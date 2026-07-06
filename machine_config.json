@@ -1,0 +1,204 @@
+{
+  "axes": {
+    "x": {
+      "name": "x",
+      "pulse_pin": 16,
+      "direction_pin": 23,
+      "head_limit_pin": 17,
+      "tail_limit_pin": 27,
+      "home_direction": 0,
+      "forward_direction": 1,
+      "steps_per_mm": 400.0,
+      "max_travel_mm": 220.0,
+      "pulse_delay": 0.00035,
+      "settle_delay": 0.05,
+      "jog_step_mm": 5.0
+    },
+    "y": {
+      "name": "y",
+      "pulse_pin": 26,
+      "direction_pin": 24,
+      "head_limit_pin": 9,
+      "tail_limit_pin": 22,
+      "home_direction": 1,
+      "forward_direction": 0,
+      "steps_per_mm": 400.0,
+      "max_travel_mm": 260.0,
+      "pulse_delay": 0.00035,
+      "settle_delay": 0.05,
+      "jog_step_mm": 5.0
+    },
+    "z": {
+      "name": "z",
+      "pulse_pin": 18,
+      "direction_pin": 25,
+      "head_limit_pin": 11,
+      "tail_limit_pin": 5,
+      "home_direction": 0,
+      "forward_direction": 1,
+      "steps_per_mm": 400.0,
+      "max_travel_mm": 200.0,
+      "pulse_delay": 0.00035,
+      "settle_delay": 0.05,
+      "jog_step_mm": 2.0
+    }
+  },
+  "home_order": [
+    "z",
+    "x",
+    "y"
+  ],
+  "safe_z_mm": 10.0,
+  "slots": {
+    "1": {
+      "x_mm": 20.0,
+      "y_mm": 20.0,
+      "z_mm": 20.0
+    },
+    "2": {
+      "x_mm": 40.0,
+      "y_mm": 50.0,
+      "z_mm": 75.0
+    },
+    "3": {
+      "x_mm": 40.0,
+      "y_mm": 50.0,
+      "z_mm": 10.0
+    },
+    "4": {
+      "x_mm": 0.0,
+      "y_mm": 0.0,
+      "z_mm": 0.0
+    },
+    "5": {
+      "x_mm": 0.0,
+      "y_mm": 0.0,
+      "z_mm": 0.0
+    },
+    "6": {
+      "x_mm": 0.0,
+      "y_mm": 0.0,
+      "z_mm": 0.0
+    },
+    "7": {
+      "x_mm": 0.0,
+      "y_mm": 0.0,
+      "z_mm": 0.0
+    },
+    "8": {
+      "x_mm": 0.0,
+      "y_mm": 0.0,
+      "z_mm": 0.0
+    },
+    "9": {
+      "x_mm": 0.0,
+      "y_mm": 0.0,
+      "z_mm": 0.0
+    },
+    "10": {
+      "x_mm": 0.0,
+      "y_mm": 0.0,
+      "z_mm": 0.0
+    },
+    "11": {
+      "x_mm": 0.0,
+      "y_mm": 0.0,
+      "z_mm": 0.0
+    },
+    "12": {
+      "x_mm": 0.0,
+      "y_mm": 0.0,
+      "z_mm": 0.0
+    },
+    "13": {
+      "x_mm": 0.0,
+      "y_mm": 0.0,
+      "z_mm": 0.0
+    },
+    "14": {
+      "x_mm": 0.0,
+      "y_mm": 0.0,
+      "z_mm": 0.0
+    },
+    "15": {
+      "x_mm": 0.0,
+      "y_mm": 0.0,
+      "z_mm": 0.0
+    },
+    "16": {
+      "x_mm": 0.0,
+      "y_mm": 0.0,
+      "z_mm": 0.0
+    },
+    "17": {
+      "x_mm": 0.0,
+      "y_mm": 0.0,
+      "z_mm": 0.0
+    },
+    "18": {
+      "x_mm": 0.0,
+      "y_mm": 0.0,
+      "z_mm": 0.0
+    },
+    "19": {
+      "x_mm": 0.0,
+      "y_mm": 0.0,
+      "z_mm": 0.0
+    },
+    "20": {
+      "x_mm": 0.0,
+      "y_mm": 0.0,
+      "z_mm": 0.0
+    },
+    "21": {
+      "x_mm": 0.0,
+      "y_mm": 0.0,
+      "z_mm": 0.0
+    },
+    "22": {
+      "x_mm": 0.0,
+      "y_mm": 0.0,
+      "z_mm": 0.0
+    },
+    "23": {
+      "x_mm": 0.0,
+      "y_mm": 0.0,
+      "z_mm": 0.0
+    },
+    "24": {
+      "x_mm": 0.0,
+      "y_mm": 0.0,
+      "z_mm": 0.0
+    },
+    "25": {
+      "x_mm": 0.0,
+      "y_mm": 0.0,
+      "z_mm": 0.0
+    },
+    "26": {
+      "x_mm": 0.0,
+      "y_mm": 0.0,
+      "z_mm": 0.0
+    },
+    "27": {
+      "x_mm": 0.0,
+      "y_mm": 0.0,
+      "z_mm": 0.0
+    },
+    "28": {
+      "x_mm": 0.0,
+      "y_mm": 0.0,
+      "z_mm": 0.0
+    },
+    "29": {
+      "x_mm": 0.0,
+      "y_mm": 0.0,
+      "z_mm": 0.0
+    },
+    "30": {
+      "x_mm": 0.0,
+      "y_mm": 0.0,
+      "z_mm": 0.0
+    }
+  }
+}
