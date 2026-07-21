@@ -1699,6 +1699,84 @@ select.slot-filter {
   }
 }
 
+/* v13 panel sizing and mouse-wheel scrolling */
+.hmi-workspace {
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding-right: 5px;
+}
+
+.right-panel,
+.rpz-jog,
+.sidebar-nav,
+.slot-table-wrap,
+.event-log,
+.diagnostics-live-log {
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.right-panel {
+  overflow: hidden;
+}
+
+.rpz-jog {
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.hmi-workspace,
+.rpz-jog,
+.sidebar-nav,
+.slot-table-wrap,
+.event-log,
+.diagnostics-live-log {
+  scrollbar-width: thin;
+  scrollbar-color: var(--blue-lt) var(--surf-0);
+}
+
+.hmi-workspace::-webkit-scrollbar,
+.rpz-jog::-webkit-scrollbar,
+.sidebar-nav::-webkit-scrollbar,
+.slot-table-wrap::-webkit-scrollbar,
+.event-log::-webkit-scrollbar,
+.diagnostics-live-log::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+
+.hmi-workspace::-webkit-scrollbar-track,
+.rpz-jog::-webkit-scrollbar-track,
+.sidebar-nav::-webkit-scrollbar-track,
+.slot-table-wrap::-webkit-scrollbar-track,
+.event-log::-webkit-scrollbar-track,
+.diagnostics-live-log::-webkit-scrollbar-track {
+  background: var(--surf-0);
+  border-radius: 999px;
+}
+
+.hmi-workspace::-webkit-scrollbar-thumb,
+.rpz-jog::-webkit-scrollbar-thumb,
+.sidebar-nav::-webkit-scrollbar-thumb,
+.slot-table-wrap::-webkit-scrollbar-thumb,
+.event-log::-webkit-scrollbar-thumb,
+.diagnostics-live-log::-webkit-scrollbar-thumb {
+  border: 2px solid var(--surf-0);
+  border-radius: 999px;
+  background: var(--blue-lt);
+}
+
+@media (max-height: 920px) and (min-width: 1501px) {
+  .hmi-header,
+  .hmi-shell.view-wide .hmi-header { min-height: 78px; }
+  .hmi-shell,
+  .hmi-shell.view-wide { grid-template-rows: 78px auto minmax(0, 1fr) 38px; }
+  .header-title { height: 64px; }
+  .header-brand-logo { width: 420px; }
+}
+
 /* Motion workspace layout revision v9 */
 :root {
   font-size: 15px;
@@ -2411,4 +2489,26 @@ select.slot-filter {
       "footer"
       "sidebar";
   }
+}
+
+/* v13 final sizing guards: keep complete controls reachable on short screens. */
+.hmi-workspace {
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.workspace-view[data-view-page="motion"] {
+  grid-template-rows: max-content max-content max-content;
+}
+
+.workspace-view[data-view-page="motion"] > .motion-axis-panel { min-height: 205px; }
+.workspace-view[data-view-page="motion"] > .wz-top { min-height: 245px; }
+.workspace-view[data-view-page="motion"] > .target-panel { min-height: 350px; }
+
+@media (max-height: 920px) and (min-width: 1501px) {
+  .workspace-view[data-view-page="motion"] > .motion-axis-panel { min-height: 195px; }
+  .workspace-view[data-view-page="motion"] > .wz-top { min-height: 235px; }
+  .workspace-view[data-view-page="motion"] > .target-panel { min-height: 350px; }
 }
