@@ -31,7 +31,7 @@
 
   function log(message, level = "info") {
     state.events.unshift({ at: new Date(), message, level });
-    state.events = state.events.slice(0, 80);
+    state.events = state.events.slice(0, 100);
     $("#event-log").innerHTML = state.events.map((entry) => `
       <li class="${entry.level}">
         <time>${entry.at.toLocaleTimeString()}</time>
@@ -47,18 +47,18 @@
     window.clearTimeout(toast.timer);
     toast.timer = window.setTimeout(() => {
       element.className = "toast";
-    }, 3200);
+    }, 3000);
   }
 
   async function api(path, method = "GET", body) {
-    const controller = new AbortController();
-    const timer = window.setTimeout(() => controller.abort(), 8000);
+    const abort = new AbortController();
+    const timer = window.setTimeout(() => abort.abort(), 8000);
     try {
       const response = await fetch(path, {
         method,
         headers: body ? { "Content-Type": "application/json" } : undefined,
         body: body ? JSON.stringify(body) : undefined,
-        signal: controller.signal,
+        signal: abort.signal,
       });
       const data = await response.json();
       if (!response.ok || data.ok === false) {
@@ -105,7 +105,7 @@
 
   async function command(label, path, body, options = {}) {
     if (!options.stop && !motionEnabled(options.requireHome)) {
-      toast("Command blocked by controller state or safety interlock.", true);
+      toast("Command blocked by interlock.", true);
       log(`${label} blocked by interlock.`, "error");
       return;
     }
@@ -127,27 +127,25 @@
     }
   }
 
-  function renderConnection() {
-    const connection = $("#connection");
-    connection.className = `connection ${state.online ? "online" : "offline"}`;
-    $("#connection-state").textContent = state.online ? "CONTROLLER ONLINE" : "CONTROLLER OFFLINE";
-  }
-
   function renderAxisCards() {
     const status = state.payload?.status || {};
     $("#axis-grid").innerHTML = axes.map((axis) => {
       const data = status[axis] || {};
       return `
         <article class="axis-card">
-          <div class="axis-row">
-            <h3>Axis ${axis.toUpperCase()}</h3>
-            <span class="axis-badge ${data.is_homed ? "ok" : "warn"}">${data.is_homed ? "HOMED" : "NOT HOMED"}</span>
+          <div class="axis-top">
+            <h3>AXIS ${axis.toUpperCase()}</h3>
+            <span class="axis-tag ${data.is_homed ? "ok" : "warn"}">${data.is_homed ? "HOMED" : "NOT HOMED"}</span>
           </div>
-          <div class="axis-value">${formatNumber(data.position_mm)} <small>mm</small></div>
-          <div class="axis-signals">
-            <span class="signal-chip ${data.head_limit ? "danger" : ""}">MIN ${data.head_limit ? "ON" : "OFF"}</span>
-            <span class="signal-chip ${data.tail_limit ? "danger" : ""}">MAX ${data.tail_limit ? "ON" : "OFF"}</span>
-            <span class="signal-chip">STEP ${data.position_steps || 0}</span>
+          <div class="axis-readout">
+            <div class="axis-value">${formatNumber(data.position_mm)} <small>mm</small></div>
+            <div class="axis-tag ${data.estop ? "warn" : "ok"}">${data.estop ? "SAFE HOLD" : "READY"}</div>
+          </div>
+          <div class="axis-sub">
+            <div class="kv"><span>Target</span><strong>${formatNumber(data.position_mm)}</strong></div>
+            <div class="kv"><span>Steps</span><strong>${data.position_steps || 0}</strong></div>
+            <div class="kv"><span>Min</span><strong>${data.head_limit ? "ON" : "OFF"}</strong></div>
+            <div class="kv"><span>Max</span><strong>${data.tail_limit ? "ON" : "OFF"}</strong></div>
           </div>
         </article>
       `;
@@ -175,7 +173,8 @@
     const homing = state.payload?.operation?.homing || {};
     $("#home-status").innerHTML = axes.map((axis) => {
       const phase = homing[axis] || "not_homed";
-      return `<span class="status-pill ${phase}">${axis.toUpperCase()} ${phase.replaceAll("_", " ").toUpperCase()}</span>`;
+      const css = phase === "passed" ? "ok" : phase === "failed" ? "warn" : "warn";
+      return `<span class="status-pill ${css}">${axis.toUpperCase()} ${phase.replaceAll("_", " ").toUpperCase()}</span>`;
     }).join("");
   }
 
@@ -184,37 +183,34 @@
       $("#move-plan").textContent = "Planner idle.";
       return;
     }
-    const axisRows = Object.values(plan.axes || {}).map((item) => `
+    const axisLines = Object.values(plan.axes || {}).map((item) => `
       <li>${item.axis.toUpperCase()}: ${formatNumber(item.distance_mm)} mm / ${item.steps} pulses / ${formatNumber(item.speed_mm_s)} mm/s / ${formatNumber(item.duration_s)} s</li>
     `).join("");
     $("#move-plan").innerHTML = `
       <strong>${escapeHtml(String(plan.mode || "speed").toUpperCase())} PLAN</strong>
-      <div>Total ${formatNumber(plan.duration_s)} s / Master ${plan.master_steps || 0} steps / Span ${formatNumber(plan.total_distance_mm)} mm</div>
-      <ul>${axisRows || "<li>No movement planned</li>"}</ul>
+      <div>Total ${formatNumber(plan.duration_s)} s · Master ${plan.master_steps || 0} steps · Span ${formatNumber(plan.total_distance_mm)} mm</div>
+      <ul>${axisLines || "<li>No movement planned</li>"}</ul>
     `;
   }
 
   function renderSlots() {
     const query = $("#slot-search").value.trim().toLowerCase();
     const entries = Object.entries(state.slots)
-      .sort(([left], [right]) => Number(left) - Number(right))
-      .filter(([code, slot]) => {
-        if (!query) return true;
-        return code.includes(query) || String(slot.product_name || "").toLowerCase().includes(query);
-      });
+      .sort(([a], [b]) => Number(a) - Number(b))
+      .filter(([code, slot]) => !query || code.includes(query) || String(slot.product_name || "").toLowerCase().includes(query));
 
     $("#slot-grid").innerHTML = entries.map(([code, slot]) => `
       <article class="slot-card">
         <div class="slot-head">
-          <span>Slot ${escapeHtml(code)}</span>
-          <span>${slot.product_name ? "Configured" : "Empty"}</span>
+          <span>SLOT ${escapeHtml(code)}</span>
+          <span>${slot.product_name ? "CONFIGURED" : "EMPTY"}</span>
         </div>
         <h3>${escapeHtml(slot.product_name || `Slot ${code}`)}</h3>
-        <p>X ${formatNumber(slot.x_mm, 1)} / Y ${formatNumber(slot.y_mm, 1)} / Z ${formatNumber(slot.z_mm, 1)} mm</p>
+        <p>X ${formatNumber(slot.x_mm, 1)} · Y ${formatNumber(slot.y_mm, 1)} · Z ${formatNumber(slot.z_mm, 1)} mm</p>
         <div class="slot-actions">
-          <button data-slot-goto="${escapeHtml(code)}">Go To</button>
-          <button class="primary" data-slot-dispense="${escapeHtml(code)}">Dispense</button>
-          <button class="ghost" data-slot-save="${escapeHtml(code)}">Save Current</button>
+          <button data-slot-goto="${escapeHtml(code)}">GO TO</button>
+          <button class="primary" data-slot-dispense="${escapeHtml(code)}">START</button>
+          <button class="ghost" data-slot-save="${escapeHtml(code)}">SAVE</button>
         </div>
       </article>
     `).join("");
@@ -239,6 +235,23 @@
     });
   }
 
+  function updateFooter() {
+    const now = new Date();
+    const status = state.payload?.status || {};
+    const operation = state.payload?.operation || {};
+    const connection = state.online ? "ONLINE" : "OFFLINE";
+    const busy = state.payload?.busy ? "BUSY" : "IDLE";
+    const estop = status.estop ? "E-STOP ACTIVE" : "E-STOP CLEAR";
+    const active = state.payload?.active_command || "none";
+    const message = operation.message || "Waiting for controller status";
+
+    $("#footer-connection").textContent = connection;
+    $("#footer-busy").textContent = busy;
+    $("#footer-estop").textContent = estop;
+    $("#footer-status-text").textContent = `Command: ${active} | Phase: ${operation.phase || "ready"} | Board: ${message}`;
+    $("#footer-status-time").textContent = now.toLocaleTimeString();
+  }
+
   function updateInterlocks() {
     const locks = interlocks();
     const reasons = [];
@@ -248,40 +261,44 @@
     if (!locks.homed) reasons.push("Axes not fully homed");
     if (!reasons.length) reasons.push("Ready");
 
-    $("#interlock-list").innerHTML = reasons.map((reason) => `<li>${escapeHtml(reason)}</li>`).join("");
+    $("#interlock-list").innerHTML = reasons.map((reason) => `<span>${escapeHtml(reason)}</span>`).join("");
     $("#stop-button").disabled = !locks.online;
     $("#clear-alarm").disabled = !locks.online || locks.busy;
     $("#home-all").disabled = !motionEnabled(false);
-    $$(".home-axis").forEach((button) => {
-      button.disabled = !motionEnabled(false);
-    });
-    $$("[data-jog]").forEach((button) => {
-      button.disabled = !motionEnabled(false);
-    });
+    $$(".home-axis").forEach((button) => button.disabled = !motionEnabled(false));
+    $$("[data-jog]").forEach((button) => button.disabled = !motionEnabled(false));
     $("#absolute-move").disabled = !motionEnabled(true);
     $("#plan-move").disabled = !locks.online;
     renderSlots();
+    updateFooter();
   }
 
   function render(payload) {
     state.payload = payload;
     state.slots = payload.slots || {};
     const status = payload.status || {};
+    const current = status.current_position || {};
     $("#machine-state").textContent = status.estop
       ? "E-STOP ACTIVE"
       : payload.busy
         ? "MOTION ACTIVE"
         : String(payload.operation?.phase || status.state || "ready").toUpperCase();
-    $("#operation-message").textContent = payload.operation?.message || "Controller ready";
-    $("#active-command").textContent = payload.active_command || "None";
     $("#operation-phase").textContent = String(payload.operation?.phase || "ready").toUpperCase();
-    $("#override-speed").textContent = status.speed_override ? formatNumber(status.speed_override, 1) : "--";
-    $("#override-time").textContent = status.timer_seconds ? formatNumber(status.timer_seconds, 1) : "--";
-    $("#estop-state").textContent = status.estop ? "E-STOP ACTIVE" : "E-STOP CLEAR";
-    $("#last-error").textContent = payload.last_error || "No active error";
+    $("#connection-state").textContent = state.online ? "CONTROLLER ONLINE" : "CONTROLLER OFFLINE";
+    $("#operation-message").textContent = payload.operation?.message || "Controller ready";
+    $("#override-speed").textContent = status.speed_override ? `${formatNumber(status.speed_override, 1)} mm/s` : "--";
+    $("#override-time").textContent = status.timer_seconds ? `${formatNumber(status.timer_seconds, 1)} s` : "--";
+    $("#estop-state").textContent = status.estop ? "ACTIVE" : "CLEAR";
+    $("#position-summary").innerHTML = `
+      <div>X: ${formatNumber(current.x_mm)} mm</div>
+      <div>Y: ${formatNumber(current.y_mm)} mm</div>
+      <div>Z: ${formatNumber(current.z_mm)} mm</div>
+    `;
+
     renderAxisCards();
     renderHomeStatus();
     renderPlan(status.last_plan);
+
     if (payload.last_error && payload.last_error !== state.lastError) {
       log(`Controller error: ${payload.last_error}`, "error");
       toast(payload.last_error, true);
@@ -295,13 +312,13 @@
       const payload = await api("/api/status");
       if (!state.online) log("Controller connection established.");
       state.online = true;
-      renderConnection();
       render(payload);
     } catch (error) {
       if (state.online) log(`Controller connection lost: ${error.message}`, "error");
       state.online = false;
-      renderConnection();
+      updateFooter();
       updateInterlocks();
+      $("#connection-state").textContent = "CONTROLLER OFFLINE";
     }
   }
 
@@ -322,21 +339,21 @@
     $$("[data-jog]").forEach((button) => {
       button.addEventListener("click", () => {
         const [axis, direction] = button.dataset.jog.split(":");
-        const payload = {
+        const body = {
           axis,
           distance_mm: Number($("#jog-step").value) * Number(direction),
         };
-        if ($("#jog-time").value !== "") payload.time_s = Number($("#jog-time").value);
-        command(`Jog ${axis.toUpperCase()}`, "/api/jog", payload);
+        if ($("#jog-time").value !== "") body.time_s = Number($("#jog-time").value);
+        command(`Jog ${axis.toUpperCase()}`, "/api/jog", body);
       });
     });
     $("#absolute-move").addEventListener("click", () => {
-      const payload = buildMovePayload();
-      if (!Object.keys(payload).some((key) => key.endsWith("_mm"))) {
+      const body = buildMovePayload();
+      if (!Object.keys(body).some((key) => key.endsWith("_mm"))) {
         toast("Enter at least one target axis.", true);
         return;
       }
-      command("Absolute move", "/api/move", payload, { requireHome: true });
+      command("Absolute move", "/api/move", body, { requireHome: true });
     });
     $("#plan-move").addEventListener("click", async () => {
       try {
@@ -372,12 +389,13 @@
 
   document.addEventListener("DOMContentLoaded", () => {
     bind();
-    log("Engineering console started.");
+    log("Compact motion console started.");
     loadConfig();
     refresh();
-    window.setInterval(refresh, 600);
+    window.setInterval(refresh, 1000);
     window.setInterval(() => {
       $("#system-time").textContent = new Date().toLocaleTimeString();
+      updateFooter();
     }, 1000);
   });
 })();
