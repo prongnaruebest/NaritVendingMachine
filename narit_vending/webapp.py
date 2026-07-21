@@ -321,11 +321,19 @@ def _parse_optional_float(payload: dict[str, object], key: str) -> float | None:
 
 def create_app(config_path: str = "machine_config.json", hw_config_path: str = "hardware_config.json") -> Flask:
     app = Flask(__name__)
+    app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0
     service = MotionService(config_path=config_path, hw_config_path=hw_config_path)
 
     @app.before_request
     def log_request():
         _logger.info("%s %s", request.method, request.path)
+
+    @app.after_request
+    def add_header(response):
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+        return response
 
     @app.after_request
     def add_cors_headers(response):
