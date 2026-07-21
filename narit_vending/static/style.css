@@ -2794,3 +2794,157 @@ select.slot-filter {
   .header-title { display: none; }
   .right-panel { grid-template-columns: 1fr; }
 }
+
+/* v16 compact jog controls, GPIO reference, and collision-free header */
+.header-control-area .safety-indicators,
+.hmi-shell.view-wide .header-control-area .safety-indicators {
+  grid-template-columns: repeat(4, minmax(96px, 1fr)) minmax(210px, 1.8fr);
+}
+
+.right-panel {
+  grid-template-rows: minmax(300px, .85fr) minmax(310px, 1fr);
+}
+
+.rpz-jog {
+  min-height: 300px;
+}
+
+.rpz-jog .rp-jog-pad-area {
+  grid-template-columns: 110px 34px;
+  justify-content: center;
+  align-items: start;
+  gap: 12px;
+}
+
+.rpz-jog .rp-xy-pad {
+  grid-template-columns: repeat(3, 34px);
+  grid-template-rows: repeat(3, 34px);
+  gap: 4px;
+}
+
+.rpz-jog .rp-z-pad {
+  width: 34px;
+  grid-template-rows: auto 34px 34px;
+  gap: 4px;
+}
+
+.rpz-jog .rp-jog-btn {
+  width: 34px;
+  min-width: 34px;
+  min-height: 34px;
+  padding: 0;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.rpz-jog .rp-jog-center {
+  border-radius: 4px;
+  font-size: 7px;
+}
+
+.rpz-jog .rp-params {
+  gap: 7px;
+  margin-top: 8px;
+}
+
+.rpz-jog .rp-param-label {
+  margin-bottom: 4px;
+  font-size: 10px;
+}
+
+.rpz-jog .rp-preset-btn {
+  min-height: 26px;
+  padding: 3px 5px;
+  font-size: 10px;
+}
+
+.header-control-area .btn-estop,
+.header-control-area .btn-reset-alarm {
+  width: 100%;
+  min-width: 0;
+}
+
+.configuration-pin-panel {
+  min-height: 340px;
+}
+
+.configuration-pin-panel .config-table-wrap {
+  max-height: 430px;
+  overflow: auto;
+}
+
+.pin-config-table td:first-child {
+  color: var(--blue-lt);
+  font-weight: 700;
+}
+
+.pin-config-table td:nth-child(3) {
+  color: var(--accent-cyan);
+  font-weight: 700;
+}
+
+@media (max-width: 1500px) {
+  .hmi-shell,
+  .hmi-shell.view-wide {
+    grid-template-rows: 194px auto auto 38px;
+  }
+
+  .hmi-header,
+  .hmi-shell.view-wide .hmi-header {
+    min-height: 194px;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+  }
+
+  .hmi-header .header-title {
+    display: none;
+  }
+
+  .header-control-area {
+    width: 100%;
+  }
+
+  .header-control-area .safety-strip,
+  .hmi-shell.view-wide .header-control-area .safety-strip {
+    grid-template-columns: 322px minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .header-control-area .estop-zone,
+  .hmi-shell.view-wide .header-control-area .estop-zone {
+    grid-template-columns: 1.15fr 1fr;
+    align-self: start;
+    align-items: start;
+  }
+
+  .header-control-area .safety-indicators,
+  .hmi-shell.view-wide .header-control-area .safety-indicators {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .right-panel {
+    grid-template-rows: auto;
+  }
+
+  .rpz-jog,
+  .rpz-slot-editor {
+    min-height: 330px;
+  }
+}
+
+@media (max-width: 900px) {
+  .hmi-shell,
+  .hmi-shell.view-wide {
+    grid-template-rows: auto auto auto 38px auto;
+  }
+
+  .header-control-area .safety-strip,
+  .hmi-shell.view-wide .header-control-area .safety-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .header-control-area .safety-indicators,
+  .hmi-shell.view-wide .header-control-area .safety-indicators {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

@@ -8,7 +8,7 @@
   <link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='favicon-transparent-large.png') }}?v=20260721_v12">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=20260721_v15">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=20260721_v16">
 </head>
 <body>
   <div class="hmi-shell">
@@ -140,12 +140,6 @@
         </button>
       </div>
       <div class="safety-indicators">
-        <div class="safety-ind">
-          <span class="safety-ind-label">Controller</span>
-          <div class="safety-ind-value fault" id="strip-controller">
-            <span class="status-dot"></span> OFFLINE
-          </div>
-        </div>
         <div class="safety-ind">
           <span class="safety-ind-label">E-Stop Pin</span>
           <div class="safety-ind-value ok" id="strip-estop">CLEAR</div>
@@ -369,9 +363,14 @@
       </section>
 
       <section class="workspace-view" data-view-page="configuration">
-        <div class="page-heading"><div><p class="panel-label">Configuration</p><h2>Motion Parameters</h2></div><span class="page-note">Read-only engineering reference</span></div>
+        <div class="page-heading"><div><p class="panel-label">Configuration</p><h2>Motion &amp; GPIO Parameters</h2></div><span class="page-note">Read-only engineering reference</span></div>
         <div class="panel page-panel">
+          <div class="panel-head"><div><p class="panel-label">Motion Configuration</p><h2 class="panel-title">Axis Parameters</h2></div></div>
           <div class="config-table-wrap"><table class="config-table"><thead><tr><th>Axis</th><th>Travel</th><th>Steps/mm</th><th>Max Speed</th><th>Default Speed</th><th>Lead Screw</th></tr></thead><tbody id="configuration-axis-table"></tbody></table></div>
+        </div>
+        <div class="panel page-panel configuration-pin-panel">
+          <div class="panel-head"><div><p class="panel-label">Raspberry Pi GPIO</p><h2 class="panel-title">Pin Configuration &amp; Sensors</h2></div><span class="page-note" id="configuration-board-profile">Board: --</span></div>
+          <div class="config-table-wrap"><table class="config-table pin-config-table"><thead><tr><th>Signal</th><th>Category</th><th>GPIO Pin</th><th>Pull / Initial</th><th>Active Logic</th></tr></thead><tbody id="configuration-pin-table"></tbody></table></div>
         </div>
       </section>
 
@@ -551,10 +550,6 @@
 
         <div class="selected-slot-fields">
           <label class="selected-slot-field">
-            <span>Product Name</span>
-            <input id="selected-slot-product" class="hmi-input" type="text" maxlength="80" placeholder="Product name">
-          </label>
-          <label class="selected-slot-field">
             <span>Dispense Delay</span>
             <div class="field-input-wrap">
               <input id="selected-slot-delay" class="hmi-input" type="number" min="0" step="100" value="0">
@@ -575,7 +570,7 @@
               <span class="unit-tag">mm</span>
             </div>
           </label>
-          <label class="selected-slot-field selected-slot-field-wide">
+          <label class="selected-slot-field">
             <span>Z Coordinate</span>
             <div class="field-input-wrap">
               <input id="selected-slot-z" class="hmi-input" type="number" min="0" step="0.1">
@@ -635,6 +630,6 @@
   <!-- Toast notification -->
   <div class="toast" id="toast" role="status"></div>
 
-  <script src="{{ url_for('static', filename='app.js') }}?v=20260721_v15"></script>
+  <script src="{{ url_for('static', filename='app.js') }}?v=20260721_v16"></script>
 </body>
 </html>

@@ -275,7 +275,9 @@ class MotionService:
 
     def get_config(self) -> dict[str, object]:
         with self.lock:
-            return self.controller.config.to_dict()
+            config = self.controller.config.to_dict()
+            config["hardware"] = load_hardware_config(str(self.hw_config_path))
+            return config
 
     def reset_slot(self, slot_code: str) -> dict[str, object]:
         def action():

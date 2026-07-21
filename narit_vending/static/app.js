@@ -581,7 +581,6 @@
       `Current: X ${fmtPos(current.x_mm)} · Y ${fmtPos(current.y_mm)} · Z ${fmtPos(current.z_mm)} mm`);
 
     if (force || !MS.slotEditorDirty) {
-      el("selected-slot-product").value = slot.product_name || "";
       el("selected-slot-delay").value = Number(slot.dispense_delay_ms || 0);
       AXES.forEach((axis) => {
         el(`selected-slot-${axis}`).value = Number(slot[`${axis}_mm`] || 0);
@@ -591,8 +590,9 @@
   }
 
   function selectedSlotPayload() {
+    const currentSlot = MS.slots[selectedSlotCode()] || {};
     const payload = {
-      product_name: el("selected-slot-product").value.trim(),
+      product_name: currentSlot.product_name || "",
       dispense_delay_ms: Number(el("selected-slot-delay").value || 0),
     };
     AXES.forEach((axis) => {
@@ -835,7 +835,8 @@
     // Jog inhibit banner
     const banner = el("jog-inhibit-banner");
     if (banner) {
-      if (!canJog) {
+      const showInhibit = !canJog && inhibitReason !== "Another command is executing";
+      if (showInhibit) {
         banner.classList.add("active");
         setText("jog-inhibit-text", inhibitReason || "Motion inhibited");
       } else {
@@ -968,6 +969,37 @@
       const cfg = MS.config?.axes?.[axis] || {};
       return `<tr><td>${axis.toUpperCase()}</td><td>${fmt(cfg.max_travel_mm, 1)} mm</td><td>${fmt(cfg.steps_per_mm, 1)}</td><td>${fmt(cfg.max_speed_mm_s, 1)} mm/s</td><td>${fmt(cfg.default_speed_mm_s, 1)} mm/s</td><td>${fmt(cfg.lead_screw_pitch_mm, 1)} mm</td></tr>`;
     }).join("");
+
+    const hardware = MS.config?.hardware || {};
+    setText("configuration-board-profile", `Board: ${hardware.board_profile || "--"}`);
+    const pinRows = [];
+    Object.entries(hardware.motors || {}).forEach(([axis, pins]) => {
+      [["STEP", pins.step_pin], ["DIR", pins.dir_pin], ["ENABLE", pins.enable_pin]].forEach(([signal, pin]) => {
+        pinRows.push([`${axis.toUpperCase()} ${signal}`, "Motor Output", pin, "--", pins.active_high ? "ACTIVE HIGH" : "ACTIVE LOW"]);
+      });
+    });
+    Object.entries(hardware.digital_inputs || {}).forEach(([name, input]) => {
+      pinRows.push([
+        name.replaceAll("_", " ").toUpperCase(),
+        name.includes("home") || name.includes("lim_") ? "Position Sensor" : "Safety Input",
+        input.pin,
+        input.pull_up ? "PULL-UP" : "NO PULL-UP",
+        input.active_high ? "ACTIVE HIGH" : "ACTIVE LOW",
+      ]);
+    });
+    Object.entries(hardware.digital_outputs || {}).forEach(([name, output]) => {
+      pinRows.push([
+        name.replaceAll("_", " ").toUpperCase(),
+        "Digital Output",
+        output.pin,
+        output.initial_value ? "INITIAL ON" : "INITIAL OFF",
+        output.active_high ? "ACTIVE HIGH" : "ACTIVE LOW",
+      ]);
+    });
+    const pinTable = document.getElementById("configuration-pin-table");
+    if (pinTable) pinTable.innerHTML = pinRows.map(([signal, category, pin, setup, logic]) =>
+      `<tr><td>${esc(signal)}</td><td>${esc(category)}</td><td>GPIO ${esc(pin)}</td><td>${esc(setup)}</td><td>${esc(logic)}</td></tr>`
+    ).join("");
 
     const alarmList = document.getElementById("alarm-page-list");
     if (alarmList) alarmList.innerHTML = alarmCount
@@ -1192,7 +1224,7 @@
       loadSelectedSlotEditor(true);
       updateButtonStates();
     });
-    ["selected-slot-product", "selected-slot-delay", "selected-slot-x", "selected-slot-y", "selected-slot-z"]
+    ["selected-slot-delay", "selected-slot-x", "selected-slot-y", "selected-slot-z"]
       .forEach((id) => el(id).addEventListener("input", () => { MS.slotEditorDirty = true; }));
     el("selected-slot-load-current").addEventListener("click", loadCurrentIntoSelectedSlot);
     el("selected-slot-save").addEventListener("click", saveSelectedSlot);
