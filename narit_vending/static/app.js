@@ -410,10 +410,13 @@
   function updateSummaryPanels() {
     const status = getStatus();
     const operation = getOperation();
+    const activeCommand = state.payload?.active_command || "None";
     $("#summary-controller").textContent = state.online ? "ONLINE" : "OFFLINE";
     $("#summary-motion").textContent = state.payload?.busy ? "EXECUTING" : "IDLE";
     $("#summary-mode").textContent = state.payload?.busy ? "MANUAL ACTIVE" : "MANUAL";
-    $("#active-command").textContent = state.payload?.active_command || "None";
+    $("#active-command").textContent = activeCommand;
+    const duplicate = document.querySelector("#active-command-duplicate");
+    if (duplicate) duplicate.textContent = activeCommand;
     $("#jog-inhibit-reason").textContent = motionInhibitReason(false) || "Manual motion ready";
     $("#operation-message").textContent = operation.message || "Controller ready";
     $("#connection-state").textContent = state.online ? "ONLINE" : "OFFLINE";

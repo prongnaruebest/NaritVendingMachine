@@ -8,110 +8,122 @@
 </head>
 <body>
   <div class="workspace-shell">
-    <header class="topbar">
-      <div class="brand">
+    <header class="masthead">
+      <div class="masthead-brand">
         <div class="brand-mark">NV</div>
         <div class="brand-copy">
           <h1>NARIT VENDING MACHINE</h1>
           <p>Industrial XYZ Gantry Motion Controller</p>
         </div>
       </div>
-      <div class="header-metrics">
-        <div class="head-chip"><span>Machine ID</span><strong>NVM-2026-01</strong></div>
-        <div class="head-chip"><span>Controller</span><strong>Raspberry Pi 4B</strong></div>
-        <div class="head-chip"><span>Connection</span><strong id="connection-state">OFFLINE</strong></div>
-        <div class="head-chip"><span>Machine State</span><strong id="machine-state">UNKNOWN</strong></div>
-        <div class="head-chip"><span>System Time</span><strong id="system-time">--:--:--</strong></div>
+      <div class="masthead-meta">
+        <div class="meta-box"><span>Machine ID</span><strong>NVM-2026-01</strong></div>
+        <div class="meta-box"><span>Controller</span><strong>Raspberry Pi 4B</strong></div>
+        <div class="meta-box"><span>Connection</span><strong id="connection-state">OFFLINE</strong></div>
+        <div class="meta-box"><span>Machine State</span><strong id="machine-state">UNKNOWN</strong></div>
+        <div class="meta-box"><span>System Time</span><strong id="system-time">--:--:--</strong></div>
       </div>
     </header>
 
     <div class="workspace-grid">
-      <aside class="nav-rail">
-        <div class="nav-group">
-          <p>OVERVIEW</p>
+      <aside class="sidebar">
+        <section class="sidebar-card">
+          <p class="sidebar-label">Overview</p>
           <button class="nav-item"><span class="nav-icon"></span><span>Dashboard</span></button>
-        </div>
-        <div class="nav-group">
-          <p>CONTROL</p>
           <button class="nav-item active"><span class="nav-icon"></span><span>Motion Control</span></button>
           <button class="nav-item"><span class="nav-icon"></span><span>Slot Manager</span></button>
-        </div>
-        <div class="nav-group">
-          <p>MONITORING</p>
-          <button class="nav-item"><span class="nav-icon"></span><span>Visualization</span></button>
           <button class="nav-item"><span class="nav-icon"></span><span>Diagnostics</span></button>
-          <button class="nav-item"><span class="nav-icon"></span><span>Alarms</span><span class="nav-badge" id="nav-alarm-count">0</span></button>
-          <button class="nav-item"><span class="nav-icon"></span><span>Event Logs</span></button>
-        </div>
-        <div class="nav-group">
-          <p>SYSTEM</p>
           <button class="nav-item"><span class="nav-icon"></span><span>Configuration</span></button>
-          <button class="nav-item"><span class="nav-icon"></span><span>System Flow</span></button>
-        </div>
+        </section>
+
+        <section class="sidebar-card">
+          <p class="sidebar-label">Alarm Monitor</p>
+          <div class="alarm-counter">
+            <span>Active Alarms</span>
+            <strong id="nav-alarm-count">0</strong>
+          </div>
+          <div class="sidebar-readout" id="alarm-summary">
+            <strong>NO ACTIVE ALARMS</strong>
+            <p>Machine operation normal.</p>
+          </div>
+        </section>
+
+        <section class="sidebar-card">
+          <p class="sidebar-label">Readiness</p>
+          <div class="sidebar-list">
+            <div><span>Controller</span><strong id="strip-controller">OFFLINE</strong></div>
+            <div><span>E-Stop</span><strong id="strip-estop">UNKNOWN</strong></div>
+            <div><span>Homing</span><strong id="strip-homing">NOT READY</strong></div>
+            <div><span>Motion</span><strong id="strip-motion">INHIBITED</strong></div>
+            <div><span>Alarms</span><strong id="strip-alarms">0</strong></div>
+          </div>
+          <p class="sidebar-note" id="strip-motion-reason">Waiting for controller status</p>
+          <p class="sidebar-note" id="strip-homing-detail">Awaiting axis state</p>
+        </section>
       </aside>
 
       <main class="main-stage">
-        <section class="readiness-strip">
-          <article class="status-block">
-            <span class="status-label">Controller</span>
-            <strong class="status-value" id="strip-controller">OFFLINE</strong>
-            <small>HTTP machine link</small>
+        <section class="hero-row">
+          <article class="hero-card position-hero">
+            <div class="hero-head">
+              <div>
+                <p class="section-label">Machine Position</p>
+                <h2>Live Coordinates</h2>
+              </div>
+              <div class="hero-state">
+                <span id="summary-controller">OFFLINE</span>
+                <strong id="summary-motion">IDLE</strong>
+              </div>
+            </div>
+            <div class="coord-display" id="position-summary">
+              <div><span>X</span><strong>--</strong><small>mm</small></div>
+              <div><span>Y</span><strong>--</strong><small>mm</small></div>
+              <div><span>Z</span><strong>--</strong><small>mm</small></div>
+            </div>
           </article>
-          <article class="status-block">
-            <span class="status-label">E-Stop</span>
-            <strong class="status-value" id="strip-estop">UNKNOWN</strong>
-            <small>Safety loop state</small>
+
+          <article class="hero-card action-hero">
+            <div class="hero-head">
+              <div>
+                <p class="section-label">Safety Control</p>
+                <h2>Machine Command Rail</h2>
+              </div>
+              <span class="hero-mode" id="summary-mode">MANUAL</span>
+            </div>
+            <div class="action-stack">
+              <button class="danger" id="stop-button">EMERGENCY STOP</button>
+              <button class="primary" id="clear-alarm">RESET ALARMS</button>
+              <div class="action-note" id="operation-message">Controller ready</div>
+            </div>
           </article>
-          <article class="status-block">
-            <span class="status-label">Homing</span>
-            <strong class="status-value" id="strip-homing">NOT READY</strong>
-            <small id="strip-homing-detail">Awaiting axis state</small>
-          </article>
-          <article class="status-block">
-            <span class="status-label">Motion Permission</span>
-            <strong class="status-value" id="strip-motion">INHIBITED</strong>
-            <small id="strip-motion-reason">Waiting for controller status</small>
-          </article>
-          <article class="status-block alert">
-            <span class="status-label">Active Alarms</span>
-            <strong class="status-value" id="strip-alarms">0</strong>
-            <small id="strip-alarm-detail">No active alarms</small>
-          </article>
-          <div class="safety-actions">
-            <button class="danger" id="stop-button">EMERGENCY STOP</button>
-            <button class="primary" id="clear-alarm">RESET ALARMS</button>
-          </div>
         </section>
 
-        <section class="position-banner">
-          <div class="banner-title">
-            <h2>Machine Position</h2>
-            <p>Live machine coordinates and axis state overview</p>
+        <section class="axis-board">
+          <div class="board-head">
+            <div>
+              <p class="section-label">Axis State</p>
+              <h2>Axis Position Overview</h2>
+            </div>
+            <span class="board-note" id="active-command">None</span>
           </div>
-          <div class="coord-display" id="position-summary">
-            <div><span>X</span><strong>--</strong><small>mm</small></div>
-            <div><span>Y</span><strong>--</strong><small>mm</small></div>
-            <div><span>Z</span><strong>--</strong><small>mm</small></div>
-          </div>
+          <section class="axis-row" id="axis-grid"></section>
         </section>
 
-        <section class="axis-row" id="axis-grid"></section>
-
-        <section class="motion-grid">
-          <article class="panel">
+        <section class="workspace-panels">
+          <article class="panel jog-panel">
             <div class="panel-head">
               <div>
-                <p>MANUAL JOG</p>
-                <h3>Jog Control</h3>
+                <p class="section-label">Manual Motion</p>
+                <h3>Jog & Homing Station</h3>
               </div>
               <span class="panel-note" id="jog-inhibit-reason">Manual motion ready</span>
             </div>
-            <div class="jog-layout">
+            <div class="jog-station">
               <div class="xy-jog">
                 <button data-jog="y:1" class="jog-btn">Y+</button>
                 <div class="xy-middle">
                   <button data-jog="x:-1" class="jog-btn">X-</button>
-                  <div class="jog-center">XY</div>
+                  <div class="jog-core">XY</div>
                   <button data-jog="x:1" class="jog-btn">X+</button>
                 </div>
                 <button data-jog="y:-1" class="jog-btn">Y-</button>
@@ -120,7 +132,7 @@
                 <button data-jog="z:1" class="jog-btn">Z+</button>
                 <button data-jog="z:-1" class="jog-btn">Z-</button>
               </div>
-              <div class="jog-params">
+              <div class="jog-config">
                 <label>Jog Step
                   <select id="jog-step">
                     <option value="0.1">0.1 mm</option>
@@ -132,7 +144,7 @@
                 <label>Jog Time
                   <input id="jog-time" type="number" step="0.1" min="0.1" placeholder="Optional">
                 </label>
-                <label>Travel Speed
+                <label>Jog Speed
                   <input id="move-speed" type="number" step="0.1" min="0.1" placeholder="mm/s">
                 </label>
                 <div class="preset-row">
@@ -143,11 +155,11 @@
                 </div>
               </div>
             </div>
-            <div class="home-panel">
+            <div class="home-block">
               <div class="home-head">
                 <div>
-                  <p>HOMING</p>
-                  <h4>Axis Reference Sequence</h4>
+                  <p class="section-label">Reference</p>
+                  <h4>Home Sequence</h4>
                 </div>
                 <span class="panel-note" id="home-sequence">Sequence: Z → X → Y</span>
               </div>
@@ -161,13 +173,12 @@
             </div>
           </article>
 
-          <article class="panel">
+          <article class="panel target-panel">
             <div class="panel-head">
               <div>
-                <p>TARGET POSITIONING</p>
-                <h3>Validate → Preview → Execute</h3>
+                <p class="section-label">Target Positioning</p>
+                <h3>Validate · Preview · Execute</h3>
               </div>
-              <span class="panel-note" id="operation-message">Controller ready</span>
             </div>
             <div class="target-form">
               <label>X Target
@@ -194,17 +205,17 @@
               <button class="ghost" id="apply-time">SAVE TIME</button>
             </div>
             <div class="validation-box" id="validation-box">Target not validated.</div>
-            <div class="preview-grid">
+            <div class="preview-strip">
               <div class="preview-card">
-                <span>CURRENT</span>
+                <span>Current</span>
                 <pre id="preview-current">X --\nY --\nZ --</pre>
               </div>
               <div class="preview-card">
-                <span>TARGET</span>
+                <span>Target</span>
                 <pre id="preview-target">X --\nY --\nZ --</pre>
               </div>
               <div class="preview-card">
-                <span>DELTA</span>
+                <span>Delta</span>
                 <pre id="preview-delta">ΔX --\nΔY --\nΔZ --</pre>
               </div>
             </div>
@@ -212,73 +223,53 @@
           </article>
         </section>
 
-        <section class="slot-section panel">
-          <div class="panel-head">
-            <div>
-              <p>SLOT POSITIONING</p>
-              <h3>Compact Slot Table</h3>
-            </div>
-            <div class="slot-toolbar">
-              <input id="slot-search" class="search" placeholder="Search slot or product">
-              <select id="slot-filter">
-                <option value="all">All</option>
-                <option value="ready">Ready</option>
-                <option value="empty">Empty</option>
-                <option value="configured">Configured</option>
-              </select>
-            </div>
-          </div>
-          <div class="slot-table-wrap scroll-block">
-            <table class="slot-table">
-              <thead>
-                <tr>
-                  <th>Slot</th>
-                  <th>Product</th>
-                  <th>Status</th>
-                  <th>X (mm)</th>
-                  <th>Y (mm)</th>
-                  <th>Z (mm)</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody id="slot-grid"></tbody>
-            </table>
-          </div>
-        </section>
-
-        <section class="diagnostic-grid">
-          <article class="panel info-panel">
+        <section class="bottom-grid">
+          <article class="panel slot-panel">
             <div class="panel-head">
               <div>
-                <p>MACHINE STATE</p>
-                <h3>Operational Summary</h3>
+                <p class="section-label">Slot Positioning</p>
+                <h3>Teach · Go To · Dispense</h3>
+              </div>
+              <div class="slot-toolbar">
+                <input id="slot-search" class="search" placeholder="Search slot or product">
+                <select id="slot-filter">
+                  <option value="all">All</option>
+                  <option value="ready">Ready</option>
+                  <option value="empty">Empty</option>
+                  <option value="configured">Configured</option>
+                </select>
               </div>
             </div>
-            <div class="summary-grid">
+            <div class="slot-table-wrap scroll-block">
+              <table class="slot-table">
+                <thead>
+                  <tr>
+                    <th>Slot</th>
+                    <th>Product</th>
+                    <th>Status</th>
+                    <th>X</th>
+                    <th>Y</th>
+                    <th>Z</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="slot-grid"></tbody>
+              </table>
+            </div>
+          </article>
+
+          <article class="panel diagnostics-panel">
+            <div class="panel-head">
+              <div>
+                <p class="section-label">Diagnostics</p>
+                <h3>Machine State & Event Stream</h3>
+              </div>
+            </div>
+            <div class="diagnostic-summary">
               <div><span>Controller</span><strong id="summary-controller">OFFLINE</strong></div>
               <div><span>Motion</span><strong id="summary-motion">IDLE</strong></div>
               <div><span>Mode</span><strong id="summary-mode">MANUAL</strong></div>
-              <div><span>Last Command</span><strong id="active-command">None</strong></div>
-            </div>
-          </article>
-          <article class="panel alarm-panel">
-            <div class="panel-head">
-              <div>
-                <p>ACTIVE ALARMS</p>
-                <h3>Alarm Summary</h3>
-              </div>
-            </div>
-            <div class="alarm-summary" id="alarm-summary">
-              <strong>NO ACTIVE ALARMS</strong>
-              <p>Machine operation normal.</p>
-            </div>
-          </article>
-          <article class="panel log-panel">
-            <div class="panel-head">
-              <div>
-                <p>EVENT LOG</p>
-                <h3>Diagnostics Stream</h3>
-              </div>
+              <div><span>Command</span><strong id="active-command-duplicate">None</strong></div>
             </div>
             <ol class="event-log scroll-block" id="event-log"></ol>
           </article>
