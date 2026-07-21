@@ -1699,6 +1699,252 @@ select.slot-filter {
   }
 }
 
+/* Motion workspace layout revision v9 */
+:root {
+  font-size: 15px;
+}
+
+.hmi-shell {
+  grid-template-rows: 86px auto minmax(0, 1fr) 38px;
+  grid-template-areas:
+    "sidebar header header"
+    "sidebar workspace safety"
+    "sidebar workspace right"
+    "sidebar footer footer";
+}
+
+.hmi-header {
+  min-height: 86px;
+  padding: 7px 16px;
+}
+
+.header-title {
+  position: relative;
+  width: min(520px, 42vw);
+  height: 70px;
+  flex: 0 1 auto;
+  overflow: hidden;
+}
+
+.header-brand-logo {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 450px;
+  max-width: 100%;
+  height: auto;
+  transform: translateY(-50%);
+  display: block;
+}
+
+.sidebar-brand-text { font-size: 13px; }
+.sidebar-brand-text span { font-size: 11px; }
+.nav-section-label { font-size: 10px; }
+.nav-item { padding: 10px 14px; font-size: 14px; }
+.readiness-row { font-size: 12px; }
+
+.header-chip { min-width: 108px; }
+.header-chip span { font-size: 10px; }
+.header-chip strong { font-size: 13px; }
+
+.safety-strip {
+  width: 400px;
+  min-height: 0;
+  align-self: start;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  padding: 14px;
+}
+
+.estop-zone {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1.25fr 1fr;
+  gap: 8px;
+  padding-right: 0;
+  border-right: 0;
+}
+
+.btn-estop,
+.btn-reset-alarm {
+  min-height: 46px;
+  padding: 10px 12px;
+  font-size: 12px;
+}
+
+.safety-indicators {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.safety-ind {
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surf-2);
+}
+
+.safety-ind-label { font-size: 10px; }
+.safety-ind-value { margin-top: 4px; font-size: 13px; }
+.safety-ind-sub { font-size: 10px; }
+
+.motion-inhibit-reason {
+  grid-column: 1 / -1;
+  min-width: 0;
+  padding: 10px;
+  border-left: 0;
+  border: 1px solid var(--amber-brd);
+  border-radius: 6px;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.right-panel {
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.workspace-view[data-view-page="motion"] {
+  grid-template-rows: auto auto auto;
+}
+
+.motion-axis-panel {
+  padding: 16px;
+  overflow: visible;
+}
+
+.motion-axis-panel .rpz-head {
+  margin-bottom: 14px;
+}
+
+.motion-axis-panel .rpz-title {
+  font-size: 14px;
+}
+
+.motion-axis-panel .rp-axis-list {
+  gap: 12px;
+}
+
+.motion-axis-panel .axis-card {
+  padding: 14px;
+}
+
+.motion-axis-panel .axis-name { font-size: 13px; }
+.motion-axis-panel .axis-position { font-size: 31px; }
+.motion-axis-panel .axis-kv { font-size: 11px; }
+
+.rpz-title,
+.fo-label,
+.panel-label { font-size: 12px; }
+.panel-title { font-size: 16px; }
+.field-label { font-size: 11px; }
+.hmi-input { font-size: 14px; }
+.fo-preset-btn,
+.rp-preset-btn { font-size: 13px; }
+.fo-speed-row,
+.rp-param-label { font-size: 13px; }
+.rp-jog-btn { font-size: 23px; }
+
+.diagnostics-live-log {
+  min-height: 340px;
+  max-height: 440px;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.diagnostics-live-log .event-log {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.hmi-shell.view-wide {
+  grid-template-rows: 86px auto minmax(0, 1fr) 38px;
+  grid-template-areas:
+    "sidebar header header"
+    "sidebar safety safety"
+    "sidebar workspace workspace"
+    "sidebar footer footer";
+}
+
+.hmi-shell.view-wide .safety-strip {
+  width: auto;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+}
+
+.hmi-shell.view-wide .estop-zone {
+  width: 360px;
+}
+
+.hmi-shell.view-wide .safety-indicators {
+  grid-template-columns: repeat(6, minmax(0, auto));
+  align-items: center;
+}
+
+.hmi-shell.view-wide .safety-ind {
+  background: transparent;
+  border-color: transparent;
+}
+
+.hmi-shell.view-wide .motion-inhibit-reason {
+  grid-column: auto;
+}
+
+@media (max-width: 1500px) {
+  .hmi-shell,
+  .hmi-shell.view-wide {
+    grid-template-columns: 210px minmax(0, 1fr);
+    grid-template-rows: 86px auto auto auto 38px;
+    grid-template-areas:
+      "sidebar header"
+      "sidebar safety"
+      "sidebar right"
+      "sidebar workspace"
+      "sidebar footer";
+  }
+
+  .safety-strip,
+  .hmi-shell.view-wide .safety-strip {
+    width: auto;
+    grid-template-columns: auto 1fr;
+    align-items: center;
+  }
+
+  .estop-zone,
+  .hmi-shell.view-wide .estop-zone { width: 360px; }
+  .safety-indicators,
+  .hmi-shell.view-wide .safety-indicators { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .right-panel { width: auto; min-width: 0; display: grid; grid-template-columns: 1fr; grid-template-rows: auto; }
+  .rpz-jog { grid-column: auto; grid-row: auto; }
+}
+
+@media (max-width: 1050px) {
+  .hmi-shell,
+  .hmi-shell.view-wide {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "header"
+      "safety"
+      "right"
+      "workspace"
+      "footer"
+      "sidebar";
+  }
+
+  .header-title { width: 100%; }
+  .header-brand-logo { width: 420px; }
+  .safety-strip,
+  .hmi-shell.view-wide .safety-strip { grid-template-columns: 1fr; }
+  .estop-zone,
+  .hmi-shell.view-wide .estop-zone { width: 100%; }
+  .safety-indicators,
+  .hmi-shell.view-wide .safety-indicators { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
 @media (max-width: 700px) {
   .header-meta,
   .safety-indicators {
@@ -2109,4 +2355,60 @@ select.slot-filter {
   .overview-grid,
   .diagnostic-grid,
   .dashboard-axis-grid { grid-template-columns: 1fr; }
+}
+
+/* v9 cascade guards */
+.workspace-view[data-view-page="motion"] {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto auto;
+  align-content: start;
+}
+.workspace-view[data-view-page="motion"] > .motion-axis-panel,
+.workspace-view[data-view-page="motion"] > .wz-top,
+.workspace-view[data-view-page="motion"] > .target-panel {
+  grid-column: 1;
+  width: 100%;
+  min-height: 0;
+  height: auto;
+}
+.workspace-view[data-view-page="motion"] > .motion-axis-panel { grid-row: 1; }
+.workspace-view[data-view-page="motion"] > .wz-top { grid-row: 2; }
+.workspace-view[data-view-page="motion"] > .target-panel { grid-row: 3; }
+.workspace-view[data-view-page="motion"] .feed-override-card,
+.workspace-view[data-view-page="motion"] .home-panel { min-height: 0; height: auto; }
+.hmi-shell.view-wide {
+  grid-template-rows: 86px auto minmax(0, 1fr) 38px;
+  grid-template-areas:
+    "sidebar header header"
+    "sidebar safety safety"
+    "sidebar workspace workspace"
+    "sidebar footer footer";
+}
+
+@media (max-width: 1500px) {
+  .hmi-shell,
+  .hmi-shell.view-wide {
+    grid-template-columns: 210px minmax(0, 1fr);
+    grid-template-rows: 86px auto auto auto 38px;
+    grid-template-areas:
+      "sidebar header"
+      "sidebar safety"
+      "sidebar right"
+      "sidebar workspace"
+      "sidebar footer";
+  }
+}
+
+@media (max-width: 1050px) {
+  .hmi-shell,
+  .hmi-shell.view-wide {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "header"
+      "safety"
+      "right"
+      "workspace"
+      "footer"
+      "sidebar";
+  }
 }

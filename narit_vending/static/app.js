@@ -990,6 +990,21 @@
   }
 
   /* ── BIND ALL EVENTS ────────────────────────────────────────── */
+  function organizeWorkspacePanels() {
+    const motionPage = $('[data-view-page="motion"]');
+    const diagnosticsPage = $('[data-view-page="diagnostics"]');
+    const axisPanel = $(".rpz-status");
+    const liveDiagnostics = $(".rpz-log");
+    if (motionPage && axisPanel) {
+      axisPanel.classList.add("motion-axis-panel");
+      motionPage.prepend(axisPanel);
+    }
+    if (diagnosticsPage && liveDiagnostics) {
+      liveDiagnostics.classList.add("diagnostics-live-log");
+      diagnosticsPage.append(liveDiagnostics);
+    }
+  }
+
   function bind() {
 
     /* --- Workspace navigation --- */
@@ -1138,6 +1153,7 @@
 
   /* ── INIT ───────────────────────────────────────────────────── */
   document.addEventListener("DOMContentLoaded", () => {
+    organizeWorkspacePanels();
     bind();
     switchWorkspace(location.hash.slice(1) || "motion", false);
     log("Industrial motion HMI initialised", "info", "SYSTEM");
