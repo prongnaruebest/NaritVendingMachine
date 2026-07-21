@@ -28,18 +28,52 @@
       <aside class="nav-rail">
         <div class="nav-group">
           <p>WORKSPACES</p>
-          <button class="nav-item active">Motion Control</button>
-          <button class="nav-item">Diagnostics</button>
-          <button class="nav-item">Slot Manager</button>
+          <button class="nav-item">
+            <span class="nav-icon">📊</span>
+            <span>Dashboard</span>
+          </button>
+          <button class="nav-item active">
+            <span class="nav-icon">⚙️</span>
+            <span>Motion Control</span>
+          </button>
+          <button class="nav-item">
+            <span class="nav-icon">👁️</span>
+            <span>Visualization</span>
+          </button>
+          <button class="nav-item">
+            <span class="nav-icon">🪛</span>
+            <span>Diagnostics</span>
+          </button>
+          <button class="nav-item">
+            <span class="nav-icon">⚙️</span>
+            <span>Configuration</span>
+          </button>
         </div>
         <div class="nav-group">
-          <p>INTERLOCKS</p>
+          <p>SYSTEM VIEWS</p>
+          <button class="nav-item">
+            <span class="nav-icon">📦</span>
+            <span>Slot Manager</span>
+          </button>
+          <button class="nav-item">
+            <span class="nav-icon">⚠️</span>
+            <span>Alarms</span>
+            <span class="nav-badge">0</span>
+          </button>
+          <button class="nav-item">
+            <span class="nav-icon">📜</span>
+            <span>Event Logs</span>
+          </button>
+          <button class="nav-item">
+            <span class="nav-icon">🔄</span>
+            <span>System Flow</span>
+          </button>
+        </div>
+        <div class="nav-group nav-group-fill">
+          <p>LIVE STATUS</p>
           <div class="nav-list" id="interlock-list">
             <span>Waiting for controller status</span>
           </div>
-        </div>
-        <div class="nav-group">
-          <p>MECHANICS</p>
           <div class="scroll-block compact" id="mechanics-summary">Loading axis data...</div>
         </div>
       </aside>
