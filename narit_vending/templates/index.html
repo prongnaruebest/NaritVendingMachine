@@ -8,7 +8,7 @@
   <link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='favicon-transparent-large.png') }}?v=20260721_v12">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=20260721_v17">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=20260721_v18">
 </head>
 <body>
   <div class="hmi-shell">
@@ -110,59 +110,32 @@
         <img class="header-brand-logo" src="{{ url_for('static', filename='narit-vending-logo.png') }}?v=20260721_v9" alt="NARIT Vending Smart Vending Control System">
       </div>
       <div class="header-control-area">
-      <div class="header-meta">
-        <div class="header-chip">
-          <span>Controller</span>
-          <strong id="hdr-connection" class="offline">OFFLINE</strong>
+        <section class="safety-strip" aria-label="Machine safety status and controls">
+          <div class="estop-zone">
+            <button class="btn-estop" id="stop-button" title="Emergency Stop Motion">
+              <span class="estop-icon">🛑</span> EMERGENCY STOP
+            </button>
+            <button class="btn-reset-alarm" id="clear-alarm" title="Reset Alarms & Interlocks">
+              🔄 RESET ALARMS
+            </button>
+          </div>
+          <div class="header-unified-status">
+            <div class="header-meta">
+              <div class="header-chip"><span>Controller</span><strong id="hdr-connection" class="offline">OFFLINE</strong></div>
+              <div class="header-chip"><span>State</span><strong id="hdr-machine-state" class="state-notready">NOT READY</strong></div>
+              <div class="header-chip"><span>Mode</span><strong id="hdr-mode" class="monospace">MANUAL</strong></div>
+              <div class="header-chip"><span>System Time</span><strong id="hdr-time" class="monospace">--:--:--</strong></div>
+            </div>
+            <div class="safety-indicators">
+              <div class="safety-ind"><span class="safety-ind-label">E-Stop Pin</span><div class="safety-ind-value ok" id="strip-estop">CLEAR</div></div>
+              <div class="safety-ind"><span class="safety-ind-label">Homing Status</span><div class="safety-ind-value warn" id="strip-homing">NOT READY</div><span class="safety-ind-sub" id="strip-homing-detail">X !  Y !  Z !</span></div>
+              <div class="safety-ind"><span class="safety-ind-label">Motion Interlock</span><div class="safety-ind-value warn" id="strip-motion">INHIBITED</div></div>
+              <div class="safety-ind"><span class="safety-ind-label">Active Alarms</span><div class="safety-ind-value ok" id="strip-alarms">0</div></div>
+              <div class="motion-inhibit-reason" id="strip-motion-reason">Connecting to controller...</div>
+            </div>
+          </div>
+        </section>
         </div>
-        <div class="header-chip">
-          <span>State</span>
-          <strong id="hdr-machine-state" class="state-notready">NOT READY</strong>
-        </div>
-        <div class="header-chip">
-          <span>Mode</span>
-          <strong id="hdr-mode" class="monospace">MANUAL</strong>
-        </div>
-        <div class="header-chip">
-          <span>System Time</span>
-          <strong id="hdr-time" class="monospace">--:--:--</strong>
-        </div>
-      </div>
-
-    <!-- ── ZONE B: SAFETY STRIP ────────────────────────────────── -->
-    <section class="safety-strip" aria-label="Machine safety status and controls">
-      <div class="estop-zone">
-        <button class="btn-estop" id="stop-button" title="Emergency Stop Motion">
-          <span class="estop-icon">🛑</span> EMERGENCY STOP
-        </button>
-        <button class="btn-reset-alarm" id="clear-alarm" title="Reset Alarms & Interlocks">
-          🔄 RESET ALARMS
-        </button>
-      </div>
-      <div class="safety-indicators">
-        <div class="safety-ind">
-          <span class="safety-ind-label">E-Stop Pin</span>
-          <div class="safety-ind-value ok" id="strip-estop">CLEAR</div>
-        </div>
-        <div class="safety-ind">
-          <span class="safety-ind-label">Homing Status</span>
-          <div class="safety-ind-value warn" id="strip-homing">NOT READY</div>
-          <span class="safety-ind-sub" id="strip-homing-detail">X !  Y !  Z !</span>
-        </div>
-        <div class="safety-ind">
-          <span class="safety-ind-label">Motion Interlock</span>
-          <div class="safety-ind-value warn" id="strip-motion">INHIBITED</div>
-        </div>
-        <div class="safety-ind">
-          <span class="safety-ind-label">Active Alarms</span>
-          <div class="safety-ind-value ok" id="strip-alarms">0</div>
-        </div>
-        <div class="motion-inhibit-reason" id="strip-motion-reason">
-          Connecting to controller...
-        </div>
-      </div>
-    </section>
-      </div>
     </header>
 
     <!-- ── MAIN WORKSPACE (CENTER) ─────────────────────────────── -->
@@ -404,7 +377,7 @@
 
       <section class="workspace-view" data-view-page="configuration">
         <div class="page-heading"><div><p class="panel-label">Configuration</p><h2>Motion &amp; GPIO Parameters</h2></div><span class="page-note">Read-only engineering reference</span></div>
-        <div class="panel page-panel">
+        <div class="panel page-panel motion-config-panel">
           <div class="panel-head"><div><p class="panel-label">Motion Configuration</p><h2 class="panel-title">Axis Parameters</h2></div></div>
           <div class="config-table-wrap"><table class="config-table"><thead><tr><th>Axis</th><th>Travel</th><th>Steps/mm</th><th>Max Speed</th><th>Default Speed</th><th>Lead Screw</th></tr></thead><tbody id="configuration-axis-table"></tbody></table></div>
         </div>
@@ -670,6 +643,6 @@
   <!-- Toast notification -->
   <div class="toast" id="toast" role="status"></div>
 
-  <script src="{{ url_for('static', filename='app.js') }}?v=20260721_v17"></script>
+  <script src="{{ url_for('static', filename='app.js') }}?v=20260721_v18"></script>
 </body>
 </html>

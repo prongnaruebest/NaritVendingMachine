@@ -646,6 +646,8 @@
         <a href="#flow-overview"><span class="dot"></span>ภาพรวม</a>
         <a href="#flow-home"><span class="dot"></span>Home แกน</a>
         <a href="#flow-slot"><span class="dot"></span>Go To Slot</a>
+        <div class="sb-sect">คู่มือ HMI</div>
+        <a href="#hmi-manual"><span class="dot"></span>การใช้งานหน้าเครื่อง</a>
         <div class="sb-sect">อื่น ๆ</div>
         <a href="#boot"><span class="dot"></span>ลำดับเริ่มระบบ</a>
         <a href="#todo"><span class="dot"></span>แผนพัฒนาต่อ</a>
@@ -1537,6 +1539,69 @@ Access-Control-Allow-Headers:
               style G fill:#0d1f33,stroke:#1ea7ff,color:#e4edf7
           </div>
         </div>
+      </section>
+
+      <!-- 14. HMI OPERATOR MANUAL -->
+      <section class="section" id="hmi-manual">
+        <h2 class="section-title">📘 คู่มือ NARIT VENDING Industrial Gantry HMI</h2>
+        <p class="lead">คู่มือฉบับย่อสำหรับผู้ควบคุมและช่างเทคนิค ใช้งานผ่าน
+          <code>http://naritvendingmachine/</code> โดยทุกคำสั่งเคลื่อนที่ต้องผ่าน E-Stop, limit switch,
+          homing และ motion interlock ก่อนเสมอ</p>
+
+        <div class="layer-grid">
+          <div class="layer-card motion">
+            <div class="layer-icon">🛡️</div>
+            <div class="layer-name">1. ตรวจสอบก่อนเริ่ม</div>
+            <div class="layer-desc">ตรวจพื้นที่ X/Y/Z ให้โล่ง ปลด E-Stop ตรวจสายมอเตอร์ เซนเซอร์ limit
+              และยืนยันว่า Controller เป็น ONLINE ก่อนสั่งงาน</div>
+          </div>
+          <div class="layer-card api">
+            <div class="layer-icon">🏠</div>
+            <div class="layer-name">2. Home ทุกแกน</div>
+            <div class="layer-desc">เข้า Motion Control แล้วกด HOME ALL AXES ระบบทำตามลำดับ Z → X → Y
+              รอจน Homing Status เป็น ALL HOMED และ Motion Interlock เป็น ENABLED</div>
+          </div>
+          <div class="layer-card ui">
+            <div class="layer-icon">🎮</div>
+            <div class="layer-name">3. ควบคุมการเคลื่อนที่</div>
+            <div class="layer-desc">เลือก Jog Step และ Jog Speed ก่อนกด X±, Y± หรือ Z±
+              สำหรับตำแหน่งเฉพาะให้กรอก X/Y/Z และ Speed แล้ว Validate → Preview → Execute</div>
+          </div>
+        </div>
+
+        <h3>ลำดับใช้งานมาตรฐาน</h3>
+        <div class="boot-steps">
+          <div class="boot-step"><div class="step-num">1</div><div class="step-body"><strong>เปิดหน้า HMI</strong><span>ตรวจ Controller = ONLINE, E-Stop Pin = CLEAR และ Active Alarms = 0</span></div></div>
+          <div class="boot-step"><div class="step-num">2</div><div class="step-body"><strong>Home ระบบ</strong><span>กด HOME ALL AXES และห้ามเข้าใกล้ชุดเคลื่อนที่ระหว่างหา reference</span></div></div>
+          <div class="boot-step"><div class="step-num">3</div><div class="step-body"><strong>ทดสอบ Jog ความเร็วต่ำ</strong><span>เริ่มจาก Step 0.1 หรือ 1.0 mm และ Feed Rate ต่ำ เพื่อตรวจทิศทาง</span></div></div>
+          <div class="boot-step"><div class="step-num">4</div><div class="step-body"><strong>เลือกหรือบันทึก Slot</strong><span>หน้า Slot Manager ใช้ Selected Slot เพื่อ Load Current Position, Save Value, Go To Slot หรือ Dispense</span></div></div>
+          <div class="boot-step"><div class="step-num">5</div><div class="step-body"><strong>สั่งจาก Visualization</strong><span>เลือกช่อง 1–30 ในตาราง 6×5 ช่องที่บันทึกแล้วจะสั่ง Go To Slot ทันที ส่วนช่องว่างถูกปิดใช้งาน</span></div></div>
+          <div class="boot-step"><div class="step-num">6</div><div class="step-body"><strong>ติดตามการทำงาน</strong><span>ตรวจตำแหน่ง X/Y, ระดับ Z, แถบสถานะล่าง และ Event Logs ระหว่างเครื่องเคลื่อนที่</span></div></div>
+        </div>
+
+        <div class="layer-grid">
+          <div class="layer-card motion">
+            <div class="layer-icon">🗺️</div>
+            <div class="layer-name">Visualization</div>
+            <div class="layer-desc">แผนผัง X/Y แสดง 30 Slot และตำแหน่ง gantry ปัจจุบัน แถบ Z ด้านข้างแสดงความลึก
+              สามารถใช้ล้อเมาส์เลื่อนภายในหน้าเพื่อดูข้อมูลทั้งหมด</div>
+          </div>
+          <div class="layer-card api">
+            <div class="layer-icon">🔧</div>
+            <div class="layer-name">Configuration & Diagnostics</div>
+            <div class="layer-desc">Configuration แสดงพารามิเตอร์แกนและ GPIO sensor pin ทั้งหมด
+              Diagnostics ใช้ตรวจสถานะ I/O และ Live Diagnostics Stream โดยไม่ใช้แทนเครื่องมือวัดไฟฟ้า</div>
+          </div>
+          <div class="layer-card ui">
+            <div class="layer-icon">🚨</div>
+            <div class="layer-name">Alarm & Emergency</div>
+            <div class="layer-desc">เมื่อเกิดอันตรายให้กด EMERGENCY STOP ทันที แก้สาเหตุทางกายภาพก่อน
+              จากนั้นปลด E-Stop กด RESET ALARMS และ Home ใหม่ก่อนเคลื่อนที่</div>
+          </div>
+        </div>
+
+        <p class="lead"><strong>ข้อห้าม:</strong> ห้าม bypass limit switch หรือ E-Stop, ห้ามเพิ่ม Speed ขณะไม่เห็นพื้นที่เคลื่อนที่,
+          ห้ามสั่ง Slot ที่ยังไม่ตรวจสอบค่า X/Y/Z และห้ามทำงานใต้ชุดแกน Z ขณะระบบมีไฟ</p>
       </section>
 
       <!-- 14. BOOT -->

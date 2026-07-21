@@ -946,10 +946,11 @@
       if (code === targetCode) classes.push("target");
       if (code === targetCode && moving) classes.push("moving-target");
       if (code === nearestCode) classes.push("at-position");
-      return `<div class="${classes.join(" ")}" data-visual-slot="${code}">
+      return `<button type="button" class="${classes.join(" ")}" data-visual-slot="${code}"
+        ${configured ? "" : "disabled"} title="${configured ? `Move gantry to Slot ${code}` : `Slot ${code} has no saved position`}">
         <span class="visual-slot-number">${String(index + 1).padStart(2, "0")}</span>
         <small>${configured ? `X${fmt(slot.x_mm, 0)} · Y${fmt(slot.y_mm, 0)}` : "NOT SET"}</small>
-      </div>`;
+      </button>`;
     }).join("");
 
     const markerX = 6 + xPct * .9;
@@ -1336,6 +1337,18 @@
         MS.visualTargetSlot = code;
         command(`Dispense slot ${code}`, "/api/start", { slot: code, ...targetSpeedPayload() }, { requireHome: true });
       }
+    });
+
+    /* --- Visualization slot map: direct move to saved position --- */
+    el("visual-slot-grid").addEventListener("click", (event) => {
+      const slotButton = event.target.closest("[data-visual-slot]");
+      if (!slotButton || slotButton.disabled) return;
+      const code = slotButton.dataset.visualSlot;
+      MS.selectedSlotCode = code;
+      MS.visualTargetSlot = code;
+      loadSelectedSlotEditor(true);
+      renderVisualization();
+      command(`Go to slot ${code}`, `/api/slots/${code}/goto`, targetSpeedPayload(), { requireHome: true });
     });
 
     /* --- Event log filter --- */

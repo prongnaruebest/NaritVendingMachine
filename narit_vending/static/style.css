@@ -3336,3 +3336,225 @@ select.slot-filter {
   .xy-live-coordinates { display: none; }
   .visualization-panel > .visual-readouts { grid-template-columns: 1fr; }
 }
+
+/* v18 expanded configuration, larger motion text, unified compact status */
+.hmi-shell,
+.hmi-shell.view-wide {
+  grid-template-rows: 108px minmax(0, 1fr) 38px;
+}
+
+.hmi-header,
+.hmi-shell.view-wide .hmi-header {
+  min-height: 108px;
+  grid-template-columns: minmax(330px, 410px) minmax(0, 1fr);
+  gap: 10px;
+  padding: 7px 14px;
+}
+
+.header-title { height: 72px; }
+.header-brand-logo { width: 400px; }
+
+.header-control-area {
+  grid-template-rows: minmax(0, 1fr);
+  gap: 0;
+}
+
+.header-control-area > .safety-strip {
+  grid-column: 1;
+}
+
+.header-control-area .safety-strip,
+.hmi-shell.view-wide .header-control-area .safety-strip {
+  grid-template-columns: 282px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  border-top: 0;
+}
+
+.header-control-area .estop-zone,
+.hmi-shell.view-wide .header-control-area .estop-zone {
+  grid-template-columns: 1.15fr 1fr;
+  gap: 5px;
+  align-items: center;
+}
+
+.header-control-area .btn-estop,
+.header-control-area .btn-reset-alarm {
+  min-height: 38px;
+  padding: 7px 8px;
+  font-size: 10px;
+}
+
+.header-unified-status {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(8, minmax(72px, 1fr));
+  gap: 4px;
+  align-items: stretch;
+}
+
+.header-unified-status > .header-meta,
+.header-unified-status > .safety-indicators {
+  display: contents;
+}
+
+.header-unified-status .header-chip,
+.header-unified-status .safety-ind {
+  min-width: 0;
+  min-height: 35px;
+  display: grid;
+  align-content: center;
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surf-2);
+  text-align: left;
+}
+
+.header-unified-status .header-chip {
+  border-left: 1px solid var(--border);
+}
+
+.header-unified-status .header-chip span,
+.header-unified-status .safety-ind-label {
+  font-size: 7px;
+  letter-spacing: .08em;
+}
+
+.header-unified-status .header-chip strong,
+.header-unified-status .safety-ind-value {
+  margin-top: 1px;
+  font-size: 10px;
+}
+
+.header-unified-status .safety-ind-sub {
+  overflow: hidden;
+  font-size: 7px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.header-unified-status .motion-inhibit-reason {
+  grid-column: 1 / -1;
+  min-height: 25px;
+  padding: 4px 8px;
+  font-size: 9px;
+}
+
+.workspace-view[data-view-page="motion"] .panel-title { font-size: 18px; }
+.workspace-view[data-view-page="motion"] .panel-label,
+.workspace-view[data-view-page="motion"] .fo-label,
+.hmi-shell:not(.view-wide) .right-panel .rpz-title { font-size: 13px; }
+.workspace-view[data-view-page="motion"] .field-label { font-size: 12px; }
+.workspace-view[data-view-page="motion"] .hmi-input { font-size: 15px; }
+.workspace-view[data-view-page="motion"] .home-seq-axis,
+.workspace-view[data-view-page="motion"] .home-seq-status,
+.workspace-view[data-view-page="motion"] .fo-speed-row,
+.hmi-shell:not(.view-wide) .right-panel .rp-param-label { font-size: 12px; }
+.workspace-view[data-view-page="motion"] button,
+.hmi-shell:not(.view-wide) .right-panel button { font-size: 12px; }
+.workspace-view[data-view-page="motion"] .axis-position { font-size: 33px; }
+.workspace-view[data-view-page="motion"] .axis-name,
+.workspace-view[data-view-page="motion"] .axis-kv { font-size: 12px; }
+
+.motion-config-panel {
+  min-height: 235px;
+  height: auto;
+  overflow: visible;
+}
+
+.motion-config-panel .config-table-wrap {
+  max-height: none;
+  height: auto;
+  overflow: visible;
+}
+
+.motion-config-panel .config-table {
+  min-width: 0;
+  table-layout: fixed;
+}
+
+.motion-config-panel .config-table th,
+.motion-config-panel .config-table td {
+  padding: 12px;
+}
+
+.workspace-view[data-view-page="configuration"] {
+  height: auto;
+  min-height: max-content;
+  align-content: start;
+}
+
+.workspace-view[data-view-page="visualization"] {
+  min-height: max-content;
+  align-content: start;
+}
+
+.workspace-view[data-view-page="visualization"] .visualization-panel {
+  min-height: max-content;
+  overflow: visible;
+}
+
+.visual-slot {
+  appearance: none;
+  width: 100%;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+}
+
+.visual-slot:hover:not(:disabled),
+.visual-slot:focus-visible {
+  border-color: var(--accent-cyan);
+  box-shadow: inset 0 0 0 1px var(--accent-cyan), 0 0 14px rgba(0, 199, 255, .24);
+  outline: none;
+}
+
+.visual-slot:disabled {
+  cursor: not-allowed;
+  opacity: .58;
+}
+
+@media (max-width: 1500px) {
+  .hmi-shell,
+  .hmi-shell.view-wide {
+    grid-template-rows: 150px auto auto 38px;
+  }
+
+  .hmi-header,
+  .hmi-shell.view-wide .hmi-header {
+    min-height: 150px;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .hmi-header .header-title { display: none; }
+
+  .header-control-area .safety-strip,
+  .hmi-shell.view-wide .header-control-area .safety-strip {
+    grid-template-columns: 272px minmax(0, 1fr);
+  }
+
+  .header-unified-status {
+    grid-template-columns: repeat(4, minmax(80px, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .header-control-area .safety-strip,
+  .hmi-shell.view-wide .header-control-area .safety-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .header-unified-status {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .motion-config-panel .config-table {
+    min-width: 720px;
+  }
+
+  .motion-config-panel .config-table-wrap {
+    overflow-x: auto;
+  }
+}
