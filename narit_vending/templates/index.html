@@ -3,638 +3,294 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="NARIT Vending Machine — Industrial XYZ Gantry Motion Controller HMI">
+  <meta name="description" content="NARIT Vending Machine Motion Control HMI">
   <title>NARIT Vending Machine — Motion Control</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-<div class="hmi-shell">
-
-  <!-- ═══════════════════════════════════════════════════════════
-       SIDEBAR — Navigation only
-  ════════════════════════════════════════════════════════════ -->
-  <aside class="sidebar" role="navigation" aria-label="Main navigation">
-    <div class="sidebar-brand">
-      <div class="brand-mark" aria-hidden="true">NV</div>
-      <div class="sidebar-brand-text">
-        NARIT VENDING
-        <span>Industrial Gantry HMI</span>
+  <div class="layout-shell">
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <div class="brand-mark">NV</div>
+        <div class="brand-copy">
+          <strong>NARIT VENDING</strong>
+          <span>Motion HMI</span>
+        </div>
       </div>
-    </div>
 
-    <nav class="sidebar-nav">
       <div class="nav-section">
-        <p class="nav-section-label">Overview</p>
-        <button class="nav-item" id="nav-dashboard" aria-label="Dashboard">
-          <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
-            <rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/>
-            <rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/>
-          </svg>
-          <span>Dashboard</span>
-        </button>
+        <p class="nav-label">Overview</p>
+        <button class="nav-item"><span class="nav-icon"></span><span>Dashboard</span></button>
       </div>
+
       <div class="nav-section">
-        <p class="nav-section-label">Control</p>
-        <button class="nav-item active" id="nav-motion" aria-current="page" aria-label="Motion Control">
-          <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
-            <circle cx="8" cy="8" r="2.5"/><path d="M8 1v2.5M8 12.5V15M1 8h2.5M12.5 8H15"/>
-            <path d="M3.2 3.2l1.8 1.8M11 11l1.8 1.8M3.2 12.8l1.8-1.8M11 5l1.8-1.8"/>
-          </svg>
-          <span>Motion Control</span>
-        </button>
-        <button class="nav-item" id="nav-slots" aria-label="Slot Manager">
-          <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
-            <rect x="1" y="3" width="14" height="3" rx="1"/><rect x="1" y="8" width="14" height="3" rx="1"/>
-            <rect x="1" y="13" width="14" height="1.5" rx="0.5"/>
-          </svg>
-          <span>Slot Manager</span>
-        </button>
+        <p class="nav-label">Control</p>
+        <button class="nav-item active"><span class="nav-icon"></span><span>Motion Control</span></button>
+        <button class="nav-item"><span class="nav-icon"></span><span>Slot Manager</span></button>
       </div>
+
       <div class="nav-section">
-        <p class="nav-section-label">Monitoring</p>
-        <button class="nav-item" id="nav-viz" aria-label="Visualization">
-          <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
-            <polyline points="1,12 5,8 8,10 11,5 15,3"/>
-          </svg>
-          <span>Visualization</span>
-        </button>
-        <button class="nav-item" id="nav-diag" aria-label="Diagnostics">
-          <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
-            <circle cx="8" cy="8" r="6.5"/><line x1="8" y1="5" x2="8" y2="8.5"/><circle cx="8" cy="11" r="0.8" fill="currentColor"/>
-          </svg>
-          <span>Diagnostics</span>
+        <p class="nav-label">Monitoring</p>
+        <button class="nav-item"><span class="nav-icon"></span><span>Visualization</span></button>
+        <button class="nav-item"><span class="nav-icon"></span><span>Diagnostics</span></button>
+        <button class="nav-item">
+          <span class="nav-icon"></span>
+          <span>Alarms</span>
+          <span class="nav-badge" id="nav-alarm-count">0</span>
         </button>
       </div>
-      <div class="nav-section">
-        <p class="nav-section-label">System</p>
-        <button class="nav-item" id="nav-config" aria-label="Configuration">
-          <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
-            <circle cx="8" cy="8" r="2.5"/>
-            <path d="M8 1.5V4M8 12v2.5M1.5 8H4M12 8h2.5M3.3 3.3l1.6 1.6M11.1 11.1l1.6 1.6M3.3 12.7l1.6-1.6M11.1 4.9l1.6-1.6"/>
-          </svg>
-          <span>Configuration</span>
-        </button>
-        <button class="nav-item" id="nav-flow" aria-label="System Flow">
-          <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
-            <rect x="1" y="2" width="4" height="3" rx="1"/><rect x="6" y="6" width="4" height="3" rx="1"/>
-            <rect x="11" y="10" width="4" height="3" rx="1"/>
-            <path d="M5 3.5h4M10 7.5h4M4 5v2h2"/>
-          </svg>
-          <span>System Flow</span>
-        </button>
-      </div>
-    </nav>
 
-    <!-- Compact machine readiness -->
-    <div class="sidebar-readiness" aria-label="Machine readiness summary">
-      <div class="readiness-row">
-        <span>Controller</span>
-        <span class="readiness-val fault" id="sb-controller">OFFLINE</span>
+      <div class="nav-section nav-summary">
+        <p class="nav-label">Alarm Summary</p>
+        <div class="alarm-summary-card" id="alarm-summary">
+          <strong>NO ACTIVE ALARMS</strong>
+          <p>Machine operation normal.</p>
+        </div>
       </div>
-      <div class="readiness-row">
-        <span>E-Stop</span>
-        <span class="readiness-val" id="sb-estop">UNKNOWN</span>
-      </div>
-      <div class="readiness-row">
-        <span>Alarms</span>
-        <span class="readiness-val" id="sb-alarms">0</span>
-      </div>
-    </div>
-  </aside>
+    </aside>
 
-  <!-- ═══════════════════════════════════════════════════════════
-       ZONE A: GLOBAL HEADER
-  ════════════════════════════════════════════════════════════ -->
-  <header class="hmi-header" role="banner">
-    <div class="header-title">
-      <h1>NARIT VENDING MACHINE</h1>
-      <p>Industrial XYZ Gantry Motion Controller · NVM-2026-01</p>
-    </div>
-    <div class="header-meta" role="status" aria-live="polite" aria-label="Machine status">
-      <div class="header-chip">
-        <span>Controller</span>
-        <strong>Raspberry Pi 4B</strong>
+    <header class="topbar">
+      <div class="header-title">
+        <h1>NARIT VENDING MACHINE</h1>
+        <p>Industrial XYZ Gantry Motion Controller</p>
       </div>
-      <div class="header-chip">
-        <span>Connection</span>
-        <strong id="hdr-connection" class="offline">OFFLINE</strong>
+      <div class="header-metrics">
+        <div class="metric-box"><span>Machine ID</span><strong>NVM-2026-01</strong></div>
+        <div class="metric-box"><span>Controller</span><strong>Raspberry Pi 4B</strong></div>
+        <div class="metric-box"><span>Connection</span><strong id="connection-state">OFFLINE</strong></div>
+        <div class="metric-box"><span>Machine State</span><strong id="machine-state">UNKNOWN</strong></div>
+        <div class="metric-box"><span>System Time</span><strong id="system-time">--:--:--</strong></div>
       </div>
-      <div class="header-chip">
-        <span>Mode</span>
-        <strong id="hdr-mode">MANUAL</strong>
-      </div>
-      <div class="header-chip">
-        <span>Machine State</span>
-        <strong id="hdr-machine-state" class="state-notready">NOT READY</strong>
-      </div>
-      <div class="header-chip">
-        <span>System Time</span>
-        <strong id="hdr-time" class="monospace">--:--:--</strong>
-      </div>
-    </div>
-  </header>
+    </header>
 
-  <!-- ═══════════════════════════════════════════════════════════
-       ZONE B: MACHINE SAFETY & READINESS STRIP
-  ════════════════════════════════════════════════════════════ -->
-  <div class="safety-strip" role="region" aria-label="Machine safety status">
+    <main class="main-panel">
+      <section class="readiness-strip">
+        <div class="strip-item">
+          <span>Controller</span>
+          <strong id="strip-controller">OFFLINE</strong>
+        </div>
+        <div class="strip-item">
+          <span>E-Stop</span>
+          <strong id="strip-estop">UNKNOWN</strong>
+        </div>
+        <div class="strip-item wide">
+          <span>Homing</span>
+          <strong id="strip-homing">NOT READY</strong>
+          <small id="strip-homing-detail">Awaiting axis state</small>
+        </div>
+        <div class="strip-item wide">
+          <span>Motion</span>
+          <strong id="strip-motion">INHIBITED</strong>
+          <small id="strip-motion-reason">Waiting for controller status</small>
+        </div>
+        <div class="strip-item">
+          <span>Alarms</span>
+          <strong id="strip-alarms">0</strong>
+        </div>
+      </section>
 
-    <!-- EMERGENCY STOP — visually isolated danger zone -->
-    <div class="estop-zone">
-      <button class="btn-estop" id="stop-button" disabled
-              aria-label="Emergency Stop — immediately halt all motion">
-        <span class="estop-icon" aria-hidden="true">⏹</span>
-        EMERGENCY STOP
-      </button>
-      <button class="btn-reset-alarm" id="clear-alarm" disabled
-              aria-label="Reset alarms after clearing fault condition">
-        RESET ALARM
-      </button>
-    </div>
-
-    <!-- Status indicators -->
-    <div class="safety-indicators" aria-label="Readiness indicators">
-      <div class="safety-ind" aria-label="Controller connection">
-        <span class="safety-ind-label">Controller</span>
-        <span class="safety-ind-value fault" id="strip-controller">
-          <span class="status-dot"></span> OFFLINE
-        </span>
-      </div>
-      <div class="safety-ind" aria-label="Emergency stop circuit">
-        <span class="safety-ind-label">E-Stop Circuit</span>
-        <span class="safety-ind-value fault" id="strip-estop">UNKNOWN</span>
-      </div>
-      <div class="safety-ind" aria-label="Axis homing status">
-        <span class="safety-ind-label">Axis Homing</span>
-        <span class="safety-ind-value warn" id="strip-homing">NOT READY</span>
-        <span class="safety-ind-sub" id="strip-homing-detail">X !  Y !  Z !</span>
-      </div>
-      <div class="safety-ind" aria-label="Motion permission">
-        <span class="safety-ind-label">Motion</span>
-        <span class="safety-ind-value warn" id="strip-motion">INHIBITED</span>
-      </div>
-      <div class="safety-ind" aria-label="Active alarm count">
-        <span class="safety-ind-label">Alarms</span>
-        <span class="safety-ind-value" id="strip-alarms">0</span>
-      </div>
-      <!-- Motion inhibit reason — WHY is motion blocked -->
-      <div class="motion-inhibit-reason" id="strip-motion-reason" role="alert" aria-live="polite">
-        Waiting for controller status
-      </div>
-    </div>
-  </div>
-
-  <!-- ═══════════════════════════════════════════════════════════
-       MAIN WORKSPACE
-  ════════════════════════════════════════════════════════════ -->
-  <main class="hmi-workspace" role="main">
-
-    <!-- ZONE C: Axis Overview + Feed Override -->
-    <section class="zone-c" aria-label="Axis position overview">
-
-      <!-- X AXIS -->
-      <article class="axis-card" id="axis-card-x" aria-label="X Axis status">
-        <div class="axis-card-head">
-          <span class="axis-name">X Axis</span>
-          <span class="axis-state-badge not-homed" id="axis-badge-x">NOT HOMED</span>
-        </div>
-        <div class="axis-position" id="axis-pos-x" aria-label="X position">
-          <span class="monospace">---.---</span>
-          <span class="unit">mm</span>
-        </div>
-        <div class="axis-travel-bar" aria-label="X travel position" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
-          <div class="axis-travel-fill" id="axis-fill-x" style="width:0%"></div>
-        </div>
-        <div class="axis-meta">
-          <div class="axis-kv"><span>Target</span><strong id="axis-tgt-x" class="monospace">---</strong></div>
-          <div class="axis-kv"><span>Steps</span><strong id="axis-steps-x" class="monospace">---</strong></div>
-          <div class="axis-kv"><span>Limit MIN</span><strong id="axis-lim-min-x">CLEAR</strong></div>
-          <div class="axis-kv"><span>Limit MAX</span><strong id="axis-lim-max-x">CLEAR</strong></div>
-        </div>
-      </article>
-
-      <!-- Y AXIS -->
-      <article class="axis-card" id="axis-card-y" aria-label="Y Axis status">
-        <div class="axis-card-head">
-          <span class="axis-name">Y Axis</span>
-          <span class="axis-state-badge not-homed" id="axis-badge-y">NOT HOMED</span>
-        </div>
-        <div class="axis-position" id="axis-pos-y" aria-label="Y position">
-          <span class="monospace">---.---</span>
-          <span class="unit">mm</span>
-        </div>
-        <div class="axis-travel-bar" aria-label="Y travel position" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
-          <div class="axis-travel-fill" id="axis-fill-y" style="width:0%"></div>
-        </div>
-        <div class="axis-meta">
-          <div class="axis-kv"><span>Target</span><strong id="axis-tgt-y" class="monospace">---</strong></div>
-          <div class="axis-kv"><span>Steps</span><strong id="axis-steps-y" class="monospace">---</strong></div>
-          <div class="axis-kv"><span>Limit MIN</span><strong id="axis-lim-min-y">CLEAR</strong></div>
-          <div class="axis-kv"><span>Limit MAX</span><strong id="axis-lim-max-y">CLEAR</strong></div>
-        </div>
-      </article>
-
-      <!-- Z AXIS -->
-      <article class="axis-card" id="axis-card-z" aria-label="Z Axis status">
-        <div class="axis-card-head">
-          <span class="axis-name">Z Axis</span>
-          <span class="axis-state-badge not-homed" id="axis-badge-z">NOT HOMED</span>
-        </div>
-        <div class="axis-position" id="axis-pos-z" aria-label="Z position">
-          <span class="monospace">---.---</span>
-          <span class="unit">mm</span>
-        </div>
-        <div class="axis-travel-bar" aria-label="Z travel position" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
-          <div class="axis-travel-fill" id="axis-fill-z" style="width:0%"></div>
-        </div>
-        <div class="axis-meta">
-          <div class="axis-kv"><span>Target</span><strong id="axis-tgt-z" class="monospace">---</strong></div>
-          <div class="axis-kv"><span>Steps</span><strong id="axis-steps-z" class="monospace">---</strong></div>
-          <div class="axis-kv"><span>Limit MIN</span><strong id="axis-lim-min-z">CLEAR</strong></div>
-          <div class="axis-kv"><span>Limit MAX</span><strong id="axis-lim-max-z">CLEAR</strong></div>
-        </div>
-      </article>
-
-      <!-- FEED OVERRIDE -->
-      <div class="feed-override-card" aria-label="Feed override control">
-        <p class="fo-label">Feed Override</p>
-        <div class="fo-value" aria-live="polite">
-          <span id="fo-pct-display" class="monospace">100</span>
-          <span class="fo-pct">%</span>
-        </div>
-        <div class="fo-presets" role="group" aria-label="Feed override presets">
-          <button class="fo-preset-btn" data-fo="10"  aria-label="10% feed override">10%</button>
-          <button class="fo-preset-btn" data-fo="25"  aria-label="25% feed override">25%</button>
-          <button class="fo-preset-btn" data-fo="50"  aria-label="50% feed override">50%</button>
-          <button class="fo-preset-btn" data-fo="75"  aria-label="75% feed override">75%</button>
-          <button class="fo-preset-btn active" data-fo="100" aria-label="100% feed override">100%</button>
-        </div>
-        <div class="fo-speeds">
-          <div class="fo-speed-row"><span>Programmed</span><strong id="fo-prog-speed" class="monospace">-- mm/s</strong></div>
-          <div class="fo-speed-row"><span>Override</span><strong id="fo-override-val" class="monospace">100 %</strong></div>
-          <div class="fo-speed-row"><span>Effective</span><strong id="fo-eff-speed" class="monospace">-- mm/s</strong></div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ZONE D: Jog / Homing / Target Positioning -->
-    <section class="zone-d" aria-label="Motion control workspace">
-
-      <!-- ─── JOG PANEL ─────────────────────────────────────── -->
-      <article class="panel jog-panel" aria-label="Manual jog control">
-        <div class="panel-head">
+      <section class="position-panel">
+        <div class="section-head">
           <div>
-            <p class="panel-label">Manual Motion</p>
-            <p class="panel-title">Jog Control</p>
+            <p class="section-label">Machine Position</p>
+            <h2>Current Coordinates</h2>
+          </div>
+          <div class="machine-summary">
+            <div><span>Controller</span><strong id="summary-controller">OFFLINE</strong></div>
+            <div><span>Motion</span><strong id="summary-motion">IDLE</strong></div>
+            <div><span>Mode</span><strong id="summary-mode">MANUAL</strong></div>
+            <div><span>Command</span><strong id="active-command">None</strong></div>
           </div>
         </div>
-        <div class="panel-body">
-          <!-- Inhibit banner — shown when jogging is blocked -->
-          <div class="jog-inhibit-banner" id="jog-inhibit-banner" role="alert" aria-live="polite">
-            <span>⚠</span>
-            <span id="jog-inhibit-text">Motion inhibited</span>
-          </div>
-
-          <!-- Jog parameters -->
-          <div class="jog-params" role="group" aria-label="Jog parameters">
-            <div>
-              <p class="field-label">Jog Step</p>
-              <div class="jog-step-row" role="group" aria-label="Step size selection">
-                <button class="step-btn" data-step="0.1" aria-label="0.1mm step">0.1</button>
-                <button class="step-btn active" data-step="1" aria-label="1.0mm step">1.0</button>
-                <button class="step-btn" data-step="5" aria-label="5.0mm step">5.0</button>
-                <button class="step-btn" data-step="10" aria-label="10.0mm step">10.0</button>
-                <button class="step-btn" data-step="0.01" aria-label="0.01mm step">0.01</button>
-              </div>
-              <div style="font-size:9px;color:var(--text-3);margin-top:2px;">
-                Selected: <span id="jog-step-display" class="monospace">1.0</span> mm
-              </div>
-            </div>
-            <div>
-              <p class="field-label">Jog Speed</p>
-              <div class="speed-preset-row" role="group" aria-label="Speed preset selection">
-                <button class="speed-preset" data-speed="5"  aria-label="5mm/s speed">5</button>
-                <button class="speed-preset active" data-speed="10" aria-label="10mm/s speed">10</button>
-                <button class="speed-preset" data-speed="20" aria-label="20mm/s speed">20</button>
-                <button class="speed-preset" data-speed="35" aria-label="35mm/s speed">35</button>
-              </div>
-              <div style="font-size:9px;color:var(--text-3);margin-top:2px;">
-                Speed: <span id="jog-speed-display" class="monospace">10.0</span> mm/s
-              </div>
-            </div>
-          </div>
-
-          <!-- Directional controls -->
-          <div class="jog-workspace" role="group" aria-label="Directional jog controls">
-            <!-- XY pad -->
-            <div>
-              <p class="field-label" style="text-align:center;margin-bottom:6px;">XY Plane</p>
-              <div class="xy-pad" role="group" aria-label="XY jog controls">
-                <button class="jog-btn jog-y-pos" data-jog="y:1" disabled
-                        aria-label="Jog Y positive direction">Y+</button>
-                <button class="jog-btn jog-x-neg" data-jog="x:-1" disabled
-                        aria-label="Jog X negative direction">X-</button>
-                <div class="jog-center" aria-hidden="true">XY</div>
-                <button class="jog-btn jog-x-pos" data-jog="x:1" disabled
-                        aria-label="Jog X positive direction">X+</button>
-                <button class="jog-btn jog-y-neg" data-jog="y:-1" disabled
-                        aria-label="Jog Y negative direction">Y-</button>
-              </div>
-            </div>
-            <!-- Z pad — separate, no spatial confusion -->
-            <div class="z-pad">
-              <p class="field-label">Z Axis</p>
-              <button class="jog-btn jog-btn-z" data-jog="z:1" disabled
-                      aria-label="Jog Z positive (up)">Z+</button>
-              <div style="height:8px;"></div>
-              <button class="jog-btn jog-btn-z" data-jog="z:-1" disabled
-                      aria-label="Jog Z negative (down)">Z-</button>
-            </div>
-          </div>
-
-          <!-- Hidden input that jog code reads -->
-          <input type="hidden" id="jog-step" value="1">
-          <input type="hidden" id="move-speed" value="10">
-          <input type="hidden" id="jog-time" value="">
+        <div class="coord-display" id="position-summary">
+          <div><span>X</span><strong>--</strong><small>mm</small></div>
+          <div><span>Y</span><strong>--</strong><small>mm</small></div>
+          <div><span>Z</span><strong>--</strong><small>mm</small></div>
         </div>
-      </article>
+      </section>
 
-      <!-- ─── HOMING PANEL ──────────────────────────────────── -->
-      <article class="panel homing-panel" aria-label="Homing control and status">
-        <div class="panel-head">
+      <section class="axis-panel">
+        <div class="section-head">
           <div>
-            <p class="panel-label">Reference</p>
-            <p class="panel-title">Home Sequence</p>
+            <p class="section-label">Axis Overview</p>
+            <h2>Live Axis Status</h2>
           </div>
+          <div class="section-note" id="active-command-duplicate">None</div>
         </div>
-        <div class="panel-body">
-          <!-- Per-axis homing workflow display -->
-          <div class="home-sequence-display" id="home-sequence-display" aria-label="Homing sequence status" aria-live="polite">
-            <!-- Populated by JS from config.home_order -->
-          </div>
+        <div class="axis-grid" id="axis-grid"></div>
+      </section>
 
-          <!-- Action buttons -->
-          <div class="home-actions">
-            <button class="btn-home-all" id="home-all" disabled
-                    aria-label="Home all axes in sequence">
-              HOME ALL AXES
-            </button>
-            <div class="home-axis-row" role="group" aria-label="Individual axis home buttons">
-              <button class="btn-home-axis home-axis" data-axis="x" disabled
-                      aria-label="Home X axis">HOME X</button>
-              <button class="btn-home-axis home-axis" data-axis="y" disabled
-                      aria-label="Home Y axis">HOME Y</button>
-              <button class="btn-home-axis home-axis" data-axis="z" disabled
-                      aria-label="Home Z axis">HOME Z</button>
-            </div>
-          </div>
-        </div>
-      </article>
-
-      <!-- ─── TARGET POSITIONING PANEL ─────────────────────── -->
-      <article class="panel target-panel" aria-label="Target positioning workflow">
-        <div class="panel-head">
+      <section class="target-panel">
+        <div class="section-head">
           <div>
-            <p class="panel-label">Target Positioning</p>
-            <p class="panel-title">Validate · Preview · Execute</p>
+            <p class="section-label">Target Positioning</p>
+            <h2>Validate · Preview · Execute</h2>
           </div>
-          <span id="active-command" style="font-size:10px;color:var(--text-3);">Command: None</span>
+          <div class="section-note" id="operation-message">Controller ready</div>
         </div>
-        <div class="panel-body" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;overflow:visible;">
 
-          <!-- Left: coordinate inputs -->
-          <div style="display:grid;gap:8px;align-content:start;">
-            <div>
-              <p class="field-label">X Target</p>
-              <div class="field-input-wrap">
-                <input class="hmi-input" type="number" id="move-x" step="0.1" min="0" max="220" placeholder="0.000" aria-label="X target position in mm">
-                <span class="unit-tag">mm</span>
-              </div>
-            </div>
-            <div>
-              <p class="field-label">Y Target</p>
-              <div class="field-input-wrap">
-                <input class="hmi-input" type="number" id="move-y" step="0.1" min="0" max="260" placeholder="0.000" aria-label="Y target position in mm">
-                <span class="unit-tag">mm</span>
-              </div>
-            </div>
-            <div>
-              <p class="field-label">Z Target</p>
-              <div class="field-input-wrap">
-                <input class="hmi-input" type="number" id="move-z" step="0.1" min="0" max="200" placeholder="0.000" aria-label="Z target position in mm">
-                <span class="unit-tag">mm</span>
-              </div>
-            </div>
-            <div>
-              <p class="field-label">Travel Speed</p>
-              <div class="field-input-wrap">
-                <input class="hmi-input" type="number" id="target-speed" step="0.1" min="0.1" placeholder="mm/s" aria-label="Travel speed in mm per second">
-                <span class="unit-tag">mm/s</span>
-              </div>
-            </div>
-            <div>
-              <p class="field-label">Move Timeout</p>
-              <div class="field-input-wrap">
-                <input class="hmi-input" type="number" id="move-time" step="0.1" min="0.1" placeholder="optional" aria-label="Move timeout in seconds">
-                <span class="unit-tag">s</span>
-              </div>
-            </div>
-            <!-- Action buttons: step 1→2→3 workflow -->
-            <div style="display:grid;gap:5px;margin-top:2px;">
-              <button class="btn-secondary" id="validate-move"
-                      aria-label="Step 1: Validate target coordinates">
-                VALIDATE TARGET
-              </button>
-              <button class="btn-secondary" id="plan-move"
-                      aria-label="Step 2: Preview move distances and time">
-                PREVIEW MOVE
-              </button>
-              <button class="btn-execute" id="absolute-move" disabled
-                      aria-label="Step 3: Execute move to target (requires validation)">
-                EXECUTE MOVE
-              </button>
-            </div>
-            <!-- Save speed/time helpers -->
-            <div style="display:flex;gap:5px;">
-              <button class="btn-secondary" id="apply-speed" style="flex:1;font-size:9px;padding:4px;" aria-label="Save travel speed to controller">SAVE SPEED</button>
-              <button class="btn-secondary" id="apply-time" style="flex:1;font-size:9px;padding:4px;" aria-label="Save move timeout to controller">SAVE TIMEOUT</button>
-            </div>
+        <div class="target-form">
+          <label>X Target<input id="move-x" type="number" step="0.1" min="0" placeholder="mm"></label>
+          <label>Y Target<input id="move-y" type="number" step="0.1" min="0" placeholder="mm"></label>
+          <label>Z Target<input id="move-z" type="number" step="0.1" min="0" placeholder="mm"></label>
+          <label>Travel Speed<input id="target-speed" type="number" step="0.1" min="0.1" placeholder="mm/s"></label>
+          <label>Move Timeout<input id="move-time" type="number" step="0.1" min="0.1" placeholder="s"></label>
+        </div>
+
+        <div class="workflow-actions">
+          <button class="ghost" id="validate-move">VALIDATE TARGET</button>
+          <button class="ghost" id="plan-move">PREVIEW MOVE</button>
+          <button class="primary" id="absolute-move" disabled>EXECUTE MOVE</button>
+          <button class="ghost" id="apply-speed">SAVE SPEED</button>
+          <button class="ghost" id="apply-time">SAVE TIME</button>
+        </div>
+
+        <div class="validation-box" id="validation-box">Target not validated.</div>
+
+        <div class="preview-grid">
+          <div class="preview-card">
+            <span>Current</span>
+            <pre id="preview-current">X --\nY --\nZ --</pre>
           </div>
-
-          <!-- Right: move preview -->
-          <div style="display:grid;gap:8px;align-content:start;">
-            <!-- Validation status -->
-            <div class="validation-message" id="validation-box" role="status" aria-live="polite">
-              Target not validated.
-            </div>
-
-            <!-- Move preview table -->
-            <div class="preview-table" aria-label="Move preview" id="preview-panel">
-              <div class="preview-table-label">Move Preview</div>
-              <div class="preview-row" style="font-size:8px;color:var(--text-4);margin-bottom:2px;">
-                <span></span><span style="text-align:right">CUR</span><span style="text-align:right">TGT</span><span style="text-align:right">DELTA</span>
-              </div>
-              <div class="preview-row">
-                <span>X</span>
-                <span class="pv" id="prev-cur-x">---</span>
-                <span class="pv" id="prev-tgt-x">---</span>
-                <span class="pd zero" id="prev-delta-x">---</span>
-              </div>
-              <div class="preview-row">
-                <span>Y</span>
-                <span class="pv" id="prev-cur-y">---</span>
-                <span class="pv" id="prev-tgt-y">---</span>
-                <span class="pd zero" id="prev-delta-y">---</span>
-              </div>
-              <div class="preview-row">
-                <span>Z</span>
-                <span class="pv" id="prev-cur-z">---</span>
-                <span class="pv" id="prev-tgt-z">---</span>
-                <span class="pd zero" id="prev-delta-z">---</span>
-              </div>
-              <div class="preview-dist">
-                <span>Distance</span>
-                <strong id="prev-dist" class="monospace">--- mm</strong>
-              </div>
-              <div class="preview-dist">
-                <span>Est. Time</span>
-                <strong id="prev-time" class="monospace">--- s</strong>
-              </div>
-              <div class="preview-dist">
-                <span>Speed</span>
-                <strong id="prev-speed" class="monospace">--- mm/s</strong>
-              </div>
-            </div>
-
-            <!-- Detailed plan readout -->
-            <div class="preview-table scroll-plan" id="move-plan" style="overflow-y:auto;max-height:120px;font-size:9px;color:var(--text-2);" aria-label="Detailed move plan">
-              Preview not generated.
-            </div>
-
-            <!-- Operation status -->
-            <div style="padding:6px 8px;border-radius:var(--r-sm);background:var(--surf-3);border:1px solid var(--border);">
-              <div style="font-size:8px;color:var(--text-4);letter-spacing:0.10em;text-transform:uppercase;margin-bottom:2px;">Operation Status</div>
-              <div id="operation-message" style="font-size:10px;color:var(--text-2);">Controller ready</div>
-            </div>
+          <div class="preview-card">
+            <span>Target</span>
+            <pre id="preview-target">X --\nY --\nZ --</pre>
+          </div>
+          <div class="preview-card">
+            <span>Delta</span>
+            <pre id="preview-delta">ΔX --\nΔY --\nΔZ --</pre>
           </div>
         </div>
-      </article>
-    </section>
 
-    <!-- ZONE E: Slot Positioning + Diagnostics -->
-    <section class="zone-e" aria-label="Slot operations and diagnostics">
+        <div class="plan-readout" id="move-plan">Preview not generated.</div>
+      </section>
 
-      <!-- ─── SLOT TABLE ─────────────────────────────────────── -->
-      <article class="panel slot-panel" aria-label="Slot positioning">
-        <div class="panel-head" style="padding:8px 12px 0;">
+      <section class="slot-panel">
+        <div class="section-head">
           <div>
-            <p class="panel-label">Slot Positioning</p>
-            <p class="panel-title">Teach · Go To · Dispense</p>
+            <p class="section-label">Slot Positioning</p>
+            <h2>Teach · Go To · Dispense</h2>
           </div>
-        </div>
-        <div class="slot-toolbar">
-          <input class="slot-search" id="slot-search" type="search"
-                 placeholder="Search slot # or product name..."
-                 aria-label="Search slots">
-          <select class="slot-filter hmi-input" id="slot-filter" aria-label="Filter slots by status" style="width:auto;padding:5px 8px;">
-            <option value="all">All Slots</option>
-            <option value="ready">Ready</option>
-            <option value="empty">Empty</option>
-            <option value="configured">Configured</option>
-          </select>
+          <div class="slot-toolbar">
+            <input id="slot-search" class="search" placeholder="Search slot or product">
+            <select id="slot-filter">
+              <option value="all">All</option>
+              <option value="ready">Ready</option>
+              <option value="empty">Empty</option>
+              <option value="configured">Configured</option>
+            </select>
+          </div>
         </div>
         <div class="slot-table-wrap">
-          <table class="slot-table" role="grid" aria-label="Slot positions table">
+          <table class="slot-table">
             <thead>
               <tr>
-                <th scope="col">Slot</th>
-                <th scope="col">Product</th>
-                <th scope="col">Status</th>
-                <th scope="col">X mm</th>
-                <th scope="col">Y mm</th>
-                <th scope="col">Z mm</th>
-                <th scope="col">Actions</th>
+                <th>Slot</th>
+                <th>Product</th>
+                <th>Status</th>
+                <th>X</th>
+                <th>Y</th>
+                <th>Z</th>
+                <th>Actions</th>
               </tr>
             </thead>
-            <tbody id="slot-grid" aria-live="polite">
-              <!-- Populated by JS -->
-            </tbody>
+            <tbody id="slot-grid"></tbody>
           </table>
         </div>
-      </article>
+      </section>
+    </main>
 
-      <!-- ─── DIAGNOSTICS PANEL ─────────────────────────────── -->
-      <article class="panel diag-panel" aria-label="Diagnostics and event log">
-        <div class="panel-head">
+    <aside class="right-panel">
+      <section class="rp-section rp-status">
+        <div class="rp-head">
           <div>
-            <p class="panel-label">Diagnostics</p>
-            <p class="panel-title">Alarms · Events</p>
+            <p class="section-label">Status</p>
+            <h3>Machine Readiness</h3>
           </div>
         </div>
-        <div class="panel-body">
-          <!-- Active alarm summary -->
-          <div class="alarm-summary" id="alarm-summary" role="alert" aria-live="assertive" aria-label="Active alarm summary">
-            <div class="alarm-summary-title">NO ACTIVE ALARMS</div>
-            <div class="alarm-detail">Machine operation normal.</div>
-          </div>
+        <div class="rp-status-grid">
+          <div class="rp-status-card"><span>Connection</span><strong id="footer-connection">OFFLINE</strong></div>
+          <div class="rp-status-card"><span>Ready</span><strong id="footer-ready">NOT READY</strong></div>
+          <div class="rp-status-card"><span>E-Stop</span><strong id="footer-estop">UNKNOWN</strong></div>
+          <div class="rp-status-card"><span>Command</span><strong id="home-sequence">Sequence: Z → X → Y</strong></div>
+        </div>
+      </section>
 
-          <!-- Event log header with filter -->
-          <div class="event-log-header">
-            <span style="font-size:9px;color:var(--text-3);font-weight:700;letter-spacing:0.10em;text-transform:uppercase;">Event Log</span>
-            <div class="event-log-filter" role="group" aria-label="Event log filter">
-              <button class="evt-filter-btn active" data-filter="all" aria-pressed="true">All</button>
-              <button class="evt-filter-btn" data-filter="error" aria-pressed="false">Errors</button>
-              <button class="evt-filter-btn" data-filter="motion" aria-pressed="false">Motion</button>
+      <section class="rp-section rp-jog">
+        <div class="rp-head">
+          <div>
+            <p class="section-label">Manual Motion</p>
+            <h3>Jog & Homing</h3>
+          </div>
+          <div class="section-note" id="jog-inhibit-reason">Manual motion ready</div>
+        </div>
+
+        <div class="jog-layout">
+          <div class="xy-jog">
+            <button data-jog="y:1" class="jog-btn">Y+</button>
+            <div class="xy-middle">
+              <button data-jog="x:-1" class="jog-btn">X-</button>
+              <div class="jog-core">XY</div>
+              <button data-jog="x:1" class="jog-btn">X+</button>
             </div>
+            <button data-jog="y:-1" class="jog-btn">Y-</button>
           </div>
-
-          <!-- Event list -->
-          <ol class="event-log" id="event-log" aria-label="System event log" aria-live="polite">
-            <!-- Populated by JS -->
-          </ol>
+          <div class="z-jog">
+            <button data-jog="z:1" class="jog-btn">Z+</button>
+            <button data-jog="z:-1" class="jog-btn">Z-</button>
+          </div>
         </div>
-      </article>
-    </section>
-  </main>
 
-  <!-- ═══════════════════════════════════════════════════════════
-       ZONE F: BOTTOM STATUS BAR
-  ════════════════════════════════════════════════════════════ -->
-  <footer class="status-bar" role="contentinfo" aria-label="Machine status bar">
-    <div class="status-pills" aria-live="polite">
-      <span class="status-pill offline" id="footer-connection">
-        <span class="status-dot"></span>OFFLINE
-      </span>
-      <span class="status-pill not-ready" id="footer-ready">NOT READY</span>
-      <span class="status-pill" id="footer-estop">E-STOP UNKNOWN</span>
-      <span class="status-pill" id="footer-homed">NOT HOMED</span>
-    </div>
-    <div class="status-center-bar" id="footer-status-text" aria-live="polite">
-      Waiting for controller status...
-    </div>
-    <div class="status-time" id="footer-status-time" aria-label="System time">--:--:--</div>
-  </footer>
+        <div class="jog-config">
+          <label>Jog Step
+            <select id="jog-step">
+              <option value="0.1">0.1 mm</option>
+              <option value="1" selected>1.0 mm</option>
+              <option value="5">5.0 mm</option>
+              <option value="10">10.0 mm</option>
+            </select>
+          </label>
+          <label>Jog Time
+            <input id="jog-time" type="number" step="0.1" min="0.1" placeholder="Optional">
+          </label>
+          <label>Jog Speed
+            <input id="move-speed" type="number" step="0.1" min="0.1" placeholder="mm/s">
+          </label>
+        </div>
 
-</div><!-- .hmi-shell -->
+        <div class="preset-row">
+          <button class="preset" data-speed="5">5 mm/s</button>
+          <button class="preset" data-speed="10">10 mm/s</button>
+          <button class="preset" data-speed="20">20 mm/s</button>
+          <button class="preset" data-speed="35">35 mm/s</button>
+        </div>
 
-<!-- Toast notifications -->
-<div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
+        <div class="home-actions">
+          <button class="primary" id="home-all">HOME ALL AXES</button>
+          <button class="ghost home-axis" data-axis="x">HOME X</button>
+          <button class="ghost home-axis" data-axis="y">HOME Y</button>
+          <button class="ghost home-axis" data-axis="z">HOME Z</button>
+        </div>
 
-<!-- Confirm dialog for teach position -->
-<div class="dialog-overlay" id="dialog-overlay" role="dialog" aria-modal="true" aria-labelledby="dialog-title" aria-describedby="dialog-body">
-  <div class="dialog-box">
-    <h2 class="dialog-title" id="dialog-title">Confirm Action</h2>
-    <p class="dialog-body" id="dialog-body-text">Are you sure?</p>
-    <div class="dialog-coords" id="dialog-coords" aria-label="Position to save"></div>
-    <div class="dialog-actions">
-      <button class="dialog-cancel" id="dialog-cancel">CANCEL</button>
-      <button class="dialog-confirm" id="dialog-confirm">CONFIRM SAVE</button>
-    </div>
+        <div class="status-ribbon" id="home-status"></div>
+      </section>
+
+      <section class="rp-section rp-log">
+        <div class="rp-head">
+          <div>
+            <p class="section-label">Live Log</p>
+            <h3>Diagnostics Stream</h3>
+          </div>
+          <div class="section-note" id="footer-status-time">--:--:--</div>
+        </div>
+        <div class="log-status" id="footer-status-text">Waiting for controller status...</div>
+        <ol class="event-log" id="event-log"></ol>
+      </section>
+    </aside>
   </div>
-</div>
 
-<script src="{{ url_for('static', filename='app.js') }}"></script>
+  <div class="toast" id="toast" role="status"></div>
 </body>
 </html>
