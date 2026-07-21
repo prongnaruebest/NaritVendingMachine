@@ -8,7 +8,7 @@
   <link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='favicon-transparent-large.png') }}?v=20260721_v12">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=20260721_v16">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=20260721_v17">
 </head>
 <body>
   <div class="hmi-shell">
@@ -346,14 +346,54 @@
       </section>
 
       <section class="workspace-view" data-view-page="visualization">
-        <div class="page-heading"><div><p class="panel-label">Machine Visualization</p><h2>Gantry Position View</h2></div><span class="page-note">Live update every 1 second</span></div>
+        <div class="page-heading"><div><p class="panel-label">Machine Visualization</p><h2>X–Y Slot Position Map</h2></div><span class="page-note">30 slots · 6 columns × 5 rows · live update every 1 second</span></div>
         <div class="panel page-panel visualization-panel">
-          <div class="gantry-stage">
-            <div class="gantry-rail gantry-x"><span>X</span><div class="gantry-carriage" id="vis-carriage-x"></div></div>
-            <div class="gantry-rail gantry-y"><span>Y</span><div class="gantry-carriage" id="vis-carriage-y"></div></div>
-            <div class="gantry-z" id="vis-carriage-z">Z</div>
+          <section class="xy-visual-card">
+            <div class="visual-card-head">
+              <div><span class="panel-label">X–Y Gantry Plane</span><strong>Slot Matrix 01–30</strong></div>
+              <div class="xy-live-coordinates"><span>X <b id="vis-x-value">0.000</b> mm</span><span>Y <b id="vis-y-value">0.000</b> mm</span></div>
+            </div>
+            <div class="xy-slot-stage" id="vis-xy-stage">
+              <span class="xy-axis-tag xy-axis-x">X+</span>
+              <span class="xy-axis-tag xy-axis-y">Y+</span>
+              <div class="visual-slot-grid" id="visual-slot-grid"></div>
+              <svg class="visual-trajectory" id="visual-trajectory" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><line id="visual-trajectory-line"></line></svg>
+              <div class="xy-gantry-marker" id="vis-xy-carriage"><span>HEAD</span></div>
+            </div>
+            <div class="visual-legend">
+              <span><i class="legend-dot current"></i>Gantry Position</span>
+              <span><i class="legend-dot target"></i>Motion Target</span>
+              <span><i class="legend-dot ready"></i>Configured Slot</span>
+              <span><i class="legend-dot empty"></i>Empty Slot</span>
+            </div>
+          </section>
+
+          <aside class="z-visual-card">
+            <div class="visual-card-head z-head">
+              <div><span class="panel-label">Independent Axis</span><strong>Z Axis</strong></div>
+              <span class="axis-state-badge not-homed" id="vis-z-state">NOT HOMED</span>
+            </div>
+            <div class="z-position-value"><strong id="vis-z-value">0.000</strong><span>mm</span></div>
+            <div class="z-travel-assembly">
+              <div class="z-scale"><span id="vis-z-max">200.0</span><span>MAX</span><span>0.0</span></div>
+              <div class="z-track">
+                <div class="z-track-fill" id="vis-z-fill"></div>
+                <div class="z-carriage-marker" id="vis-z-carriage">Z</div>
+                <div class="z-target-marker" id="vis-z-target-marker" title="Target Z"></div>
+              </div>
+            </div>
+            <div class="z-detail-grid">
+              <div><span>Target Slot</span><strong id="vis-target-slot">--</strong></div>
+              <div><span>Target Z</span><strong id="vis-target-z">-- mm</strong></div>
+              <div><span>Position Steps</span><strong id="vis-z-steps">0</strong></div>
+              <div><span>Motion</span><strong id="vis-motion-state">IDLE</strong></div>
+            </div>
+          </aside>
+
+          <div class="visual-readouts" id="visual-readouts">
+            <article class="visual-readout"><span>Target</span><strong id="vis-target-summary">SLOT --</strong><small id="vis-target-coordinates">X -- · Y -- · Z --</small></article>
+            <article class="visual-readout"><span>Gantry State</span><strong id="vis-gantry-state">IDLE</strong><small id="vis-gantry-detail">Waiting for controller</small></article>
           </div>
-          <div class="visual-readouts" id="visual-readouts"></div>
         </div>
       </section>
 
@@ -630,6 +670,6 @@
   <!-- Toast notification -->
   <div class="toast" id="toast" role="status"></div>
 
-  <script src="{{ url_for('static', filename='app.js') }}?v=20260721_v16"></script>
+  <script src="{{ url_for('static', filename='app.js') }}?v=20260721_v17"></script>
 </body>
 </html>

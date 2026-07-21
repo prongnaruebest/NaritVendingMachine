@@ -34,6 +34,7 @@
     selectedJogStep: 1.0,
     selectedJogSpeed: 10.0,
     selectedSlotCode: "",
+    visualTargetSlot: "",
     slotEditorDirty: false,
     silentErrorUntil: 0,
     logFilter: "all",
@@ -530,12 +531,14 @@
     $$("[data-slot-goto]").forEach((btn) => {
       btn.addEventListener("click", () => {
         const code = btn.dataset.slotGoto;
+        MS.visualTargetSlot = code;
         command(`Go to slot ${code}`, `/api/slots/${code}/goto`, targetSpeedPayload(), { requireHome: true });
       });
     });
     $$("[data-slot-dispense]").forEach((btn) => {
       btn.addEventListener("click", () => {
         const code = btn.dataset.slotDispense;
+        MS.visualTargetSlot = code;
         command(`Dispense slot ${code}`, "/api/start",
           { slot: code, ...targetSpeedPayload() }, { requireHome: true });
       });
@@ -902,6 +905,112 @@
     renderWorkspacePages();
   }
 
+  function renderVisualization() {
+    const slotGrid = document.getElementById("visual-slot-grid");
+    if (!slotGrid) return;
+
+    const commandName = MS.payload?.active_command || "";
+    const commandTarget = commandName.match(/^goto_slot_(\d+)$/)?.[1];
+    if (commandTarget) MS.visualTargetSlot = commandTarget;
+    const targetCode = MS.visualTargetSlot || MS.selectedSlotCode || "1";
+    const targetSlot = MS.slots[targetCode] || {};
+    const moving = Boolean(MS.pending || MS.payload?.busy);
+    const current = getStatus().current_position || {};
+    const xPosition = Number(current.x_mm ?? getAxis("x").position_mm ?? 0);
+    const yPosition = Number(current.y_mm ?? getAxis("y").position_mm ?? 0);
+    const zPosition = Number(current.z_mm ?? getAxis("z").position_mm ?? 0);
+    const xMax = Number(MS.config?.axes?.x?.max_travel_mm || 1);
+    const yMax = Number(MS.config?.axes?.y?.max_travel_mm || 1);
+    const zMax = Number(MS.config?.axes?.z?.max_travel_mm || 1);
+    const xPct = Math.max(0, Math.min(100, (xPosition / xMax) * 100));
+    const yPct = Math.max(0, Math.min(100, (yPosition / yMax) * 100));
+    const zPct = Math.max(0, Math.min(100, (zPosition / zMax) * 100));
+
+    let nearestCode = "";
+    let nearestDistance = Infinity;
+    Object.entries(MS.slots).forEach(([code, slot]) => {
+      if (slotStatus(slot) !== "ready") return;
+      const distance = Math.hypot(xPosition - Number(slot.x_mm || 0), yPosition - Number(slot.y_mm || 0));
+      if (distance < nearestDistance) {
+        nearestDistance = distance;
+        nearestCode = code;
+      }
+    });
+    if (nearestDistance > 3) nearestCode = "";
+
+    slotGrid.innerHTML = Array.from({ length: 30 }, (_, index) => {
+      const code = String(index + 1);
+      const slot = MS.slots[code] || {};
+      const configured = slotStatus(slot) === "ready";
+      const classes = ["visual-slot", configured ? "configured" : "empty"];
+      if (code === targetCode) classes.push("target");
+      if (code === targetCode && moving) classes.push("moving-target");
+      if (code === nearestCode) classes.push("at-position");
+      return `<div class="${classes.join(" ")}" data-visual-slot="${code}">
+        <span class="visual-slot-number">${String(index + 1).padStart(2, "0")}</span>
+        <small>${configured ? `X${fmt(slot.x_mm, 0)} · Y${fmt(slot.y_mm, 0)}` : "NOT SET"}</small>
+      </div>`;
+    }).join("");
+
+    const markerX = 6 + xPct * .9;
+    const markerY = 8 + yPct * .84;
+    const xyMarker = document.getElementById("vis-xy-carriage");
+    if (xyMarker) {
+      xyMarker.style.left = `${markerX}%`;
+      xyMarker.style.top = `${markerY}%`;
+      xyMarker.classList.toggle("moving", moving);
+    }
+
+    const targetIndex = Math.max(0, Number(targetCode || 1) - 1);
+    const targetColumn = targetIndex % 6;
+    const targetRow = Math.floor(targetIndex / 6);
+    const targetX = 6 + ((targetColumn + .5) / 6) * 90;
+    const targetY = 8 + ((targetRow + .5) / 5) * 84;
+    const trajectory = document.getElementById("visual-trajectory");
+    const trajectoryLine = document.getElementById("visual-trajectory-line");
+    if (trajectory && trajectoryLine) {
+      trajectory.classList.toggle("active", moving && Boolean(targetCode));
+      trajectoryLine.setAttribute("x1", markerX);
+      trajectoryLine.setAttribute("y1", markerY);
+      trajectoryLine.setAttribute("x2", targetX);
+      trajectoryLine.setAttribute("y2", targetY);
+    }
+
+    const zAxis = getAxis("z");
+    const zMarker = document.getElementById("vis-z-carriage");
+    const zFill = document.getElementById("vis-z-fill");
+    const zTargetMarker = document.getElementById("vis-z-target-marker");
+    if (zMarker) zMarker.style.bottom = `${zPct}%`;
+    if (zFill) zFill.style.height = `${zPct}%`;
+    const targetZPct = Math.max(0, Math.min(100, (Number(targetSlot.z_mm || 0) / zMax) * 100));
+    if (zTargetMarker) {
+      zTargetMarker.style.bottom = `${targetZPct}%`;
+      zTargetMarker.classList.toggle("active", Boolean(targetCode));
+    }
+
+    const zState = document.getElementById("vis-z-state");
+    if (zState) {
+      const homed = Boolean(zAxis.is_homed);
+      zState.className = `axis-state-badge ${homed ? "homed" : "not-homed"}`;
+      zState.textContent = homed ? "HOMED" : "NOT HOMED";
+    }
+
+    setText("vis-x-value", fmtPos(xPosition));
+    setText("vis-y-value", fmtPos(yPosition));
+    setText("vis-z-value", fmtPos(zPosition));
+    setText("vis-z-max", fmt(zMax, 1));
+    setText("vis-target-slot", targetCode ? `SLOT ${String(targetCode).padStart(2, "0")}` : "--");
+    setText("vis-target-z", targetCode ? `${fmtPos(targetSlot.z_mm)} mm` : "-- mm");
+    setText("vis-z-steps", fmtSteps(zAxis.position_steps));
+    setText("vis-motion-state", moving ? "MOVING" : "IDLE");
+    setText("vis-target-summary", targetCode ? `SLOT ${String(targetCode).padStart(2, "0")}` : "SLOT --");
+    setText("vis-target-coordinates", targetCode
+      ? `X ${fmtPos(targetSlot.x_mm)} · Y ${fmtPos(targetSlot.y_mm)} · Z ${fmtPos(targetSlot.z_mm)} mm`
+      : "X -- · Y -- · Z --");
+    setText("vis-gantry-state", moving ? `MOVING TO SLOT ${String(targetCode).padStart(2, "0")}` : "IDLE");
+    setText("vis-gantry-detail", `X ${fmtPos(xPosition)} · Y ${fmtPos(yPosition)} · Z ${fmtPos(zPosition)} mm`);
+  }
+
   function renderWorkspacePages() {
     const status = getStatus();
     const operation = getOperation();
@@ -927,22 +1036,7 @@
       return `<article class="dashboard-axis-card"><span>${axis.toUpperCase()} AXIS</span><strong>${fmtPos(data.position_mm)} mm</strong><small>${data.is_homed ? "HOMED" : "NOT HOMED"} · ${fmtSteps(data.position_steps)} steps</small></article>`;
     }).join("");
 
-    const visualReadouts = document.getElementById("visual-readouts");
-    if (visualReadouts) visualReadouts.innerHTML = AXES.map((axis) => {
-      const data = getAxis(axis);
-      const max = Number(MS.config?.axes?.[axis]?.max_travel_mm || 0);
-      return `<article class="visual-readout"><span>${axis.toUpperCase()} POSITION</span><strong>${fmtPos(data.position_mm)} mm</strong><small>Travel 0 – ${fmt(max, 1)} mm</small></article>`;
-    }).join("");
-    AXES.forEach((axis) => {
-      const node = document.getElementById(`vis-carriage-${axis}`);
-      if (!node) return;
-      const position = Number(getAxis(axis).position_mm || 0);
-      const max = Number(MS.config?.axes?.[axis]?.max_travel_mm || 1);
-      const pct = Math.max(0, Math.min(100, (position / max) * 100));
-      if (axis === "x") node.style.left = `calc(${pct}% - ${pct * .24}px)`;
-      if (axis === "y") node.style.top = `calc(${pct}% - ${pct * .24}px)`;
-      if (axis === "z") node.style.bottom = `${10 + pct * .65}%`;
-    });
+    renderVisualization();
 
     const diagnostics = document.getElementById("diagnostic-grid");
     if (diagnostics) {
@@ -1220,6 +1314,7 @@
     /* --- Selected slot direct controls --- */
     el("selected-slot-code").addEventListener("change", (event) => {
       MS.selectedSlotCode = event.target.value;
+      MS.visualTargetSlot = event.target.value;
       MS.slotEditorDirty = false;
       loadSelectedSlotEditor(true);
       updateButtonStates();
@@ -1230,11 +1325,17 @@
     el("selected-slot-save").addEventListener("click", saveSelectedSlot);
     el("selected-slot-goto").addEventListener("click", () => {
       const code = selectedSlotCode();
-      if (code) command(`Go to slot ${code}`, `/api/slots/${code}/goto`, targetSpeedPayload(), { requireHome: true });
+      if (code) {
+        MS.visualTargetSlot = code;
+        command(`Go to slot ${code}`, `/api/slots/${code}/goto`, targetSpeedPayload(), { requireHome: true });
+      }
     });
     el("selected-slot-dispense").addEventListener("click", () => {
       const code = selectedSlotCode();
-      if (code) command(`Dispense slot ${code}`, "/api/start", { slot: code, ...targetSpeedPayload() }, { requireHome: true });
+      if (code) {
+        MS.visualTargetSlot = code;
+        command(`Dispense slot ${code}`, "/api/start", { slot: code, ...targetSpeedPayload() }, { requireHome: true });
+      }
     });
 
     /* --- Event log filter --- */
