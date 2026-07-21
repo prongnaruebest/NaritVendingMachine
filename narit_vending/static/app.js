@@ -33,11 +33,11 @@
     feedOverridePct: 100,   // 0–100, displayed
     selectedJogStep: 1.0,
     selectedJogSpeed: 10.0,
+    selectedSlotCode: "",
+    slotEditorDirty: false,
+    silentErrorUntil: 0,
     logFilter: "all",
     currentView: "motion",
-
-    // Pending save dialog
-    pendingSaveSlot: null,
   };
 
   /* ── DOM HELPERS ────────────────────────────────────────────── */
@@ -204,24 +204,25 @@
   async function command(label, path, body, opts = {}) {
     if (!opts.noCheck && !motionAllowed(opts.requireHome)) {
       const reason = motionInhibitReason(opts.requireHome ?? false);
-      toast(reason, "error");
+      if (!opts.silent) toast(reason, "error");
       log(`${label} blocked: ${reason}`, "error", "INTERLOCK");
       return null;
     }
     MS.pending = !opts.isStop;
+    if (opts.silent) MS.silentErrorUntil = Date.now() + 5000;
     updateAllUI();
     log(`${label} requested`, "info", "COMMAND");
 
     try {
       const data = await apiCall(path, "POST", body);
-      toast(`${label} — accepted`, "ok");
+      if (!opts.silent) toast(`${label} — accepted`, "ok");
       log(`${label} accepted`, "info", "COMMAND");
       if (data.plan) renderPlan(data.plan);
       await refresh();
       return data;
     } catch (err) {
       const msg = humanizeError(err.message);
-      toast(msg, "error");
+      if (!opts.silent) toast(msg, "error");
       log(`${label} failed: ${msg}`, "error", "COMMAND");
       return null;
     } finally {
@@ -542,37 +543,87 @@
     $$("[data-slot-save]").forEach((btn) => {
       btn.addEventListener("click", () => {
         const code = btn.dataset.slotSave;
-        openSaveDialog(code);
+        MS.selectedSlotCode = code;
+        command(`Save current position to slot ${code}`, `/api/slots/${code}/save-current`, undefined,
+          { requireHome: true });
       });
     });
   }
 
-  /* ── CONFIRM DIALOG — teach position ────────────────────────── */
-  function openSaveDialog(slotCode) {
-    if (!motionAllowed(true)) {
-      toast(motionInhibitReason(true), "error");
+  /* ── SELECTED SLOT DIRECT EDITOR ────────────────────────────── */
+  function selectedSlotCode() {
+    return el("selected-slot-code")?.value || MS.selectedSlotCode;
+  }
+
+  function loadSelectedSlotEditor(force = false) {
+    const select = el("selected-slot-code");
+    if (!select) return;
+
+    const codes = Object.keys(MS.slots).sort((a, b) => Number(a) - Number(b));
+    const previous = MS.selectedSlotCode || select.value;
+    if (select.options.length !== codes.length || codes.some((code, index) => select.options[index]?.value !== code)) {
+      select.innerHTML = codes.map((code) => `<option value="${esc(code)}">Slot ${esc(code)}</option>`).join("");
+    }
+    if (!codes.length) return;
+
+    MS.selectedSlotCode = codes.includes(previous) ? previous : codes[0];
+    select.value = MS.selectedSlotCode;
+    const slot = MS.slots[MS.selectedSlotCode] || {};
+    const derived = slotStatus(slot);
+    const badge = el("selected-slot-status");
+    if (badge) {
+      badge.className = `slot-badge ${derived}`;
+      badge.textContent = derived.toUpperCase();
+    }
+
+    const current = getStatus().current_position || {};
+    setText("selected-slot-current",
+      `Current: X ${fmtPos(current.x_mm)} · Y ${fmtPos(current.y_mm)} · Z ${fmtPos(current.z_mm)} mm`);
+
+    if (force || !MS.slotEditorDirty) {
+      el("selected-slot-product").value = slot.product_name || "";
+      el("selected-slot-delay").value = Number(slot.dispense_delay_ms || 0);
+      AXES.forEach((axis) => {
+        el(`selected-slot-${axis}`).value = Number(slot[`${axis}_mm`] || 0);
+      });
+      MS.slotEditorDirty = false;
+    }
+  }
+
+  function selectedSlotPayload() {
+    const payload = {
+      product_name: el("selected-slot-product").value.trim(),
+      dispense_delay_ms: Number(el("selected-slot-delay").value || 0),
+    };
+    AXES.forEach((axis) => {
+      payload[`${axis}_mm`] = Number(el(`selected-slot-${axis}`).value);
+    });
+    return payload;
+  }
+
+  async function saveSelectedSlot() {
+    const code = selectedSlotCode();
+    if (!code) return;
+    const payload = selectedSlotPayload();
+    if (AXES.some((axis) => !Number.isFinite(payload[`${axis}_mm`]))) {
+      toast("Enter valid X, Y and Z coordinates.", "error");
       return;
     }
-    const cur = getStatus().current_position || {};
-    MS.pendingSaveSlot = slotCode;
-
-    el("dialog-title").textContent = `Teach Slot ${slotCode} Position`;
-    el("dialog-body-text").textContent = `Save current machine position to Slot ${slotCode}?`;
-    el("dialog-coords").innerHTML =
-      `X = ${fmtPos(cur.x_mm)} mm\nY = ${fmtPos(cur.y_mm)} mm\nZ = ${fmtPos(cur.z_mm)} mm`;
-    el("dialog-overlay").classList.add("open");
+    const result = await command(`Save values to slot ${code}`, `/api/slots/${code}`, payload,
+      { isStop: true, noCheck: true });
+    if (result) {
+      MS.slotEditorDirty = false;
+      loadSelectedSlotEditor(true);
+    }
   }
 
-  function closeDialog() {
-    el("dialog-overlay").classList.remove("open");
-    MS.pendingSaveSlot = null;
-  }
-
-  function confirmSave() {
-    const code = MS.pendingSaveSlot;
-    closeDialog();
-    if (!code) return;
-    command(`Save position to slot ${code}`, `/api/slots/${code}/save-current`, undefined, { requireHome: true });
+  function loadCurrentIntoSelectedSlot() {
+    const current = getStatus().current_position || {};
+    AXES.forEach((axis) => {
+      el(`selected-slot-${axis}`).value = Number(current[`${axis}_mm`] || 0).toFixed(3);
+    });
+    MS.slotEditorDirty = true;
+    setText("selected-slot-current", "Current position loaded — click SAVE VALUES to store it.");
   }
 
   /* ── RENDER: ALARM SUMMARY ──────────────────────────────────── */
@@ -771,6 +822,16 @@
       btn.disabled = !canJog;
     });
 
+    const selectedCode = selectedSlotCode();
+    const selectedSlot = MS.slots[selectedCode] || {};
+    const canConfigureSlot = MS.online && !MS.pending && !MS.payload?.busy;
+    const canUseSlot = motionAllowed(true);
+    const selectedSlotReady = slotStatus(selectedSlot) === "ready";
+    if (el("selected-slot-load-current")) el("selected-slot-load-current").disabled = !MS.online;
+    if (el("selected-slot-save")) el("selected-slot-save").disabled = !canConfigureSlot;
+    if (el("selected-slot-goto")) el("selected-slot-goto").disabled = !canUseSlot;
+    if (el("selected-slot-dispense")) el("selected-slot-dispense").disabled = !canUseSlot || !selectedSlotReady;
+
     // Jog inhibit banner
     const banner = el("jog-inhibit-banner");
     if (banner) {
@@ -942,6 +1003,7 @@
     renderAxisCards();
     renderHomingSequence();
     renderSlotTable();
+    loadSelectedSlotEditor();
     renderAlarmSummary();
     renderPreview(MS.validation.plan);
     updateAllUI();
@@ -949,7 +1011,7 @@
     // Alert on new errors
     if (payload.last_error && payload.last_error !== MS.lastError) {
       log(humanizeError(payload.last_error), "error", "ALARM");
-      toast(humanizeError(payload.last_error), "error");
+      if (Date.now() > MS.silentErrorUntil) toast(humanizeError(payload.last_error), "error");
     }
     MS.lastError = payload.last_error || "";
   }
@@ -1031,7 +1093,7 @@
       btn.addEventListener("click", () => {
         const [axis, dir] = btn.dataset.jog.split(":");
         command(`Jog ${axis.toUpperCase()} ${dir === "1" ? "+" : "-"}${MS.selectedJogStep} mm`,
-          "/api/jog", buildJogPayload(axis, dir));
+          "/api/jog", buildJogPayload(axis, dir), { silent: true });
       });
     });
 
@@ -1123,11 +1185,24 @@
     el("slot-search").addEventListener("input", renderSlotTable);
     el("slot-filter").addEventListener("change", renderSlotTable);
 
-    /* --- Dialog --- */
-    el("dialog-cancel").addEventListener("click", closeDialog);
-    el("dialog-confirm").addEventListener("click", confirmSave);
-    el("dialog-overlay").addEventListener("click", (e) => {
-      if (e.target === el("dialog-overlay")) closeDialog();
+    /* --- Selected slot direct controls --- */
+    el("selected-slot-code").addEventListener("change", (event) => {
+      MS.selectedSlotCode = event.target.value;
+      MS.slotEditorDirty = false;
+      loadSelectedSlotEditor(true);
+      updateButtonStates();
+    });
+    ["selected-slot-product", "selected-slot-delay", "selected-slot-x", "selected-slot-y", "selected-slot-z"]
+      .forEach((id) => el(id).addEventListener("input", () => { MS.slotEditorDirty = true; }));
+    el("selected-slot-load-current").addEventListener("click", loadCurrentIntoSelectedSlot);
+    el("selected-slot-save").addEventListener("click", saveSelectedSlot);
+    el("selected-slot-goto").addEventListener("click", () => {
+      const code = selectedSlotCode();
+      if (code) command(`Go to slot ${code}`, `/api/slots/${code}/goto`, targetSpeedPayload(), { requireHome: true });
+    });
+    el("selected-slot-dispense").addEventListener("click", () => {
+      const code = selectedSlotCode();
+      if (code) command(`Dispense slot ${code}`, "/api/start", { slot: code, ...targetSpeedPayload() }, { requireHome: true });
     });
 
     /* --- Event log filter --- */
@@ -1145,10 +1220,6 @@
     /* --- Target speed input change — update feed override display --- */
     el("target-speed").addEventListener("input", updateFeedOverride);
 
-    /* --- Keyboard: Escape closes dialog --- */
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") closeDialog();
-    });
   }
 
   /* ── INIT ───────────────────────────────────────────────────── */

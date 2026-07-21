@@ -2512,3 +2512,285 @@ select.slot-filter {
   .workspace-view[data-view-page="motion"] > .wz-top { min-height: 235px; }
   .workspace-view[data-view-page="motion"] > .target-panel { min-height: 350px; }
 }
+
+/* v14 header safety, jog-first right rail, and direct slot editor */
+.hmi-shell,
+.hmi-shell.view-wide {
+  grid-template-rows: 132px minmax(0, 1fr) 38px;
+}
+
+.hmi-shell {
+  grid-template-areas:
+    "sidebar header header"
+    "sidebar workspace right"
+    "sidebar footer footer";
+}
+
+.hmi-shell.view-wide {
+  grid-template-areas:
+    "sidebar header header"
+    "sidebar workspace workspace"
+    "sidebar footer footer";
+}
+
+.hmi-header,
+.hmi-shell.view-wide .hmi-header {
+  min-height: 132px;
+  display: grid;
+  grid-template-columns: minmax(360px, 450px) minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+  padding: 8px 16px;
+}
+
+.header-title {
+  width: 100%;
+  height: 86px;
+}
+
+.header-brand-logo {
+  width: 445px;
+}
+
+.header-control-area {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: 30px minmax(0, 1fr);
+  gap: 6px;
+}
+
+.header-control-area > .header-meta,
+.header-control-area > .safety-strip {
+  grid-column: 1;
+}
+
+.header-control-area .header-meta {
+  min-height: 30px;
+  justify-content: flex-end;
+}
+
+.header-control-area .header-chip {
+  min-width: 102px;
+  padding: 0 12px;
+}
+
+.header-control-area .safety-strip,
+.hmi-shell.view-wide .header-control-area .safety-strip {
+  width: 100%;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr);
+  align-items: stretch;
+  gap: 8px;
+  padding: 6px 0 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+}
+
+.header-control-area .estop-zone,
+.hmi-shell.view-wide .header-control-area .estop-zone {
+  width: auto;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 6px;
+}
+
+.header-control-area .btn-estop,
+.header-control-area .btn-reset-alarm {
+  min-height: 42px;
+  padding: 8px 10px;
+}
+
+.header-control-area .safety-indicators,
+.hmi-shell.view-wide .header-control-area .safety-indicators {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(92px, 1fr)) minmax(190px, 1.7fr);
+  gap: 6px;
+}
+
+.header-control-area .safety-ind {
+  padding: 6px 8px;
+  border-color: var(--border);
+  background: var(--surf-2);
+}
+
+.header-control-area .safety-ind-label { font-size: 9px; }
+.header-control-area .safety-ind-value { margin-top: 2px; font-size: 12px; }
+.header-control-area .safety-ind-sub { font-size: 9px; }
+
+.header-control-area .motion-inhibit-reason,
+.hmi-shell.view-wide .header-control-area .motion-inhibit-reason {
+  grid-column: auto;
+  display: flex;
+  align-items: center;
+  padding: 7px 9px;
+  font-size: 10px;
+}
+
+.right-panel {
+  grid-template-rows: minmax(420px, 1fr) minmax(340px, .8fr);
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.rpz-jog {
+  min-height: 420px;
+  grid-row: 1;
+}
+
+.rpz-slot-editor {
+  min-height: 340px;
+  grid-row: 2;
+  overflow-y: auto;
+}
+
+.selected-slot-picker {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+.selected-slot-picker .hmi-input {
+  min-height: 38px;
+}
+
+.selected-slot-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.selected-slot-field {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+  color: var(--text-3);
+  font-size: 10px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.selected-slot-field-wide {
+  grid-column: 1 / -1;
+}
+
+.selected-slot-field .hmi-input {
+  min-height: 36px;
+}
+
+.selected-slot-current {
+  margin-top: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surf-2);
+  color: var(--blue-lt);
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+.selected-slot-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.selected-slot-actions button {
+  min-height: 38px;
+  font-size: 11px;
+}
+
+.right-panel,
+.rpz-slot-editor {
+  scrollbar-width: thin;
+  scrollbar-color: var(--blue-lt) var(--surf-0);
+}
+
+.right-panel::-webkit-scrollbar,
+.rpz-slot-editor::-webkit-scrollbar { width: 9px; }
+.right-panel::-webkit-scrollbar-track,
+.rpz-slot-editor::-webkit-scrollbar-track { background: var(--surf-0); }
+.right-panel::-webkit-scrollbar-thumb,
+.rpz-slot-editor::-webkit-scrollbar-thumb {
+  border: 2px solid var(--surf-0);
+  border-radius: 999px;
+  background: var(--blue-lt);
+}
+
+@media (max-width: 1500px) {
+  .hmi-shell,
+  .hmi-shell.view-wide {
+    grid-template-columns: 210px minmax(0, 1fr);
+    grid-template-rows: auto auto auto 38px;
+    grid-template-areas:
+      "sidebar header"
+      "sidebar right"
+      "sidebar workspace"
+      "sidebar footer";
+  }
+
+  .hmi-shell.view-wide {
+    grid-template-areas:
+      "sidebar header"
+      "sidebar workspace"
+      "sidebar footer";
+  }
+
+  .hmi-header,
+  .hmi-shell.view-wide .hmi-header {
+    min-height: 178px;
+    grid-template-columns: 320px minmax(0, 1fr);
+  }
+
+  .header-control-area .safety-strip,
+  .hmi-shell.view-wide .header-control-area .safety-strip {
+    grid-template-columns: 260px minmax(0, 1fr);
+  }
+
+  .header-control-area .safety-indicators,
+  .hmi-shell.view-wide .header-control-area .safety-indicators {
+    grid-template-columns: repeat(3, minmax(90px, 1fr));
+  }
+
+  .right-panel {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: auto;
+    overflow: visible;
+  }
+
+  .rpz-jog,
+  .rpz-slot-editor {
+    min-height: 430px;
+    grid-row: auto;
+  }
+}
+
+@media (max-width: 1050px) {
+  .hmi-shell,
+  .hmi-shell.view-wide {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "header"
+      "right"
+      "workspace"
+      "footer"
+      "sidebar";
+  }
+
+  .hmi-header,
+  .hmi-shell.view-wide .hmi-header {
+    grid-template-columns: 1fr;
+  }
+
+  .header-title { display: none; }
+  .right-panel { grid-template-columns: 1fr; }
+}

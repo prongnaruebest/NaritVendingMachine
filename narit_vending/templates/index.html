@@ -8,7 +8,7 @@
   <link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='favicon-transparent-large.png') }}?v=20260721_v12">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=20260721_v13">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=20260721_v15">
 </head>
 <body>
   <div class="hmi-shell">
@@ -109,6 +109,7 @@
       <div class="header-title">
         <img class="header-brand-logo" src="{{ url_for('static', filename='narit-vending-logo.png') }}?v=20260721_v9" alt="NARIT Vending Smart Vending Control System">
       </div>
+      <div class="header-control-area">
       <div class="header-meta">
         <div class="header-chip">
           <span>Controller</span>
@@ -127,10 +128,9 @@
           <strong id="hdr-time" class="monospace">--:--:--</strong>
         </div>
       </div>
-    </header>
 
     <!-- ── ZONE B: SAFETY STRIP ────────────────────────────────── -->
-    <section class="safety-strip">
+    <section class="safety-strip" aria-label="Machine safety status and controls">
       <div class="estop-zone">
         <button class="btn-estop" id="stop-button" title="Emergency Stop Motion">
           <span class="estop-icon">🛑</span> EMERGENCY STOP
@@ -168,6 +168,8 @@
         </div>
       </div>
     </section>
+      </div>
+    </header>
 
     <!-- ── MAIN WORKSPACE (CENTER) ─────────────────────────────── -->
     <main class="hmi-workspace">
@@ -535,7 +537,63 @@
         </div>
       </div>
 
-      <!-- Zone 3: Live Event Log / Diagnostics Stream (Bottom Right) -->
+      <!-- Zone 3: Selected Slot Direct Controls -->
+      <div class="rpz rpz-slot-editor">
+        <div class="rpz-head">
+          <span class="rpz-title">Selected Slot</span>
+          <span class="slot-badge empty" id="selected-slot-status">EMPTY</span>
+        </div>
+
+        <div class="selected-slot-picker">
+          <label for="selected-slot-code">Slot</label>
+          <select id="selected-slot-code" class="hmi-input"></select>
+        </div>
+
+        <div class="selected-slot-fields">
+          <label class="selected-slot-field">
+            <span>Product Name</span>
+            <input id="selected-slot-product" class="hmi-input" type="text" maxlength="80" placeholder="Product name">
+          </label>
+          <label class="selected-slot-field">
+            <span>Dispense Delay</span>
+            <div class="field-input-wrap">
+              <input id="selected-slot-delay" class="hmi-input" type="number" min="0" step="100" value="0">
+              <span class="unit-tag">ms</span>
+            </div>
+          </label>
+          <label class="selected-slot-field">
+            <span>X Coordinate</span>
+            <div class="field-input-wrap">
+              <input id="selected-slot-x" class="hmi-input" type="number" min="0" step="0.1">
+              <span class="unit-tag">mm</span>
+            </div>
+          </label>
+          <label class="selected-slot-field">
+            <span>Y Coordinate</span>
+            <div class="field-input-wrap">
+              <input id="selected-slot-y" class="hmi-input" type="number" min="0" step="0.1">
+              <span class="unit-tag">mm</span>
+            </div>
+          </label>
+          <label class="selected-slot-field selected-slot-field-wide">
+            <span>Z Coordinate</span>
+            <div class="field-input-wrap">
+              <input id="selected-slot-z" class="hmi-input" type="number" min="0" step="0.1">
+              <span class="unit-tag">mm</span>
+            </div>
+          </label>
+        </div>
+
+        <div class="selected-slot-current" id="selected-slot-current">Current: X -- · Y -- · Z -- mm</div>
+        <div class="selected-slot-actions">
+          <button class="btn-secondary" id="selected-slot-load-current">LOAD CURRENT</button>
+          <button class="btn-slot-save" id="selected-slot-save">SAVE VALUES</button>
+          <button class="btn-slot-goto" id="selected-slot-goto">GO TO SLOT</button>
+          <button class="btn-slot-dispense" id="selected-slot-dispense">DISPENSE</button>
+        </div>
+      </div>
+
+      <!-- Live Event Log / Diagnostics Stream (moved to Diagnostics page) -->
       <div class="rpz rpz-log">
         <div class="rpz-head">
           <span class="rpz-title">Live Diagnostics Stream</span>
@@ -577,19 +635,6 @@
   <!-- Toast notification -->
   <div class="toast" id="toast" role="status"></div>
 
-  <!-- Confirmation dialog overlay -->
-  <div class="dialog-overlay" id="dialog-overlay">
-    <div class="dialog-box">
-      <h3 class="dialog-title" id="dialog-title">Teach Slot Position</h3>
-      <p class="dialog-body" id="dialog-body-text">Save current machine position to slot?</p>
-      <div class="dialog-coords" id="dialog-coords">X = 0.000 mm\nY = 0.000 mm\nZ = 0.000 mm</div>
-      <div class="dialog-actions">
-        <button class="dialog-cancel" id="dialog-cancel">Cancel</button>
-        <button class="dialog-confirm" id="dialog-confirm">Confirm Teach</button>
-      </div>
-    </div>
-  </div>
-
-  <script src="{{ url_for('static', filename='app.js') }}?v=20260721_v9"></script>
+  <script src="{{ url_for('static', filename='app.js') }}?v=20260721_v15"></script>
 </body>
 </html>
