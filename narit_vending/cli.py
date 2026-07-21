@@ -39,7 +39,6 @@ def raw_keyboard() -> object:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Narit Vending motion controller")
-    parser.add_argument("--pulse-delay", type=float, default=None, help="Pulse delay in seconds")
     parser.add_argument("--config", default="machine_config.json", help="Path to machine configuration JSON")
 
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -118,10 +117,10 @@ def interactive_jog(controller: MotionController, step_override_mm: float | None
 
 def run_command(args: argparse.Namespace) -> int:
     try:
-        machine_config = load_machine_config(args.config, pulse_delay=args.pulse_delay)
+        machine_config = load_machine_config(args.config)
         controller = build_controller(machine_config)
     except FileNotFoundError:
-        controller = build_default_controller(pulse_delay=args.pulse_delay or 0.0008)
+        controller = build_default_controller()
 
     try:
         if args.command == "status":

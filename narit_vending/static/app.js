@@ -1,198 +1,76 @@
-const state = {
-  slots: {},
-  busy: false,
-  liveUpdate: true,
-  monitorUpdate: true,
-};
+(() => {
+  "use strict";
+  const state = { online: false, pending: false, payload: null, slots: {}, events: [], lastError: "" };
+  const $ = (selector) => document.querySelector(selector);
+  const $$ = (selector) => [...document.querySelectorAll(selector)];
+  const axes = ["x", "y", "z"];
 
-async function requestJson(url, options = {}) {
-  const response = await fetch(url, {
-    headers: { "Content-Type": "application/json" },
-    ...options,
-  });
-  const payload = await response.json();
-  if (!response.ok) {
-    throw new Error(payload.error || payload.last_error || "Request failed");
+  function escape(value) { return String(value).replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[character])); }
+  function log(message, level = "info") {
+    state.events.unshift({ at: new Date(), message, level }); state.events = state.events.slice(0, 40);
+    $("#event-log").innerHTML = state.events.map((entry) => `<li class="${entry.level}"><time>${entry.at.toLocaleTimeString()}</time>${escape(entry.message)}</li>`).join("");
   }
-  return payload;
-}
-
-function byId(id) {
-  return document.getElementById(id);
-}
-
-function updateAxis(axisName, axis) {
-  byId(`${axisName}-pos`).textContent = `${axis.position_mm.toFixed(3)} mm`;
-  byId(`${axisName}-flags`).textContent =
-    `Home: ${axis.is_homed ? "yes" : "no"} | Min: ${axis.head_limit ? 1 : 0} | Max: ${axis.tail_limit ? 1 : 0}`;
-}
-
-function renderSlots() {
-  const grid = byId("slot-grid");
-  grid.innerHTML = "";
-  Object.entries(state.slots).forEach(([code, slot]) => {
-    const button = document.createElement("button");
-    button.className = "slot-button";
-    button.innerHTML = `<strong>Slot ${code}</strong><span>X ${slot.x_mm.toFixed(1)} | Y ${slot.y_mm.toFixed(1)} | Z ${slot.z_mm.toFixed(1)}</span>`;
-    button.addEventListener("click", () => loadSlotIntoEditor(code));
-    grid.appendChild(button);
-  });
-}
-
-function loadSlotIntoEditor(code) {
-  const slot = state.slots[code];
-  byId("slot-code").value = code;
-  byId("slot-x").value = slot.x_mm;
-  byId("slot-y").value = slot.y_mm;
-  byId("slot-z").value = slot.z_mm;
-}
-
-function updateView(payload) {
-  const { busy, last_error, status, slots } = payload;
-  state.slots = slots;
-  state.busy = busy;
-  byId("machine-state").textContent = busy ? "Busy" : "Idle";
-  byId("estop-state").textContent = status.estop ? "ACTIVE" : "Clear";
-  byId("last-error").textContent = last_error || "None";
-  updateAxis("x", status.x);
-  updateAxis("y", status.y);
-  updateAxis("z", status.z);
-  renderSlots();
-  if (state.monitorUpdate) {
-    updateMonitor(payload);
+  function toast(message, error = false) { const element = $("#toast"); element.textContent = message; element.className = `toast show${error ? " error" : ""}`; window.clearTimeout(toast.timer); toast.timer = window.setTimeout(() => element.className = "toast", 3600); }
+  async function api(path, method = "GET", body) {
+    const abort = new AbortController(); const timer = setTimeout(() => abort.abort(), 8000);
+    try { const response = await fetch(path, { method, headers: body ? { "Content-Type": "application/json" } : undefined, body: body ? JSON.stringify(body) : undefined, signal: abort.signal }); const data = await response.json(); if (!response.ok || data.ok === false) throw new Error(data.error || `HTTP ${response.status}`); return data; } finally { clearTimeout(timer); }
   }
-}
-
-function updateMonitor(payload) {
-  const { busy, last_error, status } = payload;
-  const stateStr = busy ? "BUSY" : "IDLE";
-  const estopStr = status.estop ? "ACTIVE" : "Clear";
-  const errorStr = last_error || "None";
-
-  const pad = (str, len) => str.toString().padEnd(len);
-
-  const text = `=== NARIT VENDING MACHINE STATUS ===
-State     : ${stateStr}
-E-Stop    : ${estopStr}
-Last Error: ${errorStr}
-
-Axis  Position (mm)  Steps     Is Homed  Limit Min (Head)  Limit Max (Tail)
-----  -------------  -----     --------  ----------------  ----------------
-X     ${pad(status.x.position_mm.toFixed(3), 13)}  ${pad(status.x.position_steps, 9)} ${pad(status.x.is_homed ? "True" : "False", 9)} ${pad(status.x.head_limit ? "True" : "False", 17)} ${status.x.tail_limit ? "True" : "False"}
-Y     ${pad(status.y.position_mm.toFixed(3), 13)}  ${pad(status.y.position_steps, 9)} ${pad(status.y.is_homed ? "True" : "False", 9)} ${pad(status.y.head_limit ? "True" : "False", 17)} ${status.y.tail_limit ? "True" : "False"}
-Z     ${pad(status.z.position_mm.toFixed(3), 13)}  ${pad(status.z.position_steps, 9)} ${pad(status.z.is_homed ? "True" : "False", 9)} ${pad(status.z.head_limit ? "True" : "False", 17)} ${status.z.tail_limit ? "True" : "False"}`;
-
-  byId("monitor-text").textContent = text;
-}
-
-async function refreshStatus() {
-  if (!state.liveUpdate) return;
-  try {
-    const payload = await requestJson("/api/status");
-    updateView(payload);
-  } catch (error) {
-    byId("last-error").textContent = error.message;
+  function interlocks() { const status = state.payload?.status || {}; const homed = axes.every((axis) => status[axis]?.is_homed); return { estop: Boolean(status.estop), busy: Boolean(state.payload?.busy), homed }; }
+  function motionEnabled(requireHome = false) { const locks = interlocks(); return state.online && !state.pending && !locks.estop && !locks.busy && (!requireHome || locks.homed); }
+  async function command(label, path, body, options = {}) {
+    if (!options.stop && !motionEnabled(options.requireHome)) { toast("Command blocked by controller state or safety interlock.", true); log(`${label} blocked by an interlock.`, "error"); return; }
+    state.pending = !options.stop; updateInterlocks(); log(`${label} requested.`);
+    try { await api(path, "POST", body); toast(`${label} accepted.`); log(`${label} accepted.`); await refresh(); } catch (error) { toast(`${label}: ${error.message}`, true); log(`${label} failed: ${error.message}`, "error"); } finally { state.pending = false; updateInterlocks(); }
   }
-}
-
-async function postAction(url, body = null) {
-  state.busy = true;
-  byId("machine-state").textContent = "Busy";
-  const options = { method: "POST" };
-  if (body) {
-    options.body = JSON.stringify(body);
-  }
-  try {
-    const payload = await requestJson(url, options);
-    updateView(payload);
-  } catch (error) {
-    state.busy = false;
-    byId("machine-state").textContent = "Idle";
-    throw error;
-  }
-}
-
-function wireActions() {
-  document.querySelectorAll("[data-home]").forEach((button) => {
-    button.addEventListener("click", async () => {
-      await postAction(`/api/home/${button.dataset.home}`);
+  function updateConnection() { const element = $(".connection"); element.className = `connection ${state.online ? "online" : "offline"}`; $("#connection-state").textContent = state.online ? "CONTROLLER ONLINE" : "CONTROLLER OFFLINE"; }
+  function updateHoming(operation, status) {
+    axes.forEach((axis) => {
+      const phase = operation.homing?.[axis] || (status[axis]?.is_homed ? "passed" : "not_homed");
+      const card = $(`.home-step[data-axis="${axis}"]`); card.className = `home-step ${phase}`;
+      $(`#home-${axis}`).textContent = phase.toUpperCase().replace("_", " ");
+      const detail = phase === "waiting" ? "Waiting for earlier axis" : phase === "homing" ? `Searching home sensor on axis ${axis.toUpperCase()}` : phase === "passed" ? "Home sensor reached; reference accepted" : phase === "failed" ? operation.message : "Axis must be homed before automatic movement";
+      $(`#home-${axis}-detail`).textContent = detail;
     });
-  });
-
-  document.querySelectorAll("[data-jog-axis]").forEach((button) => {
-    button.addEventListener("click", async () => {
-      const step = parseFloat(byId("jog-step").value || "0");
-      const distance = step * parseFloat(button.dataset.jogSign);
-      await postAction("/api/jog", {
-        axis: button.dataset.jogAxis,
-        distance_mm: distance,
-      });
-    });
-  });
-
-  byId("stop-motion").addEventListener("click", async () => {
-    await postAction("/api/stop");
-  });
-
-  byId("load-slot").addEventListener("click", () => {
-    loadSlotIntoEditor(byId("slot-code").value);
-  });
-
-  byId("save-slot").addEventListener("click", async () => {
-    const code = byId("slot-code").value;
-    await postAction(`/api/slots/${code}`, {
-      x_mm: parseFloat(byId("slot-x").value || "0"),
-      y_mm: parseFloat(byId("slot-y").value || "0"),
-      z_mm: parseFloat(byId("slot-z").value || "0"),
-    });
-  });
-
-  byId("save-current").addEventListener("click", async () => {
-    const code = byId("slot-code").value;
-    await postAction(`/api/slots/${code}/save-current`);
-    loadSlotIntoEditor(code);
-  });
-
-  byId("goto-slot").addEventListener("click", async () => {
-    const code = byId("slot-code").value;
-    await postAction(`/api/slots/${code}/goto`);
-  });
-
-  byId("live-toggle").addEventListener("click", () => {
-    state.liveUpdate = !state.liveUpdate;
-    const btn = byId("live-toggle");
-    const container = byId("axes-container");
-    if (state.liveUpdate) {
-      btn.textContent = "Live Status: ON";
-      btn.className = "small toggle-active";
-      container.style.display = "grid";
-      refreshStatus();
-    } else {
-      btn.textContent = "Live Status: OFF";
-      btn.className = "small toggle-inactive";
-      container.style.display = "none";
-    }
-  });
-
-  byId("monitor-toggle").addEventListener("click", () => {
-    state.monitorUpdate = !state.monitorUpdate;
-    const btn = byId("monitor-toggle");
-    const container = byId("monitor-container");
-    if (state.monitorUpdate) {
-      btn.textContent = "Monitor: ON";
-      btn.className = "small toggle-active";
-      container.style.display = "block";
-      if (state.liveUpdate) {
-        refreshStatus();
-      }
-    } else {
-      btn.textContent = "Monitor: OFF";
-      btn.className = "small toggle-inactive";
-      container.style.display = "none";
-    }
-  });
-}
-
-wireActions();
-refreshStatus();
-setInterval(refreshStatus, 1000);
+  }
+  function badge(element, active, activeText, idleText, alarm = false) { element.textContent = active ? activeText : idleText; element.className = active ? (alarm ? "alarm" : "active") : ""; }
+  function render(payload) {
+    state.payload = payload; const status = payload.status || {}; const operation = payload.operation || {}; const locks = interlocks();
+    const visualState = status.estop ? "E-STOP ACTIVE" : payload.busy ? "MOTION ACTIVE" : (operation.phase || status.state || "ready").toUpperCase();
+    $("#machine-state").textContent = visualState; $("#estop-state").textContent = status.estop ? "E-STOP ACTIVE" : "E-STOP CLEAR";
+    const opCard = $("#operation-card"); opCard.className = `operation-card ${operation.phase || "ready"}`;
+    $("#operation-message").textContent = operation.message || "No operation in progress"; $("#operation-phase").textContent = (operation.phase || "ready").toUpperCase();
+    $("#operation-detail").textContent = operation.active_axis ? `Active axis: ${operation.active_axis.toUpperCase()}. Home order: Z → X → Y.` : (payload.active_command ? `Active command: ${payload.active_command}` : "Controller is standing by.");
+    updateHoming(operation, status);
+    axes.forEach((axis) => { const axisStatus = status[axis] || {}; $(`#position-${axis}`).textContent = `${Number(axisStatus.position_mm || 0).toFixed(2)} mm`; badge($(`#${axis}-homed`), axisStatus.is_homed, "HOMED", "NOT HOMED"); badge($(`#${axis}-min`), axisStatus.head_limit, "MIN ACTIVE", "MIN", true); badge($(`#${axis}-max`), axisStatus.tail_limit, "MAX ACTIVE", "MAX", true); });
+    $("#updated-at").textContent = payload.timestamp ? `Updated ${new Date(payload.timestamp).toLocaleTimeString()}` : "Updated now";
+    $("#diag-command").textContent = payload.active_command || "None"; $("#diag-error").textContent = payload.last_error || "None"; $("#diag-state").textContent = status.state || "unknown";
+    const sensorRows = [["Emergency stop", status.estop], ...axes.flatMap((axis) => [[`Axis ${axis.toUpperCase()} home/min`, status[axis]?.head_limit], [`Axis ${axis.toUpperCase()} max`, status[axis]?.tail_limit]])];
+    $("#sensor-table").innerHTML = sensorRows.map(([name, active]) => `<tr><td>${name}</td><td class="${active ? "sensor-alarm" : "sensor-ok"}">${active ? "ACTIVE" : "NORMAL"}</td></tr>`).join("");
+    if (payload.last_error && payload.last_error !== state.lastError) { log(`Controller error: ${payload.last_error}`, "error"); toast(payload.last_error, true); } state.lastError = payload.last_error || "";
+    renderSlots(); updateInterlocks();
+  }
+  function updateInterlocks() {
+    const locks = interlocks(); const reason = !state.online ? "CONTROLLER OFFLINE" : locks.estop ? "E-STOP ACTIVE" : locks.busy || state.pending ? "COMMAND IN PROGRESS" : locks.homed ? "READY" : "HOME ALL AXES BEFORE AUTO MOVE";
+    $("#manual-interlock").textContent = reason;
+    $$('[data-command="jog"],[data-command="home"],[data-command="move"]').forEach((button) => button.disabled = !motionEnabled(false));
+    $$('[data-command="slot"]').forEach((button) => button.disabled = !motionEnabled(true));
+    $("#clear-alarm").disabled = !state.online || locks.estop || locks.busy;
+    $("#stop-button").disabled = !state.online;
+  }
+  function renderSlots() {
+    const query = $("#slot-search").value.trim().toLowerCase(); const container = $("#slot-grid");
+    container.innerHTML = Object.entries(state.slots).sort(([a], [b]) => Number(a) - Number(b)).filter(([code, slot]) => !query || code.includes(query) || String(slot.product_name || "").toLowerCase().includes(query)).map(([code, slot]) => `<article class="slot"><div class="slot-top"><small>SLOT ${escape(code)}</small><span>${slot.product_name ? "CONFIGURED" : "UNASSIGNED"}</span></div><h2>${escape(slot.product_name || `Slot ${code}`)}</h2><p>X ${Number(slot.x_mm).toFixed(1)} · Y ${Number(slot.y_mm).toFixed(1)} · Z ${Number(slot.z_mm).toFixed(1)} mm</p><div class="slot-actions"><button data-command="slot" data-goto="${escape(code)}">GO TO</button><button class="primary" data-command="slot" data-dispense="${escape(code)}">DISPENSE</button></div></article>`).join("");
+    $$('[data-goto]').forEach((button) => button.addEventListener("click", () => command(`Go to slot ${button.dataset.goto}`, `/api/slots/${button.dataset.goto}/goto`, undefined, { requireHome: true })));
+    $$('[data-dispense]').forEach((button) => button.addEventListener("click", () => command(`Dispense slot ${button.dataset.dispense}`, "/api/start", { slot: button.dataset.dispense }, { requireHome: true })));
+  }
+  async function refresh() { try { const payload = await api("/api/status"); if (!state.online) log("Controller connection established."); state.online = true; render(payload); } catch (error) { if (state.online) log(`Controller connection lost: ${error.message}`, "error"); state.online = false; updateConnection(); updateInterlocks(); } finally { updateConnection(); } }
+  function bind() {
+    $$(".nav").forEach((button) => button.addEventListener("click", () => { $$(".nav").forEach((node) => node.classList.toggle("active", node === button)); $$(".page").forEach((page) => page.classList.toggle("active", page.id === button.dataset.page)); }));
+    $("#home-all").dataset.command = "home"; $("#home-all").addEventListener("click", () => command("Home all axes", "/api/home/all"));
+    $$(".home-axis").forEach((button) => { button.dataset.command = "home"; button.addEventListener("click", () => command(`Home axis ${button.dataset.axis.toUpperCase()}`, `/api/home/${button.dataset.axis}`)); });
+    $$("[data-jog]").forEach((button) => { button.dataset.command = "jog"; button.addEventListener("click", () => { const [axis, direction] = button.dataset.jog.split(":"); command(`Jog ${axis.toUpperCase()}`, "/api/jog", { axis, distance_mm: Number($("#jog-step").value) * Number(direction) }); }); });
+    $("#absolute-move").dataset.command = "move"; $("#absolute-move").addEventListener("click", () => { const body = {}; axes.forEach((axis) => { const value = $(`#move-${axis}`).value; if (value !== "") body[`${axis}_mm`] = Number(value); }); if (!Object.keys(body).length) return toast("Enter at least one target position.", true); command("Absolute move", "/api/move", body, { requireHome: true }); });
+    $("#stop-button").addEventListener("click", () => command("Stop motion", "/api/stop", undefined, { stop: true })); $("#clear-alarm").addEventListener("click", () => command("Clear alarm", "/api/clear-alarm", undefined, { stop: true })); $("#slot-search").addEventListener("input", renderSlots);
+  }
+  document.addEventListener("DOMContentLoaded", () => { bind(); log("HMI started; waiting for controller status."); refresh(); setInterval(refresh, 500); setInterval(() => $("#system-time").textContent = new Date().toLocaleTimeString(), 1000); });
+})();

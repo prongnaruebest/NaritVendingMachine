@@ -1,0 +1,1634 @@
+<!doctype html>
+<html lang="th">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Narit Vending Machine — Architecture v2.0</title>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+    rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <style>
+    :root {
+      --bg: #06111f;
+      --surface: #0d1f33;
+      --surface2: #112338;
+      --line: rgba(30, 167, 255, 0.12);
+      --accent: #1ea7ff;
+      --green: #5effa3;
+      --yellow: #ffd166;
+      --red: #ff4d6d;
+      --purple: #c8b8ff;
+      --orange: #ff9a3c;
+      --text: #e4edf7;
+      --muted: #6b8aad;
+      --radius: 12px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0
+    }
+
+    body {
+      font-family: 'Inter', 'Noto Sans Thai', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.7;
+      font-size: 15px
+    }
+
+    /* LAYOUT */
+    .layout {
+      display: grid;
+      grid-template-columns: 270px 1fr;
+      min-height: 100vh
+    }
+
+    /* SIDEBAR */
+    .sidebar {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+      background: var(--surface);
+      border-right: 1px solid var(--line);
+      padding: 24px 16px
+    }
+
+    .sidebar-logo {
+      padding-bottom: 20px;
+      margin-bottom: 20px;
+      border-bottom: 1px solid var(--line)
+    }
+
+    .badge {
+      display: inline-block;
+      background: rgba(30, 167, 255, 0.12);
+      color: var(--accent);
+      font-size: 0.65rem;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      padding: 3px 10px;
+      border-radius: 99px;
+      margin-bottom: 8px
+    }
+
+    .v-badge {
+      display: inline-block;
+      background: rgba(94, 255, 163, 0.1);
+      color: var(--green);
+      font-size: 0.65rem;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 99px;
+      margin-left: 6px
+    }
+
+    .sidebar-logo h2 {
+      font-size: 1rem;
+      font-weight: 700;
+      line-height: 1.3
+    }
+
+    .sb-sect {
+      font-size: 0.6rem;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin: 18px 0 6px 10px
+    }
+
+    .sidebar nav a {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      color: var(--muted);
+      text-decoration: none;
+      transition: background .15s, color .15s;
+      margin-bottom: 2px
+    }
+
+    .sidebar nav a:hover,
+    .sidebar nav a.active {
+      background: rgba(30, 167, 255, 0.1);
+      color: var(--text)
+    }
+
+    .sidebar nav a .dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--line);
+      flex-shrink: 0
+    }
+
+    .sidebar nav a.active .dot {
+      background: var(--accent)
+    }
+
+    /* CONTENT */
+    .content {
+      padding: 48px 56px;
+      max-width: 980px
+    }
+
+    /* HERO */
+    .hero {
+      margin-bottom: 52px;
+      padding-bottom: 36px;
+      border-bottom: 1px solid var(--line)
+    }
+
+    .hero .eyebrow {
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 10px
+    }
+
+    .hero h1 {
+      font-size: 2.4rem;
+      font-weight: 700;
+      line-height: 1.15;
+      margin-bottom: 14px;
+      background: linear-gradient(135deg, #e4edf7 0%, var(--accent) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent
+    }
+
+    .hero p {
+      color: var(--muted);
+      font-size: 0.95rem;
+      max-width: 620px
+    }
+
+    /* SECTION */
+    .section {
+      margin-bottom: 48px;
+      scroll-margin-top: 32px
+    }
+
+    .section-title {
+      font-size: 1.2rem;
+      font-weight: 700;
+      margin-bottom: 18px;
+      display: flex;
+      align-items: center;
+      gap: 10px
+    }
+
+    .section-title::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--line)
+    }
+
+    p.lead {
+      color: var(--muted);
+      font-size: 0.88rem;
+      margin-bottom: 16px;
+      line-height: 1.6
+    }
+
+    /* LAYER CARDS */
+    .layer-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin: 16px 0
+    }
+
+    .layer-card {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 18px;
+      position: relative;
+      overflow: hidden;
+      transition: transform .2s, border-color .2s
+    }
+
+    .layer-card:hover {
+      transform: translateY(-2px);
+      border-color: rgba(30, 167, 255, 0.3)
+    }
+
+    .layer-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px
+    }
+
+    .layer-card.motion::before {
+      background: var(--green)
+    }
+
+    .layer-card.api::before {
+      background: var(--accent)
+    }
+
+    .layer-card.ui::before {
+      background: var(--purple)
+    }
+
+    .layer-icon {
+      font-size: 1.5rem;
+      margin-bottom: 8px
+    }
+
+    .layer-name {
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+      margin-bottom: 5px
+    }
+
+    .layer-card.motion .layer-name {
+      color: var(--green)
+    }
+
+    .layer-card.api .layer-name {
+      color: var(--accent)
+    }
+
+    .layer-card.ui .layer-name {
+      color: var(--purple)
+    }
+
+    .layer-desc {
+      font-size: 0.8rem;
+      color: var(--muted);
+      line-height: 1.5
+    }
+
+    /* TABLES */
+    .table-wrap {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      overflow: hidden;
+      margin: 14px 0
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse
+    }
+
+    thead {
+      background: var(--surface2)
+    }
+
+    th {
+      padding: 10px 14px;
+      text-align: left;
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      color: var(--muted)
+    }
+
+    td {
+      padding: 10px 14px;
+      font-size: 0.82rem;
+      border-top: 1px solid var(--line)
+    }
+
+    tr:hover td {
+      background: rgba(30, 167, 255, 0.03)
+    }
+
+    .axis-x td:first-child {
+      color: var(--orange)
+    }
+
+    .axis-y td:first-child {
+      color: var(--green)
+    }
+
+    .axis-z td:first-child {
+      color: var(--accent)
+    }
+
+    .mono {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.8rem
+    }
+
+    .method-get {
+      color: var(--green);
+      font-weight: 700;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem
+    }
+
+    .method-post {
+      color: var(--yellow);
+      font-weight: 700;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem
+    }
+
+    .method-del {
+      color: var(--red);
+      font-weight: 700;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem
+    }
+
+    /* CODE BLOCKS */
+    .code-block {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      overflow: hidden;
+      margin: 14px 0
+    }
+
+    .code-block .header {
+      background: var(--surface2);
+      padding: 8px 14px;
+      font-size: 0.7rem;
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace
+    }
+
+    .code-block pre {
+      padding: 16px 14px;
+      overflow-x: auto;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.8rem;
+      line-height: 1.6
+    }
+
+    code {
+      background: rgba(30, 167, 255, 0.1);
+      color: var(--accent);
+      border-radius: 4px;
+      padding: 1px 6px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.82em
+    }
+
+    /* SAFETY GRID */
+    .safety-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 8px;
+      margin: 14px 0
+    }
+
+    .safety-item {
+      background: rgba(255, 77, 109, 0.06);
+      border: 1px solid rgba(255, 77, 109, 0.15);
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 0.81rem;
+      display: flex;
+      align-items: center;
+      gap: 8px
+    }
+
+    /* MERMAID */
+    .mermaid-wrap {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 24px;
+      margin: 14px 0;
+      display: flex;
+      justify-content: center;
+      overflow-x: auto
+    }
+
+    /* BOOT STEPS */
+    .boot-steps {
+      display: flex;
+      flex-direction: column
+    }
+
+    .boot-step {
+      display: grid;
+      grid-template-columns: 38px 1fr;
+      gap: 14px;
+      align-items: start;
+      position: relative
+    }
+
+    .boot-step:not(:last-child)::before {
+      content: '';
+      position: absolute;
+      left: 18px;
+      top: 38px;
+      bottom: 0;
+      width: 2px;
+      background: var(--line)
+    }
+
+    .step-num {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: var(--surface);
+      border: 2px solid var(--accent);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: var(--accent);
+      flex-shrink: 0;
+      z-index: 1
+    }
+
+    .step-body {
+      padding: 6px 0 22px
+    }
+
+    .step-body strong {
+      display: block;
+      font-size: 0.88rem;
+      margin-bottom: 3px
+    }
+
+    .step-body span {
+      font-size: 0.8rem;
+      color: var(--muted)
+    }
+
+    /* TODO LIST */
+    .todo-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px
+    }
+
+    .todo-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      background: rgba(255, 209, 102, 0.05);
+      border: 1px solid rgba(255, 209, 102, 0.15);
+      border-left: 3px solid var(--yellow);
+      border-radius: 0 8px 8px 0;
+      padding: 10px 14px;
+      font-size: 0.83rem;
+      line-height: 1.5
+    }
+
+    .todo-cb {
+      margin-top: 3px;
+      accent-color: var(--yellow);
+      flex-shrink: 0
+    }
+
+    /* FILE TABLE */
+    .file-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 6px
+    }
+
+    .file-row {
+      display: grid;
+      grid-template-columns: 200px 1fr;
+      gap: 12px;
+      align-items: start;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px 14px;
+      transition: border-color .15s
+    }
+
+    .file-row:hover {
+      border-color: rgba(30, 167, 255, 0.25)
+    }
+
+    .file-name {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.76rem;
+      color: var(--yellow);
+      word-break: break-all
+    }
+
+    .file-desc {
+      font-size: 0.81rem;
+      color: var(--muted);
+      line-height: 1.5
+    }
+
+    /* SCROLLBAR */
+    ::-webkit-scrollbar {
+      width: 5px;
+      height: 5px
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--line);
+      border-radius: 99px
+    }
+
+    /* SYSTEM FLOW DIAGRAM */
+    @keyframes flowdown {
+      from {
+        stroke-dashoffset: 24
+      }
+
+      to {
+        stroke-dashoffset: 0
+      }
+    }
+
+    @keyframes flowup {
+      from {
+        stroke-dashoffset: -24
+      }
+
+      to {
+        stroke-dashoffset: 0
+      }
+    }
+
+    .sf-flow {
+      stroke-dasharray: 8 4;
+      animation: flowdown 1.2s linear infinite;
+      fill: none
+    }
+
+    .sf-flow2 {
+      stroke-dasharray: 8 4;
+      animation: flowdown 0.9s linear infinite;
+      fill: none
+    }
+
+    .sf-rev {
+      stroke-dasharray: 6 3;
+      animation: flowup 1s linear infinite;
+      fill: none
+    }
+
+    .sf-log {
+      stroke-dasharray: 5 4;
+      animation: flowdown 1.6s linear infinite;
+      fill: none
+    }
+
+    .diagram-scroll {
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+      padding: 24px
+    }
+
+    @media(max-width:768px) {
+      .layout {
+        grid-template-columns: 1fr
+      }
+
+      .sidebar {
+        display: none
+      }
+
+      .content {
+        padding: 24px 18px
+      }
+
+      .layer-grid {
+        grid-template-columns: 1fr
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="layout">
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+      <div class="sidebar-logo">
+        <div class="badge">Architecture</div><span class="v-badge">v2.0</span>
+        <h2>Narit Vending<br>Machine</h2>
+        <div style="font-size:0.7rem;color:var(--muted);margin-top:6px">Raspberry Pi · Flask · Python</div>
+      </div>
+      <nav>
+        <div class="sb-sect">ภาพรวม</div>
+        <a href="#sys-flow"><span class="dot"></span>System Flow Diagram</a>
+        <a href="#overview"><span class="dot"></span>ภาพรวมระบบ</a>
+        <a href="#files"><span class="dot"></span>โครงสร้างไฟล์</a>
+        <a href="#config"><span class="dot"></span>ค่าคอนฟิก</a>
+        <div class="sb-sect">Motion Layer</div>
+        <a href="#exceptions"><span class="dot"></span>Exception Classes</a>
+        <a href="#axis-ctrl"><span class="dot"></span>AxisController</a>
+        <a href="#motion-ctrl"><span class="dot"></span>MotionController</a>
+        <a href="#safety"><span class="dot"></span>กลไกความปลอดภัย</a>
+        <div class="sb-sect">API Layer</div>
+        <a href="#motion-svc"><span class="dot"></span>MotionService</a>
+        <a href="#endpoints"><span class="dot"></span>REST Endpoints</a>
+        <a href="#logging"><span class="dot"></span>Logging & CORS</a>
+        <div class="sb-sect">Flowcharts</div>
+        <a href="#flow-overview"><span class="dot"></span>ภาพรวม</a>
+        <a href="#flow-home"><span class="dot"></span>Home แกน</a>
+        <a href="#flow-slot"><span class="dot"></span>Go To Slot</a>
+        <div class="sb-sect">อื่น ๆ</div>
+        <a href="#boot"><span class="dot"></span>ลำดับเริ่มระบบ</a>
+        <a href="#todo"><span class="dot"></span>แผนพัฒนาต่อ</a>
+      </nav>
+    </aside>
+
+    <!-- CONTENT -->
+    <main class="content">
+
+      <!-- HERO -->
+      <div class="hero">
+        <p class="eyebrow">Narit Vending Machine</p>
+        <h1>System Architecture <span style="font-size:1.2rem;-webkit-text-fill-color:var(--green)">v2.0</span></h1>
+        <p>เอกสารสมบูรณ์ อธิบายโครงสร้าง classes, API endpoints, กลไกความปลอดภัย, logging และ flowchart
+          ของระบบควบคุมเครื่องจ่ายสินค้าอัตโนมัติ</p>
+      </div>
+
+      <!-- SYSTEM FLOW DIAGRAM -->
+      <section class="section" id="sys-flow">
+        <h2 class="section-title">🔄 System Flow Diagram</h2>
+        <p class="lead">แผนผังแสดงการไหลของข้อมูลและคำสั่งตั้งแต่ผู้ใช้ถึงฮาร์ดแวร์</p>
+        <div class="diagram-scroll">
+          <svg viewBox="0 0 840 1320" xmlns="http://www.w3.org/2000/svg"
+            style="min-width:700px;width:100%;font-family:Inter,sans-serif;display:block;background:#06111f;border-radius:18px;padding:20px;box-shadow: 0 8px 32px rgba(0,0,0,0.5);">
+            <defs>
+              <marker id="ab" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+                <path d="M0,0 L0,6 L6,3z" fill="#1ea7ff" />
+              </marker>
+              <marker id="ag" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+                <path d="M0,0 L0,6 L6,3z" fill="#5effa3" />
+              </marker>
+              <marker id="ao" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+                <path d="M0,0 L0,6 L6,3z" fill="#ffd166" />
+              </marker>
+              <marker id="ar" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+                <path d="M0,0 L0,6 L6,3z" fill="#ff4d6d" />
+              </marker>
+
+              <linearGradient id="g-green" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" stop-color="#1b4d3e" stop-opacity="0.9" />
+                <stop offset="100%" stop-color="#14352b" stop-opacity="0.9" />
+              </linearGradient>
+              <linearGradient id="g-blue" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" stop-color="#0e2a4a" stop-opacity="0.9" />
+                <stop offset="100%" stop-color="#0a1c33" stop-opacity="0.9" />
+              </linearGradient>
+              <linearGradient id="g-orange" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" stop-color="#4c3c1e" stop-opacity="0.9" />
+                <stop offset="100%" stop-color="#332714" stop-opacity="0.9" />
+              </linearGradient>
+              <linearGradient id="g-red" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" stop-color="#5c1e28" stop-opacity="0.9" />
+                <stop offset="100%" stop-color="#3d141a" stop-opacity="0.9" />
+              </linearGradient>
+            </defs>
+
+            <!-- ===== BACKGROUND GRID ===== -->
+            <g stroke="rgba(140, 163, 191, 0.03)" stroke-width="0.5">
+              <path d="M 0,40 L 840,40 M 0,80 L 840,80 M 0,120 L 840,120 M 0,160 L 840,160 M 0,200 L 840,200 M 0,240 L 840,240 M 0,280 L 840,280 M 0,320 L 840,320 M 0,360 L 840,360 M 0,400 L 840,400 M 0,440 L 840,440 M 0,480 L 840,480 M 0,520 L 840,520 M 0,560 L 840,560 M 0,600 L 840,600 M 0,640 L 840,640 M 0,680 L 840,680 M 0,720 L 840,720 M 0,760 L 840,760 M 0,800 L 840,800 M 0,840 L 840,840 M 0,880 L 840,880 M 0,920 L 840,920 M 0,960 L 840,960 M 0,1000 L 840,1000 M 0,1040 L 840,1040 M 0,1080 L 840,1080 M 0,1120 L 840,1120 M 0,1160 L 840,1160 M 0,1200 L 840,1200 M 0,1240 L 840,1240 M 0,1280 L 840,1280" />
+            </g>
+
+            <!-- 1. START -->
+            <rect x="320" y="20" width="200" height="44" rx="22" fill="url(#g-green)" stroke="#5effa3" stroke-width="1.5" />
+            <text x="420" y="46" text-anchor="middle" font-size="12" font-weight="700" fill="#5effa3">START</text>
+            <path d="M 420,64 L 420,88" stroke="#5effa3" stroke-width="1.5" marker-end="url(#ag)" />
+
+            <!-- 2. Power Check -->
+            <rect x="320" y="90" width="200" height="44" rx="6" fill="url(#g-blue)" stroke="#1ea7ff" stroke-width="1.5" />
+            <text x="420" y="116" text-anchor="middle" font-size="12" font-weight="700" fill="#e9f2ff">Power Check</text>
+            <path d="M 420,134 L 420,158" stroke="#1ea7ff" stroke-width="1.5" marker-end="url(#ab)" />
+
+            <!-- 3. Load Configuration -->
+            <rect x="320" y="160" width="200" height="44" rx="6" fill="url(#g-blue)" stroke="#1ea7ff" stroke-width="1.5" />
+            <text x="420" y="182" text-anchor="middle" font-size="12" font-weight="700" fill="#e9f2ff">Load Configuration</text>
+            <text x="420" y="195" text-anchor="middle" font-size="8" fill="#8ca3bf">hardware_config.json</text>
+            <path d="M 420,204 L 420,228" stroke="#1ea7ff" stroke-width="1.5" marker-end="url(#ab)" />
+
+            <!-- 4. Initialize Hardware -->
+            <rect x="320" y="230" width="200" height="44" rx="6" fill="url(#g-blue)" stroke="#1ea7ff" stroke-width="1.5" />
+            <text x="420" y="252" text-anchor="middle" font-size="12" font-weight="700" fill="#e9f2ff">Initialize Hardware</text>
+            <text x="420" y="265" text-anchor="middle" font-size="8" fill="#8ca3bf">GPIO, Motors & Status LEDs</text>
+            <path d="M 420,274 L 420,298" stroke="#1ea7ff" stroke-width="1.5" marker-end="url(#ab)" />
+
+            <!-- 5. Check Safety System (Decision) -->
+            <path d="M 420,300 L 530,340 L 420,380 L 310,340 Z" fill="url(#g-orange)" stroke="#ffd166" stroke-width="1.5" />
+            <text x="420" y="336" text-anchor="middle" font-size="11" font-weight="700" fill="#ffd166">Check Safety System</text>
+            <text x="420" y="348" text-anchor="middle" font-size="8" fill="#ffd166">E-Stop Activated?</text>
+
+            <path d="M 420,380 L 420,408" stroke="#ffd166" stroke-width="1.5" marker-end="url(#ao)" />
+            <text x="430" y="396" font-size="10" fill="#5effa3" font-weight="700">NO</text>
+
+            <path d="M 530,340 L 610,340" stroke="#ffd166" stroke-width="1.5" marker-end="url(#ao)" />
+            <text x="560" y="330" font-size="10" fill="#ff4d6d" font-weight="700">YES</text>
+
+            <rect x="610" y="318" width="170" height="44" rx="6" fill="url(#g-red)" stroke="#ff4d6d" stroke-width="1.5" />
+            <text x="695" y="340" text-anchor="middle" font-size="11" font-weight="700" fill="#ff4d6d">Alarm Warning (Red)</text>
+            <text x="695" y="352" text-anchor="middle" font-size="8" fill="#ff4d6d">Sound Buzzer & Lock</text>
+
+            <!-- 6. Check Sensors (Decision) -->
+            <path d="M 420,410 L 530,450 L 420,490 L 310,450 Z" fill="url(#g-orange)" stroke="#ffd166" stroke-width="1.5" />
+            <text x="420" y="446" text-anchor="middle" font-size="11" font-weight="700" fill="#ffd166">Check Sensors</text>
+            <text x="420" y="458" text-anchor="middle" font-size="8" fill="#ffd166">Sensor Error?</text>
+
+            <path d="M 420,490 L 420,518" stroke="#ffd166" stroke-width="1.5" marker-end="url(#ao)" />
+            <text x="430" y="506" font-size="10" fill="#5effa3" font-weight="700">NO</text>
+
+            <path d="M 530,450 L 610,450" stroke="#ffd166" stroke-width="1.5" marker-end="url(#ao)" />
+            <text x="560" y="440" font-size="10" fill="#ff4d6d" font-weight="700">YES</text>
+
+            <rect x="610" y="428" width="170" height="44" rx="6" fill="url(#g-red)" stroke="#ff4d6d" stroke-width="1.5" />
+            <text x="695" y="450" text-anchor="middle" font-size="11" font-weight="700" fill="#ff4d6d">Sensor Fault Alarm</text>
+            <text x="695" y="462" text-anchor="middle" font-size="8" fill="#ff4d6d">Report Error to HMI</text>
+
+            <!-- 7. System Ready -->
+            <rect x="320" y="520" width="200" height="44" rx="6" fill="url(#g-blue)" stroke="#05d9e8" stroke-width="1.8" />
+            <text x="420" y="542" text-anchor="middle" font-size="12" font-weight="700" fill="#05d9e8">System Ready</text>
+            <text x="420" y="555" text-anchor="middle" font-size="8" fill="#8ca3bf">State: Idle (Yellow Solid LED)</text>
+            <path d="M 420,564 L 420,588" stroke="#05d9e8" stroke-width="1.5" marker-end="url(#ab)" />
+
+            <!-- 8. Receive HMI Command -->
+            <rect x="320" y="590" width="200" height="44" rx="6" fill="url(#g-blue)" stroke="#c77dff" stroke-width="1.5" />
+            <text x="420" y="612" text-anchor="middle" font-size="12" font-weight="700" fill="#c77dff">Receive HMI Command</text>
+            <text x="420" y="625" text-anchor="middle" font-size="8" fill="#8ca3bf">/api/start, /api/speed, /api/timer</text>
+            <path d="M 420,634 L 420,658" stroke="#c77dff" stroke-width="1.5" marker-end="url(#ab)" />
+
+            <!-- 9. Validate Speed/Timer Parameters -->
+            <rect x="320" y="660" width="200" height="44" rx="6" fill="url(#g-blue)" stroke="#1ea7ff" stroke-width="1.5" />
+            <text x="420" y="682" text-anchor="middle" font-size="11" font-weight="700" fill="#e9f2ff">Validate Speed/Timer</text>
+            <text x="420" y="695" text-anchor="middle" font-size="8" fill="#8ca3bf">Check Min/Max & Duration</text>
+            <path d="M 420,704 L 420,728" stroke="#1ea7ff" stroke-width="1.5" marker-end="url(#ab)" />
+
+            <!-- 10. Start Motion -->
+            <rect x="320" y="730" width="200" height="44" rx="6" fill="url(#g-blue)" stroke="#1ea7ff" stroke-width="2" />
+            <text x="420" y="752" text-anchor="middle" font-size="12" font-weight="700" fill="#e9f2ff">Start Motion</text>
+            <text x="420" y="765" text-anchor="middle" font-size="8" fill="#8ca3bf">State: Moving (Blue Pulse LED)</text>
+            <path d="M 420,774 L 420,798" stroke="#1ea7ff" stroke-width="1.5" marker-end="url(#ab)" />
+
+            <!-- 11. Monitor Loop Box -->
+            <rect x="180" y="800" width="480" height="150" rx="10" fill="rgba(14, 42, 74, 0.4)" stroke="#1ea7ff" stroke-width="1" stroke-dasharray="6 3" />
+            <text x="200" y="820" font-size="10" font-weight="700" fill="#1ea7ff">MONITOR LOOP: Position | Limit Switch | E-Stop | Alarm</text>
+
+            <!-- Decision inside Monitor: E-Stop / Limit / Fault? -->
+            <path d="M 420,830 L 530,870 L 420,910 L 310,870 Z" fill="url(#g-orange)" stroke="#ffd166" stroke-width="1.5" />
+            <text x="420" y="866" text-anchor="middle" font-size="10" font-weight="700" fill="#ffd166">E-Stop / Limit / Alarm?</text>
+
+            <path d="M 530,870 L 610,870" stroke="#ffd166" stroke-width="1.5" marker-end="url(#ao)" />
+            <text x="560" y="860" font-size="10" fill="#ff4d6d" font-weight="700">YES</text>
+
+            <rect x="610" y="848" width="170" height="44" rx="6" fill="url(#g-red)" stroke="#ff4d6d" stroke-width="1.5" />
+            <text x="695" y="870" text-anchor="middle" font-size="11" font-weight="700" fill="#ff4d6d">Alarm Handling</text>
+            <text x="695" y="882" text-anchor="middle" font-size="8" fill="#ff4d6d">SOFT STOP & Red Blink</text>
+
+            <path d="M 420,910 L 420,978" stroke="#ffd166" stroke-width="1.5" marker-end="url(#ao)" />
+            <text x="430" y="930" font-size="10" fill="#5effa3" font-weight="700">NO</text>
+
+            <!-- 12. Decision: Position Reached or Timeout? -->
+            <path d="M 420,980 L 530,1020 L 420,1060 L 310,1020 Z" fill="url(#g-orange)" stroke="#ffd166" stroke-width="1.5" />
+            <text x="420" y="1016" text-anchor="middle" font-size="10" font-weight="700" fill="#ffd166">Position Reached / Timeout?</text>
+
+            <!-- Loop back if NO -->
+            <path d="M 310,1020 L 120,1020 L 120,875 L 180,875" fill="none" stroke="#ffd166" stroke-width="1.2" stroke-dasharray="6 3" marker-end="url(#ao)" />
+            <text x="200" y="1010" font-size="10" fill="#8ca3bf" font-weight="700">NO (Continue Loop)</text>
+
+            <path d="M 420,1060 L 420,1098" stroke="#ffd166" stroke-width="1.5" marker-end="url(#ao)" />
+            <text x="430" y="1078" font-size="10" fill="#5effa3" font-weight="700">YES</text>
+
+            <!-- 13. Process Complete -->
+            <rect x="320" y="1100" width="200" height="44" rx="6" fill="url(#g-blue)" stroke="#1ea7ff" stroke-width="1.5" />
+            <text x="420" y="1126" text-anchor="middle" font-size="12" font-weight="700" fill="#e9f2ff">Process Complete</text>
+            <path d="M 420,1144 L 420,1168" stroke="#1ea7ff" stroke-width="1.5" marker-end="url(#ab)" />
+
+            <!-- 14. Success -->
+            <rect x="320" y="1170" width="200" height="44" rx="6" fill="url(#g-green)" stroke="#5effa3" stroke-width="1.8" />
+            <text x="420" y="1192" text-anchor="middle" font-size="12" font-weight="700" fill="#5effa3">Success</text>
+            <text x="420" y="1205" text-anchor="middle" font-size="8" fill="#8ca3bf">State: Success (Green Solid LED)</text>
+            <path d="M 420,1214 L 420,1238" stroke="#5effa3" stroke-width="1.5" marker-end="url(#ag)" />
+
+            <!-- 15. Return Idle -->
+            <rect x="320" y="1240" width="200" height="44" rx="22" fill="url(#g-green)" stroke="#ffd166" stroke-width="1.8" />
+            <text x="420" y="1262" text-anchor="middle" font-size="12" font-weight="700" fill="#ffd166">Return Idle</text>
+            <text x="420" y="1275" text-anchor="middle" font-size="8" fill="#8ca3bf">Re-enters Idle state</text>
+          </svg>
+        </div>
+      </section>
+
+      <!-- 1. OVERVIEW -->
+      <section class="section" id="overview">
+        <h2 class="section-title">🖥️ ภาพรวมระบบ</h2>
+        <p class="lead">ระบบทำงานบน <code>Raspberry Pi</code> ให้ Pi เป็น web server สำหรับควบคุมเครื่องจ่ายสินค้า
+          ผู้ใช้เปิดหน้าเว็บผ่าน <code>NaritVendingMachine.local</code> หรือเรียกผ่าน REST API โดยตรง</p>
+        <div class="layer-grid">
+          <div class="layer-card motion">
+            <div class="layer-icon">⚙️</div>
+            <div class="layer-name">Motion Control</div>
+            <div class="layer-desc">ควบคุมมอเตอร์ X/Y/Z, limit switch, E-Stop, guard ทุก 5 steps, logging</div>
+          </div>
+          <div class="layer-card api">
+            <div class="layer-icon">🔗</div>
+            <div class="layer-name">Command / API</div>
+            <div class="layer-desc">REST API v2.0 (18 endpoints), CORS, input validation, MotionService</div>
+          </div>
+          <div class="layer-card mqtt" style="border: 1px solid #c77dff; background: rgba(199, 125, 255, 0.08);">
+            <div class="layer-icon">📡</div>
+            <div class="layer-name" style="color: #c77dff;">MQTT IIoT Layer</div>
+            <div class="layer-desc">Bi-directional Pub/Sub, LWT Heartbeat, Remote Dispense & Status Telemetry</div>
+          </div>
+          <div class="layer-card ui">
+            <div class="layer-icon">🌐</div>
+            <div class="layer-name">Web UI</div>
+            <div class="layer-desc">สถานะ realtime poll ทุก 500 ms, ควบคุมผ่าน browser</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 2. FILES -->
+      <section class="section" id="files">
+        <h2 class="section-title">📁 โครงสร้างไฟล์</h2>
+        <div class="file-grid">
+          <div class="file-row"><span class="file-name">main.py</span><span class="file-desc">จุดเริ่มต้น CLI → <code>narit_vending.cli.main</code></span></div>
+          <div class="file-row"><span class="file-name">narit_vending/motion.py</span><span class="file-desc">แกนหลัก — Exception, AxisConfig, SlotPosition, MachineConfig, AxisController, MotionController, logging</span></div>
+          <div class="file-row"><span class="file-name">narit_vending/webapp.py</span><span class="file-desc">Flask, REST API v2.0, MotionService, CORS, logging, input validation</span></div>
+          <div class="file-row"><span class="file-name">narit_vending/mqtt_service.py</span><span class="file-desc">MQTT Client Service (LWT Heartbeat, Remote Dispense, Telemetry & Alarm Pub/Sub)</span></div>
+          <div class="file-row"><span class="file-name">narit_vending/cli.py</span><span class="file-desc">terminal commands: status, home, jog, move, goto-slot</span></div>
+          <div class="file-row"><span class="file-name">narit_vending/templates/index.html</span><span class="file-desc">โครงสร้างหน้าเว็บควบคุม HMI</span></div>
+          <div class="file-row"><span class="file-name">narit_vending/static/app.js</span><span class="file-desc">Browser logic, สปีดซิงค์, ไทม์เมอร์, poll /api/status</span></div>
+          <div class="file-row"><span class="file-name">hardware_config.json</span><span class="file-desc">คอนฟิกพินฮาร์ดแวร์ (STEP, DIR, ENABLE, Sensors, LEDs, MQTT, Accel/Decel)</span></div>
+          <div class="file-row"><span class="file-name">machine_config.json</span><span class="file-desc">คอนฟิกแกน, slot 1–30 พร้อม product_name, dispense_delay_ms</span></div>
+          <div class="file-row"><span class="file-name">narit_vending.log</span><span class="file-desc">Log ทุก HTTP request + motion event อัตโนมัติ</span></div>
+          <div class="file-row"><span class="file-name">deploy/narit-vending-web.service</span><span class="file-desc">systemd service — เริ่มอัตโนมัติหลังบูต</span></div>
+          <div class="file-row"><span class="file-name">scripts/deploy_to_pi.ps1</span><span class="file-desc">Deploy จาก Windows → Pi ผ่าน SSH + SCP</span></div>
+          <div class="file-row"><span class="file-name">scripts/setup_pi.sh</span><span class="file-desc">ติดตั้ง dependency, ตั้ง hostname, เปิด service</span></div>
+        </div>
+      </section>
+
+      <!-- 3. CONFIG -->
+      <section class="section" id="config">
+        <h2 class="section-title">⚙️ ค่าคอนฟิกเครื่อง</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Axis</th>
+                <th>Pulse Pin</th>
+                <th>Dir Pin</th>
+                <th>Min Limit</th>
+                <th>Max Limit</th>
+                <th>Steps/mm</th>
+                <th>Max Travel</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="axis-x">
+                <td>X</td>
+                <td class="mono">16</td>
+                <td class="mono">23</td>
+                <td class="mono">17</td>
+                <td class="mono">27</td>
+                <td class="mono">80.0</td>
+                <td class="mono">220.0 mm</td>
+              </tr>
+              <tr class="axis-y">
+                <td>Y</td>
+                <td class="mono">26</td>
+                <td class="mono">24</td>
+                <td class="mono">22</td>
+                <td class="mono">9</td>
+                <td class="mono">80.0</td>
+                <td class="mono">260.0 mm</td>
+              </tr>
+              <tr class="axis-z">
+                <td>Z</td>
+                <td class="mono">18</td>
+                <td class="mono">25</td>
+                <td class="mono">11</td>
+                <td class="mono">5</td>
+                <td class="mono">50.0</td>
+                <td class="mono">200.0 mm</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p style="font-size:0.83rem;color:var(--muted);margin-bottom:12px">โครงสร้าง slot รองรับ <strong>Product
+            Profile</strong> ตั้งแต่ v2.0:</p>
+        <div class="code-block">
+          <div class="header">machine_config.json — slot example</div>
+          <pre><code style="background:none;color:var(--text)">{
+  "5": {
+    "x_mm": 45.0, "y_mm": 20.0, "z_mm": 5.0,
+    "product_name": "น้ำดื่ม",
+    "dispense_delay_ms": 800
+  }
+}</code></pre>
+        </div>
+      </section>
+
+      <!-- 4. EXCEPTION CLASSES -->
+      <section class="section" id="exceptions">
+        <h2 class="section-title">⚠️ Exception Classes</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Class</th>
+                <th>สืบทอดจาก</th>
+                <th>เกิดเมื่อ</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="mono" style="color:var(--red)">MotionError</td>
+                <td class="mono">RuntimeError</td>
+                <td>ข้อผิดพลาดทั่วไปของ motion</td>
+              </tr>
+              <tr>
+                <td class="mono" style="color:var(--orange)">LimitTriggeredError</td>
+                <td class="mono">MotionError</td>
+                <td>ชน limit switch ระหว่างเคลื่อน</td>
+              </tr>
+              <tr>
+                <td class="mono" style="color:var(--red)">EmergencyStopError</td>
+                <td class="mono">MotionError</td>
+                <td>E-Stop ถูกกด</td>
+              </tr>
+              <tr>
+                <td class="mono" style="color:var(--yellow)">NotHomedError</td>
+                <td class="mono">MotionError</td>
+                <td>สั่ง move_to_mm โดยยังไม่ home</td>
+              </tr>
+              <tr>
+                <td class="mono" style="color:var(--muted)">StopRequestedError</td>
+                <td class="mono">MotionError</td>
+                <td>ผู้ใช้กด Stop</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- MQTT SYSTEM OPERATION SECTION -->
+      <section class="section" id="mqtt-section">
+        <h2 class="section-title" style="color:#c77dff;">📡 การทำงานของระบบ MQTT (MQTT System Operation)</h2>
+        <p class="lead">ระบบรองรับการสื่อสารแบบสองทาง (Bi-directional IIoT Protocol) ผ่าน MQTT Broker (เช่น <code>broker.emqx.io</code>) ร่วมกับ REST API เพื่อให้ระบบภายนอก (Payment Gateway, Mobile App, Cloud Dashboard) สั่งจ่ายสินค้าและดึงสถานะตู้ได้แบบ Real-time</p>
+        
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Topic</th>
+                <th>Direction</th>
+                <th>QoS</th>
+                <th>Retain</th>
+                <th>คำอธิบาย & Payload ตัวอย่าง</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="mono">vending/{id}/heartbeat</td>
+                <td>Publish (Pi -> Broker)</td>
+                <td class="mono">1</td>
+                <td class="mono">True</td>
+                <td><strong>สถานะการเชื่อมต่อ (LWT)</strong> — <code>{"online": true}</code> หรือ <code>{"online": false}</code> เมื่อเน็ตหลุด/ไฟดับ</td>
+              </tr>
+              <tr>
+                <td class="mono">vending/{id}/status</td>
+                <td>Publish (Pi -> Broker)</td>
+                <td class="mono">1</td>
+                <td class="mono">True</td>
+                <td><strong>Telemetry พิกัด & สถานะ</strong> — <code>{"busy": false, "status": {"state": "idle", "x_mm": 0, ...}}</code></td>
+              </tr>
+              <tr>
+                <td class="mono">vending/{id}/response</td>
+                <td>Publish (Pi -> Broker)</td>
+                <td class="mono">1</td>
+                <td class="mono">False</td>
+                <td><strong>ผลลัพธ์ตอบกลับคำสั่ง</strong> — <code>{"cmd": "dispense", "result": {"ok": true}}</code></td>
+              </tr>
+              <tr>
+                <td class="mono">vending/{id}/cmd/dispense</td>
+                <td>Subscribe (Broker -> Pi)</td>
+                <td class="mono">1</td>
+                <td class="mono">-</td>
+                <td><strong>สั่งจ่ายสินค้าตามช่อง</strong> — <code>{"slot": "1"}</code> หรือ <code>{"slot_code": "5"}</code></td>
+              </tr>
+              <tr>
+                <td class="mono">vending/{id}/cmd/speed</td>
+                <td>Subscribe (Broker -> Pi)</td>
+                <td class="mono">1</td>
+                <td class="mono">-</td>
+                <td><strong>ปรับความเร็วมอเตอร์ (mm/s)</strong> — <code>{"speed_mm_s": 45.0}</code></td>
+              </tr>
+              <tr>
+                <td class="mono">vending/{id}/cmd/timer</td>
+                <td>Subscribe (Broker -> Pi)</td>
+                <td class="mono">1</td>
+                <td class="mono">-</td>
+                <td><strong>ตั้งเวลานับถอยหลัง (วินาที)</strong> — <code>{"duration_s": 60.0}</code></td>
+              </tr>
+              <tr>
+                <td class="mono">vending/{id}/cmd/home</td>
+                <td>Subscribe (Broker -> Pi)</td>
+                <td class="mono">1</td>
+                <td class="mono">-</td>
+                <td><strong>สั่ง Home แกนมอเตอร์</strong> — <code>{"axis": "all"}</code></td>
+              </tr>
+              <tr>
+                <td class="mono">vending/{id}/cmd/stop</td>
+                <td>Subscribe (Broker -> Pi)</td>
+                <td class="mono">2</td>
+                <td class="mono">-</td>
+                <td><strong>สั่งหยุดฉุกเฉิน / Soft Stop ทันที</strong> — <code>{}</code></td>
+              </tr>
+              <tr>
+                <td class="mono">vending/{id}/cmd/clear_alarm</td>
+                <td>Subscribe (Broker -> Pi)</td>
+                <td class="mono">1</td>
+                <td class="mono">-</td>
+                <td><strong>รีเซ็ตสัญญาณแจ้งเตือนและไฟค้าง</strong> — <code>{}</code></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- 5. AXIS CONTROLLER -->
+      <section class="section" id="axis-ctrl">
+        <h2 class="section-title">🔌 AxisController</h2>
+        <p class="lead">ควบคุมมอเตอร์ทีละแกน — pulse GPIO, direction GPIO, อ่าน limit switch, คำนวณ position</p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>เมธอด</th>
+                <th>หน้าที่</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="mono">move_steps(steps, direction, speed_mm_s)</td>
+                <td>ปล่อย pulse + คำนวณความเร็ว (หน่วงเวลา) อัตโนมัติ</td>
+              </tr>
+              <tr>
+                <td class="mono">move_mm(distance_mm, speed_mm_s)</td>
+                <td>แปลง mm → steps แล้วเรียก move_steps</td>
+              </tr>
+              <tr>
+                <td class="mono">move_to_mm(target_mm, speed_mm_s)</td>
+                <td>เคลื่อนไปตำแหน่ง absolute (ต้อง home ก่อน)</td>
+              </tr>
+              <tr>
+                <td class="mono">home(backoff, max_steps)</td>
+                <td>Home แกน + log start/complete พร้อม step count</td>
+              </tr>
+              <tr>
+                <td class="mono">stop()</td>
+                <td>ปิด pulse ทันที</td>
+              </tr>
+              <tr>
+                <td class="mono">status()</td>
+                <td>คืน position, is_homed, head_limit, tail_limit, estop</td>
+              </tr>
+              <tr>
+                <td class="mono" style="color:var(--muted)">_guard_before_move()</td>
+                <td>ตรวจ E-Stop, limit, travel range ก่อนเริ่ม</td>
+              </tr>
+              <tr>
+                <td class="mono" style="color:var(--muted)">_guard_during_move()</td>
+                <td>ตรวจระหว่างเคลื่อนทุก <strong style="color:var(--yellow)">5 steps</strong> (v2.0: จาก 20)</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- 6. MOTION CONTROLLER -->
+      <section class="section" id="motion-ctrl">
+        <h2 class="section-title">⚙️ MotionController</h2>
+        <p class="lead">รวมการควบคุมแกน X, Y, Z เข้าด้วยกัน จัดการ slot และ stop</p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>เมธอด</th>
+                <th>หน้าที่</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="mono">axes()</td>
+                <td>คืน <code>{"x":…, "y":…, "z":…}</code></td>
+              </tr>
+              <tr>
+                <td class="mono">home_axis(name)</td>
+                <td>Home แกนเดียว</td>
+              </tr>
+              <tr>
+                <td class="mono">home_all()</td>
+                <td>Home ทุกแกนตาม home_order</td>
+              </tr>
+              <tr>
+                <td class="mono">move_to(x, y, z, speed_mm_s)</td>
+                <td>เคลื่อน X→Y→Z ตามลำดับ (sequential)</td>
+              </tr>
+              <tr>
+                <td class="mono">move_by_mm(x, y, z, speed_mm_s)</td>
+                <td>เคลื่อนสัมพัทธ์จากตำแหน่งปัจจุบัน</td>
+              </tr>
+              <tr>
+                <td class="mono">move_to_slot(code)</td>
+                <td>ยก Z → เคลื่อน X/Y → ลง Z ไปยัง slot</td>
+              </tr>
+              <tr>
+                <td class="mono">update_slot(code, x, y, z, product_name, dispense_delay_ms)</td>
+                <td>อัปเดตพิกัด + product profile (คง field เดิมถ้าไม่ส่ง)</td>
+              </tr>
+              <tr>
+                <td class="mono">current_position()</td>
+                <td>คืน {x_mm, y_mm, z_mm} ปัจจุบัน</td>
+              </tr>
+              <tr>
+                <td class="mono">request_stop()</td>
+                <td>ตั้ง stop flag ทุกแกน</td>
+              </tr>
+              <tr>
+                <td class="mono">status()</td>
+                <td>คืน estop + X/Y/Z status + current_position</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- 7. SAFETY -->
+      <section class="section" id="safety">
+        <h2 class="section-title">🛡️ กลไกความปลอดภัย</h2>
+        <div class="safety-grid">
+          <div class="safety-item">🔴 E-Stop ตรวจก่อนและระหว่างเคลื่อน</div>
+          <div class="safety-item">🟡 Soft Stop Request จากปุ่ม SOFT STOP (ไม่ block HTTP, มอเตอร์หยุดแต่ไม่ตัดไฟ)</div>
+          <div class="safety-item">🟠 Limit Switch Min &amp; Max ทุกแกน</div>
+          <div class="safety-item">🔵 Software Travel Limit (max_travel_mm)</div>
+          <div class="safety-item">⚡ Guard ทุก <strong>5 steps</strong> (จากเดิม 20)</div>
+          <div class="safety-item">🔒 RLock ป้องกัน 2 motion รันพร้อมกัน</div>
+          <div class="safety-item">✅ Input Validation ทุก endpoint → 400 แทน 500</div>
+        </div>
+      </section>
+
+      <!-- 8. MOTION SERVICE -->
+      <section class="section" id="motion-svc">
+        <h2 class="section-title">🔧 MotionService</h2>
+        <p class="lead">Business logic layer ระหว่าง Flask routes และ MotionController — จัดการ lock, error, logging</p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>เมธอด</th>
+                <th>หน้าที่</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="mono">status_payload()</td>
+                <td>ส่งสถานะทั้งหมด (busy, last_error, slots+product, position)</td>
+              </tr>
+              <tr>
+                <td class="mono">_run(fn)</td>
+                <td>รัน fn ใน RLock + จัดการ exception + log warning</td>
+              </tr>
+              <tr>
+                <td class="mono">stop()</td>
+                <td>สั่ง stop ทันที <strong>ไม่ใช้ lock</strong> — ทำงานได้ขณะ busy</td>
+              </tr>
+              <tr>
+                <td class="mono">home_axis(axis), home_all()</td>
+                <td>Home แกนเดียว / ทุกแกน</td>
+              </tr>
+              <tr>
+                <td class="mono">jog(axis, distance_mm)</td>
+                <td>Jog ระยะ relative</td>
+              </tr>
+              <tr>
+                <td class="mono">move_to(x, y, z)</td>
+                <td>เคลื่อนไปพิกัด absolute</td>
+              </tr>
+              <tr>
+                <td class="mono">move_to_slot(code)</td>
+                <td>ไปยัง slot</td>
+              </tr>
+              <tr>
+                <td class="mono">save_slot(code, x, y, z, product_name, dispense_delay_ms)</td>
+                <td>บันทึกพิกัด + product profile → machine_config.json</td>
+              </tr>
+              <tr>
+                <td class="mono">save_slot_from_current(code)</td>
+                <td>บันทึกตำแหน่งปัจจุบัน → slot</td>
+              </tr>
+              <tr>
+                <td class="mono">get_slot(code)</td>
+                <td>ดึงข้อมูล slot เดียว + product profile</td>
+              </tr>
+              <tr>
+                <td class="mono">reset_slot(code)</td>
+                <td>Reset พิกัด → 0,0,0 (คง product_name ไว้)</td>
+              </tr>
+              <tr>
+                <td class="mono">get_config()</td>
+                <td>ดึง MachineConfig ทั้งหมด</td>
+              </tr>
+              <tr>
+                <td class="mono">is_axis_homed(axis)</td>
+                <td>เช็กแกนเดียว</td>
+              </tr>
+              <tr>
+                <td class="mono">is_all_homed()</td>
+                <td>เช็กทุกแกนพร้อมกัน + <code>all_homed</code> flag</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- 9. ENDPOINTS -->
+      <section class="section" id="endpoints">
+        <h2 class="section-title">🌐 REST API Endpoints (v2.0)</h2>
+
+        <p style="font-size:0.8rem;color:var(--muted);margin-bottom:14px">ทุก endpoint คืน <code>"ok": true/false</code>
+          เสมอ — HTTP 200 = สำเร็จ, HTTP 400 = ผิดพลาด</p>
+
+        <p style="font-size:0.85rem;font-weight:600;color:var(--muted);margin-bottom:8px">พื้นฐาน</p>
+        <div class="table-wrap" style="margin-bottom:16px">
+          <table>
+            <thead>
+              <tr>
+                <th>Method</th>
+                <th>Endpoint</th>
+                <th>หน้าที่</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><span class="method-get">GET</span></td>
+                <td class="mono">/api/ping</td>
+                <td>เช็กการเชื่อมต่อ (เร็ว ไม่ query ข้อมูล)</td>
+              </tr>
+              <tr>
+                <td><span class="method-get">GET</span></td>
+                <td class="mono">/api/status</td>
+                <td>สถานะทั้งหมด (busy, position, slots, estop)</td>
+              </tr>
+              <tr>
+                <td><span class="method-get">GET</span></td>
+                <td class="mono">/api/config</td>
+                <td>ค่าคอนฟิกแกน X/Y/Z ทั้งหมด</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p style="font-size:0.85rem;font-weight:600;color:var(--muted);margin-bottom:8px">Home</p>
+        <div class="table-wrap" style="margin-bottom:16px">
+          <table>
+            <thead>
+              <tr>
+                <th>Method</th>
+                <th>Endpoint</th>
+                <th>หน้าที่</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><span class="method-post">POST</span></td>
+                <td class="mono">/api/home/x|y|z</td>
+                <td>Home แกนเดียว</td>
+              </tr>
+              <tr>
+                <td><span class="method-post">POST</span></td>
+                <td class="mono">/api/home/all</td>
+                <td>Home ทุกแกนตาม home_order</td>
+              </tr>
+              <tr>
+                <td><span class="method-get">GET</span></td>
+                <td class="mono">/api/home/x|y|z/check</td>
+                <td>เช็ก Home แกนเดียว (ไม่สั่ง Home)</td>
+              </tr>
+              <tr>
+                <td><span class="method-get">GET</span></td>
+                <td class="mono">/api/home/all/check</td>
+                <td>เช็กทั้ง 3 แกนพร้อมกัน + <code>all_homed</code></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p style="font-size:0.85rem;font-weight:600;color:var(--muted);margin-bottom:8px">การเคลื่อนที่</p>
+        <div class="table-wrap" style="margin-bottom:16px">
+          <table>
+            <thead>
+              <tr>
+                <th>Method</th>
+                <th>Endpoint</th>
+                <th>Body</th>
+                <th>หน้าที่</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><span class="method-post">POST</span></td>
+                <td class="mono">/api/jog</td>
+                <td class="mono">{"axis":"x", "distance_mm":10, "speed_mm_s":20}</td>
+                <td>Jog แกนเดียว (ระบุ speed_mm_s หรือ time_s ได้)</td>
+              </tr>
+              <tr>
+                <td><span class="method-post">POST</span></td>
+                <td class="mono">/api/move</td>
+                <td class="mono">{"x_mm":10, "y_mm":20, "time_s":5}</td>
+                <td>เคลื่อนไปพิกัด absolute (ระบุ speed_mm_s หรือ time_s ได้)</td>
+              </tr>
+              <tr>
+                <td><span class="method-post">POST</span></td>
+                <td class="mono">/api/stop</td>
+                <td>—</td>
+                <td>หยุดทันที (ไม่ block)</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p style="font-size:0.85rem;font-weight:600;color:var(--muted);margin-bottom:8px">Slot Management</p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Method</th>
+                <th>Endpoint</th>
+                <th>Body / หมายเหตุ</th>
+                <th>หน้าที่</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><span class="method-get">GET</span></td>
+                <td class="mono">/api/slots</td>
+                <td>—</td>
+                <td>ดึงข้อมูลทุก slot + product</td>
+              </tr>
+              <tr>
+                <td><span class="method-get">GET</span></td>
+                <td class="mono">/api/slots/&lt;code&gt;</td>
+                <td>—</td>
+                <td>ดึง slot เดียว</td>
+              </tr>
+              <tr>
+                <td><span class="method-post">POST</span></td>
+                <td class="mono">/api/slots/&lt;code&gt;/goto</td>
+                <td>—</td>
+                <td>เคลื่อนไปยัง slot</td>
+              </tr>
+              <tr>
+                <td><span class="method-post">POST</span></td>
+                <td class="mono">/api/slots/&lt;code&gt;/save-current</td>
+                <td>—</td>
+                <td>บันทึกตำแหน่งปัจจุบัน</td>
+              </tr>
+              <tr>
+                <td><span class="method-post">POST</span></td>
+                <td class="mono">/api/slots/&lt;code&gt;</td>
+                <td>x_mm, y_mm, z_mm, product_name*, dispense_delay_ms*</td>
+                <td>บันทึกพิกัด + product</td>
+              </tr>
+              <tr>
+                <td><span class="method-post">POST</span></td>
+                <td class="mono">/api/slots/&lt;code&gt;/reset</td>
+                <td>—</td>
+                <td>Reset พิกัด → 0,0,0</td>
+              </tr>
+              <tr>
+                <td><span class="method-del">DELETE</span></td>
+                <td class="mono">/api/slots/&lt;code&gt;</td>
+                <td>—</td>
+                <td>ลบพิกัด (= reset)</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p style="font-size:0.75rem;color:var(--muted);margin-top:8px">* = optional field</p>
+      </section>
+
+      <!-- 10. LOGGING & CORS -->
+      <section class="section" id="logging">
+        <h2 class="section-title">📋 Logging &amp; CORS</h2>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+          <div>
+            <p style="font-size:0.85rem;font-weight:600;margin-bottom:10px">Logging</p>
+            <div class="code-block">
+              <div class="header">ตัวอย่าง narit_vending.log</div>
+              <pre><code style="background:none;color:var(--green);font-size:0.73rem">2026-07-17 14:41:00 [INFO] webapp: Narit Vending starting
+2026-07-17 14:41:05 [INFO] webapp: GET /api/status
+2026-07-17 14:41:10 [INFO] motion: Home x: starting
+2026-07-17 14:41:15 [INFO] motion: Home x: complete (1842 steps)
+2026-07-17 14:42:01 [WARNING] webapp: Motion error: head limit</code></pre>
+            </div>
+            <p style="font-size:0.78rem;color:var(--muted);margin-top:8px">บันทึกลง <code>narit_vending.log</code> +
+              stdout พร้อมกัน</p>
+          </div>
+          <div>
+            <p style="font-size:0.85rem;font-weight:600;margin-bottom:10px">CORS Headers</p>
+            <div class="code-block">
+              <div class="header">ทุก response มี header</div>
+              <pre><code style="background:none;color:var(--accent);font-size:0.73rem">Access-Control-Allow-Origin: *
+Access-Control-Allow-Methods:
+  GET, POST, DELETE, OPTIONS
+Access-Control-Allow-Headers:
+  Content-Type</code></pre>
+            </div>
+            <p style="font-size:0.78rem;color:var(--muted);margin-top:8px">เพิ่มโดย <code>@app.after_request</code>
+              อัตโนมัติ</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- 11. FLOW OVERVIEW -->
+      <section class="section" id="flow-overview">
+        <h2 class="section-title">📊 Flowchart ภาพรวม</h2>
+        <div class="mermaid-wrap">
+          <div class="mermaid">
+            flowchart TD
+            A["👤 ผู้ใช้ / curl"] --> B["🌐 Flask\nwebapp.py"]
+            B --> G["📋 narit_vending.log"]
+            B --> C["🔧 MotionService\nbusy lock + validation + log"]
+            C --> D["⚙️ MotionController\nX / Y / Z"]
+            C --> E["📄 machine_config.json\nslot + product profile"]
+            D --> F["🔌 AxisController\nPulse · Dir · Limit\nguard ทุก 5 steps"]
+
+            style A fill:#0d1f33,stroke:#1ea7ff,color:#e4edf7
+            style B fill:#0d1f33,stroke:#1ea7ff,color:#e4edf7
+            style G fill:#0d1f33,stroke:#6b8aad,color:#6b8aad
+            style C fill:#0d1f33,stroke:#5effa3,color:#e4edf7
+            style D fill:#0d1f33,stroke:#5effa3,color:#e4edf7
+            style E fill:#0d1f33,stroke:#ffd166,color:#e4edf7
+            style F fill:#0d1f33,stroke:#ff4d6d,color:#e4edf7
+          </div>
+        </div>
+      </section>
+
+      <!-- 12. FLOW HOME -->
+      <section class="section" id="flow-home">
+        <h2 class="section-title">🏠 Flowchart การ Home แกน</h2>
+        <div class="mermaid-wrap">
+          <div class="mermaid">
+            flowchart TD
+            A["▶ เริ่ม Home แกน"] --> B["📋 Log: Home X starting"]
+            B --> C["🛡️ ตรวจ E-Stop"]
+            C --> D["↩ pulse ไปหา Min Limit"]
+            D --> E{"ชน Min Limit?"}
+            E -- "ยัง" --> D
+            E -- "ชนแล้ว" --> F["↔ Backoff 20 steps"]
+            F --> G["✅ position = 0 mm\nis_homed = True"]
+            G --> H["📋 Log: Home X complete (N steps)"]
+
+            style A fill:#0d1f33,stroke:#1ea7ff,color:#e4edf7
+            style B fill:#0d1f33,stroke:#6b8aad,color:#6b8aad
+            style C fill:#0d1f33,stroke:#ff4d6d,color:#e4edf7
+            style D fill:#0d1f33,stroke:#ffd166,color:#e4edf7
+            style E fill:#112338,stroke:#ffd166,color:#e4edf7
+            style F fill:#0d1f33,stroke:#ffd166,color:#e4edf7
+            style G fill:#0d1f33,stroke:#5effa3,color:#e4edf7
+            style H fill:#0d1f33,stroke:#6b8aad,color:#6b8aad
+          </div>
+        </div>
+      </section>
+
+      <!-- 13. FLOW SLOT -->
+      <section class="section" id="flow-slot">
+        <h2 class="section-title">📦 Flowchart Go To Slot</h2>
+        <div class="mermaid-wrap">
+          <div class="mermaid">
+            flowchart TD
+            A["▶ Go To Slot"] --> B["📖 อ่าน X/Y/Z + product_name\nจาก machine_config.json"]
+            B --> C{"Z < safe_z?"} C -- "ใช่" --> D["⬆ ยก Z ขึ้น"]
+              C -- "ไม่" --> E["↔ เคลื่อน X, Y"]
+              D --> E
+              E --> F["⬇ ลง Z ไปยัง slot"]
+              F --> G["📡 Response + realtime update"]
+
+              style A fill:#0d1f33,stroke:#1ea7ff,color:#e4edf7
+              style B fill:#0d1f33,stroke:#ffd166,color:#e4edf7
+              style C fill:#112338,stroke:#ffd166,color:#e4edf7
+              style D fill:#0d1f33,stroke:#ff4d6d,color:#e4edf7
+              style E fill:#0d1f33,stroke:#5effa3,color:#e4edf7
+              style F fill:#0d1f33,stroke:#5effa3,color:#e4edf7
+              style G fill:#0d1f33,stroke:#1ea7ff,color:#e4edf7
+          </div>
+        </div>
+      </section>
+
+      <!-- 14. BOOT -->
+      <section class="section" id="boot">
+        <h2 class="section-title">🚀 ลำดับการเริ่มระบบ</h2>
+        <div class="boot-steps">
+          <div class="boot-step">
+            <div class="step-num">1</div>
+            <div class="step-body"><strong>Raspberry Pi บูต</strong><span>Linux เริ่มทำงาน</span></div>
+          </div>
+          <div class="boot-step">
+            <div class="step-num">2</div>
+            <div class="step-body"><strong>systemd เรียก service</strong><span><code>narit-vending-web.service</code>
+                เริ่มอัตโนมัติ</span></div>
+          </div>
+          <div class="boot-step">
+            <div class="step-num">3</div>
+            <div class="step-body"><strong>Python ใน venv รัน webapp</strong><span>service สั่ง
+                <code>narit_vending.webapp</code></span></div>
+          </div>
+          <div class="boot-step">
+            <div class="step-num">4</div>
+            <div class="step-body"><strong>ตั้งค่า Logging</strong><span><code>logging.basicConfig</code> →
+                <code>narit_vending.log</code> + stdout</span></div>
+          </div>
+          <div class="boot-step">
+            <div class="step-num">5</div>
+            <div class="step-body"><strong>Flask โหลด config</strong><span>อ่าน <code>machine_config.json</code> สร้าง
+                MotionController</span></div>
+          </div>
+          <div class="boot-step">
+            <div class="step-num">6</div>
+            <div class="step-body">
+              <strong>ผู้ใช้เปิดเว็บ</strong><span><code>http://NaritVendingMachine.local/</code></span>
+            </div>
+          </div>
+          <div class="boot-step">
+            <div class="step-num">7</div>
+            <div class="step-body"><strong>app.js เริ่ม poll</strong><span><code>GET /api/status</code> ทุก 500
+                ms</span></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 15. TODO -->
+      <section class="section" id="todo">
+        <h2 class="section-title">📝 แผนพัฒนาต่อ</h2>
+        <div class="todo-list">
+          <div class="todo-item"><input type="checkbox" class="todo-cb"> <span>Worker Thread — แยก motion เป็น
+              background thread แบบ proper queue สำหรับคำสั่งที่ใช้เวลานาน</span></div>
+          <div class="todo-item"><input type="checkbox" class="todo-cb"> <span>Dispense Sequence — ใช้
+              <code>dispense_delay_ms</code> ที่เก็บไว้ใน slot เพื่อ automate การจ่ายสินค้า</span></div>
+          <div class="todo-item"><input type="checkbox" class="todo-cb"> <span>Dispense History —
+              บันทึกประวัติการจ่ายสินค้า (slot, เวลา, สำเร็จ/ล้มเหลว)</span></div>
+          <div class="todo-item"><input type="checkbox" class="todo-cb"> <span>Auto-Home on Startup — option
+              <code>--auto-home</code> ใน systemd service</span></div>
+          <div class="todo-item"><input type="checkbox" class="todo-cb"> <span>Config Hot-Reload —
+              <code>POST /api/config/reload</code> โดยไม่ต้องรีสตาร์ท service</span></div>
+          <div class="todo-item"><input type="checkbox" class="todo-cb"> <span>ทดสอบ <code>steps_per_mm</code>,
+              <code>home_direction</code>, และ <code>max_travel_mm</code> กับเครื่องจริงเสมอ</span></div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <script>
+    mermaid.initialize({
+      startOnLoad: true, theme: 'dark',
+      themeVariables: {
+        background: '#0d1f33', primaryColor: '#0d1f33',
+        primaryTextColor: '#e4edf7', primaryBorderColor: '#1ea7ff',
+        lineColor: '#1ea7ff', secondaryColor: '#112338',
+        edgeLabelBackground: '#0d1f33',
+      },
+      flowchart: { curve: 'basis', padding: 20 }
+    });
+
+    // Sidebar active on scroll
+    const sections = document.querySelectorAll('section[id]');
+    const links = document.querySelectorAll('.sidebar nav a');
+    const obs = new IntersectionObserver(entries => {
+      entries.forEach(e => {
+        if (e.isIntersecting) {
+          links.forEach(l => l.classList.remove('active'));
+          const l = document.querySelector(`.sidebar nav a[href="#${e.target.id}"]`);
+          if (l) l.classList.add('active');
+        }
+      });
+    }, { rootMargin: '-20% 0px -70% 0px' });
+    sections.forEach(s => obs.observe(s));
+  </script>
+</body>
+
+</html>

@@ -39,7 +39,8 @@ $action = {
             Write-Host "Running deploy_to_pi.ps1..." -ForegroundColor Yellow
             try {
                 & "$PSScriptRoot/deploy_to_pi.ps1" -HostName $HostName -RemoteDir $RemoteDir -NoPull
-            } catch {
+            }
+            catch {
                 Write-Error "Deployment failed: $_"
             }
         }

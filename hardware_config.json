@@ -1,0 +1,164 @@
+{
+  "board_profile": "Raspberry_Pi_4B",
+  "communication": {
+    "ip_address": "0.0.0.0",
+    "port": 80,
+    "baudrate": 115200,
+    "protocol_settings": "HTTP/1.1 REST"
+  },
+  "mqtt": {
+    "enabled": true,
+    "broker": "broker.emqx.io",
+    "port": 1883,
+    "client_id": "vending_machine_01",
+    "username": "",
+    "password": "",
+    "topic_prefix": "vending/machine_01",
+    "keepalive_s": 60
+  },
+  "motors": {
+    "x": {
+      "step_pin": 16,
+      "dir_pin": 23,
+      "enable_pin": 12,
+      "active_high": true
+    },
+    "y": {
+      "step_pin": 26,
+      "dir_pin": 24,
+      "enable_pin": 13,
+      "active_high": true
+    },
+    "z": {
+      "step_pin": 18,
+      "dir_pin": 25,
+      "enable_pin": 19,
+      "active_high": true
+    }
+  },
+  "digital_inputs": {
+    "estop": {
+      "pin": 6,
+      "pull_up": false,
+      "active_high": true
+    },
+    "home_sensor_x": {
+      "pin": 17,
+      "pull_up": false,
+      "active_high": true
+    },
+    "home_sensor_y": {
+      "pin": 22,
+      "pull_up": false,
+      "active_high": true
+    },
+    "home_sensor_z": {
+      "pin": 11,
+      "pull_up": false,
+      "active_high": true
+    },
+    "lim_x_head": {
+      "pin": 17,
+      "pull_up": false,
+      "active_high": true
+    },
+    "lim_x_tail": {
+      "pin": 27,
+      "pull_up": false,
+      "active_high": true
+    },
+    "lim_y_head": {
+      "pin": 22,
+      "pull_up": false,
+      "active_high": true
+    },
+    "lim_y_tail": {
+      "pin": 9,
+      "pull_up": false,
+      "active_high": true
+    },
+    "lim_z_head": {
+      "pin": 11,
+      "pull_up": false,
+      "active_high": true
+    },
+    "lim_z_tail": {
+      "pin": 5,
+      "pull_up": false,
+      "active_high": true
+    }
+  },
+  "digital_outputs": {
+    "alarm_warning": {
+      "pin": 21,
+      "active_high": true,
+      "initial_value": false
+    },
+    "led_idle": {
+      "pin": 20,
+      "active_high": true,
+      "initial_value": true
+    },
+    "led_moving": {
+      "pin": 4,
+      "active_high": true,
+      "initial_value": false
+    },
+    "led_success": {
+      "pin": 14,
+      "active_high": true,
+      "initial_value": false
+    },
+    "alarm_buzzer": {
+      "pin": 7,
+      "active_high": true,
+      "initial_value": false
+    }
+  },
+  "machine_parameters": {
+    "home_order": [
+      "z",
+      "x",
+      "y"
+    ],
+    "safe_z_mm": 10.0,
+    "axes": {
+      "x": {
+        "steps_per_mm": 400.0,
+        "max_travel_mm": 220.0,
+        "max_speed_mm_s": 50.0,
+        "default_speed_mm_s": 25.0,
+        "acceleration": 100.0,
+        "deceleration": 100.0,
+        "settle_delay": 0.05,
+        "jog_step_mm": 5.0,
+        "home_direction": 0,
+        "forward_direction": 1
+      },
+      "y": {
+        "steps_per_mm": 400.0,
+        "max_travel_mm": 260.0,
+        "max_speed_mm_s": 50.0,
+        "default_speed_mm_s": 25.0,
+        "acceleration": 100.0,
+        "deceleration": 100.0,
+        "settle_delay": 0.05,
+        "jog_step_mm": 5.0,
+        "home_direction": 0,
+        "forward_direction": 1
+      },
+      "z": {
+        "steps_per_mm": 400.0,
+        "max_travel_mm": 200.0,
+        "max_speed_mm_s": 30.0,
+        "default_speed_mm_s": 15.0,
+        "acceleration": 80.0,
+        "deceleration": 80.0,
+        "settle_delay": 0.05,
+        "jog_step_mm": 2.0,
+        "home_direction": 0,
+        "forward_direction": 1
+      }
+    }
+  }
+}

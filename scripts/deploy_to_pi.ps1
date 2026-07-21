@@ -21,9 +21,9 @@ if (-not $NoPull) {
     }
 }
 
-ssh $HostName "sudo chown -R admin:admin $RemoteDir 2>/dev/null || true"
+ssh $HostName "sudo systemctl stop narit-vending-web.service 2>/dev/null || true; sudo chown -R admin:admin $RemoteDir 2>/dev/null || true"
 try {
-    scp -r README.md main.py machine_config.json requirements.txt narit_vending deploy scripts "Test motor.py" "${HostName}:${RemoteDir}/"
+    scp -r README.md main.py machine_config.json hardware_config.json requirements.txt narit_vending deploy scripts "Test motor.py" "${HostName}:${RemoteDir}/"
 } catch {
     Write-Warning "SCP file upload finished with some non-blocking errors: $_"
 }
