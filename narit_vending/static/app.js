@@ -671,6 +671,8 @@
       sbAlarms.className = `readiness-val ${activeAlarmCount() ? "fault" : "ok"}`;
       sbAlarms.textContent = String(activeAlarmCount());
     }
+    const navAlarmCount = el("nav-alarm-count");
+    if (navAlarmCount) navAlarmCount.textContent = String(activeAlarmCount());
   }
 
   /* ── RENDER: HEADER ─────────────────────────────────────────── */
