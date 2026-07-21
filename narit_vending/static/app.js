@@ -34,6 +34,7 @@
     selectedJogStep: 1.0,
     selectedJogSpeed: 10.0,
     logFilter: "all",
+    currentView: "motion",
 
     // Pending save dialog
     pendingSaveSlot: null,
@@ -177,13 +178,17 @@
       ? MS.events
       : MS.events.filter((e) => e.level === filter || (filter === "error" && e.level === "error"));
 
-    el("event-log").innerHTML = entries.slice(0, 80).map((e) => `
+    const markup = entries.slice(0, 80).map((e) => `
       <li class="evt-item ${esc(e.level)}" role="listitem">
         <span class="evt-time">${e.at.toLocaleTimeString()}</span>
         <span class="evt-level">${esc(e.subsystem)}</span>
         <span class="evt-msg">${esc(e.message)}</span>
       </li>
     `).join("");
+    const compactLog = document.getElementById("event-log");
+    const pageLog = document.getElementById("event-log-page");
+    if (compactLog) compactLog.innerHTML = markup;
+    if (pageLog) pageLog.innerHTML = markup;
   }
 
   /* ── TOAST ──────────────────────────────────────────────────── */
@@ -815,12 +820,119 @@
   }
 
   /* ── MASTER RENDER ──────────────────────────────────────────── */
+  const VALID_VIEWS = new Set([
+    "dashboard", "motion", "visualization", "diagnostics", "configuration",
+    "slots", "alarms", "events", "flow",
+  ]);
+
+  function switchWorkspace(view, updateHash = true) {
+    const nextView = VALID_VIEWS.has(view) ? view : "motion";
+    MS.currentView = nextView;
+    $$('[data-view-page]').forEach((page) => page.classList.toggle("active", page.dataset.viewPage === nextView));
+    $$('[data-view-target]').forEach((button) => {
+      const active = button.dataset.viewTarget === nextView;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-current", active ? "page" : "false");
+    });
+    const shell = $(".hmi-shell");
+    if (shell) shell.classList.toggle("view-wide", nextView !== "motion");
+    if (updateHash && location.hash !== `#${nextView}`) history.replaceState(null, "", `#${nextView}`);
+    renderWorkspacePages();
+  }
+
+  function renderWorkspacePages() {
+    const status = getStatus();
+    const operation = getOperation();
+    const homed = allAxesHomed();
+    const ready = MS.online && !status.estop && homed && !MS.payload?.busy;
+    const alarmCount = activeAlarmCount();
+    const configuredSlots = Object.values(MS.slots || {}).filter((slot) => slotStatus(slot) === "ready").length;
+
+    setText("dashboard-controller", MS.online ? "ONLINE" : "OFFLINE");
+    setText("dashboard-state", ready ? "READY" : "NOT READY");
+    setText("dashboard-state-detail", operation.message || motionInhibitReason(true) || "Controller ready");
+    setText("dashboard-command", MS.payload?.active_command || "NONE");
+    setText("dashboard-slots", configuredSlots);
+    const dashboardHealth = document.getElementById("dashboard-health");
+    if (dashboardHealth) {
+      dashboardHealth.textContent = ready ? "SYSTEM READY" : (MS.online ? "ATTENTION" : "OFFLINE");
+      dashboardHealth.className = `page-status-chip ${ready ? "ok" : (MS.online ? "" : "fault")}`;
+    }
+
+    const dashboardAxes = document.getElementById("dashboard-axis-grid");
+    if (dashboardAxes) dashboardAxes.innerHTML = AXES.map((axis) => {
+      const data = getAxis(axis);
+      return `<article class="dashboard-axis-card"><span>${axis.toUpperCase()} AXIS</span><strong>${fmtPos(data.position_mm)} mm</strong><small>${data.is_homed ? "HOMED" : "NOT HOMED"} · ${fmtSteps(data.position_steps)} steps</small></article>`;
+    }).join("");
+
+    const visualReadouts = document.getElementById("visual-readouts");
+    if (visualReadouts) visualReadouts.innerHTML = AXES.map((axis) => {
+      const data = getAxis(axis);
+      const max = Number(MS.config?.axes?.[axis]?.max_travel_mm || 0);
+      return `<article class="visual-readout"><span>${axis.toUpperCase()} POSITION</span><strong>${fmtPos(data.position_mm)} mm</strong><small>Travel 0 – ${fmt(max, 1)} mm</small></article>`;
+    }).join("");
+    AXES.forEach((axis) => {
+      const node = document.getElementById(`vis-carriage-${axis}`);
+      if (!node) return;
+      const position = Number(getAxis(axis).position_mm || 0);
+      const max = Number(MS.config?.axes?.[axis]?.max_travel_mm || 1);
+      const pct = Math.max(0, Math.min(100, (position / max) * 100));
+      if (axis === "x") node.style.left = `calc(${pct}% - ${pct * .24}px)`;
+      if (axis === "y") node.style.top = `calc(${pct}% - ${pct * .24}px)`;
+      if (axis === "z") node.style.bottom = `${10 + pct * .65}%`;
+    });
+
+    const diagnostics = document.getElementById("diagnostic-grid");
+    if (diagnostics) {
+      const diagnosticItems = [
+        ["Controller Link", MS.online ? "ONLINE" : "OFFLINE", MS.online ? "API polling every 1 second" : "No response from controller", MS.online ? "ok" : "fault"],
+        ["Emergency Stop", status.estop ? "ACTIVE" : "CLEAR", "Hardware safety input", status.estop ? "fault" : "ok"],
+        ["Homing", homed ? "COMPLETE" : "REQUIRED", AXES.map((a) => `${a.toUpperCase()}:${getAxis(a).is_homed ? "OK" : "--"}`).join("  "), homed ? "ok" : "warn"],
+        ["Motion Queue", MS.payload?.busy ? "BUSY" : "IDLE", MS.payload?.active_command || "No pending command", MS.payload?.busy ? "warn" : "ok"],
+        ["Active Alarms", String(alarmCount), MS.payload?.last_error || "No controller faults", alarmCount ? "fault" : "ok"],
+        ["Slot Database", String(Object.keys(MS.slots || {}).length), `${configuredSlots} configured locations`, "ok"],
+        ["Feed Override", `${MS.feedOverridePct}%`, `${fmtSpd(MS.selectedJogSpeed)} mm/s jog speed`, "ok"],
+        ["Last Operation", operation.ok === false ? "FAILED" : "NORMAL", operation.message || "No operation message", operation.ok === false ? "fault" : "ok"],
+      ];
+      diagnostics.innerHTML = diagnosticItems.map(([label, value, detail, stateClass]) => `<article class="diagnostic-card ${stateClass}"><span>${esc(label)}</span><strong>${esc(value)}</strong><small>${esc(detail)}</small></article>`).join("");
+    }
+    const diagHealth = document.getElementById("diag-health");
+    if (diagHealth) {
+      diagHealth.textContent = alarmCount ? "FAULT DETECTED" : (MS.online ? "SYSTEM HEALTHY" : "OFFLINE");
+      diagHealth.className = `page-status-chip ${alarmCount || !MS.online ? "fault" : "ok"}`;
+    }
+
+    const configTable = document.getElementById("configuration-axis-table");
+    if (configTable) configTable.innerHTML = AXES.map((axis) => {
+      const cfg = MS.config?.axes?.[axis] || {};
+      return `<tr><td>${axis.toUpperCase()}</td><td>${fmt(cfg.max_travel_mm, 1)} mm</td><td>${fmt(cfg.steps_per_mm, 1)}</td><td>${fmt(cfg.max_speed_mm_s, 1)} mm/s</td><td>${fmt(cfg.default_speed_mm_s, 1)} mm/s</td><td>${fmt(cfg.lead_screw_pitch_mm, 1)} mm</td></tr>`;
+    }).join("");
+
+    const alarmList = document.getElementById("alarm-page-list");
+    if (alarmList) alarmList.innerHTML = alarmCount
+      ? `<article class="alarm-page-item"><strong>ACTIVE CONTROLLER ALARM</strong><small>${esc(humanizeError(MS.payload.last_error))}</small></article>`
+      : `<article class="alarm-page-item clear"><strong>NO ACTIVE ALARMS</strong><small>Safety circuit and controller report normal operation.</small></article>`;
+
+    const flowState = document.getElementById("flow-state");
+    if (flowState) {
+      flowState.textContent = MS.payload?.busy ? "EXECUTING" : (ready ? "READY" : "INTERLOCKED");
+      flowState.className = `page-status-chip ${ready ? "ok" : (alarmCount ? "fault" : "")}`;
+    }
+    const flowController = document.getElementById("flow-controller");
+    const flowHome = document.getElementById("flow-home");
+    const flowMotion = document.getElementById("flow-motion");
+    if (flowController) flowController.className = `flow-node ${MS.online ? "complete" : "blocked"}`;
+    if (flowHome) flowHome.className = `flow-node ${homed ? "complete" : "blocked"}`;
+    if (flowMotion) flowMotion.className = `flow-node ${MS.payload?.busy ? "active" : (ready ? "complete" : "blocked")}`;
+  }
+
   function updateAllUI() {
     updateHeader();
     updateSafetyStrip();
     updateFooter();
     updateButtonStates();
     updateFeedOverride();
+    renderWorkspacePages();
   }
 
   function render(payload) {
@@ -870,6 +982,7 @@
       });
       // Rebuild homing sequence panel with actual order
       renderHomingSequence();
+      renderWorkspacePages();
       log("Machine configuration loaded", "info", "SYSTEM");
     } catch (err) {
       log(`Config load failed: ${err.message}`, "error", "SYSTEM");
@@ -879,6 +992,12 @@
   /* ── BIND ALL EVENTS ────────────────────────────────────────── */
   function bind() {
 
+    /* --- Workspace navigation --- */
+    $$('[data-view-target]').forEach((button) => {
+      button.addEventListener("click", () => switchWorkspace(button.dataset.viewTarget));
+    });
+    window.addEventListener("hashchange", () => switchWorkspace(location.hash.slice(1), false));
+
     /* --- Emergency Stop --- */
     el("stop-button").addEventListener("click", () => {
       command("Emergency stop", "/api/stop", undefined, { isStop: true, noCheck: true });
@@ -886,6 +1005,9 @@
 
     /* --- Reset Alarm --- */
     el("clear-alarm").addEventListener("click", () => {
+      command("Reset alarms", "/api/clear-alarm", undefined, { isStop: true, noCheck: true });
+    });
+    el("page-clear-alarm").addEventListener("click", () => {
       command("Reset alarms", "/api/clear-alarm", undefined, { isStop: true, noCheck: true });
     });
 
@@ -1017,6 +1139,7 @@
   /* ── INIT ───────────────────────────────────────────────────── */
   document.addEventListener("DOMContentLoaded", () => {
     bind();
+    switchWorkspace(location.hash.slice(1) || "motion", false);
     log("Industrial motion HMI initialised", "info", "SYSTEM");
     log("Connecting to controller...", "info", "CONTROLLER");
     loadConfig();

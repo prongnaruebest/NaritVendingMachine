@@ -7,7 +7,7 @@
   <title>NARIT VENDING — Industrial Gantry HMI</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=20260721_v7">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=20260721_v8">
 </head>
 <body>
   <div class="hmi-shell">
@@ -24,32 +24,32 @@
       <nav class="sidebar-nav">
         <div class="nav-section">
           <p class="nav-section-label">Workspaces</p>
-          <button class="nav-item" id="nav-dashboard">
+          <button class="nav-item" id="nav-dashboard" data-view-target="dashboard">
             <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
               <rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/>
               <rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/>
             </svg>
             <span>Dashboard</span>
           </button>
-          <button class="nav-item active" id="nav-motion">
+          <button class="nav-item active" id="nav-motion" data-view-target="motion">
             <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
               <circle cx="8" cy="8" r="2.5"/><path d="M8 1v2.5M8 12.5V15M1 8h2.5M12.5 8H15"/>
             </svg>
             <span>Motion Control</span>
           </button>
-          <button class="nav-item" id="nav-visualization">
+          <button class="nav-item" id="nav-visualization" data-view-target="visualization">
             <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
               <polyline points="1 13 5 7 9 11 15 3"/>
             </svg>
             <span>Visualization</span>
           </button>
-          <button class="nav-item" id="nav-diagnostics">
+          <button class="nav-item" id="nav-diagnostics" data-view-target="diagnostics">
             <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
               <circle cx="8" cy="8" r="6"/><line x1="8" y1="5" x2="8" y2="8"/><circle cx="8" cy="11" r="0.5" fill="currentColor"/>
             </svg>
             <span>Diagnostics</span>
           </button>
-          <button class="nav-item" id="nav-configuration">
+          <button class="nav-item" id="nav-configuration" data-view-target="configuration">
             <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
               <circle cx="8" cy="8" r="2.5"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.1 3.1l1.4 1.4M11.5 11.5l1.4 1.4M12.9 3.1l-1.4 1.4M4.5 11.5l-1.4 1.4"/>
             </svg>
@@ -59,26 +59,26 @@
 
         <div class="nav-section">
           <p class="nav-section-label">System Views</p>
-          <button class="nav-item" id="nav-slots">
+          <button class="nav-item" id="nav-slots" data-view-target="slots">
             <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
               <path d="M2 5.5 8 2l6 3.5v6L8 15l-6-3.5z"/><path d="M2 5.5 8 9l6-3.5M8 9v6"/>
             </svg>
             <span>Slot Manager</span>
           </button>
-          <button class="nav-item" id="nav-alarms">
+          <button class="nav-item" id="nav-alarms" data-view-target="alarms">
             <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
               <path d="M8 2 15 14H1z"/><path d="M8 6v4M8 12v.5"/>
             </svg>
             <span>Alarms</span>
             <span class="nav-alarm-badge" id="nav-alarm-count">0</span>
           </button>
-          <button class="nav-item" id="nav-events">
+          <button class="nav-item" id="nav-events" data-view-target="events">
             <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
               <path d="M3 1.5h8l2 2V14.5H3z"/><path d="M11 1.5v3h2M5 7h6M5 10h6M5 13h4"/>
             </svg>
             <span>Event Logs</span>
           </button>
-          <button class="nav-item" id="nav-flow">
+          <button class="nav-item" id="nav-flow" data-view-target="flow">
             <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
               <rect x="2" y="2" width="12" height="12" rx="1"/><path d="M5 5h3v3h3v3M8 5 6.5 3.5M8 5 6.5 6.5M11 11l-1.5-1.5M11 11l-1.5 1.5"/>
             </svg>
@@ -171,6 +171,7 @@
 
     <!-- ── MAIN WORKSPACE (CENTER) ─────────────────────────────── -->
     <main class="hmi-workspace">
+      <section class="workspace-view active" data-view-page="motion">
       <!-- Top Row: Feed Override + Homing Sequence -->
       <div class="wz-top">
         <!-- Feed Override -->
@@ -290,8 +291,11 @@
         </div>
       </div>
 
+      </section>
+
       <!-- Slot positioning Table Panel -->
-      <div class="panel slot-panel">
+      <section class="workspace-view" data-view-page="slots">
+      <div class="panel slot-panel page-fill-panel">
         <div class="panel-head">
           <div>
             <p class="panel-label">Slot Positioning Manager</p>
@@ -326,6 +330,73 @@
           </table>
         </div>
       </div>
+      </section>
+
+      <section class="workspace-view" data-view-page="dashboard">
+        <div class="page-heading">
+          <div><p class="panel-label">System Overview</p><h2>Machine Dashboard</h2></div>
+          <span class="page-status-chip" id="dashboard-health">CONNECTING</span>
+        </div>
+        <div class="overview-grid">
+          <article class="overview-card"><span>Controller</span><strong id="dashboard-controller">OFFLINE</strong><small>Raspberry Pi motion service</small></article>
+          <article class="overview-card"><span>Machine State</span><strong id="dashboard-state">NOT READY</strong><small id="dashboard-state-detail">Waiting for status</small></article>
+          <article class="overview-card"><span>Active Command</span><strong id="dashboard-command">NONE</strong><small>Current command queue</small></article>
+          <article class="overview-card"><span>Configured Slots</span><strong id="dashboard-slots">0</strong><small>Ready vending locations</small></article>
+        </div>
+        <div class="panel page-panel">
+          <div class="panel-head"><div><p class="panel-label">Live Position</p><h2 class="panel-title">Axis Summary</h2></div></div>
+          <div class="dashboard-axis-grid" id="dashboard-axis-grid"></div>
+        </div>
+      </section>
+
+      <section class="workspace-view" data-view-page="visualization">
+        <div class="page-heading"><div><p class="panel-label">Machine Visualization</p><h2>Gantry Position View</h2></div><span class="page-note">Live update every 1 second</span></div>
+        <div class="panel page-panel visualization-panel">
+          <div class="gantry-stage">
+            <div class="gantry-rail gantry-x"><span>X</span><div class="gantry-carriage" id="vis-carriage-x"></div></div>
+            <div class="gantry-rail gantry-y"><span>Y</span><div class="gantry-carriage" id="vis-carriage-y"></div></div>
+            <div class="gantry-z" id="vis-carriage-z">Z</div>
+          </div>
+          <div class="visual-readouts" id="visual-readouts"></div>
+        </div>
+      </section>
+
+      <section class="workspace-view" data-view-page="diagnostics">
+        <div class="page-heading"><div><p class="panel-label">Diagnostics</p><h2>Controller &amp; I/O Health</h2></div><span class="page-status-chip" id="diag-health">CHECKING</span></div>
+        <div class="diagnostic-grid" id="diagnostic-grid"></div>
+      </section>
+
+      <section class="workspace-view" data-view-page="configuration">
+        <div class="page-heading"><div><p class="panel-label">Configuration</p><h2>Motion Parameters</h2></div><span class="page-note">Read-only engineering reference</span></div>
+        <div class="panel page-panel">
+          <div class="config-table-wrap"><table class="config-table"><thead><tr><th>Axis</th><th>Travel</th><th>Steps/mm</th><th>Max Speed</th><th>Default Speed</th><th>Lead Screw</th></tr></thead><tbody id="configuration-axis-table"></tbody></table></div>
+        </div>
+      </section>
+
+      <section class="workspace-view" data-view-page="alarms">
+        <div class="page-heading"><div><p class="panel-label">Alarm Management</p><h2>Active Alarms &amp; Interlocks</h2></div><button class="btn-reset-alarm page-reset-alarm" id="page-clear-alarm">RESET ALARMS</button></div>
+        <div class="panel page-panel"><div id="alarm-page-list" class="alarm-page-list"></div></div>
+      </section>
+
+      <section class="workspace-view" data-view-page="events">
+        <div class="page-heading"><div><p class="panel-label">Event History</p><h2>Controller Event Logs</h2></div><span class="page-note">Latest 200 in-memory events</span></div>
+        <div class="panel page-panel event-page-panel"><ol class="event-log event-log-page" id="event-log-page"></ol></div>
+      </section>
+
+      <section class="workspace-view" data-view-page="flow">
+        <div class="page-heading"><div><p class="panel-label">System Flow</p><h2>Vending Motion Sequence</h2></div><span class="page-status-chip" id="flow-state">IDLE</span></div>
+        <div class="flow-diagram">
+          <div class="flow-node" id="flow-controller"><span>01</span><strong>Controller Ready</strong><small>API and safety checks</small></div>
+          <div class="flow-arrow">&rarr;</div>
+          <div class="flow-node" id="flow-home"><span>02</span><strong>Axes Homed</strong><small>X / Y / Z referenced</small></div>
+          <div class="flow-arrow">&rarr;</div>
+          <div class="flow-node" id="flow-slot"><span>03</span><strong>Slot Selected</strong><small>Target coordinates loaded</small></div>
+          <div class="flow-arrow">&rarr;</div>
+          <div class="flow-node" id="flow-motion"><span>04</span><strong>Motion Execute</strong><small>Coordinated trajectory</small></div>
+          <div class="flow-arrow">&rarr;</div>
+          <div class="flow-node" id="flow-dispense"><span>05</span><strong>Dispense</strong><small>Product release cycle</small></div>
+        </div>
+      </section>
     </main>
 
     <!-- ── RIGHT PANEL (STATUS + JOG CONTROLS + LIVE LOG) ──────── -->
@@ -519,6 +590,6 @@
     </div>
   </div>
 
-  <script src="{{ url_for('static', filename='app.js') }}?v=20260721_v7"></script>
+  <script src="{{ url_for('static', filename='app.js') }}?v=20260721_v8"></script>
 </body>
 </html>
