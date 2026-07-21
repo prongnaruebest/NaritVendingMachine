@@ -7,7 +7,7 @@
     "protocol_settings": "HTTP/1.1 REST"
   },
   "mqtt": {
-    "enabled": true,
+    "enabled": false,
     "broker": "broker.emqx.io",
     "port": 1883,
     "client_id": "vending_machine_01",
@@ -126,38 +126,47 @@
       "x": {
         "steps_per_mm": 400.0,
         "max_travel_mm": 220.0,
-        "max_speed_mm_s": 50.0,
-        "default_speed_mm_s": 25.0,
-        "acceleration": 100.0,
-        "deceleration": 100.0,
+        "max_speed_mm_s": 35.0,
+        "default_speed_mm_s": 18.0,
+        "acceleration": 80.0,
+        "deceleration": 80.0,
         "settle_delay": 0.05,
         "jog_step_mm": 5.0,
         "home_direction": 0,
-        "forward_direction": 1
+        "forward_direction": 1,
+        "lead_screw_pitch_mm": 5.0,
+        "motor_steps_per_rev": 200,
+        "driver_microsteps": 10
       },
       "y": {
         "steps_per_mm": 400.0,
         "max_travel_mm": 260.0,
-        "max_speed_mm_s": 50.0,
-        "default_speed_mm_s": 25.0,
-        "acceleration": 100.0,
-        "deceleration": 100.0,
+        "max_speed_mm_s": 35.0,
+        "default_speed_mm_s": 18.0,
+        "acceleration": 80.0,
+        "deceleration": 80.0,
         "settle_delay": 0.05,
         "jog_step_mm": 5.0,
         "home_direction": 0,
-        "forward_direction": 1
+        "forward_direction": 1,
+        "lead_screw_pitch_mm": 5.0,
+        "motor_steps_per_rev": 200,
+        "driver_microsteps": 10
       },
       "z": {
         "steps_per_mm": 400.0,
         "max_travel_mm": 200.0,
-        "max_speed_mm_s": 30.0,
-        "default_speed_mm_s": 15.0,
+        "max_speed_mm_s": 20.0,
+        "default_speed_mm_s": 10.0,
         "acceleration": 80.0,
         "deceleration": 80.0,
         "settle_delay": 0.05,
         "jog_step_mm": 2.0,
         "home_direction": 0,
-        "forward_direction": 1
+        "forward_direction": 1,
+        "lead_screw_pitch_mm": 5.0,
+        "motor_steps_per_rev": 200,
+        "driver_microsteps": 10
       }
     }
   }

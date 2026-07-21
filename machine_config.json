@@ -11,9 +11,15 @@
       "steps_per_mm": 400.0,
       "max_travel_mm": 220.0,
       "max_speed_mm_s": 50.0,
-      "default_speed_mm_s": 3.5714285714285716,
+      "default_speed_mm_s": 18.0,
       "settle_delay": 0.05,
-      "jog_step_mm": 5.0
+      "jog_step_mm": 5.0,
+      "acceleration": 80.0,
+      "deceleration": 80.0,
+      "lead_screw_pitch_mm": 5.0,
+      "motor_steps_per_rev": 200,
+      "driver_microsteps": 10,
+      "pulses_per_rev": 2000
     },
     "y": {
       "name": "y",
@@ -25,10 +31,16 @@
       "forward_direction": 0,
       "steps_per_mm": 400.0,
       "max_travel_mm": 260.0,
-      "max_speed_mm_s": 50.0,
-      "default_speed_mm_s": 3.5714285714285716,
+      "max_speed_mm_s": 35.0,
+      "default_speed_mm_s": 18.0,
       "settle_delay": 0.05,
-      "jog_step_mm": 5.0
+      "jog_step_mm": 5.0,
+      "acceleration": 80.0,
+      "deceleration": 80.0,
+      "lead_screw_pitch_mm": 5.0,
+      "motor_steps_per_rev": 200,
+      "driver_microsteps": 10,
+      "pulses_per_rev": 2000
     },
     "z": {
       "name": "z",
@@ -40,10 +52,16 @@
       "forward_direction": 1,
       "steps_per_mm": 400.0,
       "max_travel_mm": 200.0,
-      "max_speed_mm_s": 50.0,
-      "default_speed_mm_s": 3.5714285714285716,
+      "max_speed_mm_s": 20.0,
+      "default_speed_mm_s": 10.0,
       "settle_delay": 0.05,
-      "jog_step_mm": 2.0
+      "jog_step_mm": 2.0,
+      "acceleration": 80.0,
+      "deceleration": 80.0,
+      "lead_screw_pitch_mm": 5.0,
+      "motor_steps_per_rev": 200,
+      "driver_microsteps": 10,
+      "pulses_per_rev": 2000
     }
   },
   "home_order": [

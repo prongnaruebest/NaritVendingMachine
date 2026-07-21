@@ -3,73 +3,209 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Narit Vending | Operator HMI</title>
+  <title>NARIT Vending Engineering Console</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-  <header class="topbar">
-    <div><strong>NARIT VENDING</strong><span>OPERATOR HMI</span></div>
-    <div class="connection"><i id="connection-dot"></i><span id="connection-state">CONNECTING</span><time id="system-time"></time></div>
-  </header>
-
-  <main class="shell">
-    <aside class="sidebar">
-      <button class="nav active" data-page="overview">Overview</button>
-      <button class="nav" data-page="manual">Manual control</button>
-      <button class="nav" data-page="slots">Slots & dispense</button>
-      <button class="nav" data-page="diagnostics">Diagnostics</button>
-      <div class="safety-card">
-        <small>HARDWARE SAFETY</small>
-        <strong id="estop-state">CHECKING</strong>
-        <p>Screen stop is not a replacement for the physical E-Stop.</p>
+  <div class="app-shell">
+    <header class="masthead">
+      <div class="brand-block">
+        <p class="kicker">NARIT SMART VENDING / CABINET AGENT</p>
+        <h1>Engineering Motion Console</h1>
+        <p class="subtitle">Three-axis gantry supervision, coordinated motion planning, field diagnostics.</p>
       </div>
-    </aside>
-
-    <section class="content">
-      <section class="page active" id="overview">
-        <div class="page-title"><div><p>LIVE OPERATION</p><h1 id="machine-state">CONNECTING</h1></div><button class="stop" id="stop-button">STOP MOTION</button></div>
-        <article class="operation-card" id="operation-card">
-          <div class="operation-heading"><span class="status-dot" id="operation-dot"></span><div><small>CURRENT ACTIVITY</small><h2 id="operation-message">Waiting for controller status…</h2></div><span class="phase" id="operation-phase">UNKNOWN</span></div>
-          <p id="operation-detail">No command telemetry received.</p>
-        </article>
-
-        <div class="section-head"><div><p>HOMING SEQUENCE</p><h2>Reference position status</h2></div><button class="primary" id="home-all">HOME ALL AXES</button></div>
-        <div class="homing-grid">
-          <article class="home-step" data-axis="z"><span class="sequence">01</span><div><small>AXIS Z</small><strong id="home-z">NOT HOMED</strong><p id="home-z-detail">Waiting for command</p></div><button class="secondary home-axis" data-axis="z">HOME Z</button></article>
-          <article class="home-step" data-axis="x"><span class="sequence">02</span><div><small>AXIS X</small><strong id="home-x">NOT HOMED</strong><p id="home-x-detail">Waiting for command</p></div><button class="secondary home-axis" data-axis="x">HOME X</button></article>
-          <article class="home-step" data-axis="y"><span class="sequence">03</span><div><small>AXIS Y</small><strong id="home-y">NOT HOMED</strong><p id="home-y-detail">Waiting for command</p></div><button class="secondary home-axis" data-axis="y">HOME Y</button></article>
+      <div class="masthead-side">
+        <div class="connection offline" id="connection">
+          <span class="indicator"></span>
+          <div>
+            <strong id="connection-state">CONTROLLER OFFLINE</strong>
+            <small>HTTP control channel</small>
+          </div>
         </div>
-
-        <div class="section-head"><div><p>AXIS POSITION</p><h2>Live position and limit sensors</h2></div><span class="updated" id="updated-at">No update</span></div>
-        <div class="axis-grid">
-          <article class="axis"><div><small>AXIS X</small><strong id="position-x">—</strong></div><div class="sensor-row"><span id="x-homed">NOT HOMED</span><span id="x-min">MIN</span><span id="x-max">MAX</span></div></article>
-          <article class="axis"><div><small>AXIS Y</small><strong id="position-y">—</strong></div><div class="sensor-row"><span id="y-homed">NOT HOMED</span><span id="y-min">MIN</span><span id="y-max">MAX</span></div></article>
-          <article class="axis"><div><small>AXIS Z</small><strong id="position-z">—</strong></div><div class="sensor-row"><span id="z-homed">NOT HOMED</span><span id="z-min">MIN</span><span id="z-max">MAX</span></div></article>
+        <div class="time-card">
+          <span>LOCAL TIME</span>
+          <strong id="system-time">--:--:--</strong>
         </div>
-      </section>
+      </div>
+    </header>
 
-      <section class="page" id="manual">
-        <div class="page-title"><div><p>ENGINEERING MODE</p><h1>Manual motion control</h1></div><span class="interlock" id="manual-interlock">WAITING FOR STATUS</span></div>
-        <article class="notice">Manual movement is disabled while a command runs, while E-Stop is active, or when controller communication is lost. Home each axis before absolute position or slot movement.</article>
-        <div class="manual-grid">
-          <article class="panel"><h2>Jog controls</h2><label>Jog increment <select id="jog-step"><option value="0.1">0.1 mm</option><option value="1" selected>1 mm</option><option value="5">5 mm</option><option value="10">10 mm</option></select></label><div class="jog-grid"><button data-jog="y:1">Y +</button><button data-jog="z:1">Z +</button><button data-jog="x:-1">X −</button><button data-jog="x:1">X +</button><button data-jog="y:-1">Y −</button><button data-jog="z:-1">Z −</button></div></article>
-          <article class="panel"><h2>Absolute move</h2><div class="input-grid"><label>X (mm)<input id="move-x" type="number" step="0.1" min="0"></label><label>Y (mm)<input id="move-y" type="number" step="0.1" min="0"></label><label>Z (mm)<input id="move-z" type="number" step="0.1" min="0"></label></div><button class="primary" id="absolute-move">MOVE TO POSITION</button><p class="help">The controller validates travel limits and homing state.</p></article>
-        </div>
-      </section>
-
-      <section class="page" id="slots">
-        <div class="page-title"><div><p>PRODUCT DELIVERY</p><h1>Slot operation</h1></div><input id="slot-search" placeholder="Search slot or product"></div>
-        <article class="notice">Go To Slot and Dispense are enabled only after all axes pass Home and all safety interlocks are clear.</article>
-        <div class="slot-grid" id="slot-grid"></div>
-      </section>
-
-      <section class="page" id="diagnostics">
-        <div class="page-title"><div><p>FAULT FINDING</p><h1>Diagnostics & event history</h1></div><button class="secondary" id="clear-alarm">CLEAR ALARM</button></div>
-        <div class="diagnostics-grid"><article class="panel"><h2>Safety and command</h2><dl><dt>Active command</dt><dd id="diag-command">—</dd><dt>Last error</dt><dd id="diag-error">None</dd><dt>Controller state</dt><dd id="diag-state">—</dd></dl></article><article class="panel"><h2>Sensor states</h2><table><thead><tr><th>Signal</th><th>State</th></tr></thead><tbody id="sensor-table"></tbody></table></article></div>
-        <article class="panel"><h2>HMI event history</h2><ol class="event-log" id="event-log"></ol></article>
-      </section>
+    <section class="telemetry-strip">
+      <article class="metric emphasis">
+        <span class="metric-label">Machine State</span>
+        <strong class="metric-value" id="machine-state">UNKNOWN</strong>
+        <small id="operation-message">Waiting for controller data</small>
+      </article>
+      <article class="metric">
+        <span class="metric-label">Active Command</span>
+        <strong class="metric-value" id="active-command">None</strong>
+        <small id="operation-phase">READY</small>
+      </article>
+      <article class="metric">
+        <span class="metric-label">Override Speed</span>
+        <strong class="metric-value"><span id="override-speed">--</span> mm/s</strong>
+        <small>Operator preset</small>
+      </article>
+      <article class="metric">
+        <span class="metric-label">Target Time</span>
+        <strong class="metric-value"><span id="override-time">--</span> s</strong>
+        <small>Synchronized move window</small>
+      </article>
+      <article class="metric warning">
+        <span class="metric-label">Safety State</span>
+        <strong class="metric-value" id="estop-state">E-STOP UNKNOWN</strong>
+        <small id="last-error">No active error</small>
+      </article>
     </section>
-  </main>
+
+    <main class="console-grid">
+      <section class="main-column">
+        <section class="panel hero-panel">
+          <div class="panel-head">
+            <div>
+              <p class="kicker">COORDINATED MOTION</p>
+              <h2>Target Planner</h2>
+            </div>
+            <div class="button-row">
+              <button class="ghost" id="plan-move">Preview Plan</button>
+              <button class="primary" id="absolute-move">Execute Move</button>
+            </div>
+          </div>
+          <div class="planner-layout">
+            <div class="planner-form">
+              <label>X target (mm)<input id="move-x" type="number" step="0.1" min="0"></label>
+              <label>Y target (mm)<input id="move-y" type="number" step="0.1" min="0"></label>
+              <label>Z target (mm)<input id="move-z" type="number" step="0.1" min="0"></label>
+              <label>Speed (mm/s)<input id="move-speed" type="number" step="0.1" min="0.1"></label>
+              <label>Move time (s)<input id="move-time" type="number" step="0.1" min="0.1"></label>
+            </div>
+            <div class="planner-side">
+              <div class="preset-column">
+                <button class="preset" data-speed="10">10 mm/s</button>
+                <button class="preset" data-speed="20">20 mm/s</button>
+                <button class="preset" data-speed="30">30 mm/s</button>
+                <button class="preset" data-speed="40">40 mm/s</button>
+              </div>
+              <div class="button-row stacked">
+                <button class="ghost" id="apply-speed">Save Speed</button>
+                <button class="ghost" id="apply-time">Save Time</button>
+              </div>
+            </div>
+          </div>
+          <div class="planner-summary">
+            <div class="formula-card">
+              <span>Distance to pulse</span>
+              <code>pulse = distance_mm × steps_per_mm</code>
+            </div>
+            <div class="formula-card">
+              <span>Lead screw 5 mm</span>
+              <code>steps_per_mm = pulses_per_rev / 5</code>
+            </div>
+            <div class="formula-card">
+              <span>Time mode</span>
+              <code>speed = max_axis_distance / time_s</code>
+            </div>
+          </div>
+          <div class="plan-readout" id="move-plan">Planner idle.</div>
+        </section>
+
+        <section class="two-up">
+          <article class="panel">
+            <div class="panel-head">
+              <div>
+                <p class="kicker">MANUAL CONTROL</p>
+                <h2>Jog Deck</h2>
+              </div>
+              <button class="danger" id="stop-button">STOP</button>
+            </div>
+            <div class="mini-form">
+              <label>Jog step (mm)
+                <select id="jog-step">
+                  <option value="0.1">0.1</option>
+                  <option value="1">1</option>
+                  <option value="5" selected>5</option>
+                  <option value="10">10</option>
+                </select>
+              </label>
+              <label>Jog time (s)<input id="jog-time" type="number" step="0.1" min="0.1"></label>
+            </div>
+            <div class="jog-pad">
+              <button data-jog="y:1">Y+</button>
+              <button data-jog="z:1">Z+</button>
+              <button data-jog="x:-1">X-</button>
+              <button data-jog="x:1">X+</button>
+              <button data-jog="y:-1">Y-</button>
+              <button data-jog="z:-1">Z-</button>
+            </div>
+            <p class="note">Jog uses override speed first. If jog time is set, the pulse rate is derived from distance and requested duration.</p>
+          </article>
+
+          <article class="panel">
+            <div class="panel-head">
+              <div>
+                <p class="kicker">HOMING AND RECOVERY</p>
+                <h2>Safety Actions</h2>
+              </div>
+            </div>
+            <div class="button-row wrap">
+              <button class="primary" id="home-all">HOME ALL</button>
+              <button class="ghost home-axis" data-axis="x">Home X</button>
+              <button class="ghost home-axis" data-axis="y">Home Y</button>
+              <button class="ghost home-axis" data-axis="z">Home Z</button>
+              <button class="ghost" id="clear-alarm">CLEAR ALARM</button>
+            </div>
+            <div class="status-ribbon" id="home-status"></div>
+            <ul class="interlock-list" id="interlock-list">
+              <li>Waiting for controller status</li>
+            </ul>
+          </article>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <p class="kicker">SLOT OPERATIONS</p>
+              <h2>Dispense Matrix</h2>
+            </div>
+            <input id="slot-search" class="search" placeholder="Search slot or product">
+          </div>
+          <div class="slot-grid" id="slot-grid"></div>
+        </section>
+      </section>
+
+      <aside class="side-column">
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <p class="kicker">AXIS TELEMETRY</p>
+              <h2>Live Position Rail</h2>
+            </div>
+          </div>
+          <div class="axis-stack" id="axis-grid"></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <p class="kicker">MECHANICAL DATA</p>
+              <h2>Axis Parameters</h2>
+            </div>
+          </div>
+          <div class="mechanics-table" id="mechanics-summary">Loading axis data...</div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <p class="kicker">DIAGNOSTICS</p>
+              <h2>Event Stream</h2>
+            </div>
+          </div>
+          <ol class="event-log" id="event-log"></ol>
+        </section>
+      </aside>
+    </main>
+  </div>
+
   <div class="toast" id="toast" role="status"></div>
   <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
