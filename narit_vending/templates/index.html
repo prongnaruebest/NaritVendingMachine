@@ -3,180 +3,283 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="NARIT Vending Machine Motion Control HMI">
-  <title>NARIT Vending Machine — Motion Control</title>
+  <meta name="description" content="NARIT Vending Machine Industrial Gantry Motion Control HMI">
+  <title>NARIT VENDING — Industrial Gantry HMI</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-  <div class="layout-shell">
+  <div class="hmi-shell">
+    <!-- ── SIDEBAR ─────────────────────────────────────────────── -->
     <aside class="sidebar">
       <div class="sidebar-brand">
         <div class="brand-mark">NV</div>
-        <div class="brand-copy">
-          <strong>NARIT VENDING</strong>
-          <span>Motion HMI</span>
+        <div class="sidebar-brand-text">
+          NARIT VENDING
+          <span>Industrial Gantry HMI</span>
         </div>
       </div>
 
-      <div class="nav-section">
-        <p class="nav-label">Overview</p>
-        <button class="nav-item"><span class="nav-icon"></span><span>Dashboard</span></button>
-      </div>
+      <nav class="sidebar-nav">
+        <div class="nav-section">
+          <p class="nav-section-label">Overview</p>
+          <button class="nav-item" id="nav-dashboard">
+            <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+              <rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/>
+              <rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/>
+            </svg>
+            <span>Dashboard</span>
+          </button>
+        </div>
 
-      <div class="nav-section">
-        <p class="nav-label">Control</p>
-        <button class="nav-item active"><span class="nav-icon"></span><span>Motion Control</span></button>
-        <button class="nav-item"><span class="nav-icon"></span><span>Slot Manager</span></button>
-      </div>
+        <div class="nav-section">
+          <p class="nav-section-label">Control</p>
+          <button class="nav-item active" id="nav-motion">
+            <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+              <circle cx="8" cy="8" r="2.5"/><path d="M8 1v2.5M8 12.5V15M1 8h2.5M12.5 8H15"/>
+            </svg>
+            <span>Motion Control</span>
+          </button>
+          <button class="nav-item" id="nav-slots">
+            <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+              <rect x="1" y="3" width="14" height="3" rx="1"/><rect x="1" y="8" width="14" height="3" rx="1"/>
+            </svg>
+            <span>Slot Manager</span>
+          </button>
+        </div>
 
-      <div class="nav-section">
-        <p class="nav-label">Monitoring</p>
-        <button class="nav-item"><span class="nav-icon"></span><span>Visualization</span></button>
-        <button class="nav-item"><span class="nav-icon"></span><span>Diagnostics</span></button>
-        <button class="nav-item">
-          <span class="nav-icon"></span>
+        <div class="nav-section">
+          <p class="nav-section-label">Monitoring</p>
+          <button class="nav-item" id="nav-visualization">
+            <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+              <polyline points="1 13 5 7 9 11 15 3"/>
+            </svg>
+            <span>Visualization</span>
+          </button>
+          <button class="nav-item" id="nav-diagnostics">
+            <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+              <circle cx="8" cy="8" r="6"/><line x1="8" y1="5" x2="8" y2="8"/><circle cx="8" cy="11" r="0.5" fill="currentColor"/>
+            </svg>
+            <span>Diagnostics</span>
+          </button>
+        </div>
+      </nav>
+
+      <div class="sidebar-readiness">
+        <div class="readiness-row">
+          <span>Controller</span>
+          <strong class="readiness-val fault" id="sb-controller">OFFLINE</strong>
+        </div>
+        <div class="readiness-row">
+          <span>E-Stop</span>
+          <strong class="readiness-val ok" id="sb-estop">CLEAR</strong>
+        </div>
+        <div class="readiness-row">
           <span>Alarms</span>
-          <span class="nav-badge" id="nav-alarm-count">0</span>
-        </button>
-      </div>
-
-      <div class="nav-section nav-summary">
-        <p class="nav-label">Alarm Summary</p>
-        <div class="alarm-summary-card" id="alarm-summary">
-          <strong>NO ACTIVE ALARMS</strong>
-          <p>Machine operation normal.</p>
+          <strong class="readiness-val ok" id="sb-alarms">0</strong>
         </div>
       </div>
     </aside>
 
-    <header class="topbar">
+    <!-- ── ZONE A: HEADER ──────────────────────────────────────── -->
+    <header class="hmi-header">
       <div class="header-title">
         <h1>NARIT VENDING MACHINE</h1>
-        <p>Industrial XYZ Gantry Motion Controller</p>
+        <p>Industrial Motion Control & Gantry System Interface</p>
       </div>
-      <div class="header-metrics">
-        <div class="metric-box"><span>Machine ID</span><strong>NVM-2026-01</strong></div>
-        <div class="metric-box"><span>Controller</span><strong>Raspberry Pi 4B</strong></div>
-        <div class="metric-box"><span>Connection</span><strong id="connection-state">OFFLINE</strong></div>
-        <div class="metric-box"><span>Machine State</span><strong id="machine-state">UNKNOWN</strong></div>
-        <div class="metric-box"><span>System Time</span><strong id="system-time">--:--:--</strong></div>
+      <div class="header-meta">
+        <div class="header-chip">
+          <span>Controller</span>
+          <strong id="hdr-connection" class="offline">OFFLINE</strong>
+        </div>
+        <div class="header-chip">
+          <span>State</span>
+          <strong id="hdr-machine-state" class="state-notready">NOT READY</strong>
+        </div>
+        <div class="header-chip">
+          <span>Mode</span>
+          <strong id="hdr-mode" class="monospace">MANUAL</strong>
+        </div>
+        <div class="header-chip">
+          <span>System Time</span>
+          <strong id="hdr-time" class="monospace">--:--:--</strong>
+        </div>
       </div>
     </header>
 
-    <main class="main-panel">
-      <section class="readiness-strip">
-        <div class="strip-item">
-          <span>Controller</span>
-          <strong id="strip-controller">OFFLINE</strong>
+    <!-- ── ZONE B: SAFETY STRIP ────────────────────────────────── -->
+    <section class="safety-strip">
+      <div class="estop-zone">
+        <button class="btn-estop" id="stop-button" title="Emergency Stop Motion">
+          <span class="estop-icon">🛑</span> EMERGENCY STOP
+        </button>
+        <button class="btn-reset-alarm" id="clear-alarm" title="Reset Alarms & Interlocks">
+          🔄 RESET ALARMS
+        </button>
+      </div>
+      <div class="safety-indicators">
+        <div class="safety-ind">
+          <span class="safety-ind-label">Controller</span>
+          <div class="safety-ind-value fault" id="strip-controller">
+            <span class="status-dot"></span> OFFLINE
+          </div>
         </div>
-        <div class="strip-item">
-          <span>E-Stop</span>
-          <strong id="strip-estop">UNKNOWN</strong>
+        <div class="safety-ind">
+          <span class="safety-ind-label">E-Stop Pin</span>
+          <div class="safety-ind-value ok" id="strip-estop">CLEAR</div>
         </div>
-        <div class="strip-item wide">
-          <span>Homing</span>
-          <strong id="strip-homing">NOT READY</strong>
-          <small id="strip-homing-detail">Awaiting axis state</small>
+        <div class="safety-ind">
+          <span class="safety-ind-label">Homing Status</span>
+          <div class="safety-ind-value warn" id="strip-homing">NOT READY</div>
+          <span class="safety-ind-sub" id="strip-homing-detail">X !  Y !  Z !</span>
         </div>
-        <div class="strip-item wide">
-          <span>Motion</span>
-          <strong id="strip-motion">INHIBITED</strong>
-          <small id="strip-motion-reason">Waiting for controller status</small>
+        <div class="safety-ind">
+          <span class="safety-ind-label">Motion Interlock</span>
+          <div class="safety-ind-value warn" id="strip-motion">INHIBITED</div>
         </div>
-        <div class="strip-item">
-          <span>Alarms</span>
-          <strong id="strip-alarms">0</strong>
+        <div class="safety-ind">
+          <span class="safety-ind-label">Active Alarms</span>
+          <div class="safety-ind-value ok" id="strip-alarms">0</div>
         </div>
-      </section>
+        <div class="motion-inhibit-reason" id="strip-motion-reason">
+          Connecting to controller...
+        </div>
+      </div>
+    </section>
 
-      <section class="position-panel">
-        <div class="section-head">
+    <!-- ── MAIN WORKSPACE (CENTER) ─────────────────────────────── -->
+    <main class="hmi-workspace">
+      <!-- Top Row: Feed Override + Homing Sequence -->
+      <div class="wz-top">
+        <!-- Feed Override -->
+        <div class="feed-override-card">
+          <div class="fo-label">Feed Rate Override</div>
+          <div class="fo-value">
+            <span id="fo-pct-display">100</span><span class="fo-pct">%</span>
+          </div>
+          <div class="fo-presets">
+            <button class="fo-preset-btn" data-fo="10">10%</button>
+            <button class="fo-preset-btn" data-fo="25">25%</button>
+            <button class="fo-preset-btn" data-fo="50">50%</button>
+            <button class="fo-preset-btn" data-fo="75">75%</button>
+            <button class="fo-preset-btn active" data-fo="100">100%</button>
+          </div>
+          <div class="fo-speeds">
+            <div class="fo-speed-row"><span>Programmed Speed</span><strong id="fo-prog-speed">-- mm/s</strong></div>
+            <div class="fo-speed-row"><span>Effective Speed</span><strong id="fo-eff-speed">-- mm/s</strong></div>
+          </div>
+        </div>
+
+        <!-- Homing Workflow -->
+        <div class="panel home-panel">
+          <div class="panel-head">
+            <div>
+              <p class="panel-label">Homing Workflow</p>
+              <h2 class="panel-title">Axis Reference Sequence</h2>
+            </div>
+            <span class="home-seq-num" id="home-sequence-label" title="Sequence Order">Z→X→Y</span>
+          </div>
+          <div class="panel-body">
+            <div class="home-sequence-display" id="home-sequence-display">
+              <!-- Rendered by app.js -->
+            </div>
+            <div class="home-actions">
+              <button class="btn-home-all" id="home-all">HOME ALL AXES</button>
+              <div class="home-axis-row">
+                <button class="btn-home-axis home-axis" data-axis="z">HOME Z</button>
+                <button class="btn-home-axis home-axis" data-axis="x">HOME X</button>
+                <button class="btn-home-axis home-axis" data-axis="y">HOME Y</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Target Positioning Workflow Panel -->
+      <div class="panel target-panel">
+        <div class="panel-head">
           <div>
-            <p class="section-label">Machine Position</p>
-            <h2>Current Coordinates</h2>
+            <p class="panel-label">Target Positioning</p>
+            <h2 class="panel-title">Validate · Preview · Execute</h2>
           </div>
-          <div class="machine-summary">
-            <div><span>Controller</span><strong id="summary-controller">OFFLINE</strong></div>
-            <div><span>Motion</span><strong id="summary-motion">IDLE</strong></div>
-            <div><span>Mode</span><strong id="summary-mode">MANUAL</strong></div>
-            <div><span>Command</span><strong id="active-command">None</strong></div>
+          <span class="safety-ind-sub" id="operation-message">Controller ready</span>
+        </div>
+        <div class="panel-body">
+          <div class="target-col">
+            <div class="field-label">X Coordinate</div>
+            <div class="field-input-wrap">
+              <input id="move-x" class="hmi-input" type="number" step="0.1" min="0" placeholder="0.0">
+              <span class="unit-tag">mm</span>
+            </div>
+          </div>
+          <div class="target-col">
+            <div class="field-label">Y Coordinate</div>
+            <div class="field-input-wrap">
+              <input id="move-y" class="hmi-input" type="number" step="0.1" min="0" placeholder="0.0">
+              <span class="unit-tag">mm</span>
+            </div>
+          </div>
+          <div class="target-col">
+            <div class="field-label">Z Coordinate</div>
+            <div class="field-input-wrap">
+              <input id="move-z" class="hmi-input" type="number" step="0.1" min="0" placeholder="0.0">
+              <span class="unit-tag">mm</span>
+            </div>
+          </div>
+          <div class="target-col">
+            <div class="field-label">Speed</div>
+            <div class="field-input-wrap">
+              <input id="target-speed" class="hmi-input" type="number" step="0.5" min="0.1" placeholder="10.0">
+              <span class="unit-tag">mm/s</span>
+            </div>
+          </div>
+          <div class="target-col">
+            <div class="field-label">Timeout</div>
+            <div class="field-input-wrap">
+              <input id="move-time" class="hmi-input" type="number" step="0.5" min="0.1" placeholder="30.0">
+              <span class="unit-tag">sec</span>
+            </div>
+          </div>
+          <div class="target-col" style="display:flex; flex-direction:column; justify-content:flex-end; gap:6px;">
+            <div style="display:flex; gap:4px;">
+              <button class="btn-secondary" id="validate-move" style="flex:1; padding:6px 4px; font-size:11px;">VALIDATE</button>
+              <button class="btn-secondary" id="plan-move" style="flex:1; padding:6px 4px; font-size:11px;">PREVIEW</button>
+            </div>
+            <div style="display:flex; gap:4px;">
+              <button class="btn-secondary" id="apply-speed" style="flex:1; padding:4px 2px; font-size:10px;" title="Save travel speed to controller">SAVE SPD</button>
+              <button class="btn-secondary" id="apply-time" style="flex:1; padding:4px 2px; font-size:10px;" title="Save move timeout to controller">SAVE T/O</button>
+            </div>
+            <button class="btn-execute" id="absolute-move" disabled>EXECUTE MOVE</button>
           </div>
         </div>
-        <div class="coord-display" id="position-summary">
-          <div><span>X</span><strong>--</strong><small>mm</small></div>
-          <div><span>Y</span><strong>--</strong><small>mm</small></div>
-          <div><span>Z</span><strong>--</strong><small>mm</small></div>
-        </div>
-      </section>
 
-      <section class="axis-panel">
-        <div class="section-head">
+        <div style="padding: 0 14px 12px; display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+          <div style="display:flex; flex-direction:column; gap:6px;">
+            <div class="validation-message" id="validation-box">Target not validated.</div>
+            <div class="validation-message" id="move-plan" style="font-size:10px; font-family:var(--font-mono); color:var(--text-2);">Preview not generated.</div>
+          </div>
+          <div class="preview-table">
+            <div class="preview-table-label">Position Delta Preview</div>
+            <div class="preview-row"><span>X</span><div class="pv" id="prev-cur-x">--</div><div class="pv" id="prev-tgt-x">--</div><div class="pd zero" id="prev-delta-x">---</div></div>
+            <div class="preview-row"><span>Y</span><div class="pv" id="prev-cur-y">--</div><div class="pv" id="prev-tgt-y">--</div><div class="pd zero" id="prev-delta-y">---</div></div>
+            <div class="preview-row"><span>Z</span><div class="pv" id="prev-cur-z">--</div><div class="pv" id="prev-tgt-z">--</div><div class="pd zero" id="prev-delta-z">---</div></div>
+            <div class="preview-dist"><span>Est. Trajectory</span><strong id="prev-dist">--- mm</strong></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Slot positioning Table Panel -->
+      <div class="panel slot-panel">
+        <div class="panel-head">
           <div>
-            <p class="section-label">Axis Overview</p>
-            <h2>Live Axis Status</h2>
-          </div>
-          <div class="section-note" id="active-command-duplicate">None</div>
-        </div>
-        <div class="axis-grid" id="axis-grid"></div>
-      </section>
-
-      <section class="target-panel">
-        <div class="section-head">
-          <div>
-            <p class="section-label">Target Positioning</p>
-            <h2>Validate · Preview · Execute</h2>
-          </div>
-          <div class="section-note" id="operation-message">Controller ready</div>
-        </div>
-
-        <div class="target-form">
-          <label>X Target<input id="move-x" type="number" step="0.1" min="0" placeholder="mm"></label>
-          <label>Y Target<input id="move-y" type="number" step="0.1" min="0" placeholder="mm"></label>
-          <label>Z Target<input id="move-z" type="number" step="0.1" min="0" placeholder="mm"></label>
-          <label>Travel Speed<input id="target-speed" type="number" step="0.1" min="0.1" placeholder="mm/s"></label>
-          <label>Move Timeout<input id="move-time" type="number" step="0.1" min="0.1" placeholder="s"></label>
-        </div>
-
-        <div class="workflow-actions">
-          <button class="ghost" id="validate-move">VALIDATE TARGET</button>
-          <button class="ghost" id="plan-move">PREVIEW MOVE</button>
-          <button class="primary" id="absolute-move" disabled>EXECUTE MOVE</button>
-          <button class="ghost" id="apply-speed">SAVE SPEED</button>
-          <button class="ghost" id="apply-time">SAVE TIME</button>
-        </div>
-
-        <div class="validation-box" id="validation-box">Target not validated.</div>
-
-        <div class="preview-grid">
-          <div class="preview-card">
-            <span>Current</span>
-            <pre id="preview-current">X --\nY --\nZ --</pre>
-          </div>
-          <div class="preview-card">
-            <span>Target</span>
-            <pre id="preview-target">X --\nY --\nZ --</pre>
-          </div>
-          <div class="preview-card">
-            <span>Delta</span>
-            <pre id="preview-delta">ΔX --\nΔY --\nΔZ --</pre>
-          </div>
-        </div>
-
-        <div class="plan-readout" id="move-plan">Preview not generated.</div>
-      </section>
-
-      <section class="slot-panel">
-        <div class="section-head">
-          <div>
-            <p class="section-label">Slot Positioning</p>
-            <h2>Teach · Go To · Dispense</h2>
+            <p class="panel-label">Slot Positioning Manager</p>
+            <h2 class="panel-title">Teach · Go To Position · Dispense</h2>
           </div>
           <div class="slot-toolbar">
-            <input id="slot-search" class="search" placeholder="Search slot or product">
-            <select id="slot-filter">
-              <option value="all">All</option>
+            <input id="slot-search" class="slot-search" placeholder="Search slot code or product name...">
+            <select id="slot-filter" class="hmi-input" style="width: auto; padding-right: 20px;">
+              <option value="all">All Slots</option>
               <option value="ready">Ready</option>
               <option value="empty">Empty</option>
               <option value="configured">Configured</option>
@@ -188,109 +291,213 @@
             <thead>
               <tr>
                 <th>Slot</th>
-                <th>Product</th>
+                <th>Product Name</th>
                 <th>Status</th>
-                <th>X</th>
-                <th>Y</th>
-                <th>Z</th>
+                <th>X (mm)</th>
+                <th>Y (mm)</th>
+                <th>Z (mm)</th>
                 <th>Actions</th>
               </tr>
             </thead>
-            <tbody id="slot-grid"></tbody>
+            <tbody id="slot-grid">
+              <!-- Dynamic slot rows rendered by app.js -->
+            </tbody>
           </table>
         </div>
-      </section>
+      </div>
     </main>
 
+    <!-- ── RIGHT PANEL (STATUS + JOG CONTROLS + LIVE LOG) ──────── -->
     <aside class="right-panel">
-      <section class="rp-section rp-status">
-        <div class="rp-head">
-          <div>
-            <p class="section-label">Status</p>
-            <h3>Machine Readiness</h3>
-          </div>
+      <!-- Zone 1: Axis Coordinates & Live Status -->
+      <div class="rpz rpz-status">
+        <div class="rpz-head">
+          <span class="rpz-title">Global Axis Coordinates</span>
+          <span class="safety-ind-sub" id="active-command">Command: None</span>
         </div>
-        <div class="rp-status-grid">
-          <div class="rp-status-card"><span>Connection</span><strong id="footer-connection">OFFLINE</strong></div>
-          <div class="rp-status-card"><span>Ready</span><strong id="footer-ready">NOT READY</strong></div>
-          <div class="rp-status-card"><span>E-Stop</span><strong id="footer-estop">UNKNOWN</strong></div>
-          <div class="rp-status-card"><span>Command</span><strong id="home-sequence">Sequence: Z → X → Y</strong></div>
-        </div>
-      </section>
-
-      <section class="rp-section rp-jog">
-        <div class="rp-head">
-          <div>
-            <p class="section-label">Manual Motion</p>
-            <h3>Jog & Homing</h3>
-          </div>
-          <div class="section-note" id="jog-inhibit-reason">Manual motion ready</div>
-        </div>
-
-        <div class="jog-layout">
-          <div class="xy-jog">
-            <button data-jog="y:1" class="jog-btn">Y+</button>
-            <div class="xy-middle">
-              <button data-jog="x:-1" class="jog-btn">X-</button>
-              <div class="jog-core">XY</div>
-              <button data-jog="x:1" class="jog-btn">X+</button>
+        <div class="rp-axis-list">
+          <!-- X Axis Card -->
+          <div class="axis-card" id="axis-card-x">
+            <div class="axis-card-head">
+              <span class="axis-name">X Axis</span>
+              <span class="axis-state-badge not-homed" id="axis-badge-x">NOT HOMED</span>
             </div>
-            <button data-jog="y:-1" class="jog-btn">Y-</button>
+            <div class="axis-position" id="axis-pos-x">
+              <span class="monospace">0.000</span><span class="unit">mm</span>
+            </div>
+            <div class="axis-track">
+              <div class="axis-track-fill" id="axis-fill-x" style="width: 0%;"></div>
+            </div>
+            <div class="axis-meta">
+              <div class="axis-kv"><span>Tgt:</span><strong id="axis-tgt-x">0.000</strong></div>
+              <div class="axis-kv"><span>Steps:</span><strong id="axis-steps-x">0</strong></div>
+              <div class="axis-kv"><span>Min Limit:</span><strong id="axis-lim-min-x" class="ok">CLEAR</strong></div>
+              <div class="axis-kv"><span>Max Limit:</span><strong id="axis-lim-max-x" class="ok">CLEAR</strong></div>
+            </div>
           </div>
-          <div class="z-jog">
-            <button data-jog="z:1" class="jog-btn">Z+</button>
-            <button data-jog="z:-1" class="jog-btn">Z-</button>
+
+          <!-- Y Axis Card -->
+          <div class="axis-card" id="axis-card-y">
+            <div class="axis-card-head">
+              <span class="axis-name">Y Axis</span>
+              <span class="axis-state-badge not-homed" id="axis-badge-y">NOT HOMED</span>
+            </div>
+            <div class="axis-position" id="axis-pos-y">
+              <span class="monospace">0.000</span><span class="unit">mm</span>
+            </div>
+            <div class="axis-track">
+              <div class="axis-track-fill" id="axis-fill-y" style="width: 0%;"></div>
+            </div>
+            <div class="axis-meta">
+              <div class="axis-kv"><span>Tgt:</span><strong id="axis-tgt-y">0.000</strong></div>
+              <div class="axis-kv"><span>Steps:</span><strong id="axis-steps-y">0</strong></div>
+              <div class="axis-kv"><span>Min Limit:</span><strong id="axis-lim-min-y" class="ok">CLEAR</strong></div>
+              <div class="axis-kv"><span>Max Limit:</span><strong id="axis-lim-max-y" class="ok">CLEAR</strong></div>
+            </div>
+          </div>
+
+          <!-- Z Axis Card -->
+          <div class="axis-card" id="axis-card-z">
+            <div class="axis-card-head">
+              <span class="axis-name">Z Axis</span>
+              <span class="axis-state-badge not-homed" id="axis-badge-z">NOT HOMED</span>
+            </div>
+            <div class="axis-position" id="axis-pos-z">
+              <span class="monospace">0.000</span><span class="unit">mm</span>
+            </div>
+            <div class="axis-track">
+              <div class="axis-track-fill" id="axis-fill-z" style="width: 0%;"></div>
+            </div>
+            <div class="axis-meta">
+              <div class="axis-kv"><span>Tgt:</span><strong id="axis-tgt-z">0.000</strong></div>
+              <div class="axis-kv"><span>Steps:</span><strong id="axis-steps-z">0</strong></div>
+              <div class="axis-kv"><span>Min Limit:</span><strong id="axis-lim-min-z" class="ok">CLEAR</strong></div>
+              <div class="axis-kv"><span>Max Limit:</span><strong id="axis-lim-max-z" class="ok">CLEAR</strong></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Zone 2: Ergonomic Jog Control -->
+      <div class="rpz rpz-jog">
+        <div class="rpz-head">
+          <span class="rpz-title">Manual Jog Control</span>
+          <span class="safety-ind-sub" id="jog-status-text">Ready</span>
+        </div>
+
+        <div class="jog-inhibit-banner" id="jog-inhibit-banner">
+          ⚠️ <span id="jog-inhibit-text">Motion Inhibited</span>
+        </div>
+
+        <!-- Hidden inputs for jog-step, jog-time, move-speed to keep app.js sync -->
+        <input type="hidden" id="jog-step" value="1.0">
+        <input type="hidden" id="jog-time" value="">
+        <input type="hidden" id="move-speed" value="10.0">
+
+        <!-- Jog Direction Pads -->
+        <div class="rp-jog-pad-area">
+          <!-- XY Pad -->
+          <div class="rp-xy-pad">
+            <button class="rp-jog-btn jog-y-pos" data-jog="y:1" title="Jog Y+ (Up)">Y+</button>
+            <button class="rp-jog-btn jog-x-neg" data-jog="x:-1" title="Jog X- (Left)">X-</button>
+            <div class="rp-jog-center">XY PAD</div>
+            <button class="rp-jog-btn jog-x-pos" data-jog="x:1" title="Jog X+ (Right)">X+</button>
+            <button class="rp-jog-btn jog-y-neg" data-jog="y:-1" title="Jog Y- (Down)">Y-</button>
+          </div>
+
+          <!-- Z Axis Pad -->
+          <div class="rp-z-pad">
+            <span class="rp-z-label">Z Axis</span>
+            <button class="rp-jog-btn" data-jog="z:1" title="Jog Z+ (Up)">Z+</button>
+            <button class="rp-jog-btn" data-jog="z:-1" title="Jog Z- (Down)">Z-</button>
           </div>
         </div>
 
-        <div class="jog-config">
-          <label>Jog Step
-            <select id="jog-step">
-              <option value="0.1">0.1 mm</option>
-              <option value="1" selected>1.0 mm</option>
-              <option value="5">5.0 mm</option>
-              <option value="10">10.0 mm</option>
-            </select>
-          </label>
-          <label>Jog Time
-            <input id="jog-time" type="number" step="0.1" min="0.1" placeholder="Optional">
-          </label>
-          <label>Jog Speed
-            <input id="move-speed" type="number" step="0.1" min="0.1" placeholder="mm/s">
-          </label>
-        </div>
-
-        <div class="preset-row">
-          <button class="preset" data-speed="5">5 mm/s</button>
-          <button class="preset" data-speed="10">10 mm/s</button>
-          <button class="preset" data-speed="20">20 mm/s</button>
-          <button class="preset" data-speed="35">35 mm/s</button>
-        </div>
-
-        <div class="home-actions">
-          <button class="primary" id="home-all">HOME ALL AXES</button>
-          <button class="ghost home-axis" data-axis="x">HOME X</button>
-          <button class="ghost home-axis" data-axis="y">HOME Y</button>
-          <button class="ghost home-axis" data-axis="z">HOME Z</button>
-        </div>
-
-        <div class="status-ribbon" id="home-status"></div>
-      </section>
-
-      <section class="rp-section rp-log">
-        <div class="rp-head">
+        <!-- Jog Preset Parameters -->
+        <div class="rp-params">
           <div>
-            <p class="section-label">Live Log</p>
-            <h3>Diagnostics Stream</h3>
+            <div class="rp-param-label">
+              <span>Step Increment</span>
+              <span class="val"><strong id="jog-step-display">1.0</strong> mm</span>
+            </div>
+            <div class="rp-preset-row">
+              <button class="rp-preset-btn step-btn" data-step="0.1">0.1 mm</button>
+              <button class="rp-preset-btn step-btn active" data-step="1">1.0 mm</button>
+              <button class="rp-preset-btn step-btn" data-step="5">5.0 mm</button>
+              <button class="rp-preset-btn step-btn" data-step="10">10.0 mm</button>
+            </div>
           </div>
-          <div class="section-note" id="footer-status-time">--:--:--</div>
+
+          <div>
+            <div class="rp-param-label">
+              <span>Jog Speed</span>
+              <span class="val"><strong id="jog-speed-display">10.0</strong> mm/s</span>
+            </div>
+            <div class="rp-preset-row">
+              <button class="rp-preset-btn speed-preset" data-speed="5">5 mm/s</button>
+              <button class="rp-preset-btn speed-preset active" data-speed="10">10 mm/s</button>
+              <button class="rp-preset-btn speed-preset" data-speed="20">20 mm/s</button>
+              <button class="rp-preset-btn speed-preset" data-speed="35">35 mm/s</button>
+            </div>
+          </div>
         </div>
-        <div class="log-status" id="footer-status-text">Waiting for controller status...</div>
-        <ol class="event-log" id="event-log"></ol>
-      </section>
+      </div>
+
+      <!-- Zone 3: Live Event Log / Diagnostics Stream (Bottom Right) -->
+      <div class="rpz rpz-log">
+        <div class="rpz-head">
+          <span class="rpz-title">Live Diagnostics Stream</span>
+          <div class="event-log-filter">
+            <button class="evt-filter-btn active" data-filter="all">ALL</button>
+            <button class="evt-filter-btn" data-filter="error">ERRORS</button>
+            <button class="evt-filter-btn" data-filter="motion">MOTION</button>
+          </div>
+        </div>
+
+        <div class="alarm-summary" id="alarm-summary">
+          <div class="alarm-summary-title">NO ACTIVE ALARMS</div>
+          <div class="alarm-detail">Machine operation normal.</div>
+        </div>
+
+        <ol class="event-log" id="event-log">
+          <!-- Dynamic 1s log stream rendered by app.js -->
+        </ol>
+      </div>
     </aside>
+
+    <!-- ── FOOTER STATUS BAR ────────────────────────────────────── -->
+    <footer class="status-bar">
+      <div class="status-pills">
+        <span class="status-pill offline" id="footer-connection">
+          <span class="status-dot"></span> OFFLINE
+        </span>
+        <span class="status-pill not-ready" id="footer-ready">NOT READY</span>
+        <span class="status-pill clear" id="footer-estop">E-STOP CLEAR</span>
+        <span class="status-pill not-homed" id="footer-homed">NOT HOMED</span>
+      </div>
+      <div class="status-center-bar" id="footer-status-text">
+        Command: None  |  Motion: Idle  |  Controller ready
+      </div>
+      <div class="status-time" id="footer-status-time">--:--:--</div>
+    </footer>
   </div>
 
+  <!-- Toast notification -->
   <div class="toast" id="toast" role="status"></div>
+
+  <!-- Confirmation dialog overlay -->
+  <div class="dialog-overlay" id="dialog-overlay">
+    <div class="dialog-box">
+      <h3 class="dialog-title" id="dialog-title">Teach Slot Position</h3>
+      <p class="dialog-body" id="dialog-body-text">Save current machine position to slot?</p>
+      <div class="dialog-coords" id="dialog-coords">X = 0.000 mm\nY = 0.000 mm\nZ = 0.000 mm</div>
+      <div class="dialog-actions">
+        <button class="dialog-cancel" id="dialog-cancel">Cancel</button>
+        <button class="dialog-confirm" id="dialog-confirm">Confirm Teach</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
 </html>
