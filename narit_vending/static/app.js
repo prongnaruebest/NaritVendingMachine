@@ -1,6 +1,7 @@
 (() => {
   "use strict";
 
+  const axes = ["x", "y", "z"];
   const state = {
     online: false,
     pending: false,
@@ -9,9 +10,9 @@
     slots: {},
     events: [],
     lastError: "",
+    validation: { valid: false, message: "Target not validated.", plan: null },
   };
 
-  const axes = ["x", "y", "z"];
   const $ = (selector) => document.querySelector(selector);
   const $$ = (selector) => [...document.querySelectorAll(selector)];
 
@@ -29,12 +30,24 @@
     return Number(value || 0).toFixed(digits);
   }
 
-  function log(message, level = "info") {
-    state.events.unshift({ at: new Date(), message, level });
-    state.events = state.events.slice(0, 100);
+  function formatPosition(value) {
+    return `${formatNumber(value, 3)} mm`;
+  }
+
+  function setValidation(valid, message, plan = null) {
+    state.validation = { valid, message, plan };
+    const box = $("#validation-box");
+    box.className = `validation-box ${valid ? "valid" : "invalid"}`;
+    box.textContent = message;
+    $("#absolute-move").disabled = !valid || !motionAllowed(true);
+  }
+
+  function log(message, level = "info", subsystem = "SYSTEM") {
+    state.events.unshift({ at: new Date(), message, level, subsystem });
+    state.events = state.events.slice(0, 120);
     $("#event-log").innerHTML = state.events.map((entry) => `
       <li class="${entry.level}">
-        <time>${entry.at.toLocaleTimeString()}</time>
+        <time>${entry.at.toLocaleTimeString()} · ${escapeHtml(entry.subsystem)}</time>
         <span>${escapeHtml(entry.message)}</span>
       </li>
     `).join("");
@@ -47,18 +60,18 @@
     window.clearTimeout(toast.timer);
     toast.timer = window.setTimeout(() => {
       element.className = "toast";
-    }, 3000);
+    }, 3200);
   }
 
   async function api(path, method = "GET", body) {
-    const abort = new AbortController();
-    const timer = window.setTimeout(() => abort.abort(), 8000);
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), 8000);
     try {
       const response = await fetch(path, {
         method,
         headers: body ? { "Content-Type": "application/json" } : undefined,
         body: body ? JSON.stringify(body) : undefined,
-        signal: abort.signal,
+        signal: controller.signal,
       });
       const data = await response.json();
       if (!response.ok || data.ok === false) {
@@ -70,264 +83,419 @@
     }
   }
 
-  function interlocks() {
-    const status = state.payload?.status || {};
-    return {
-      online: state.online,
-      estop: Boolean(status.estop),
-      busy: Boolean(state.payload?.busy),
-      homed: axes.every((axis) => Boolean(status[axis]?.is_homed)),
-    };
+  function getStatus() {
+    return state.payload?.status || {};
   }
 
-  function motionEnabled(requireHome = false) {
-    const locks = interlocks();
-    return locks.online && !locks.estop && !locks.busy && !state.pending && (!requireHome || locks.homed);
+  function getOperation() {
+    return state.payload?.operation || {};
+  }
+
+  function getAxis(axis) {
+    return getStatus()[axis] || {};
+  }
+
+  function allAxesHomed() {
+    return axes.every((axis) => Boolean(getAxis(axis).is_homed));
+  }
+
+  function activeAlarmCount() {
+    return state.payload?.last_error ? 1 : 0;
+  }
+
+  function motionInhibitReason(requireHome = false) {
+    const status = getStatus();
+    if (!state.online) return "Controller offline";
+    if (status.estop) return "Emergency stop active";
+    if (state.payload?.busy || state.pending) return "Another command is executing";
+    if (requireHome && !allAxesHomed()) {
+      const first = axes.find((axis) => !getAxis(axis).is_homed);
+      return `${first?.toUpperCase() || "Axis"} axis not homed`;
+    }
+    return "";
+  }
+
+  function motionAllowed(requireHome = false) {
+    return motionInhibitReason(requireHome) === "";
   }
 
   function buildMovePayload() {
     const payload = {};
+    const speedValue = $("#target-speed").value || $("#move-speed").value;
+    const timeValue = $("#move-time").value;
     axes.forEach((axis) => {
       const value = $(`#move-${axis}`).value;
       if (value !== "") payload[`${axis}_mm`] = Number(value);
     });
-    if ($("#move-speed").value !== "") payload.speed_mm_s = Number($("#move-speed").value);
-    if ($("#move-time").value !== "") payload.time_s = Number($("#move-time").value);
+    if (speedValue !== "") payload.speed_mm_s = Number(speedValue);
+    if (timeValue !== "") payload.time_s = Number(timeValue);
     return payload;
   }
 
-  function buildMoveOptions() {
-    const payload = {};
-    if ($("#move-speed").value !== "") payload.speed_mm_s = Number($("#move-speed").value);
-    if ($("#move-time").value !== "") payload.time_s = Number($("#move-time").value);
-    return payload;
+  function buildJogPayload(axis, direction) {
+    const body = {
+      axis,
+      distance_mm: Number($("#jog-step").value) * Number(direction),
+    };
+    const jogTime = $("#jog-time").value;
+    const speedValue = $("#move-speed").value;
+    if (jogTime !== "") body.time_s = Number(jogTime);
+    if (speedValue !== "") body.speed_mm_s = Number(speedValue);
+    return body;
+  }
+
+  function slotDerivedStatus(slot) {
+    const configured = Boolean(slot.product_name) || [slot.x_mm, slot.y_mm, slot.z_mm].some((value) => Number(value) !== 0);
+    if (!configured) return "empty";
+    return "ready";
   }
 
   async function command(label, path, body, options = {}) {
-    if (!options.stop && !motionEnabled(options.requireHome)) {
-      toast("Command blocked by interlock.", true);
-      log(`${label} blocked by interlock.`, "error");
+    if (!options.stop && !motionAllowed(options.requireHome)) {
+      const reason = motionInhibitReason(options.requireHome);
+      toast(reason, true);
+      log(`${label} blocked: ${reason}`, "error", "INTERLOCK");
       return;
     }
+
     state.pending = !options.stop;
-    updateInterlocks();
-    log(`${label} requested.`);
+    updateDerivedState();
+    log(`${label} requested`, "info", "COMMAND");
+
     try {
       const response = await api(path, "POST", body);
+      toast(`${label} accepted`);
+      log(`${label} accepted`, "info", "COMMAND");
       if (response.plan) renderPlan(response.plan);
-      toast(`${label} accepted.`);
-      log(`${label} accepted.`);
       await refresh();
     } catch (error) {
-      toast(`${label}: ${error.message}`, true);
-      log(`${label} failed: ${error.message}`, "error");
+      const message = humanizeError(error.message);
+      toast(message, true);
+      log(`${label} failed: ${message}`, "error", "COMMAND");
     } finally {
       state.pending = false;
-      updateInterlocks();
+      updateDerivedState();
     }
+  }
+
+  function humanizeError(message) {
+    if (message.includes("outside")) return `Move rejected: ${message}`;
+    if (message.includes("not homed")) return `Move rejected: ${message}`;
+    if (message.includes("Emergency")) return `Motion locked: ${message}`;
+    return message;
+  }
+
+  async function validateMove(showToast = true) {
+    const payload = buildMovePayload();
+    if (!Object.keys(payload).some((key) => key.endsWith("_mm"))) {
+      setValidation(false, "Target invalid: enter at least one axis target.");
+      if (showToast) toast("Enter at least one axis target.", true);
+      return null;
+    }
+
+    try {
+      const response = await api("/api/plan/move", "POST", payload);
+      const plan = response.plan;
+      setValidation(true, "TARGET VALID. Move may execute safely.", plan);
+      renderPreview(plan);
+      renderPlan(plan);
+      if (showToast) toast("Target validated.");
+      log("Target validation succeeded", "info", "MOTION");
+      return plan;
+    } catch (error) {
+      const message = `TARGET INVALID. ${humanizeError(error.message)}`;
+      setValidation(false, message);
+      renderPreview(null);
+      if (showToast) toast(message, true);
+      log(message, "error", "MOTION");
+      return null;
+    }
+  }
+
+  function renderPreview(plan) {
+    const current = getStatus().current_position || {};
+    const currentText = `X ${formatNumber(current.x_mm, 3)}\nY ${formatNumber(current.y_mm, 3)}\nZ ${formatNumber(current.z_mm, 3)}`;
+    $("#preview-current").textContent = currentText;
+
+    if (!plan) {
+      $("#preview-target").textContent = "X --\nY --\nZ --";
+      $("#preview-delta").textContent = "ΔX --\nΔY --\nΔZ --";
+      return;
+    }
+
+    const targetLines = [];
+    const deltaLines = [];
+    axes.forEach((axis) => {
+      const axisPlan = plan.axes?.[axis];
+      if (axisPlan) {
+        targetLines.push(`${axis.toUpperCase()} ${formatNumber(axisPlan.target_mm, 3)}`);
+        deltaLines.push(`Δ${axis.toUpperCase()} ${axisPlan.distance_mm >= 0 ? "+" : ""}${formatNumber(axisPlan.distance_mm, 3)}`);
+      } else {
+        targetLines.push(`${axis.toUpperCase()} ${formatNumber(current[`${axis}_mm`], 3)}`);
+        deltaLines.push(`Δ${axis.toUpperCase()} +0.000`);
+      }
+    });
+    $("#preview-target").textContent = targetLines.join("\n");
+    $("#preview-delta").textContent = deltaLines.join("\n");
   }
 
   function renderAxisCards() {
-    const status = state.payload?.status || {};
+    const config = state.config?.axes || {};
     $("#axis-grid").innerHTML = axes.map((axis) => {
-      const data = status[axis] || {};
+      const data = getAxis(axis);
+      const axisCfg = config[axis] || {};
+      const position = Number(data.position_mm || 0);
+      const target = state.validation.plan?.axes?.[axis]?.target_mm ?? position;
+      const trackPercent = axisCfg.max_travel_mm ? Math.max(0, Math.min((position / axisCfg.max_travel_mm) * 100, 100)) : 0;
+      const badgeClass = data.estop ? "badge-red" : data.is_homed ? "badge-green" : "badge-amber";
+      const stateLabel = data.estop
+        ? "FAULT"
+        : data.head_limit
+          ? "LIMIT MIN"
+          : data.tail_limit
+            ? "LIMIT MAX"
+            : data.is_homed
+              ? "HOMED / IDLE"
+              : "NOT HOMED";
+
       return `
         <article class="axis-card">
           <div class="axis-top">
-            <h3>AXIS ${axis.toUpperCase()}</h3>
-            <span class="axis-tag ${data.is_homed ? "ok" : "warn"}">${data.is_homed ? "HOMED" : "NOT HOMED"}</span>
+            <h3>${axis.toUpperCase()} AXIS</h3>
+            <span class="axis-badge ${badgeClass}">${data.is_homed ? "HOMED" : "NOT HOMED"}</span>
           </div>
-          <div class="axis-readout">
-            <div class="axis-value">${formatNumber(data.position_mm)} <small>mm</small></div>
-            <div class="axis-tag ${data.estop ? "warn" : "ok"}">${data.estop ? "SAFE HOLD" : "READY"}</div>
+          <div class="axis-main">
+            <div class="axis-pos">${formatNumber(position, 3)}<span class="axis-unit">mm</span></div>
+            <div class="axis-state">${stateLabel}</div>
+            <div class="axis-track"><div class="axis-track-fill" style="width:${trackPercent}%"></div></div>
           </div>
-          <div class="axis-sub">
-            <div class="kv"><span>Target</span><strong>${formatNumber(data.position_mm)}</strong></div>
-            <div class="kv"><span>Steps</span><strong>${data.position_steps || 0}</strong></div>
-            <div class="kv"><span>Min</span><strong>${data.head_limit ? "ON" : "OFF"}</strong></div>
-            <div class="kv"><span>Max</span><strong>${data.tail_limit ? "ON" : "OFF"}</strong></div>
+          <div class="axis-meta">
+            <div class="kv"><span>Target</span><strong>${formatNumber(target, 3)}</strong></div>
+            <div class="kv"><span>Steps</span><strong>${Number(data.position_steps || 0).toLocaleString()}</strong></div>
+            <div class="kv"><span>Min</span><strong>${data.head_limit ? "ACTIVE" : "CLEAR"}</strong></div>
+            <div class="kv"><span>Max</span><strong>${data.tail_limit ? "ACTIVE" : "CLEAR"}</strong></div>
           </div>
         </article>
       `;
     }).join("");
   }
 
-  function renderMechanics() {
-    if (!state.config) return;
-    $("#mechanics-summary").innerHTML = axes.map((axis) => {
-      const cfg = state.config.axes?.[axis];
-      if (!cfg) return "";
-      return `
-        <article class="mechanic-row">
-          <strong>${axis.toUpperCase()}</strong>
-          <span>${formatNumber(cfg.steps_per_mm, 1)} step/mm</span>
-          <span>${cfg.pulses_per_rev} pulse/rev</span>
-          <span>Pitch ${cfg.lead_screw_pitch_mm} mm</span>
-          <span>Vmax ${cfg.max_speed_mm_s} mm/s</span>
-        </article>
-      `;
-    }).join("");
+  function renderMechanicsSidebar() {
+    $("#nav-alarm-count").textContent = String(activeAlarmCount());
   }
 
   function renderHomeStatus() {
-    const homing = state.payload?.operation?.homing || {};
+    const homing = getOperation().homing || {};
     $("#home-status").innerHTML = axes.map((axis) => {
       const phase = homing[axis] || "not_homed";
-      const css = phase === "passed" ? "ok" : phase === "failed" ? "warn" : "warn";
-      return `<span class="status-pill ${css}">${axis.toUpperCase()} ${phase.replaceAll("_", " ").toUpperCase()}</span>`;
+      const badgeClass = phase === "passed" ? "badge-green" : phase === "failed" ? "badge-red" : phase === "homing" || phase === "waiting" ? "badge-amber" : "badge-gray";
+      return `<span class="status-pill ${badgeClass}">${axis.toUpperCase()} ${phase.replaceAll("_", " ").toUpperCase()}</span>`;
     }).join("");
   }
 
   function renderPlan(plan) {
     if (!plan) {
-      $("#move-plan").textContent = "Planner idle.";
+      $("#move-plan").textContent = "Preview not generated.";
       return;
     }
-    const axisLines = Object.values(plan.axes || {}).map((item) => `
-      <li>${item.axis.toUpperCase()}: ${formatNumber(item.distance_mm)} mm / ${item.steps} pulses / ${formatNumber(item.speed_mm_s)} mm/s / ${formatNumber(item.duration_s)} s</li>
-    `).join("");
+    const lines = Object.values(plan.axes || {}).map((item) =>
+      `<li>${item.axis.toUpperCase()}: ${formatNumber(item.distance_mm, 3)} mm · ${item.steps.toLocaleString()} steps · ${formatNumber(item.speed_mm_s, 1)} mm/s · ${formatNumber(item.duration_s, 2)} s</li>`
+    ).join("");
     $("#move-plan").innerHTML = `
-      <strong>${escapeHtml(String(plan.mode || "speed").toUpperCase())} PLAN</strong>
-      <div>Total ${formatNumber(plan.duration_s)} s · Master ${plan.master_steps || 0} steps · Span ${formatNumber(plan.total_distance_mm)} mm</div>
-      <ul>${axisLines || "<li>No movement planned</li>"}</ul>
+      <strong>${escapeHtml(String(plan.mode || "speed").toUpperCase())} PREVIEW</strong>
+      <div>Estimated distance ${formatNumber(plan.total_distance_mm, 3)} mm · Estimated time ${formatNumber(plan.duration_s, 2)} s · Master steps ${Number(plan.master_steps || 0).toLocaleString()}</div>
+      <ul>${lines || "<li>No movement planned.</li>"}</ul>
     `;
   }
 
-  function renderSlots() {
-    const query = $("#slot-search").value.trim().toLowerCase();
+  function renderSlotTable() {
+    const search = $("#slot-search").value.trim().toLowerCase();
+    const filter = $("#slot-filter").value;
     const entries = Object.entries(state.slots)
       .sort(([a], [b]) => Number(a) - Number(b))
-      .filter(([code, slot]) => !query || code.includes(query) || String(slot.product_name || "").toLowerCase().includes(query));
+      .filter(([code, slot]) => {
+        const derived = slotDerivedStatus(slot);
+        const matchFilter = filter === "all" || filter === derived || (filter === "configured" && derived !== "empty");
+        const matchSearch = !search || code.includes(search) || String(slot.product_name || "").toLowerCase().includes(search);
+        return matchFilter && matchSearch;
+      });
 
-    $("#slot-grid").innerHTML = entries.map(([code, slot]) => `
-      <article class="slot-card">
-        <div class="slot-head">
-          <span>SLOT ${escapeHtml(code)}</span>
-          <span>${slot.product_name ? "CONFIGURED" : "EMPTY"}</span>
-        </div>
-        <h3>${escapeHtml(slot.product_name || `Slot ${code}`)}</h3>
-        <p>X ${formatNumber(slot.x_mm, 1)} · Y ${formatNumber(slot.y_mm, 1)} · Z ${formatNumber(slot.z_mm, 1)} mm</p>
-        <div class="slot-actions">
-          <button data-slot-goto="${escapeHtml(code)}">GO TO</button>
-          <button class="primary" data-slot-dispense="${escapeHtml(code)}">START</button>
-          <button class="ghost" data-slot-save="${escapeHtml(code)}">SAVE</button>
-        </div>
-      </article>
-    `).join("");
+    $("#slot-grid").innerHTML = entries.map(([code, slot]) => {
+      const derived = slotDerivedStatus(slot);
+      const badgeClass = derived === "ready" ? "badge-green" : derived === "empty" ? "badge-gray" : "badge-amber";
+      return `
+        <tr>
+          <td>${escapeHtml(code)}</td>
+          <td>${escapeHtml(slot.product_name || "EMPTY")}</td>
+          <td><span class="slot-status ${badgeClass}">${derived.toUpperCase()}</span></td>
+          <td>${formatNumber(slot.x_mm, 1)}</td>
+          <td>${formatNumber(slot.y_mm, 1)}</td>
+          <td>${formatNumber(slot.z_mm, 1)}</td>
+          <td>
+            <button data-slot-goto="${escapeHtml(code)}">GO TO POSITION</button>
+            <button class="primary" data-slot-dispense="${escapeHtml(code)}" ${derived === "empty" ? "disabled" : ""}>DISPENSE</button>
+            <button class="ghost" data-slot-save="${escapeHtml(code)}">SAVE POSITION</button>
+          </td>
+        </tr>
+      `;
+    }).join("");
 
     $$("[data-slot-goto]").forEach((button) => {
-      button.disabled = !motionEnabled(true);
-      button.addEventListener("click", () => {
-        command(`Go to slot ${button.dataset.slotGoto}`, `/api/slots/${button.dataset.slotGoto}/goto`, buildMoveOptions(), { requireHome: true });
-      });
+      button.disabled = !motionAllowed(true);
+      button.addEventListener("click", () => command(`Move to slot ${button.dataset.slotGoto}`, `/api/slots/${button.dataset.slotGoto}/goto`, targetSpeedPayload(), { requireHome: true }));
     });
     $$("[data-slot-dispense]").forEach((button) => {
-      button.disabled = !motionEnabled(true);
-      button.addEventListener("click", () => {
-        command(`Dispense slot ${button.dataset.slotDispense}`, "/api/start", { slot: button.dataset.slotDispense, ...buildMoveOptions() }, { requireHome: true });
-      });
+      button.disabled = button.disabled || !motionAllowed(true);
+      button.addEventListener("click", () => command(`Dispense slot ${button.dataset.slotDispense}`, "/api/start", { slot: button.dataset.slotDispense, ...targetSpeedPayload() }, { requireHome: true }));
     });
     $$("[data-slot-save]").forEach((button) => {
-      button.disabled = !motionEnabled(true);
-      button.addEventListener("click", () => {
+      button.disabled = !motionAllowed(true);
+      button.addEventListener("click", async () => {
+        const current = getStatus().current_position || {};
+        const confirmed = confirm(`Save current machine position to Slot ${button.dataset.slotSave}?\nX = ${formatNumber(current.x_mm, 3)} mm\nY = ${formatNumber(current.y_mm, 3)} mm\nZ = ${formatNumber(current.z_mm, 3)} mm`);
+        if (!confirmed) return;
         command(`Save slot ${button.dataset.slotSave}`, `/api/slots/${button.dataset.slotSave}/save-current`, undefined, { requireHome: true });
       });
     });
   }
 
-  function updateFooter() {
-    const now = new Date();
-    const status = state.payload?.status || {};
-    const operation = state.payload?.operation || {};
-    const connection = state.online ? "ONLINE" : "OFFLINE";
-    const busy = state.payload?.busy ? "BUSY" : "IDLE";
-    const estop = status.estop ? "E-STOP ACTIVE" : "E-STOP CLEAR";
-    const active = state.payload?.active_command || "none";
-    const message = operation.message || "Waiting for controller status";
-
-    $("#footer-connection").textContent = connection;
-    $("#footer-busy").textContent = busy;
-    $("#footer-estop").textContent = estop;
-    $("#footer-status-text").textContent = `Command: ${active} | Phase: ${operation.phase || "ready"} | Board: ${message}`;
-    $("#footer-status-time").textContent = now.toLocaleTimeString();
+  function targetSpeedPayload() {
+    const body = {};
+    const speedValue = $("#target-speed").value || $("#move-speed").value;
+    const timeValue = $("#move-time").value;
+    if (speedValue !== "") body.speed_mm_s = Number(speedValue);
+    if (timeValue !== "") body.time_s = Number(timeValue);
+    return body;
   }
 
-  function updateInterlocks() {
-    const locks = interlocks();
-    const reasons = [];
-    if (!locks.online) reasons.push("Controller offline");
-    if (locks.estop) reasons.push("Emergency stop active");
-    if (locks.busy || state.pending) reasons.push("Command in progress");
-    if (!locks.homed) reasons.push("Axes not fully homed");
-    if (!reasons.length) reasons.push("Ready");
+  function renderAlarmSummary() {
+    const status = getStatus();
+    const error = state.payload?.last_error;
+    if (!error) {
+      $("#alarm-summary").innerHTML = "<strong>NO ACTIVE ALARMS</strong><p>Machine operation normal.</p>";
+      return;
+    }
+    const effect = status.estop ? "Motion inhibited by emergency stop." : "Motion inhibited until the condition is cleared.";
+    $("#alarm-summary").innerHTML = `
+      <strong>1 ACTIVE ALARM</strong>
+      <p>${escapeHtml(error)}</p>
+      <p><b>Severity:</b> ${status.estop ? "CRITICAL" : "WARNING"}<br><b>Effect:</b> ${effect}<br><b>Recommended action:</b> Clear alarm cause and re-home if required.</p>
+    `;
+  }
 
-    $("#interlock-list").innerHTML = reasons.map((reason) => `<span>${escapeHtml(reason)}</span>`).join("");
-    $("#stop-button").disabled = !locks.online;
-    $("#clear-alarm").disabled = !locks.online || locks.busy;
-    $("#home-all").disabled = !motionEnabled(false);
-    $$(".home-axis").forEach((button) => button.disabled = !motionEnabled(false));
-    $$("[data-jog]").forEach((button) => button.disabled = !motionEnabled(false));
-    $("#absolute-move").disabled = !motionEnabled(true);
-    $("#plan-move").disabled = !locks.online;
-    renderSlots();
+  function updateReadinessStrip() {
+    const status = getStatus();
+    const homed = allAxesHomed();
+    const reason = motionInhibitReason(true);
+
+    $("#strip-controller").textContent = state.online ? "ONLINE" : "OFFLINE";
+    $("#strip-estop").textContent = status.estop ? "ACTIVE" : "CLEAR";
+    $("#strip-homing").textContent = homed ? "ALL HOMED" : "NOT READY";
+    $("#strip-homing-detail").textContent = homed ? "X ✓  Y ✓  Z ✓" : axes.map((axis) => `${axis.toUpperCase()} ${getAxis(axis).is_homed ? "✓" : "!"}`).join("  ");
+    $("#strip-motion").textContent = reason ? "INHIBITED" : "ENABLED";
+    $("#strip-motion-reason").textContent = reason || "Motion allowed";
+    $("#strip-alarms").textContent = String(activeAlarmCount());
+    $("#strip-alarm-detail").textContent = activeAlarmCount() ? (state.payload?.last_error || "Alarm active") : "No active alarms";
+  }
+
+  function updatePositionBanner() {
+    const current = getStatus().current_position || {};
+    $("#position-summary").innerHTML = `
+      <div><span>X</span><strong>${formatNumber(current.x_mm, 3)}</strong><small>mm</small></div>
+      <div><span>Y</span><strong>${formatNumber(current.y_mm, 3)}</strong><small>mm</small></div>
+      <div><span>Z</span><strong>${formatNumber(current.z_mm, 3)}</strong><small>mm</small></div>
+    `;
+  }
+
+  function updateSummaryPanels() {
+    const status = getStatus();
+    const operation = getOperation();
+    $("#summary-controller").textContent = state.online ? "ONLINE" : "OFFLINE";
+    $("#summary-motion").textContent = state.payload?.busy ? "EXECUTING" : "IDLE";
+    $("#summary-mode").textContent = state.payload?.busy ? "MANUAL ACTIVE" : "MANUAL";
+    $("#active-command").textContent = state.payload?.active_command || "None";
+    $("#jog-inhibit-reason").textContent = motionInhibitReason(false) || "Manual motion ready";
+    $("#operation-message").textContent = operation.message || "Controller ready";
+    $("#connection-state").textContent = state.online ? "ONLINE" : "OFFLINE";
+    $("#machine-state").textContent = status.estop
+      ? "E-STOP"
+      : state.payload?.busy
+        ? String(operation.phase || "MOVING").toUpperCase()
+        : allAxesHomed()
+          ? "READY"
+          : "NOT READY";
+  }
+
+  function updateFooter() {
+    const status = getStatus();
+    const now = new Date().toLocaleTimeString();
+    const ready = motionInhibitReason(true) ? "NOT READY" : "READY";
+    $("#footer-connection").textContent = state.online ? "ONLINE" : "OFFLINE";
+    $("#footer-ready").textContent = ready;
+    $("#footer-estop").textContent = status.estop ? "E-STOP ACTIVE" : "E-STOP CLEAR";
+    $("#footer-status-text").textContent = `Command: ${state.payload?.active_command || "None"} | Motion: ${state.payload?.busy ? "Executing" : "Idle"} | Controller: ${getOperation().message || "Ready"}`;
+    $("#footer-status-time").textContent = now;
+  }
+
+  function updateDerivedState() {
+    updateReadinessStrip();
+    updateSummaryPanels();
     updateFooter();
+    renderAlarmSummary();
+    renderMechanicsSidebar();
+    $("#absolute-move").disabled = !state.validation.valid || !motionAllowed(true);
+    const disableJog = !motionAllowed(false);
+    $$("[data-jog]").forEach((button) => {
+      button.disabled = disableJog;
+    });
+    $$(".home-axis").forEach((button) => {
+      button.disabled = !motionAllowed(false);
+    });
+    $("#home-all").disabled = !motionAllowed(false);
+    $("#stop-button").disabled = !state.online;
+    $("#clear-alarm").disabled = !state.online || Boolean(state.payload?.busy);
   }
 
   function render(payload) {
     state.payload = payload;
     state.slots = payload.slots || {};
-    const status = payload.status || {};
-    const current = status.current_position || {};
-    $("#machine-state").textContent = status.estop
-      ? "E-STOP ACTIVE"
-      : payload.busy
-        ? "MOTION ACTIVE"
-        : String(payload.operation?.phase || status.state || "ready").toUpperCase();
-    $("#operation-phase").textContent = String(payload.operation?.phase || "ready").toUpperCase();
-    $("#connection-state").textContent = state.online ? "CONTROLLER ONLINE" : "CONTROLLER OFFLINE";
-    $("#operation-message").textContent = payload.operation?.message || "Controller ready";
-    $("#override-speed").textContent = status.speed_override ? `${formatNumber(status.speed_override, 1)} mm/s` : "--";
-    $("#override-time").textContent = status.timer_seconds ? `${formatNumber(status.timer_seconds, 1)} s` : "--";
-    $("#estop-state").textContent = status.estop ? "ACTIVE" : "CLEAR";
-    $("#position-summary").innerHTML = `
-      <div>X: ${formatNumber(current.x_mm)} mm</div>
-      <div>Y: ${formatNumber(current.y_mm)} mm</div>
-      <div>Z: ${formatNumber(current.z_mm)} mm</div>
-    `;
-
+    updatePositionBanner();
     renderAxisCards();
     renderHomeStatus();
-    renderPlan(status.last_plan);
+    renderSlotTable();
+    updateDerivedState();
 
     if (payload.last_error && payload.last_error !== state.lastError) {
-      log(`Controller error: ${payload.last_error}`, "error");
-      toast(payload.last_error, true);
+      log(humanizeError(payload.last_error), "error", "ALARM");
+      toast(humanizeError(payload.last_error), true);
     }
     state.lastError = payload.last_error || "";
-    updateInterlocks();
   }
 
   async function refresh() {
     try {
       const payload = await api("/api/status");
-      if (!state.online) log("Controller connection established.");
+      if (!state.online) log("Controller connection established", "info", "CONTROLLER");
       state.online = true;
       render(payload);
     } catch (error) {
-      if (state.online) log(`Controller connection lost: ${error.message}`, "error");
+      if (state.online) log(`Controller connection lost: ${error.message}`, "error", "CONTROLLER");
       state.online = false;
-      updateFooter();
-      updateInterlocks();
-      $("#connection-state").textContent = "CONTROLLER OFFLINE";
+      updateDerivedState();
+      $("#connection-state").textContent = "OFFLINE";
+      $("#machine-state").textContent = "OFFLINE";
+      $("#strip-controller").textContent = "OFFLINE";
     }
   }
 
   async function loadConfig() {
     try {
       state.config = await api("/api/config");
-      renderMechanics();
+      const order = state.config.home_order?.map((axis) => axis.toUpperCase()).join(" → ");
+      if (order) $("#home-sequence").textContent = `Sequence: ${order}`;
+      renderMechanicsSidebar();
     } catch (error) {
-      log(`Config load failed: ${error.message}`, "error");
+      log(`Config load failed: ${error.message}`, "error", "SYSTEM");
     }
   }
 
@@ -339,63 +507,60 @@
     $$("[data-jog]").forEach((button) => {
       button.addEventListener("click", () => {
         const [axis, direction] = button.dataset.jog.split(":");
-        const body = {
-          axis,
-          distance_mm: Number($("#jog-step").value) * Number(direction),
-        };
-        if ($("#jog-time").value !== "") body.time_s = Number($("#jog-time").value);
-        command(`Jog ${axis.toUpperCase()}`, "/api/jog", body);
+        command(`Jog ${axis.toUpperCase()}`, "/api/jog", buildJogPayload(axis, direction));
       });
     });
-    $("#absolute-move").addEventListener("click", () => {
-      const body = buildMovePayload();
-      if (!Object.keys(body).some((key) => key.endsWith("_mm"))) {
-        toast("Enter at least one target axis.", true);
-        return;
-      }
-      command("Absolute move", "/api/move", body, { requireHome: true });
+    $("#validate-move").addEventListener("click", () => {
+      validateMove(true);
     });
     $("#plan-move").addEventListener("click", async () => {
-      try {
-        const response = await api("/api/plan/move", "POST", buildMovePayload());
-        renderPlan(response.plan);
-        log("Motion plan calculated.");
-        toast("Motion plan updated.");
-      } catch (error) {
-        log(`Plan failed: ${error.message}`, "error");
-        toast(`Plan failed: ${error.message}`, true);
+      const plan = await validateMove(false);
+      if (plan) {
+        toast("Move preview updated.");
+        log("Move preview generated", "info", "MOTION");
+      } else {
+        toast(state.validation.message, true);
       }
     });
+    $("#absolute-move").addEventListener("click", async () => {
+      if (!state.validation.valid) {
+        const plan = await validateMove(true);
+        if (!plan) return;
+      }
+      command("Execute move", "/api/move", buildMovePayload(), { requireHome: true });
+    });
     $("#apply-speed").addEventListener("click", () => {
-      const value = $("#move-speed").value;
-      if (value === "") return toast("Enter speed value first.", true);
-      command("Save override speed", "/api/speed", { speed_mm_s: Number(value) }, { stop: true });
+      const value = $("#target-speed").value || $("#move-speed").value;
+      if (value === "") return toast("Enter travel speed first.", true);
+      $("#move-speed").value = value;
+      $("#target-speed").value = value;
+      command("Save travel speed", "/api/speed", { speed_mm_s: Number(value) }, { stop: true });
     });
     $("#apply-time").addEventListener("click", () => {
       const value = $("#move-time").value;
-      if (value === "") return toast("Enter target time first.", true);
-      command("Save target time", "/api/timer", { duration_s: Number(value) }, { stop: true });
+      if (value === "") return toast("Enter move timeout first.", true);
+      command("Save move timeout", "/api/timer", { duration_s: Number(value) }, { stop: true });
     });
     $$(".preset").forEach((button) => {
       button.addEventListener("click", () => {
-        $("#move-speed").value = button.dataset.speed;
-        command(`Set speed ${button.dataset.speed} mm/s`, "/api/speed", { speed_mm_s: Number(button.dataset.speed) }, { stop: true });
+        const value = button.dataset.speed;
+        $("#move-speed").value = value;
+        $("#target-speed").value = value;
+        command(`Set travel speed ${value} mm/s`, "/api/speed", { speed_mm_s: Number(value) }, { stop: true });
       });
     });
-    $("#stop-button").addEventListener("click", () => command("Stop motion", "/api/stop", undefined, { stop: true }));
-    $("#clear-alarm").addEventListener("click", () => command("Clear alarm", "/api/clear-alarm", undefined, { stop: true }));
-    $("#slot-search").addEventListener("input", renderSlots);
+    $("#stop-button").addEventListener("click", () => command("Emergency stop", "/api/stop", undefined, { stop: true }));
+    $("#clear-alarm").addEventListener("click", () => command("Reset alarms", "/api/clear-alarm", undefined, { stop: true }));
+    $("#slot-search").addEventListener("input", renderSlotTable);
+    $("#slot-filter").addEventListener("change", renderSlotTable);
   }
 
   document.addEventListener("DOMContentLoaded", () => {
     bind();
-    log("Compact motion console started.");
+    log("Industrial motion HMI started", "info", "SYSTEM");
     loadConfig();
     refresh();
     window.setInterval(refresh, 1000);
-    window.setInterval(() => {
-      $("#system-time").textContent = new Date().toLocaleTimeString();
-      updateFooter();
-    }, 1000);
+    window.setInterval(updateFooter, 1000);
   });
 })();
