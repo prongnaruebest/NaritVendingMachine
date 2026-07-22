@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import math
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
@@ -22,6 +23,10 @@ from .mqtt_service import MQTTService
 
 
 _logger = logging.getLogger(__name__)
+
+
+class APIInputError(ValueError):
+    pass
 
 
 class MotionService:
@@ -65,7 +70,7 @@ class MotionService:
                     "product_name": slot.product_name,
                     "dispense_delay_ms": slot.dispense_delay_ms,
                 }
-                for code, slot in sorted(self.controller.config.slots.items(), key=lambda item: int(item[0]))
+                for code, slot in sorted(self.controller.config.slots.items(), key=_slot_sort_key)
             }
             return {
                 "busy": self.busy,
@@ -87,7 +92,9 @@ class MotionService:
                 "slots": slots,
             }
 
-    def _run(self, command_name: str, fn):
+    def _run(self, command_name: str, fn, *, motion_command: bool = True):
+        if motion_command and self.controller.stop_requested():
+            return {"ok": False, "error": "Motion is stopped; reset alarms before issuing another command"}
         if not self.command_lock.acquire(blocking=False):
             return {"ok": False, "error": "Machine is busy with another command"}
 
@@ -100,26 +107,39 @@ class MotionService:
                 self.operation_message = f"Running {command_name.replace('_', ' ')}"
                 if not command_name.startswith("home"):
                     self.operation_axis = None
-                self.controller.clear_stop()
-                self.controller.set_state("moving")
+                if motion_command:
+                    self.controller.set_state("moving")
 
             result = fn()
 
             with self.lock:
-                self.controller.set_state("success")
+                if motion_command:
+                    self.controller.set_state("success")
                 self.operation_phase = "completed"
                 self.operation_message = f"Completed {command_name.replace('_', ' ')}"
             return {"ok": True, "result": result}
         except (MotionError, EmergencyStopError, LimitTriggeredError) as exc:
             with self.lock:
                 self.last_error = str(exc)
-                self.controller.set_state("alarm")
+                if motion_command:
+                    self.controller.request_stop()
+                    self.controller.set_state("alarm")
                 self.operation_phase = "failed"
                 self.operation_message = str(exc)
                 if self.operation_axis:
                     self.homing[self.operation_axis] = "failed"
             _logger.warning("Motion error: %s", exc)
             return {"ok": False, "error": str(exc)}
+        except Exception:
+            with self.lock:
+                self.last_error = "Internal controller error"
+                if motion_command:
+                    self.controller.request_stop()
+                    self.controller.set_state("alarm")
+                self.operation_phase = "failed"
+                self.operation_message = "Internal controller error"
+            _logger.exception("Unexpected error while running %s", command_name)
+            return {"ok": False, "error": "Internal controller error"}
         finally:
             with self.lock:
                 self.busy = False
@@ -153,12 +173,18 @@ class MotionService:
 
     def set_speed(self, speed_mm_s: float) -> dict[str, object]:
         with self.lock:
-            self.controller.speed_override = max(0.1, min(float(speed_mm_s), 60.0))
+            requested_speed = float(speed_mm_s)
+            if not math.isfinite(requested_speed) or requested_speed <= 0:
+                return {"ok": False, "error": "speed_mm_s must be a finite number greater than 0"}
+            self.controller.speed_override = min(requested_speed, 60.0)
             return {"ok": True, "speed_mm_s": self.controller.speed_override}
 
     def set_timer(self, seconds: float) -> dict[str, object]:
         with self.lock:
-            self.controller.timer_seconds = max(0.0, float(seconds))
+            requested_seconds = float(seconds)
+            if not math.isfinite(requested_seconds) or requested_seconds < 0:
+                return {"ok": False, "error": "duration_s must be a finite number greater than or equal to 0"}
+            self.controller.timer_seconds = requested_seconds
             return {"ok": True, "timer_seconds": self.controller.timer_seconds}
 
     def _effective_motion(self, payload: dict[str, object]) -> tuple[float | None, float | None]:
@@ -166,8 +192,12 @@ class MotionService:
         time_s = None
         if payload.get("speed_mm_s") not in (None, ""):
             speed_mm_s = float(payload["speed_mm_s"])
+            if not math.isfinite(speed_mm_s) or speed_mm_s <= 0:
+                raise ValueError("speed_mm_s must be a finite number greater than 0")
         if payload.get("time_s") not in (None, ""):
             time_s = float(payload["time_s"])
+            if not math.isfinite(time_s) or time_s <= 0:
+                raise ValueError("time_s must be a finite number greater than 0")
         if speed_mm_s is None and self.controller.speed_override is not None:
             speed_mm_s = self.controller.speed_override
         if time_s is None and self.controller.timer_seconds > 0:
@@ -238,7 +268,7 @@ class MotionService:
             )
             save_machine_config(self.controller.config, self.config_path)
 
-        return self._run(f"save_slot_{slot_code}", action)
+        return self._run(f"save_slot_{slot_code}", action, motion_command=False)
 
     def save_slot_from_current(self, slot_code: str) -> dict[str, object]:
         def action():
@@ -247,7 +277,7 @@ class MotionService:
             save_machine_config(self.controller.config, self.config_path)
             return current
 
-        return self._run(f"save_current_slot_{slot_code}", action)
+        return self._run(f"save_current_slot_{slot_code}", action, motion_command=False)
 
     def move_to(
         self,
@@ -284,7 +314,7 @@ class MotionService:
             self.controller.update_slot(slot_code, x_mm=0.0, y_mm=0.0, z_mm=0.0)
             save_machine_config(self.controller.config, self.config_path)
 
-        return self._run(f"reset_slot_{slot_code}", action)
+        return self._run(f"reset_slot_{slot_code}", action, motion_command=False)
 
     def get_slot(self, slot_code: str) -> dict[str, object] | None:
         with self.lock:
@@ -318,13 +348,34 @@ def _parse_optional_float(payload: dict[str, object], key: str) -> float | None:
     value = payload.get(key)
     if value in (None, ""):
         return None
-    return float(value)
+    parsed = float(value)
+    if not math.isfinite(parsed):
+        raise ValueError(f"{key} must be finite")
+    return parsed
+
+
+def _slot_sort_key(item: tuple[str, object]) -> tuple[int, int | str]:
+    code = str(item[0])
+    return (0, int(code)) if code.isdigit() else (1, code)
+
+
+def _json_payload() -> dict[str, object]:
+    if not request.get_data(cache=True):
+        return {}
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        raise APIInputError("Request body must be a valid JSON object")
+    return payload
 
 
 def create_app(config_path: str = "machine_config.json", hw_config_path: str = "hardware_config.json") -> Flask:
     app = Flask(__name__)
     app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0
     service = MotionService(config_path=config_path, hw_config_path=hw_config_path)
+
+    @app.errorhandler(APIInputError)
+    def handle_api_input_error(exc: APIInputError):
+        return jsonify({"ok": False, "error": str(exc)}), 400
 
     @app.before_request
     def log_request():
@@ -362,7 +413,7 @@ def create_app(config_path: str = "machine_config.json", hw_config_path: str = "
 
     @app.post("/api/plan/move")
     def api_plan_move():
-        payload = request.get_json(force=True, silent=True) or {}
+        payload = _json_payload()
         try:
             speed_mm_s, time_s = service._effective_motion(payload)
             plan = service.plan_move(
@@ -397,7 +448,7 @@ def create_app(config_path: str = "machine_config.json", hw_config_path: str = "
 
     @app.post("/api/jog")
     def api_jog():
-        payload = request.get_json(force=True) or {}
+        payload = _json_payload()
         axis = str(payload.get("axis", "")).lower()
         if axis not in ("x", "y", "z"):
             return jsonify({"ok": False, "error": "Field 'axis' must be one of: x, y, z"}), 400
@@ -414,7 +465,7 @@ def create_app(config_path: str = "machine_config.json", hw_config_path: str = "
 
     @app.post("/api/move")
     def api_move():
-        payload = request.get_json(force=True) or {}
+        payload = _json_payload()
         try:
             x_mm = _parse_optional_float(payload, "x_mm")
             y_mm = _parse_optional_float(payload, "y_mm")
@@ -430,7 +481,7 @@ def create_app(config_path: str = "machine_config.json", hw_config_path: str = "
 
     @app.post("/api/start")
     def api_start():
-        payload = request.get_json(force=True, silent=True) or {}
+        payload = _json_payload()
         slot_code = payload.get("slot") or payload.get("slot_code")
         try:
             speed_mm_s, time_s = service._effective_motion(payload)
@@ -442,7 +493,7 @@ def create_app(config_path: str = "machine_config.json", hw_config_path: str = "
 
     @app.post("/api/slots/<slot_code>/goto")
     def api_goto_slot(slot_code: str):
-        payload = request.get_json(force=True, silent=True) or {}
+        payload = _json_payload()
         try:
             speed_mm_s, time_s = service._effective_motion(payload)
         except (TypeError, ValueError):
@@ -464,7 +515,7 @@ def create_app(config_path: str = "machine_config.json", hw_config_path: str = "
 
     @app.post("/api/slots/<slot_code>")
     def api_save_slot(slot_code: str):
-        payload = request.get_json(force=True) or {}
+        payload = _json_payload()
         missing = [field for field in ("x_mm", "y_mm", "z_mm") if field not in payload]
         if missing:
             return jsonify({"ok": False, "error": f"Missing required fields: {', '.join(missing)}"}), 400
@@ -497,7 +548,7 @@ def create_app(config_path: str = "machine_config.json", hw_config_path: str = "
 
     @app.post("/api/speed")
     def api_speed():
-        payload = request.get_json(force=True, silent=True) or {}
+        payload = _json_payload()
         speed = payload.get("speed_mm_s", payload.get("speed"))
         if speed is None:
             return jsonify({"ok": False, "error": "Field 'speed_mm_s' or 'speed' is required"}), 400
@@ -505,11 +556,12 @@ def create_app(config_path: str = "machine_config.json", hw_config_path: str = "
             result = service.set_speed(float(speed))
         except (TypeError, ValueError):
             return jsonify({"ok": False, "error": "speed must be a number"}), 400
-        return jsonify(result | service.status_payload()), 200
+        status_code = 200 if result["ok"] else 400
+        return jsonify(result | service.status_payload()), status_code
 
     @app.post("/api/timer")
     def api_timer():
-        payload = request.get_json(force=True, silent=True) or {}
+        payload = _json_payload()
         duration = payload.get("duration_s", payload.get("timer_seconds", payload.get("duration")))
         if duration is None:
             return jsonify({"ok": False, "error": "Field 'duration_s' is required"}), 400
@@ -517,7 +569,8 @@ def create_app(config_path: str = "machine_config.json", hw_config_path: str = "
             result = service.set_timer(float(duration))
         except (TypeError, ValueError):
             return jsonify({"ok": False, "error": "duration_s must be a number"}), 400
-        return jsonify(result | service.status_payload()), 200
+        status_code = 200 if result["ok"] else 400
+        return jsonify(result | service.status_payload()), status_code
 
     @app.post("/api/stop")
     def api_stop():

@@ -111,6 +111,7 @@
     const status = getStatus();
     if (!MS.online)                           return "Controller offline — reconnecting...";
     if (status.estop)                         return "MOTION LOCKED — Emergency stop active";
+    if (MS.payload?.safety?.stop_requested)   return "MOTION LOCKED — reset alarms before continuing";
     if (MS.pending || MS.payload?.busy)       return "Another command is executing";
     if (requireHome && !allAxesHomed()) {
       const first = AXES.find((a) => !getAxis(a).is_homed);
@@ -142,7 +143,15 @@
         body: body ? JSON.stringify(body) : undefined,
         signal: ctrl.signal,
       });
-      const data = await res.json();
+      const responseText = await res.text();
+      let data = {};
+      if (responseText) {
+        try {
+          data = JSON.parse(responseText);
+        } catch {
+          throw new Error(res.ok ? "Controller returned an invalid response" : `HTTP ${res.status}`);
+        }
+      }
       if (!res.ok || data.ok === false) {
         throw new Error(data.error || `HTTP ${res.status}`);
       }

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -15,6 +16,11 @@ from gpiozero import DigitalInputDevice, OutputDevice
 
 
 _logger = logging.getLogger(__name__)
+
+
+def _slot_sort_key(item: tuple[str, object]) -> tuple[int, int | str]:
+    code = str(item[0])
+    return (0, int(code)) if code.isdigit() else (1, code)
 
 
 class MotionError(RuntimeError):
@@ -58,6 +64,26 @@ class AxisConfig:
     lead_screw_pitch_mm: float = 5.0
     motor_steps_per_rev: int = 200
     driver_microsteps: int = 10
+
+    def __post_init__(self) -> None:
+        positive_values = {
+            "steps_per_mm": self.steps_per_mm,
+            "max_travel_mm": self.max_travel_mm,
+            "max_speed_mm_s": self.max_speed_mm_s,
+            "default_speed_mm_s": self.default_speed_mm_s,
+            "lead_screw_pitch_mm": self.lead_screw_pitch_mm,
+            "motor_steps_per_rev": self.motor_steps_per_rev,
+            "driver_microsteps": self.driver_microsteps,
+        }
+        for field_name, value in positive_values.items():
+            if not math.isfinite(float(value)) or float(value) <= 0:
+                raise MotionError(f"{self.name}: {field_name} must be a finite number greater than 0")
+        if self.default_speed_mm_s > self.max_speed_mm_s:
+            raise MotionError(f"{self.name}: default_speed_mm_s cannot exceed max_speed_mm_s")
+        if self.home_direction not in (0, 1) or self.forward_direction not in (0, 1):
+            raise MotionError(f"{self.name}: motor directions must be 0 or 1")
+        if self.home_direction == self.forward_direction:
+            raise MotionError(f"{self.name}: home_direction and forward_direction must be opposite")
 
     @property
     def step_pin(self) -> int:
@@ -146,6 +172,22 @@ class MachineConfig:
     slots: dict[str, SlotPosition] = field(default_factory=dict)
     safe_z_mm: float = 10.0
 
+    def __post_init__(self) -> None:
+        if len(self.home_order) != 3 or set(self.home_order) != {"x", "y", "z"}:
+            raise MotionError("home_order must contain x, y, and z exactly once")
+        if not math.isfinite(self.safe_z_mm) or not 0 <= self.safe_z_mm <= self.z.max_travel_mm:
+            raise MotionError(f"safe_z_mm must be within 0-{self.z.max_travel_mm:.2f} mm")
+        limits = {"x": self.x.max_travel_mm, "y": self.y.max_travel_mm, "z": self.z.max_travel_mm}
+        for code, slot in self.slots.items():
+            for axis_name in ("x", "y", "z"):
+                coordinate = float(getattr(slot, f"{axis_name}_mm"))
+                if not math.isfinite(coordinate) or not 0 <= coordinate <= limits[axis_name]:
+                    raise MotionError(
+                        f"slot {code}: {axis_name}_mm must be within 0-{limits[axis_name]:.2f} mm"
+                    )
+            if slot.dispense_delay_ms < 0:
+                raise MotionError(f"slot {code}: dispense_delay_ms cannot be negative")
+
     def to_dict(self) -> dict[str, object]:
         return {
             "axes": {
@@ -163,7 +205,7 @@ class MachineConfig:
                     "product_name": slot.product_name,
                     "dispense_delay_ms": slot.dispense_delay_ms,
                 }
-                for code, slot in sorted(self.slots.items(), key=lambda item: int(item[0]))
+                for code, slot in sorted(self.slots.items(), key=_slot_sort_key)
             },
         }
 
@@ -205,9 +247,13 @@ class AxisController:
 
     def clamp_speed(self, speed_mm_s: float | None) -> float:
         requested = self.config.default_speed_mm_s if speed_mm_s is None else float(speed_mm_s)
-        return max(0.1, min(requested, self.config.max_speed_mm_s))
+        if not math.isfinite(requested) or requested <= 0:
+            raise MotionError(f"{self.config.name}: speed_mm_s must be a finite number greater than 0")
+        return min(requested, self.config.max_speed_mm_s)
 
     def plan_relative_move(self, distance_mm: float, speed_mm_s: float | None = None, time_s: float | None = None) -> AxisMovePlan:
+        if not math.isfinite(float(distance_mm)):
+            raise MotionError(f"{self.config.name}: distance_mm must be finite")
         if distance_mm == 0:
             return AxisMovePlan(
                 axis=self.config.name,
@@ -240,6 +286,8 @@ class AxisController:
     def plan_absolute_move(self, target_mm: float, speed_mm_s: float | None = None, time_s: float | None = None) -> AxisMovePlan:
         if not self.is_homed:
             raise NotHomedError(f"{self.config.name}: axis must be homed before move_to_mm")
+        if not math.isfinite(float(target_mm)):
+            raise MotionError(f"{self.config.name}: target must be finite")
         if target_mm < 0 or target_mm > self.config.max_travel_mm:
             raise MotionError(
                 f"{self.config.name}: target {target_mm:.2f} mm outside 0-{self.config.max_travel_mm:.2f} mm"
@@ -270,7 +318,12 @@ class AxisController:
             if moved >= max_steps:
                 raise LimitTriggeredError(f"{self.config.name}: home not reached within {max_steps} steps")
             if moved % 10 == 0:
-                self._guard_during_move(self.config.home_direction)
+                if self.estop.value:
+                    self.stop()
+                    raise EmergencyStopError(f"{self.config.name}: emergency stop triggered during homing")
+                if self.stop_requested():
+                    self.stop()
+                    raise StopRequestedError(f"{self.config.name}: stop requested during homing")
                 limit_active = self.head_limit.value
                 if limit_active:
                     break
@@ -289,6 +342,10 @@ class AxisController:
                 self._pulse_once(half_periods[min(released, len(half_periods) - 1)])
                 released += 1
             sleep(self.config.settle_delay)
+            if self.head_limit.value:
+                raise LimitTriggeredError(
+                    f"{self.config.name}: home sensor did not release after {backoff_steps} backoff steps"
+                )
 
         self.position_steps = 0
         self.is_homed = True
@@ -319,8 +376,8 @@ class AxisController:
             return 0.0
         if time_s is not None:
             duration_s = float(time_s)
-            if duration_s <= 0:
-                raise MotionError(f"{self.config.name}: time_s must be greater than 0")
+            if not math.isfinite(duration_s) or duration_s <= 0:
+                raise MotionError(f"{self.config.name}: time_s must be a finite number greater than 0")
             required_speed = distance_mm / duration_s
             if required_speed > self.config.max_speed_mm_s:
                 raise MotionError(
@@ -373,15 +430,19 @@ class AxisController:
     def _guard_during_move(self, direction: int) -> None:
         if self.estop.value:
             self.stop()
+            self.is_homed = False
             raise EmergencyStopError(f"{self.config.name}: emergency stop triggered")
         if self.stop_requested():
             self.stop()
+            self.is_homed = False
             raise StopRequestedError(f"{self.config.name}: stop requested")
         if direction == self.config.home_direction and self.head_limit.value:
             self.stop()
+            self.is_homed = False
             raise LimitTriggeredError(f"{self.config.name}: head limit triggered")
         if direction != self.config.home_direction and self.tail_limit.value:
             self.stop()
+            self.is_homed = False
             raise LimitTriggeredError(f"{self.config.name}: tail limit triggered")
 
 
@@ -413,13 +474,13 @@ class MotionController:
         self.speed_override: float | None = None
         self.timer_seconds: float = 0.0
         self.last_plan: CoordinatedMovePlan | None = None
+        self._state_name = "idle"
         self.set_state("idle")
 
     def axes(self) -> dict[str, AxisController]:
         return {"x": self.x, "y": self.y, "z": self.z}
 
     def home_axis(self, axis_name: str, progress: Callable[[str, str], None] | None = None) -> None:
-        self.clear_stop()
         axis = self.axes()[axis_name.lower()]
         if progress is not None:
             progress(axis.config.name, "homing")
@@ -428,7 +489,6 @@ class MotionController:
             progress(axis.config.name, "passed")
 
     def home_all(self, progress: Callable[[str, str], None] | None = None) -> None:
-        self.clear_stop()
         for axis_name in self.config.home_order:
             self.home_axis(axis_name, progress=progress)
 
@@ -463,7 +523,6 @@ class MotionController:
         speed_mm_s: float | None = None,
         time_s: float | None = None,
     ) -> CoordinatedMovePlan:
-        self.clear_stop()
         effective_speed = speed_mm_s if speed_mm_s is not None else self.speed_override
 
         raw_targets = {"x": x_mm, "y": y_mm, "z": z_mm}
@@ -496,8 +555,8 @@ class MotionController:
 
         if time_s is not None:
             duration_s = float(time_s)
-            if duration_s <= 0:
-                raise MotionError("time_s must be greater than 0")
+            if not math.isfinite(duration_s) or duration_s <= 0:
+                raise MotionError("time_s must be a finite number greater than 0")
             mode = "time"
         else:
             base_speed = effective_speed
@@ -506,7 +565,9 @@ class MotionController:
                     self.axes()[axis_name].config.default_speed_mm_s
                     for axis_name in included_axes
                 )
-            base_speed = max(0.1, float(base_speed))
+            base_speed = float(base_speed)
+            if not math.isfinite(base_speed) or base_speed <= 0:
+                raise MotionError("speed_mm_s must be a finite number greater than 0")
             duration_s = max_distance / base_speed
             mode = "speed"
 
@@ -554,7 +615,6 @@ class MotionController:
         }
 
     def move_to_slot(self, slot_code: str, speed_mm_s: float | None = None, time_s: float | None = None) -> SlotPosition:
-        self.clear_stop()
         slot = self.config.slots.get(str(slot_code))
         if slot is None:
             raise MotionError(f"unknown slot '{slot_code}'")
@@ -584,13 +644,22 @@ class MotionController:
         code = str(slot_code)
         if code not in self.config.slots:
             raise MotionError(f"unknown slot '{slot_code}'")
+        coordinates = {"x": float(x_mm), "y": float(y_mm), "z": float(z_mm)}
+        for axis_name, coordinate in coordinates.items():
+            axis = self.axes()[axis_name]
+            if not math.isfinite(coordinate) or coordinate < 0 or coordinate > axis.config.max_travel_mm:
+                raise MotionError(
+                    f"slot {code}: {axis_name}_mm must be within 0-{axis.config.max_travel_mm:.2f} mm"
+                )
+        if dispense_delay_ms is not None and dispense_delay_ms < 0:
+            raise MotionError(f"slot {code}: dispense_delay_ms cannot be negative")
         existing = self.config.slots[code]
         new_slots = dict(self.config.slots)
         new_slots[code] = SlotPosition(
             code=code,
-            x_mm=x_mm,
-            y_mm=y_mm,
-            z_mm=z_mm,
+            x_mm=coordinates["x"],
+            y_mm=coordinates["y"],
+            z_mm=coordinates["z"],
             product_name=product_name if product_name is not None else existing.product_name,
             dispense_delay_ms=dispense_delay_ms if dispense_delay_ms is not None else existing.dispense_delay_ms,
         )
@@ -618,6 +687,9 @@ class MotionController:
         return bool(self.estop.value)
 
     def set_state(self, state_name: str) -> None:
+        if state_name not in {"idle", "moving", "success", "alarm"}:
+            raise MotionError(f"unknown machine state '{state_name}'")
+        self._state_name = state_name
         for led in [self.led_idle, self.led_moving, self.led_success, self.alarm_warning]:
             if led is not None:
                 led.off()
@@ -640,15 +712,9 @@ class MotionController:
                 self.alarm_buzzer.on()
 
     def status(self) -> dict[str, object]:
-        state_name = "idle"
+        state_name = self._state_name
         if self.emergency_stop_active() or self._stop_requested:
             state_name = "alarm"
-        elif self.alarm_warning and self.alarm_warning.value:
-            state_name = "alarm"
-        elif self.led_moving and self.led_moving.value:
-            state_name = "moving"
-        elif self.led_success and self.led_success.value:
-            state_name = "success"
 
         return {
             "estop": bool(self.estop.value),
@@ -679,21 +745,27 @@ class MotionController:
         accumulators = {name: 0 for name in plan.axes}
         half_periods = _build_half_periods(master_steps, plan.duration_s, ramp_ratio=1.6)
 
-        for index, half_period in enumerate(half_periods):
-            if index % 5 == 0:
+        try:
+            for index, half_period in enumerate(half_periods):
+                if index % 5 == 0:
+                    for axis_name, axis in axes.items():
+                        axis._guard_during_move(directions[axis_name])
                 for axis_name, axis in axes.items():
-                    axis._guard_during_move(directions[axis_name])
-            for axis_name, axis in axes.items():
-                accumulators[axis_name] += steps[axis_name]
-                if accumulators[axis_name] >= master_steps:
-                    axis.pulse.on()
-            sleep(half_period)
-            for axis_name, axis in axes.items():
-                if accumulators[axis_name] >= master_steps:
-                    axis.pulse.off()
-                    axis.position_steps += 1 if directions[axis_name] == axis.config.forward_direction else -1
-                    accumulators[axis_name] -= master_steps
-            sleep(half_period)
+                    accumulators[axis_name] += steps[axis_name]
+                    if accumulators[axis_name] >= master_steps:
+                        axis.pulse.on()
+                sleep(half_period)
+                for axis_name, axis in axes.items():
+                    if accumulators[axis_name] >= master_steps:
+                        axis.pulse.off()
+                        axis.position_steps += 1 if directions[axis_name] == axis.config.forward_direction else -1
+                        accumulators[axis_name] -= master_steps
+                sleep(half_period)
+        except (EmergencyStopError, StopRequestedError, LimitTriggeredError):
+            for axis in axes.values():
+                axis.stop()
+                axis.is_homed = False
+            raise
 
         sleep(max(axis.config.settle_delay for axis in axes.values()))
 
@@ -879,7 +951,11 @@ def load_machine_config(path: str | Path) -> MachineConfig:
 
 
 def save_machine_config(config: MachineConfig, path: str | Path) -> None:
-    Path(path).write_text(json.dumps(config.to_dict(), indent=2) + "\n", encoding="utf-8")
+    config_path = Path(path)
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path = config_path.with_name(f".{config_path.name}.tmp")
+    temporary_path.write_text(json.dumps(config.to_dict(), indent=2) + "\n", encoding="utf-8")
+    os.replace(temporary_path, config_path)
 
 
 def load_hardware_config(path: str | Path = "hardware_config.json") -> dict:
@@ -890,18 +966,33 @@ def load_hardware_config(path: str | Path = "hardware_config.json") -> dict:
         try:
             return json.loads(p.read_text(encoding="utf-8"))
         except Exception as exc:
-            _logger.error("Failed to parse hardware config: %s", exc)
+            raise MotionError(f"Failed to parse hardware config '{p}': {exc}") from exc
     return {}
 
 
 def build_controller(config: MachineConfig, hw_config_path: str = "hardware_config.json") -> MotionController:
     hw_config = load_hardware_config(hw_config_path)
     di_config = hw_config.get("digital_inputs", {})
+
+    def make_input(pin: int, info: dict[str, object]) -> DigitalInputDevice:
+        pull_up_value = info.get("pull_up", False)
+        if pull_up_value is None:
+            return DigitalInputDevice(
+                pin,
+                pull_up=None,
+                active_state=bool(info.get("active_high", True)),
+            )
+        pull_up = bool(pull_up_value)
+        expected_active_high = not pull_up
+        if "active_high" in info and bool(info["active_high"]) != expected_active_high:
+            raise MotionError(
+                f"GPIO {pin}: active_high conflicts with pull_up; "
+                f"use active_high={str(expected_active_high).lower()} or pull_up=null"
+            )
+        return DigitalInputDevice(pin, pull_up=pull_up)
+
     estop_info = di_config.get("estop", {})
-    estop_button = DigitalInputDevice(
-        int(estop_info.get("pin", 6)),
-        pull_up=bool(estop_info.get("pull_up", False)),
-    )
+    estop_button = make_input(int(estop_info.get("pin", 6)), estop_info)
 
     motors_config = hw_config.get("motors", {})
 
@@ -939,26 +1030,29 @@ def build_controller(config: MachineConfig, hw_config_path: str = "hardware_conf
     )
 
     controller_ref: dict[str, MotionController] = {}
-    stop_requested = lambda: controller_ref["controller"].stop_requested()
+
+    def stop_requested() -> bool:
+        return controller_ref["controller"].stop_requested()
 
     def make_axis(cfg: AxisConfig) -> AxisController:
-        pulse_dev = OutputDevice(cfg.pulse_pin, active_high=True, initial_value=False)
-        dir_dev = OutputDevice(cfg.direction_pin, active_high=True, initial_value=False)
+        motor_info = motors_config.get(cfg.name, {})
+        motor_active_high = bool(motor_info.get("active_high", True))
+        pulse_dev = OutputDevice(cfg.pulse_pin, active_high=motor_active_high, initial_value=False)
+        dir_dev = OutputDevice(cfg.direction_pin, active_high=motor_active_high, initial_value=False)
         enable_dev = (
-            OutputDevice(cfg.enable_pin, active_high=True, initial_value=True)
+            OutputDevice(cfg.enable_pin, active_high=motor_active_high, initial_value=True)
             if cfg.enable_pin is not None
             else None
         )
 
-        head_pull = di_config.get(f"lim_{cfg.name}_head", di_config.get(f"home_sensor_{cfg.name}", {})).get("pull_up", False)
-        tail_pull = di_config.get(f"lim_{cfg.name}_tail", {}).get("pull_up", False)
-
+        head_info = di_config.get(f"lim_{cfg.name}_head", di_config.get(f"home_sensor_{cfg.name}", {}))
+        tail_info = di_config.get(f"lim_{cfg.name}_tail", {})
         return AxisController(
             config=cfg,
             pulse=pulse_dev,
             direction=dir_dev,
-            head_limit=DigitalInputDevice(cfg.head_limit_pin, pull_up=head_pull),
-            tail_limit=DigitalInputDevice(cfg.tail_limit_pin, pull_up=tail_pull),
+            head_limit=make_input(cfg.head_limit_pin, head_info),
+            tail_limit=make_input(cfg.tail_limit_pin, tail_info),
             estop=estop_button,
             stop_requested=stop_requested,
             enable=enable_dev,
