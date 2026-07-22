@@ -908,18 +908,6 @@
     if (el("visual-slot-save")) el("visual-slot-save").disabled = !canConfigureSlot;
     if (el("visual-slot-goto")) el("visual-slot-goto").disabled = !canUseSlot || slotStatus(MS.slots[MS.visualTargetSlot || MS.selectedSlotCode || "1"] || {}) !== "ready";
 
-    // Jog inhibit banner
-    const banner = el("jog-inhibit-banner");
-    if (banner) {
-      const showInhibit = !canJog && inhibitReason !== "Another command is executing";
-      if (showInhibit) {
-        banner.classList.add("active");
-        setText("jog-inhibit-text", inhibitReason || "Motion inhibited");
-      } else {
-        banner.classList.remove("active");
-      }
-    }
-
     // Home buttons
     el("home-all").disabled = !canHome;
     $$(".home-axis").forEach((btn) => { btn.disabled = !canHome; });

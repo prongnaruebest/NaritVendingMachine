@@ -4018,3 +4018,113 @@ select.slot-filter {
   .visual-slot-editor .visual-editor-head,
   .visual-slot-editor .visual-editor-actions { grid-column: auto; }
 }
+
+/* v26 consistent status header across every workspace */
+.jog-inhibit-banner { display: none !important; }
+
+.hmi-shell,
+.hmi-shell.view-wide {
+  grid-template-rows: 160px minmax(0, 1fr) 38px;
+}
+
+.hmi-header,
+.hmi-shell.view-wide .hmi-header {
+  min-height: 160px;
+  grid-template-columns: minmax(280px, 330px) minmax(0, 1fr);
+  gap: 12px;
+  padding: 8px 14px;
+  overflow: hidden;
+}
+
+.header-title { width: 100%; height: 92px; }
+.header-brand-logo { width: 320px; max-width: 100%; }
+
+.header-control-area,
+.hmi-shell.view-wide .header-control-area {
+  min-width: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.header-control-area .safety-strip,
+.hmi-shell.view-wide .header-control-area .safety-strip {
+  min-width: 0;
+  grid-template-columns: 250px minmax(0, 1fr);
+  gap: 8px;
+  align-items: stretch;
+}
+
+.header-control-area .estop-zone,
+.hmi-shell.view-wide .header-control-area .estop-zone {
+  width: auto;
+  grid-template-columns: 1.1fr 1fr;
+  gap: 6px;
+}
+
+.header-control-area .btn-estop,
+.header-control-area .btn-reset-alarm {
+  min-height: 42px;
+  font-size: 12px;
+}
+
+.header-unified-status {
+  min-width: 0;
+  grid-template-columns: repeat(4, minmax(105px, 1fr));
+  gap: 5px;
+}
+
+.header-control-area .header-unified-status > .header-meta,
+.header-control-area .header-unified-status > .safety-indicators,
+.hmi-shell.view-wide .header-control-area .header-unified-status > .header-meta,
+.hmi-shell.view-wide .header-control-area .header-unified-status > .safety-indicators {
+  display: contents;
+}
+
+.header-unified-status .header-chip,
+.header-unified-status .safety-ind {
+  min-height: 38px;
+  padding: 5px 8px;
+  border-color: var(--border);
+  background: var(--surf-2);
+}
+
+.header-unified-status .header-chip span,
+.header-unified-status .safety-ind-label { font-size: 9px; }
+
+.header-unified-status .header-chip strong,
+.header-unified-status .safety-ind-value { font-size: 12px; }
+
+.header-unified-status .safety-ind-sub { font-size: 9px; }
+
+.header-unified-status .motion-inhibit-reason {
+  grid-column: 1 / -1;
+  min-height: 27px;
+  padding: 5px 9px;
+  font-size: 11px;
+}
+
+.header-control-area .header-unified-status .motion-inhibit-reason,
+.hmi-shell.view-wide .header-control-area .header-unified-status .motion-inhibit-reason {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 1700px) {
+  .hmi-header,
+  .hmi-shell.view-wide .hmi-header { grid-template-columns: minmax(0, 1fr); }
+  .hmi-header .header-title { display: none; }
+}
+
+@media (max-width: 900px) {
+  .hmi-shell,
+  .hmi-shell.view-wide { grid-template-rows: 238px minmax(0, 1fr) 38px; }
+
+  .hmi-header,
+  .hmi-shell.view-wide .hmi-header { min-height: 238px; }
+
+  .header-control-area .safety-strip,
+  .hmi-shell.view-wide .header-control-area .safety-strip {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .header-unified-status { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
