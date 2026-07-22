@@ -1443,6 +1443,7 @@
     const idle = MS.online && !MS.pending && !MS.payload?.busy;
     el("visual-load-preview").disabled = !validSlot || !idle;
     el("visual-send-motion").disabled = !validSlot;
+    el("visual-slot-goto").disabled = !validSlot || !idle || Boolean(motionInhibitReason(true));
     el("visual-edit-enable").disabled = !idle || MS.visualEditMode;
     el("visual-slot-load-current").disabled = !MS.visualEditMode || !idle || !allAxesHomed();
     el("visual-slot-save").disabled = !MS.visualEditMode || !idle || !MS.visualEditorDirty;
@@ -1467,6 +1468,69 @@
       log(`Visualization preview rejected: ${humanizeError(err.message)}`, "error", "INTERLOCK");
     }
     renderVisualizationV32();
+  }
+
+  async function gotoVisualSlot() {
+    const code = MS.visualTargetSlot || MS.selectedSlotCode || "1";
+    const slot = MS.slots[code] || {};
+    if (!visualSlotIsValid(slot) || slotStatus(slot) !== "ready") {
+      toast(`Slot ${code} has no valid saved position.`, "error");
+      return;
+    }
+    const inhibitReason = motionInhibitReason(true);
+    if (inhibitReason) {
+      toast(inhibitReason, "error");
+      log(`Visualization GOTO Slot ${code} blocked: ${inhibitReason}`, "error", "INTERLOCK");
+      return;
+    }
+
+    const payload = {
+      x_mm: Number(slot.x_mm),
+      y_mm: Number(slot.y_mm),
+      z_mm: Number(slot.z_mm),
+      speed_mm_s: Number(el("target-speed")?.value || 10) * (MS.feedOverridePct / 100),
+      timeout_s: Number(el("move-timeout")?.value || 30),
+      acceleration_mm_s2: Number(el("move-acceleration")?.value || 80),
+      deceleration_mm_s2: Number(el("move-deceleration")?.value || 80),
+    };
+
+    try {
+      const preview = await apiCall("/api/motion/preview", "POST", payload);
+      MS.visualPreview = preview.plan;
+      renderVisualizationV32();
+      const duration = Number(preview.plan?.duration_s);
+      const confirmation = [
+        `Move machine to Slot ${code}?`,
+        `X ${fmtPos(slot.x_mm)} mm · Y ${fmtPos(slot.y_mm)} mm · Z ${fmtPos(slot.z_mm)} mm`,
+        `Speed ${fmt(payload.speed_mm_s, 1)} mm/s${Number.isFinite(duration) ? ` · Estimated ${fmtTime(duration)} s` : ""}`,
+        "Confirm the travel area is clear before continuing.",
+      ].join("\n");
+      if (!window.confirm(confirmation)) {
+        toast(`GOTO Slot ${code} cancelled. Preview remains available.`, "");
+        log(`Visualization GOTO Slot ${code} cancelled after preview`, "info", "MOTION");
+        return;
+      }
+
+      const armed = await apiCall("/api/motion/arm", "POST", payload);
+      const requestId = globalThis.crypto?.randomUUID?.() || `visual-slot-${code}-${Date.now()}`;
+      const result = await command(`GOTO Slot ${code}`, "/api/motion/execute", {
+        arm_token: armed.arm_token,
+        request_id: requestId,
+      }, {
+        requireHome: true,
+        timeoutMs: Math.max(15000, (Number(payload.timeout_s) + 10) * 1000),
+      });
+      if (result) {
+        MS.visualPreview = null;
+        log(`Visualization GOTO Slot ${code} completed`, "info", "MOTION");
+      }
+    } catch (err) {
+      const message = humanizeError(err.message);
+      toast(message, "error");
+      log(`Visualization GOTO Slot ${code} rejected: ${message}`, "error", "INTERLOCK");
+    } finally {
+      renderVisualizationV32();
+    }
   }
 
   function sendVisualTargetToMotion() {
@@ -1999,7 +2063,7 @@
       if (code) executeArmedMotion(`Go to validated slot ${code}`);
     });
 
-    /* --- Visualization is view/preview only; slot click never commands motion --- */
+    /* --- Visualization slot click selects only; GOTO requires an explicit button press. --- */
     el("visual-slot-grid").addEventListener("click", (event) => {
       const slotButton = event.target.closest("[data-visual-slot]");
       if (!slotButton) return;
@@ -2022,6 +2086,7 @@
     }));
     el("visual-slot-load-current").addEventListener("click", loadCurrentIntoVisualSlot);
     el("visual-slot-save").addEventListener("click", saveVisualSlotV32);
+    el("visual-slot-goto").addEventListener("click", gotoVisualSlot);
     el("visual-load-preview").addEventListener("click", previewVisualSlot);
     el("visual-send-motion").addEventListener("click", sendVisualTargetToMotion);
     el("visual-edit-enable").addEventListener("click", () => setVisualEditMode(true));

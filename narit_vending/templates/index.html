@@ -8,7 +8,7 @@
   <link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='favicon-transparent-large.png') }}?v=20260721_v12">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=20260722_v32">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=20260722_v33">
 </head>
 <body>
   <div class="hmi-shell">
@@ -486,6 +486,7 @@
               <div><span>Homing Requirement</span><strong id="visual-slot-homing">UNKNOWN</strong></div>
             </div>
             <div class="visual-inspector-actions">
+              <button class="btn-execute visual-goto-slot" id="visual-slot-goto">GOTO SLOT</button>
               <button class="btn-secondary" id="visual-load-preview">LOAD AS PREVIEW</button>
               <button class="btn-secondary" id="visual-send-motion">SEND TO MOTION CONTROL</button>
               <button class="btn-arm" id="visual-edit-enable">ENABLE EDIT MODE</button>
@@ -798,6 +799,6 @@
   <!-- Toast notification -->
   <div class="toast" id="toast" role="status"></div>
 
-  <script src="{{ url_for('static', filename='app.js') }}?v=20260722_v32"></script>
+  <script src="{{ url_for('static', filename='app.js') }}?v=20260722_v33"></script>
 </body>
 </html>

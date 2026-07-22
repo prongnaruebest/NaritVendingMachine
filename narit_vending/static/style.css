@@ -4898,6 +4898,7 @@ select.slot-filter {
 .visual-slot-detail-grid strong { display: block; margin-top: 4px; overflow: hidden; color: var(--text-1); font: 700 10px var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }
 .visual-inspector-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; margin-top: 8px; }
 .visual-inspector-actions button { min-height: 39px; padding: 7px; font-size: 10px; }
+.visual-inspector-actions .visual-goto-slot { grid-column: 1 / -1; min-height: 46px; font-size: 13px; letter-spacing: .08em; }
 
 .visual-trajectory-details {
   min-height: 92px;
