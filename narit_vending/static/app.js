@@ -27,12 +27,13 @@
     lastError: "",
 
     // Validation state
-    validation: { valid: false, message: "Target not validated.", plan: null },
+    validation: { valid: false, stage: "idle", message: "Target not validated.", plan: null, axes: {}, armToken: null },
 
     // UI state
     feedOverridePct: 100,   // 0–100, displayed
     selectedJogStep: 1.0,
     selectedJogSpeed: 15.0,
+    keyboardJogEnabled: false,
     selectedSlotCode: "",
     visualTargetSlot: "",
     slotEditorDirty: false,
@@ -160,7 +161,7 @@
   }
 
   function canJogAxis() { return motionInhibitReason(false) === ""; }
-  function canExecuteMove() { return MS.validation.valid && motionInhibitReason(true) === ""; }
+  function canExecuteMove() { return MS.validation.valid && MS.validation.stage === "armed" && motionInhibitReason(true) === ""; }
   function canHomeAxis() { return motionInhibitReason(false) === ""; }
 
   /* ── SLOT STATUS ────────────────────────────────────────────── */
@@ -172,9 +173,9 @@
   }
 
   /* ── API LAYER ──────────────────────────────────────────────── */
-  async function apiCall(path, method = "GET", body) {
+  async function apiCall(path, method = "GET", body, timeoutMs = 8000) {
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 8000);
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
     try {
       const res = await fetch(path, {
         method,
@@ -263,7 +264,7 @@
     log(`${label} requested`, "info", "COMMAND");
 
     try {
-      const data = await apiCall(path, "POST", body);
+      const data = await apiCall(path, "POST", body, opts.timeoutMs || 8000);
       if (!opts.silent) toast(`${label} — accepted`, "ok");
       log(`${label} accepted`, "info", "COMMAND");
       if (data.plan) renderPlan(data.plan);
@@ -292,9 +293,15 @@
       if (v !== "" && v !== null && v !== undefined) body[`${a}_mm`] = Number(v);
     });
     const spd = el("target-speed")?.value;
-    const time = el("move-time")?.value;
+    const time = el("target-duration")?.value;
+    const timeout = el("move-timeout")?.value;
+    const acceleration = el("move-acceleration")?.value;
+    const deceleration = el("move-deceleration")?.value;
     if (spd) body.speed_mm_s = Number(spd);
     if (time) body.time_s = Number(time);
+    if (timeout) body.timeout_s = Number(timeout);
+    if (acceleration) body.acceleration_mm_s2 = Number(acceleration);
+    if (deceleration) body.deceleration_mm_s2 = Number(deceleration);
     // Apply feed override
     if (body.speed_mm_s) {
       body.speed_mm_s = body.speed_mm_s * (MS.feedOverridePct / 100);
@@ -317,7 +324,7 @@
   function targetSpeedPayload() {
     const body = {};
     const spd = el("target-speed")?.value || el("move-speed")?.value;
-    const time = el("move-time")?.value;
+    const time = el("target-duration")?.value;
     if (spd) body.speed_mm_s = Number(spd) * (MS.feedOverridePct / 100);
     if (time) body.time_s = Number(time);
     return body;
@@ -327,22 +334,22 @@
   async function validateMove(showToast = true) {
     const payload = buildMovePayload();
     if (!Object.keys(payload).some((k) => k.endsWith("_mm"))) {
-      setValidation(false, "TARGET INVALID — enter at least one axis coordinate.");
+      setValidation(false, "invalid", "TARGET INVALID — enter at least one axis coordinate.");
       if (showToast) toast("Enter at least one target coordinate.", "error");
       return null;
     }
     try {
-      const data = await apiCall("/api/plan/move", "POST", payload);
+      const data = await apiCall("/api/motion/validate", "POST", payload);
       const plan = data.plan;
-      setValidation(true, "TARGET VALID — move may execute safely.", plan);
+      setValidation(true, "validated", "TARGET VALID — generate preview before arming.", plan, data.axes || {});
       renderPreview(plan);
       renderPlan(plan);
-      if (showToast) toast("Target validated — ready to execute.", "ok");
+      if (showToast) toast("Target validated — continue to PREVIEW.", "ok");
       log("Target validation passed", "info", "MOTION");
       return plan;
     } catch (err) {
       const msg = `TARGET INVALID — ${humanizeError(err.message)}`;
-      setValidation(false, msg);
+      setValidation(false, "invalid", msg);
       renderPreview(null);
       if (showToast) toast(msg, "error");
       log(msg, "error", "MOTION");
@@ -350,12 +357,77 @@
     }
   }
 
-  function setValidation(valid, message, plan = null) {
-    MS.validation = { valid, message, plan };
+  async function previewMove(showToast = true) {
+    if (MS.validation.stage !== "validated") {
+      const validated = await validateMove(showToast);
+      if (!validated) return null;
+    }
+    try {
+      const data = await apiCall("/api/motion/preview", "POST", buildMovePayload());
+      setValidation(true, "previewed", "PREVIEW READY — verify trajectory and ARM MOVE.", data.plan, data.axes || {});
+      renderPreview(data.plan);
+      renderPlan(data.plan);
+      if (showToast) toast("Trajectory preview ready.", "ok");
+      return data.plan;
+    } catch (err) {
+      setValidation(false, "invalid", `PREVIEW FAILED — ${humanizeError(err.message)}`);
+      if (showToast) toast(humanizeError(err.message), "error");
+      return null;
+    }
+  }
+
+  async function armMove(showToast = true) {
+    if (MS.validation.stage !== "previewed") {
+      const preview = await previewMove(showToast);
+      if (!preview) return null;
+    }
+    try {
+      const data = await apiCall("/api/motion/arm", "POST", buildMovePayload());
+      setValidation(true, "armed", `MOVE ARMED — token expires in ${data.expires_in_s || 20} seconds.`, data.plan, data.axes || {}, data.arm_token);
+      if (showToast) toast("Move armed — press EXECUTE when the travel area is clear.", "ok");
+      log("Move armed after backend safety recheck", "info", "MOTION");
+      return data;
+    } catch (err) {
+      setValidation(false, "invalid", `ARM REJECTED — ${humanizeError(err.message)}`);
+      if (showToast) toast(humanizeError(err.message), "error");
+      return null;
+    }
+  }
+
+  async function executeArmedMotion(label = "Execute move") {
+    if (MS.validation.stage !== "armed" || !MS.validation.armToken) {
+      toast("Move is not armed — complete VALIDATE, PREVIEW and ARM first.", "error");
+      return null;
+    }
+    const requestId = globalThis.crypto?.randomUUID?.() || `cmd-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const timeoutSeconds = Number(el("move-timeout")?.value || 30);
+    const result = await command(label, "/api/motion/execute", {
+      arm_token: MS.validation.armToken,
+      request_id: requestId,
+    }, { requireHome: true, timeoutMs: Math.max(15000, (timeoutSeconds + 10) * 1000) });
+    if (result) invalidateMotionWorkflow("Move completed — target must be validated again.");
+    return result;
+  }
+
+  function invalidateMotionWorkflow(message = "Target changed — validate again.") {
+    setValidation(false, "idle", message);
+    renderPreview(null);
+    renderPlan(null);
+  }
+
+  function setValidation(valid, stage, message, plan = null, axes = {}, armToken = null) {
+    MS.validation = { valid, stage, message, plan, axes, armToken };
     const box = el("validation-box");
     if (box) {
-      box.className = `validation-message ${valid ? "valid" : message !== "Target not validated." ? "invalid" : ""}`;
+      box.className = `validation-message ${valid ? "valid" : stage === "invalid" ? "invalid" : ""}`;
       box.textContent = message;
+    }
+    const axesNode = el("motion-validation-axes");
+    if (axesNode) {
+      const entries = Object.entries(axes);
+      axesNode.innerHTML = entries.length
+        ? entries.map(([axis, result]) => `<span><b>${esc(axis.toUpperCase())}</b> HOME ${result.homed ? "PASS" : "FAIL"} · LIMIT ${esc(result.soft_limit || "--")} · PULSE ${fmt(result.pulse_frequency_hz, 0)} Hz · DRIVE ${esc(result.drive_feedback || "NO DATA")}</span>`).join("")
+        : "Per-axis safety validation pending.";
     }
     updateExecuteButton();
   }
@@ -364,8 +436,12 @@
     const btn = el("absolute-move");
     if (!btn) return;
     btn.disabled = !canExecuteMove();
-    btn.textContent = MS.payload?.busy ? "MOVING..." : "EXECUTE MOVE";
+    btn.textContent = MS.payload?.busy ? "MOVING..." : "4 EXECUTE";
     btn.className = MS.payload?.busy ? "btn-execute btn-executing" : "btn-execute";
+    const previewButton = el("plan-move");
+    if (previewButton) previewButton.disabled = MS.validation.stage !== "validated";
+    const armButton = el("arm-move");
+    if (armButton) armButton.disabled = MS.validation.stage !== "previewed" || Boolean(MS.payload?.busy);
   }
 
   /* ── RENDER: MOVE PREVIEW ───────────────────────────────────── */
@@ -385,7 +461,7 @@
       });
       setText("prev-dist", "--- mm");
       setText("prev-time", "--- s");
-      setText("prev-speed", "--- mm/s");
+      setText("prev-master", "---");
       return;
     }
 
@@ -405,8 +481,7 @@
 
     setText("prev-dist", `${fmtPos(plan.total_distance_mm)} mm`);
     setText("prev-time", `${fmtTime(plan.duration_s)} s`);
-    const firstAxis = Object.values(plan.axes || {})[0];
-    setText("prev-speed", firstAxis ? `${fmtSpd(firstAxis.speed_mm_s)} mm/s` : "--- mm/s");
+    setText("prev-master", plan.master_axis ? `${String(plan.master_axis).toUpperCase()} AXIS` : "---");
   }
 
   /* ── RENDER: PLAN READOUT ───────────────────────────────────── */
@@ -416,10 +491,10 @@
     if (!plan) { node.textContent = "Preview not generated."; return; }
     const mode = String(plan.mode || "speed").toUpperCase();
     const lines = Object.values(plan.axes || {}).map((item) =>
-      `${item.axis.toUpperCase()}: ${fmtPos(item.distance_mm)} mm · ${fmtSteps(item.steps)} steps · ${fmtSpd(item.speed_mm_s)} mm/s · ${fmtTime(item.duration_s)} s`
+      `${item.axis.toUpperCase()}: ${fmtPos(item.distance_mm)} mm · ${fmtSteps(item.steps)} pulses · ${fmt(item.pulse_hz, 0)} Hz · ${fmtSpd(item.speed_mm_s)} mm/s`
     ).join("\n");
     node.innerHTML = `<strong>${esc(mode)} PLAN</strong>` +
-      `<br>Dist: ${fmtPos(plan.total_distance_mm)} mm · Time: ${fmtTime(plan.duration_s)} s · Steps: ${fmtSteps(plan.master_steps)}`+
+      `<br>${esc(plan.profile || "TRAPEZOIDAL")} · Master ${esc(String(plan.master_axis || "--").toUpperCase())} · Dist ${fmtPos(plan.total_distance_mm)} mm · Time ${fmtTime(plan.duration_s)} s · Pulses ${fmtSteps(plan.master_steps)}`+
       (lines ? `<br><small style="color:var(--text-3)">${esc(lines)}</small>` : "");
   }
 
@@ -430,7 +505,8 @@
       const data = getAxis(a);
       const cfg  = axisCfg[a] || {};
       const pos  = Number(data.position_mm ?? 0);
-      const tgt  = MS.validation.plan?.axes?.[a]?.target_mm ?? pos;
+      const axisPlan = MS.validation.plan?.axes?.[a];
+      const tgt  = axisPlan?.target_mm ?? pos;
       const max  = cfg.max_travel_mm || 1;
       const pct  = Math.max(0, Math.min((pos / max) * 100, 100));
 
@@ -448,6 +524,13 @@
       // Target / steps
       setText(`axis-tgt-${a}`, fmtPos(tgt));
       setText(`axis-steps-${a}`, fmtSteps(data.position_steps));
+      const delta = Number(tgt) - pos;
+      setText(`axis-delta-${a}`, fmtDelta(delta).text);
+      setText(`axis-direction-${a}`, Math.abs(delta) < 0.001 ? "IDLE" : delta > 0 ? "+ FORWARD" : "− REVERSE");
+      const programmedSpeed = Number(el("target-speed")?.value || 0);
+      const effectiveSpeed = axisPlan?.speed_mm_s;
+      setText(`axis-speed-${a}`, programmedSpeed > 0 ? `${fmtSpd(programmedSpeed)} / ${effectiveSpeed == null ? "--" : fmtSpd(effectiveSpeed)}` : "-- / --");
+      setText(`axis-drive-${a}`, axisPlan?.drive_status ? `${axisPlan.drive_status} / ${axisPlan.following_error_mm == null ? "NO DATA" : fmtPos(axisPlan.following_error_mm)}` : "NO DATA");
 
       // Limits
       const limitMinNode = el(`axis-lim-min-${a}`);
@@ -503,7 +586,9 @@
 
       const statusText =
         effectivePhase === "passed"    ? "HOMED ✓" :
-        effectivePhase === "homing"    ? "HOMING..." :
+        effectivePhase === "searching" ? "SEARCHING" :
+        effectivePhase === "backoff"   ? "BACKOFF" :
+        effectivePhase === "completed" ? "COMPLETED" :
         effectivePhase === "failed"    ? "FAILED ✗" :
         effectivePhase === "waiting"   ? "QUEUED" :
         "NOT HOMED";
@@ -747,7 +832,7 @@
     const estopActive = Boolean(status.estop);
 
     // Controller
-    const ctrlNode = el("strip-controller");
+    const ctrlNode = document.getElementById("strip-controller");
     if (ctrlNode) {
       ctrlNode.className = `safety-ind-value ${MS.online ? "ok" : "fault"}`;
       ctrlNode.innerHTML = `<span class="status-dot"></span> ${MS.online ? "ONLINE" : "OFFLINE"}`;
@@ -896,6 +981,25 @@
       `Command: ${cmd}  |  Motion: ${motionState}  |  ${op.message || "Ready"}`);
   }
 
+  function renderMotionCommand() {
+    const command = MS.payload?.motion_command || {};
+    const operation = getOperation();
+    const elapsed = command.elapsed_s == null ? NaN : Number(command.elapsed_s);
+    const estimate = command.estimated_duration_s == null ? NaN : Number(command.estimated_duration_s);
+    const remaining = Number.isFinite(elapsed) && Number.isFinite(estimate)
+      ? Math.max(estimate - elapsed, 0)
+      : NaN;
+    setText("motion-command-id", command.command_id ? String(command.command_id).slice(0, 12).toUpperCase() : "NONE");
+    setText("motion-command-phase", `${String(command.command_type || "IDLE").toUpperCase()} / ${String(operation.phase || "READY").toUpperCase()}`);
+    setText("motion-command-time", `${Number.isFinite(elapsed) ? fmtTime(elapsed) + " s" : "--"} / ${Number.isFinite(remaining) ? fmtTime(remaining) + " s" : "NO DATA"}`);
+    setText("motion-command-trajectory", String(command.trajectory_state || "READY").toUpperCase());
+    setText("motion-command-queue", command.queue_depth ?? 0);
+    const controlledStop = el("controlled-stop");
+    if (controlledStop) controlledStop.disabled = !MS.online || !MS.payload?.busy;
+    const abort = el("abort-motion");
+    if (abort) abort.disabled = !MS.online || !MS.payload?.busy;
+  }
+
   /* ── RENDER: BUTTON STATES ──────────────────────────────────── */
   function updateButtonStates() {
     const canJog  = canJogAxis();
@@ -912,10 +1016,13 @@
     const canConfigureSlot = MS.online && !MS.pending && !MS.payload?.busy;
     const canUseSlot = motionAllowed(true);
     const selectedSlotReady = slotStatus(selectedSlot) === "ready";
-    if (el("selected-slot-load-current")) el("selected-slot-load-current").disabled = !MS.online;
-    if (el("selected-slot-save")) el("selected-slot-save").disabled = !canConfigureSlot;
-    if (el("selected-slot-goto")) el("selected-slot-goto").disabled = !canUseSlot;
-    if (el("selected-slot-dispense")) el("selected-slot-dispense").disabled = !canUseSlot || !selectedSlotReady;
+    const armedSlotMatches = MS.validation.stage === "armed" && AXES.every((axis) => {
+      const plannedTarget = MS.validation.plan?.axes?.[axis]?.target_mm;
+      return plannedTarget != null && Math.abs(Number(plannedTarget) - Number(selectedSlot[`${axis}_mm`])) < 0.001;
+    });
+    el("selected-slot-load-target").disabled = !MS.online || !selectedSlotReady;
+    el("selected-slot-validate").disabled = !canUseSlot || !selectedSlotReady;
+    el("selected-slot-goto").disabled = !canUseSlot || !selectedSlotReady || !armedSlotMatches;
     if (el("visual-slot-load-current")) el("visual-slot-load-current").disabled = !canUseSlot;
     if (el("visual-slot-save")) el("visual-slot-save").disabled = !canConfigureSlot;
     if (el("visual-slot-goto")) el("visual-slot-goto").disabled = !canUseSlot || slotStatus(MS.slots[MS.visualTargetSlot || MS.selectedSlotCode || "1"] || {}) !== "ready";
@@ -943,7 +1050,8 @@
   /* ── RENDER: FEED OVERRIDE ──────────────────────────────────── */
   function updateFeedOverride() {
     setText("fo-pct-display", String(MS.feedOverridePct));
-    setText("fo-override-val", `${MS.feedOverridePct} %`);
+    const overrideValue = document.getElementById("fo-override-val");
+    if (overrideValue) overrideValue.textContent = `${MS.feedOverridePct} %`;
 
     // Programmed speed from the target speed field
     const progSpd = Number(el("target-speed")?.value || el("move-speed")?.value || 0);
@@ -1393,6 +1501,7 @@
     updateFooter();
     updateButtonStates();
     updateFeedOverride();
+    renderMotionCommand();
     renderWorkspacePages();
   }
 
@@ -1400,6 +1509,9 @@
     trackDashboardOperation(payload);
     MS.payload = payload;
     MS.slots   = payload.slots || {};
+    if (MS.validation.stage === "armed" && !payload.motion_command?.armed && !payload.busy && !MS.pending) {
+      invalidateMotionWorkflow("Arm token expired — validate and arm again.");
+    }
 
     renderAxisCards();
     renderHomingSequence();
@@ -1523,10 +1635,32 @@
       });
     });
 
+    el("jog-keyboard-enable").addEventListener("change", (event) => {
+      MS.keyboardJogEnabled = event.target.checked;
+      toast(`Keyboard jog ${MS.keyboardJogEnabled ? "enabled" : "disabled"}.`, MS.keyboardJogEnabled ? "ok" : "");
+    });
+    document.addEventListener("keydown", (event) => {
+      if (!MS.keyboardJogEnabled || MS.currentView !== "motion" || event.repeat) return;
+      const tagName = document.activeElement?.tagName?.toLowerCase();
+      if (["input", "select", "textarea", "button"].includes(tagName) || document.activeElement?.isContentEditable) return;
+      const keyMap = {
+        ArrowLeft: ["x", -1], ArrowRight: ["x", 1],
+        ArrowDown: ["y", -1], ArrowUp: ["y", 1],
+        PageDown: ["z", -1], PageUp: ["z", 1],
+      };
+      const move = keyMap[event.key];
+      if (!move) return;
+      event.preventDefault();
+      const [axis, direction] = move;
+      command(`Keyboard jog ${axis.toUpperCase()} ${direction > 0 ? "+" : "−"}`,
+        "/api/jog", buildJogPayload(axis, direction), { silent: true });
+    });
+
     /* --- Feed override presets --- */
     $$(".fo-preset-btn").forEach((btn) => {
       btn.addEventListener("click", () => {
         MS.feedOverridePct = Number(btn.dataset.fo);
+        if (MS.validation.stage !== "idle") invalidateMotionWorkflow("Feed override changed — validate again.");
         updateFeedOverride();
       });
     });
@@ -1545,42 +1679,22 @@
     /* --- Target positioning workflow --- */
     el("validate-move").addEventListener("click", () => validateMove(true));
 
-    el("plan-move").addEventListener("click", async () => {
-      const plan = await validateMove(false);
-      if (plan) {
-        toast("Move preview updated.", "ok");
-        log("Move preview generated", "info", "MOTION");
-      } else {
-        toast(MS.validation.message, "error");
-      }
+    el("plan-move").addEventListener("click", () => previewMove(true));
+    el("arm-move").addEventListener("click", () => armMove(true));
+
+    el("absolute-move").addEventListener("click", () => executeArmedMotion("Execute validated move"));
+    el("controlled-stop").addEventListener("click", () => {
+      command("Controlled stop", "/api/motion/controlled-stop", undefined, { isStop: true, noCheck: true });
+    });
+    el("abort-motion").addEventListener("click", () => {
+      command("Abort motion", "/api/motion/abort", undefined, { isStop: true, noCheck: true });
     });
 
-    el("absolute-move").addEventListener("click", async () => {
-      if (!MS.validation.valid) {
-        const plan = await validateMove(true);
-        if (!plan) return;
-      }
-      command("Execute move", "/api/move", buildMovePayload(), { requireHome: true });
-    });
-
-    /* --- Save speed to controller --- */
-    el("apply-speed").addEventListener("click", () => {
-      const v = el("target-speed")?.value || el("move-speed")?.value;
-      if (!v) { toast("Enter travel speed first.", "error"); return; }
-      const eff = Number(v) * (MS.feedOverridePct / 100);
-      if (el("move-speed")) el("move-speed").value = v;
-      updateFeedOverride();
-      command(`Save travel speed ${eff} mm/s`, "/api/speed",
-        { speed_mm_s: eff }, { isStop: true, noCheck: true });
-    });
-
-    /* --- Save timeout to controller --- */
-    el("apply-time").addEventListener("click", () => {
-      const v = el("move-time")?.value;
-      if (!v) { toast("Enter move timeout first.", "error"); return; }
-      command(`Save move timeout ${v} s`, "/api/timer",
-        { duration_s: Number(v) }, { isStop: true, noCheck: true });
-    });
+    ["move-x", "move-y", "move-z", "target-speed", "target-duration", "move-timeout", "move-acceleration", "move-deceleration"]
+      .forEach((id) => el(id).addEventListener("input", () => {
+        if (MS.validation.stage !== "idle") invalidateMotionWorkflow();
+        updateFeedOverride();
+      }));
 
     /* --- Slot search / filter --- */
     el("slot-search").addEventListener("input", renderSlotTable);
@@ -1592,25 +1706,24 @@
       MS.visualTargetSlot = event.target.value;
       MS.slotEditorDirty = false;
       loadSelectedSlotEditor(true);
+      invalidateMotionWorkflow("Slot changed — load and validate the target.");
       updateButtonStates();
     });
-    ["selected-slot-x", "selected-slot-y", "selected-slot-z"]
-      .forEach((id) => el(id).addEventListener("input", () => { MS.slotEditorDirty = true; }));
-    el("selected-slot-load-current").addEventListener("click", loadCurrentIntoSelectedSlot);
-    el("selected-slot-save").addEventListener("click", saveSelectedSlot);
+    el("selected-slot-load-target").addEventListener("click", () => {
+      const code = selectedSlotCode();
+      const slot = MS.slots[code] || {};
+      AXES.forEach((axis) => { el(`move-${axis}`).value = Number(slot[`${axis}_mm`] || 0).toFixed(3); });
+      invalidateMotionWorkflow(`Slot ${code} loaded — validate before movement.`);
+      toast(`Slot ${code} coordinates loaded into Target Positioning.`, "ok");
+    });
+    el("selected-slot-validate").addEventListener("click", async () => {
+      el("selected-slot-load-target").click();
+      const plan = await validateMove(true);
+      if (plan) await previewMove(true);
+    });
     el("selected-slot-goto").addEventListener("click", () => {
       const code = selectedSlotCode();
-      if (code) {
-        MS.visualTargetSlot = code;
-        command(`Go to slot ${code}`, `/api/slots/${code}/goto`, targetSpeedPayload(), { requireHome: true });
-      }
-    });
-    el("selected-slot-dispense").addEventListener("click", () => {
-      const code = selectedSlotCode();
-      if (code) {
-        MS.visualTargetSlot = code;
-        command(`Dispense slot ${code}`, "/api/start", { slot: code, ...targetSpeedPayload() }, { requireHome: true });
-      }
+      if (code) executeArmedMotion(`Go to validated slot ${code}`);
     });
 
     /* --- Visualization slot map: select, edit, save, then move explicitly --- */

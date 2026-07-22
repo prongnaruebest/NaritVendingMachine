@@ -4519,3 +4519,207 @@ select.slot-filter {
   .dashboard-readiness-item strong { font-size: 10px; }
   .dashboard-axis-row > div > strong { font-size: 10px; }
 }
+
+/* v31 industrial motion workflow and command safety */
+.workspace-view[data-view-page="motion"] {
+  min-width: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.workspace-view[data-view-page="motion"] .panel,
+.workspace-view[data-view-page="motion"] .feed-override-card,
+.hmi-shell:not(.view-wide) .right-panel .rpz {
+  border-color: #294967;
+  background: linear-gradient(145deg, rgba(20, 38, 58, .98), rgba(12, 25, 40, .98));
+}
+
+.workspace-view[data-view-page="motion"] .panel-title,
+.hmi-shell:not(.view-wide) .right-panel .rpz-title {
+  font-size: 16px;
+  letter-spacing: .01em;
+}
+
+.motion-target-grid {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 9px !important;
+  padding: 12px 14px !important;
+}
+
+.motion-target-grid .target-col { min-width: 0; }
+.motion-target-grid .field-label { min-height: 16px; font-size: 12px !important; }
+.motion-target-grid .hmi-input { min-height: 36px; font-size: 15px !important; }
+
+.target-actions {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.target-actions button {
+  min-height: 38px;
+  padding: 8px 10px;
+  font-size: 13px !important;
+  font-weight: 800;
+}
+
+.btn-arm {
+  border: 1px solid #d18c15;
+  border-radius: 5px;
+  background: #5a3c0b;
+  color: #ffc45c;
+}
+
+.btn-arm:not(:disabled):hover { background: #765112; }
+.btn-arm:disabled { opacity: .38; cursor: not-allowed; }
+
+.motion-preview-grid {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(230px, .85fr);
+  gap: 10px;
+  padding: 0 14px 14px;
+}
+
+.motion-validation-stack { min-width: 0; display: grid; align-content: start; gap: 7px; }
+.motion-validation-stack .validation-message { font-size: 11px; line-height: 1.45; }
+#move-plan { min-height: 54px; overflow: auto; color: var(--text-2); font: 10px/1.55 var(--font-mono); }
+
+.motion-validation-axes {
+  min-height: 0;
+  max-height: 74px;
+  display: grid;
+  gap: 3px;
+  overflow-y: auto;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: rgba(6, 17, 29, .58);
+  color: var(--text-2);
+  font: 9px/1.35 var(--font-mono);
+}
+
+.motion-validation-axes span { display: block; }
+.motion-validation-axes b { color: var(--green); }
+
+.motion-command-card {
+  grid-column: 1 / -1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 12px;
+  padding: 9px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: rgba(6, 17, 29, .62);
+}
+
+.motion-command-card > .preview-table-label { grid-column: 1 / -1; }
+.motion-command-grid {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr) max-content minmax(0, 1fr);
+  gap: 4px 8px;
+  align-items: center;
+  font-size: 10px;
+}
+.motion-command-grid span { color: var(--text-3); }
+.motion-command-grid strong { overflow: hidden; color: var(--accent-cyan); font-family: var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }
+
+.motion-stop-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-self: center; }
+.motion-stop-actions button { min-height: 38px; padding: 8px 12px; font-size: 11px; font-weight: 900; white-space: nowrap; }
+.btn-controlled-stop { border: 1px solid #d18c15; border-radius: 5px; background: #4c350e; color: #ffc45c; }
+.btn-abort { border: 1px solid #ff4d5e; border-radius: 5px; background: #5b1822; color: #ff8290; }
+.motion-stop-actions button:disabled { opacity: .35; cursor: not-allowed; }
+
+.motion-axis-panel .axis-meta {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 3px;
+}
+.motion-axis-panel .axis-kv { min-width: 0; font-size: 10px !important; }
+.motion-axis-panel .axis-kv strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.home-seq-step.searching,
+.home-seq-step.backoff,
+.home-seq-step.completed { border-color: var(--accent-cyan); background: rgba(0, 180, 255, .08); }
+.home-seq-step.searching .home-seq-status,
+.home-seq-step.backoff .home-seq-status,
+.home-seq-step.completed .home-seq-status { color: var(--accent-cyan); }
+
+.jog-keyboard-switch {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 9px;
+  color: var(--text-1);
+  font-size: 12px;
+  font-weight: 700;
+}
+.jog-keyboard-switch input { width: 17px; height: 17px; accent-color: var(--accent-cyan); }
+.jog-keyboard-help { display: block; margin-top: 5px; color: var(--text-3); font-size: 9px; line-height: 1.35; }
+.selected-slot-field .hmi-input[readonly] { color: var(--accent-cyan); cursor: default; }
+
+@media (min-width: 1600px) {
+  .motion-target-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .target-actions { grid-column: 1 / -1; }
+  .motion-preview-grid { grid-template-columns: minmax(0, 1fr) minmax(290px, .72fr); }
+}
+
+@media (max-width: 1350px) {
+  .motion-target-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .target-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .motion-preview-grid { grid-template-columns: 1fr; }
+  .motion-command-card { grid-column: auto; grid-template-columns: 1fr; }
+  .motion-command-card > .preview-table-label { grid-column: auto; }
+  .motion-command-grid { grid-template-columns: max-content minmax(0, 1fr); }
+}
+
+@media (min-width: 1200px) and (max-width: 1500px) {
+  .hmi-shell:not(.view-wide) {
+    height: calc(100vh - 20px);
+    min-height: 700px;
+    grid-template-columns: 210px minmax(0, 1fr) 400px;
+    grid-template-rows: 160px minmax(0, 1fr) 38px;
+    grid-template-areas:
+      "sidebar header header"
+      "sidebar workspace right"
+      "sidebar footer footer";
+  }
+
+  .hmi-shell:not(.view-wide) .hmi-header {
+    min-height: 160px;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .hmi-shell:not(.view-wide) .right-panel {
+    width: auto;
+    min-width: 0;
+    display: grid;
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(310px, .9fr) minmax(300px, 1fr);
+    overflow-y: auto;
+  }
+
+  .hmi-shell:not(.view-wide) .rpz-jog,
+  .hmi-shell:not(.view-wide) .rpz-slot-editor {
+    min-height: 0;
+  }
+
+  .hmi-shell:not(.view-wide) .hmi-workspace {
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .hmi-shell:not(.view-wide) .workspace-view[data-view-page="motion"] {
+    height: 100%;
+    overflow-y: auto;
+  }
+
+  .hmi-shell:not(.view-wide) .workspace-view[data-view-page="motion"] > .wz-top {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

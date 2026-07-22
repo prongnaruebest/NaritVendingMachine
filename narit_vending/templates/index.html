@@ -8,7 +8,7 @@
   <link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='favicon-transparent-large.png') }}?v=20260721_v12">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=20260722_v30">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=20260722_v31">
 </head>
 <body>
   <div class="hmi-shell">
@@ -145,7 +145,7 @@
       <div class="wz-top">
         <!-- Feed Override -->
         <div class="feed-override-card">
-          <div class="fo-label">Feed Rate Override</div>
+          <div class="fo-label">Feed Rate Override (Next Command)</div>
           <div class="fo-value">
             <span id="fo-pct-display">100</span><span class="fo-pct">%</span>
           </div>
@@ -160,7 +160,7 @@
             <div class="fo-speed-row"><span>Programmed Speed</span><strong id="fo-prog-speed">-- mm/s</strong></div>
             <div class="fo-speed-row"><span>Effective Speed</span><strong id="fo-eff-speed">-- mm/s</strong></div>
           </div>
-          <p class="fo-help">ปรับความเร็วทุกคำสั่งแบบเปอร์เซ็นต์ โดยไม่เปลี่ยนตำแหน่งเป้าหมาย เช่น 50% = เคลื่อนที่ครึ่งหนึ่งของความเร็วที่กำหนด</p>
+          <p class="fo-help">Scales the programmed speed without changing target position. The current pulse engine applies this value when planning the next command; it does not retime a move already in progress.</p>
         </div>
 
         <!-- Homing Workflow -->
@@ -193,11 +193,11 @@
         <div class="panel-head">
           <div>
             <p class="panel-label">Target Positioning</p>
-            <h2 class="panel-title">Validate · Preview · Execute</h2>
+            <h2 class="panel-title">Validate · Preview · Arm · Execute</h2>
           </div>
           <span class="safety-ind-sub" id="operation-message">Controller ready</span>
         </div>
-        <div class="panel-body">
+        <div class="panel-body motion-target-grid">
           <div class="target-col">
             <div class="field-label">X Coordinate</div>
             <div class="field-input-wrap">
@@ -220,36 +220,53 @@
             </div>
           </div>
           <div class="target-col">
-            <div class="field-label">Speed</div>
+            <div class="field-label">Command Speed</div>
             <div class="field-input-wrap">
-              <input id="target-speed" class="hmi-input" type="number" step="0.5" min="0.1" placeholder="10.0">
+              <input id="target-speed" class="hmi-input" type="number" step="0.5" min="0.1" value="10.0">
               <span class="unit-tag">mm/s</span>
             </div>
           </div>
           <div class="target-col">
-            <div class="field-label">Timeout</div>
+            <div class="field-label">Target Duration (Optional)</div>
             <div class="field-input-wrap">
-              <input id="move-time" class="hmi-input" type="number" step="0.5" min="0.1" placeholder="30.0">
+              <input id="target-duration" class="hmi-input" type="number" step="0.5" min="0.1" placeholder="Auto">
               <span class="unit-tag">sec</span>
             </div>
           </div>
-          <div class="target-col" style="display:flex; flex-direction:column; justify-content:flex-end; gap:6px;">
-            <div style="display:flex; gap:4px;">
-              <button class="btn-secondary" id="validate-move" style="flex:1; padding:6px 4px; font-size:11px;">VALIDATE</button>
-              <button class="btn-secondary" id="plan-move" style="flex:1; padding:6px 4px; font-size:11px;">PREVIEW</button>
+          <div class="target-col">
+            <div class="field-label">Move Timeout</div>
+            <div class="field-input-wrap">
+              <input id="move-timeout" class="hmi-input" type="number" step="0.5" min="0.1" value="30.0">
+              <span class="unit-tag">sec</span>
             </div>
-            <div style="display:flex; gap:4px;">
-              <button class="btn-secondary" id="apply-speed" style="flex:1; padding:4px 2px; font-size:10px;" title="Save travel speed to controller">SAVE SPD</button>
-              <button class="btn-secondary" id="apply-time" style="flex:1; padding:4px 2px; font-size:10px;" title="Save move timeout to controller">SAVE T/O</button>
+          </div>
+          <div class="target-col">
+            <div class="field-label">Acceleration</div>
+            <div class="field-input-wrap">
+              <input id="move-acceleration" class="hmi-input" type="number" step="1" min="1" value="80">
+              <span class="unit-tag">mm/s²</span>
             </div>
-            <button class="btn-execute" id="absolute-move" disabled>EXECUTE MOVE</button>
+          </div>
+          <div class="target-col">
+            <div class="field-label">Deceleration</div>
+            <div class="field-input-wrap">
+              <input id="move-deceleration" class="hmi-input" type="number" step="1" min="1" value="80">
+              <span class="unit-tag">mm/s²</span>
+            </div>
+          </div>
+          <div class="target-actions">
+            <button class="btn-secondary" id="validate-move">1 VALIDATE</button>
+            <button class="btn-secondary" id="plan-move" disabled>2 PREVIEW</button>
+            <button class="btn-arm" id="arm-move" disabled>3 ARM MOVE</button>
+            <button class="btn-execute" id="absolute-move" disabled>4 EXECUTE</button>
           </div>
         </div>
 
-        <div style="padding: 0 14px 12px; display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
-          <div style="display:flex; flex-direction:column; gap:6px;">
+        <div class="motion-preview-grid">
+          <div class="motion-validation-stack">
             <div class="validation-message" id="validation-box">Target not validated.</div>
-            <div class="validation-message" id="move-plan" style="font-size:10px; font-family:var(--font-mono); color:var(--text-2);">Preview not generated.</div>
+            <div class="validation-message" id="move-plan">Preview not generated.</div>
+            <div class="motion-validation-axes" id="motion-validation-axes">Per-axis safety validation pending.</div>
           </div>
           <div class="preview-table">
             <div class="preview-table-label">Position Delta Preview</div>
@@ -257,7 +274,22 @@
             <div class="preview-row"><span>Y</span><div class="pv" id="prev-cur-y">--</div><div class="pv" id="prev-tgt-y">--</div><div class="pd zero" id="prev-delta-y">---</div></div>
             <div class="preview-row"><span>Z</span><div class="pv" id="prev-cur-z">--</div><div class="pv" id="prev-tgt-z">--</div><div class="pd zero" id="prev-delta-z">---</div></div>
             <div class="preview-dist"><span>Est. Trajectory</span><strong id="prev-dist">--- mm</strong></div>
+            <div class="preview-dist"><span>Duration / Master</span><strong><span id="prev-time">--- s</span> · <span id="prev-master">---</span></strong></div>
           </div>
+          <section class="motion-command-card">
+            <div class="preview-table-label">Current Motion Command</div>
+            <div class="motion-command-grid">
+              <span>ID</span><strong id="motion-command-id">NONE</strong>
+              <span>Type / Phase</span><strong id="motion-command-phase">IDLE</strong>
+              <span>Elapsed / Remaining</span><strong id="motion-command-time">-- / --</strong>
+              <span>Trajectory</span><strong id="motion-command-trajectory">READY</strong>
+              <span>Queue</span><strong id="motion-command-queue">0</strong>
+            </div>
+            <div class="motion-stop-actions">
+              <button class="btn-controlled-stop" id="controlled-stop">CONTROLLED STOP</button>
+              <button class="btn-abort" id="abort-motion">ABORT MOTION</button>
+            </div>
+          </section>
         </div>
       </div>
 
@@ -513,6 +545,10 @@
             <div class="axis-meta">
               <div class="axis-kv"><span>Tgt:</span><strong id="axis-tgt-x">0.000</strong></div>
               <div class="axis-kv"><span>Steps:</span><strong id="axis-steps-x">0</strong></div>
+              <div class="axis-kv"><span>Delta:</span><strong id="axis-delta-x">0.000</strong></div>
+              <div class="axis-kv"><span>Direction:</span><strong id="axis-direction-x">IDLE</strong></div>
+              <div class="axis-kv"><span>Cmd / Eff:</span><strong id="axis-speed-x">-- / --</strong></div>
+              <div class="axis-kv"><span>Drive / Error:</span><strong id="axis-drive-x">NO DATA</strong></div>
               <div class="axis-kv"><span>Min Limit:</span><strong id="axis-lim-min-x" class="ok">CLEAR</strong></div>
               <div class="axis-kv"><span>Max Limit:</span><strong id="axis-lim-max-x" class="ok">CLEAR</strong></div>
             </div>
@@ -533,6 +569,10 @@
             <div class="axis-meta">
               <div class="axis-kv"><span>Tgt:</span><strong id="axis-tgt-y">0.000</strong></div>
               <div class="axis-kv"><span>Steps:</span><strong id="axis-steps-y">0</strong></div>
+              <div class="axis-kv"><span>Delta:</span><strong id="axis-delta-y">0.000</strong></div>
+              <div class="axis-kv"><span>Direction:</span><strong id="axis-direction-y">IDLE</strong></div>
+              <div class="axis-kv"><span>Cmd / Eff:</span><strong id="axis-speed-y">-- / --</strong></div>
+              <div class="axis-kv"><span>Drive / Error:</span><strong id="axis-drive-y">NO DATA</strong></div>
               <div class="axis-kv"><span>Min Limit:</span><strong id="axis-lim-min-y" class="ok">CLEAR</strong></div>
               <div class="axis-kv"><span>Max Limit:</span><strong id="axis-lim-max-y" class="ok">CLEAR</strong></div>
             </div>
@@ -553,6 +593,10 @@
             <div class="axis-meta">
               <div class="axis-kv"><span>Tgt:</span><strong id="axis-tgt-z">0.000</strong></div>
               <div class="axis-kv"><span>Steps:</span><strong id="axis-steps-z">0</strong></div>
+              <div class="axis-kv"><span>Delta:</span><strong id="axis-delta-z">0.000</strong></div>
+              <div class="axis-kv"><span>Direction:</span><strong id="axis-direction-z">IDLE</strong></div>
+              <div class="axis-kv"><span>Cmd / Eff:</span><strong id="axis-speed-z">-- / --</strong></div>
+              <div class="axis-kv"><span>Drive / Error:</span><strong id="axis-drive-z">NO DATA</strong></div>
               <div class="axis-kv"><span>Min Limit:</span><strong id="axis-lim-min-z" class="ok">CLEAR</strong></div>
               <div class="axis-kv"><span>Max Limit:</span><strong id="axis-lim-max-z" class="ok">CLEAR</strong></div>
             </div>
@@ -618,6 +662,11 @@
               <button class="rp-preset-btn speed-preset active" data-speed="15"><b>MED</b><small>15 mm/s</small></button>
               <button class="rp-preset-btn speed-preset" data-speed="30"><b>FAST</b><small>30 mm/s</small></button>
             </div>
+            <label class="jog-keyboard-switch">
+              <input id="jog-keyboard-enable" type="checkbox">
+              <span>Keyboard Jog</span>
+            </label>
+            <small class="jog-keyboard-help">Arrow keys: X/Y · Page Up/Down: Z · disabled while typing</small>
           </aside>
         </div>
       </div>
@@ -638,21 +687,21 @@
           <label class="selected-slot-field">
             <span>X Coordinate</span>
             <div class="field-input-wrap">
-              <input id="selected-slot-x" class="hmi-input" type="number" min="0" step="0.1">
+              <input id="selected-slot-x" class="hmi-input" type="number" min="0" step="0.1" readonly>
               <span class="unit-tag">mm</span>
             </div>
           </label>
           <label class="selected-slot-field">
             <span>Y Coordinate</span>
             <div class="field-input-wrap">
-              <input id="selected-slot-y" class="hmi-input" type="number" min="0" step="0.1">
+              <input id="selected-slot-y" class="hmi-input" type="number" min="0" step="0.1" readonly>
               <span class="unit-tag">mm</span>
             </div>
           </label>
           <label class="selected-slot-field">
             <span>Z Coordinate</span>
             <div class="field-input-wrap">
-              <input id="selected-slot-z" class="hmi-input" type="number" min="0" step="0.1">
+              <input id="selected-slot-z" class="hmi-input" type="number" min="0" step="0.1" readonly>
               <span class="unit-tag">mm</span>
             </div>
           </label>
@@ -660,10 +709,9 @@
 
         <div class="selected-slot-current" id="selected-slot-current">Current: X -- · Y -- · Z -- mm</div>
         <div class="selected-slot-actions">
-          <button class="btn-secondary" id="selected-slot-load-current">LOAD CURRENT</button>
-          <button class="btn-slot-save" id="selected-slot-save">SAVE VALUES</button>
-          <button class="btn-slot-goto" id="selected-slot-goto">GO TO SLOT</button>
-          <button class="btn-slot-dispense" id="selected-slot-dispense">DISPENSE</button>
+          <button class="btn-secondary" id="selected-slot-load-target">LOAD TARGET</button>
+          <button class="btn-secondary" id="selected-slot-validate">VALIDATE SLOT</button>
+          <button class="btn-slot-goto" id="selected-slot-goto" disabled>GO TO (ARMED)</button>
         </div>
       </div>
 
@@ -709,6 +757,6 @@
   <!-- Toast notification -->
   <div class="toast" id="toast" role="status"></div>
 
-  <script src="{{ url_for('static', filename='app.js') }}?v=20260722_v30"></script>
+  <script src="{{ url_for('static', filename='app.js') }}?v=20260722_v31"></script>
 </body>
 </html>

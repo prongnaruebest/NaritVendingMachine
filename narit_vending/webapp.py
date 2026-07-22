@@ -4,12 +4,15 @@ import argparse
 import logging
 import math
 import threading
+import time
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
 from flask import Flask, jsonify, render_template, request
 
 from .motion import (
+    ControlledStopError,
     EmergencyStopError,
     LimitTriggeredError,
     MotionError,
@@ -42,6 +45,12 @@ class MotionService:
         self.operation_message = "Controller ready"
         self.operation_axis: str | None = None
         self.homing = {axis: "not_homed" for axis in ("x", "y", "z")}
+        self.command_id: str | None = None
+        self.command_started_monotonic: float | None = None
+        self.command_started_at: str | None = None
+        self.command_estimated_duration_s: float | None = None
+        self.armed_move: dict[str, object] | None = None
+        self.completed_request_ids: dict[str, dict[str, object]] = {}
 
         if self.config_path.exists():
             config = load_machine_config(self.config_path)
@@ -84,15 +93,38 @@ class MotionService:
                     "active_axis": self.operation_axis,
                     "homing": self.homing.copy(),
                 },
+                "motion_command": {
+                    "command_id": self.command_id,
+                    "command_type": self.active_command or None,
+                    "started_at": self.command_started_at,
+                    "elapsed_s": (
+                        round(time.monotonic() - self.command_started_monotonic, 3)
+                        if self.busy and self.command_started_monotonic is not None
+                        else None
+                    ),
+                    "estimated_duration_s": self.command_estimated_duration_s,
+                    "queue_depth": 0,
+                    "trajectory_state": self.operation_phase,
+                    "armed": self._armed_move_status(),
+                },
                 "safety": {
                     "estop_active": controller_status["estop"],
                     "stop_requested": self.controller.stop_requested(),
+                    "controlled_stop_requested": self.controller.controlled_stop_requested(),
                 },
                 "status": controller_status,
                 "slots": slots,
             }
 
-    def _run(self, command_name: str, fn, *, motion_command: bool = True):
+    def _run(
+        self,
+        command_name: str,
+        fn,
+        *,
+        motion_command: bool = True,
+        command_id: str | None = None,
+        estimated_duration_s: float | None = None,
+    ):
         if motion_command and self.controller.stop_requested():
             return {"ok": False, "error": "Motion is stopped; reset alarms before issuing another command"}
         if not self.command_lock.acquire(blocking=False):
@@ -102,6 +134,10 @@ class MotionService:
             with self.lock:
                 self.busy = True
                 self.active_command = command_name
+                self.command_id = command_id or uuid.uuid4().hex
+                self.command_started_monotonic = time.monotonic()
+                self.command_started_at = datetime.now(timezone.utc).isoformat()
+                self.command_estimated_duration_s = estimated_duration_s
                 self.last_error = ""
                 self.operation_phase = "running"
                 self.operation_message = f"Running {command_name.replace('_', ' ')}"
@@ -118,6 +154,15 @@ class MotionService:
                 self.operation_phase = "completed"
                 self.operation_message = f"Completed {command_name.replace('_', ' ')}"
             return {"ok": True, "result": result}
+        except ControlledStopError as exc:
+            with self.lock:
+                self.controller.clear_controlled_stop()
+                self.controller.set_state("idle")
+                self.last_error = ""
+                self.operation_phase = "stopped"
+                self.operation_message = str(exc)
+            _logger.info("Controlled stop: %s", exc)
+            return {"ok": False, "controlled_stop": True, "error": str(exc)}
         except (MotionError, EmergencyStopError, LimitTriggeredError) as exc:
             with self.lock:
                 self.last_error = str(exc)
@@ -144,7 +189,165 @@ class MotionService:
             with self.lock:
                 self.busy = False
                 self.active_command = ""
+                self.command_started_monotonic = None
+                self.command_estimated_duration_s = None
             self.command_lock.release()
+
+    def _armed_move_status(self) -> dict[str, object] | None:
+        if self.armed_move is None:
+            return None
+        expires_at = float(self.armed_move["expires_at"])
+        if time.monotonic() >= expires_at:
+            self.armed_move = None
+            return None
+        return {
+            "arm_token": self.armed_move["arm_token"],
+            "expires_in_s": round(expires_at - time.monotonic(), 1),
+            "plan": self.armed_move["plan"],
+        }
+
+    def _motion_safety_errors(self, *, require_homed: bool = True) -> list[str]:
+        status = self.controller.status()
+        errors: list[str] = []
+        if self.busy:
+            errors.append("Machine is busy with another command")
+        if status["estop"]:
+            errors.append("Emergency stop is active")
+        if self.controller.stop_requested():
+            errors.append("Software stop latch is active; reset alarms first")
+        for axis_name in ("x", "y", "z"):
+            axis = status[axis_name]
+            if require_homed and not axis["is_homed"]:
+                errors.append(f"{axis_name.upper()} axis is not homed")
+            if axis["head_limit"] and axis["tail_limit"]:
+                errors.append(f"{axis_name.upper()} axis has conflicting limit inputs")
+        return errors
+
+    def validate_motion_target(
+        self,
+        *,
+        x_mm: float | None,
+        y_mm: float | None,
+        z_mm: float | None,
+        speed_mm_s: float | None,
+        time_s: float | None,
+        timeout_s: float | None,
+        acceleration_mm_s2: float | None,
+        deceleration_mm_s2: float | None,
+    ) -> dict[str, object]:
+        with self.lock:
+            errors = self._motion_safety_errors(require_homed=True)
+            if errors:
+                raise MotionError("; ".join(errors))
+            plan = self.controller.plan_move(
+                x_mm=x_mm,
+                y_mm=y_mm,
+                z_mm=z_mm,
+                speed_mm_s=speed_mm_s,
+                time_s=time_s,
+            ).to_dict()
+            duration_s = float(plan["duration_s"])
+            if timeout_s is not None:
+                if timeout_s <= 0:
+                    raise MotionError("timeout_s must be greater than 0")
+                if duration_s > timeout_s:
+                    raise MotionError(
+                        f"Estimated trajectory {duration_s:.2f} s exceeds timeout {timeout_s:.2f} s"
+                    )
+
+            requested_acceleration = acceleration_mm_s2
+            requested_deceleration = deceleration_mm_s2
+            axis_details: dict[str, object] = {}
+            for axis_name, axis_plan in plan["axes"].items():
+                config = self.controller.axes()[axis_name].config
+                acceleration = config.acceleration if requested_acceleration is None else requested_acceleration
+                deceleration = config.deceleration if requested_deceleration is None else requested_deceleration
+                if not math.isfinite(acceleration) or acceleration <= 0 or acceleration > config.acceleration:
+                    raise MotionError(
+                        f"{axis_name.upper()}: acceleration must be within 0-{config.acceleration:.2f} mm/s^2"
+                    )
+                if not math.isfinite(deceleration) or deceleration <= 0 or deceleration > config.deceleration:
+                    raise MotionError(
+                        f"{axis_name.upper()}: deceleration must be within 0-{config.deceleration:.2f} mm/s^2"
+                    )
+                speed = float(axis_plan["speed_mm_s"])
+                pulse_hz = float(axis_plan["pulse_hz"])
+                if pulse_hz > 25000:
+                    raise MotionError(
+                        f"{axis_name.upper()}: pulse frequency {pulse_hz:.0f} Hz exceeds software limit 25000 Hz"
+                    )
+                axis_plan["acceleration_mm_s2"] = round(acceleration, 3)
+                axis_plan["deceleration_mm_s2"] = round(deceleration, 3)
+                axis_plan["acceleration_time_s"] = round(min(speed / acceleration, duration_s / 2), 3)
+                axis_plan["deceleration_time_s"] = round(min(speed / deceleration, duration_s / 2), 3)
+                axis_plan["following_error_mm"] = None
+                axis_plan["drive_status"] = "NO DATA"
+                axis_details[axis_name] = {
+                    "valid": True,
+                    "soft_limit": "PASS",
+                    "homed": True,
+                    "pulse_frequency_hz": pulse_hz,
+                    "drive_feedback": "NO DATA",
+                }
+            plan["timeout_s"] = timeout_s
+            plan["profile"] = "TRAPEZOIDAL"
+            plan["master_axis"] = max(
+                plan["axes"], key=lambda name: int(plan["axes"][name]["steps"]), default=None
+            )
+            return {
+                "valid": True,
+                "message": "Target passed backend safety validation",
+                "plan": plan,
+                "axes": axis_details,
+                "warnings": ["Closed-loop drive feedback is not available from the current hardware API"],
+            }
+
+    def arm_motion_target(self, validation: dict[str, object], payload: dict[str, object]) -> dict[str, object]:
+        arm_token = uuid.uuid4().hex
+        with self.lock:
+            self.armed_move = {
+                "arm_token": arm_token,
+                "expires_at": time.monotonic() + 20.0,
+                "payload": payload,
+                "plan": validation["plan"],
+            }
+        return {"ok": True, "arm_token": arm_token, "expires_in_s": 20, "plan": validation["plan"]}
+
+    def execute_armed_motion(self, arm_token: str, request_id: str) -> dict[str, object]:
+        if not request_id:
+            return {"ok": False, "error": "request_id is required"}
+        with self.lock:
+            previous = self.completed_request_ids.get(request_id)
+            if previous is not None:
+                return previous | {"duplicate": True}
+            armed = self.armed_move
+            if armed is None or armed.get("arm_token") != arm_token:
+                return {"ok": False, "error": "Move is not armed or arm token is invalid"}
+            if time.monotonic() >= float(armed["expires_at"]):
+                self.armed_move = None
+                return {"ok": False, "error": "Armed move expired; validate and arm again"}
+            payload = dict(armed["payload"])
+            plan = dict(armed["plan"])
+            self.armed_move = None
+            self.completed_request_ids[request_id] = {"ok": False, "error": "Command is already executing"}
+
+        result = self._run(
+            "absolute_move",
+            lambda: self.controller.move_to(
+                x_mm=payload.get("x_mm"),
+                y_mm=payload.get("y_mm"),
+                z_mm=payload.get("z_mm"),
+                speed_mm_s=payload.get("speed_mm_s"),
+                time_s=payload.get("time_s"),
+            ).to_dict(),
+            command_id=request_id,
+            estimated_duration_s=float(plan.get("duration_s", 0)),
+        )
+        with self.lock:
+            self.completed_request_ids[request_id] = result
+            if len(self.completed_request_ids) > 100:
+                self.completed_request_ids.pop(next(iter(self.completed_request_ids)))
+        return result
 
     def stop(self) -> dict[str, object]:
         self.controller.request_stop()
@@ -154,6 +357,15 @@ class MotionService:
             self.operation_phase = "stopped"
             self.operation_message = "Stop requested by operator"
         return {"ok": True, "result": "stop requested"}
+
+    def controlled_stop(self) -> dict[str, object]:
+        if not self.busy:
+            return {"ok": True, "result": "machine already idle"}
+        self.controller.request_controlled_stop()
+        with self.lock:
+            self.operation_phase = "decelerating"
+            self.operation_message = "Controlled stop requested; decelerating pulse train"
+        return {"ok": True, "result": "controlled stop requested"}
 
     def clear_alarm(self) -> dict[str, object]:
         if self.controller.emergency_stop_active():
@@ -234,8 +446,12 @@ class MotionService:
         with self.lock:
             self.operation_axis = axis_name
             self.homing[axis_name] = phase
-            if phase == "homing":
-                self.operation_message = f"Homing axis {axis_name.upper()}"
+            if phase == "searching":
+                self.operation_message = f"Axis {axis_name.upper()} searching for home sensor"
+            elif phase == "backoff":
+                self.operation_message = f"Axis {axis_name.upper()} backing off home sensor"
+            elif phase == "completed":
+                self.operation_message = f"Axis {axis_name.upper()} home cycle completed"
             elif phase == "passed":
                 self.operation_message = f"Axis {axis_name.upper()} homed successfully"
 
@@ -368,10 +584,29 @@ def _json_payload() -> dict[str, object]:
     return payload
 
 
+def _motion_target_args(payload: dict[str, object]) -> dict[str, float | None]:
+    speed_mm_s = _parse_optional_float(payload, "speed_mm_s")
+    time_s = _parse_optional_float(payload, "time_s")
+    timeout_s = _parse_optional_float(payload, "timeout_s")
+    acceleration_mm_s2 = _parse_optional_float(payload, "acceleration_mm_s2")
+    deceleration_mm_s2 = _parse_optional_float(payload, "deceleration_mm_s2")
+    return {
+        "x_mm": _parse_optional_float(payload, "x_mm"),
+        "y_mm": _parse_optional_float(payload, "y_mm"),
+        "z_mm": _parse_optional_float(payload, "z_mm"),
+        "speed_mm_s": speed_mm_s,
+        "time_s": time_s,
+        "timeout_s": timeout_s,
+        "acceleration_mm_s2": acceleration_mm_s2,
+        "deceleration_mm_s2": deceleration_mm_s2,
+    }
+
+
 def create_app(config_path: str = "machine_config.json", hw_config_path: str = "hardware_config.json") -> Flask:
     app = Flask(__name__)
     app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0
     service = MotionService(config_path=config_path, hw_config_path=hw_config_path)
+    app.extensions["motion_service"] = service
 
     @app.errorhandler(APIInputError)
     def handle_api_input_error(exc: APIInputError):
@@ -428,6 +663,60 @@ def create_app(config_path: str = "machine_config.json", hw_config_path: str = "
             return jsonify({"ok": False, "error": "x_mm, y_mm, z_mm, speed_mm_s, and time_s must be numbers"}), 400
         except MotionError as exc:
             return jsonify({"ok": False, "error": str(exc)}), 400
+
+    @app.post("/api/motion/validate")
+    @app.post("/api/motion/preview")
+    def api_motion_validate():
+        payload = _json_payload()
+        try:
+            args = _motion_target_args(payload)
+            if args["x_mm"] is None and args["y_mm"] is None and args["z_mm"] is None:
+                raise APIInputError("At least one target coordinate is required")
+            validation = service.validate_motion_target(**args)
+            return jsonify({"ok": True, "stage": "preview", **validation} | service.status_payload()), 200
+        except (TypeError, ValueError):
+            return jsonify({"ok": False, "error": "Motion parameters must be finite numbers"}), 400
+        except MotionError as exc:
+            return jsonify({"ok": False, "error": str(exc)}), 400
+
+    @app.post("/api/motion/arm")
+    def api_motion_arm():
+        payload = _json_payload()
+        try:
+            args = _motion_target_args(payload)
+            if args["x_mm"] is None and args["y_mm"] is None and args["z_mm"] is None:
+                raise APIInputError("At least one target coordinate is required")
+            validation = service.validate_motion_target(**args)
+            execution_payload = {
+                key: args[key]
+                for key in ("x_mm", "y_mm", "z_mm", "speed_mm_s", "time_s")
+            }
+            result = service.arm_motion_target(validation, execution_payload)
+            return jsonify(result | validation | service.status_payload()), 200
+        except (TypeError, ValueError):
+            return jsonify({"ok": False, "error": "Motion parameters must be finite numbers"}), 400
+        except MotionError as exc:
+            return jsonify({"ok": False, "error": str(exc)}), 400
+
+    @app.post("/api/motion/execute")
+    def api_motion_execute():
+        payload = _json_payload()
+        arm_token = str(payload.get("arm_token", ""))
+        request_id = str(payload.get("request_id", ""))
+        result = service.execute_armed_motion(arm_token, request_id)
+        status_code = 200 if result["ok"] else 400
+        return jsonify(result | service.status_payload()), status_code
+
+    @app.post("/api/motion/controlled-stop")
+    def api_motion_controlled_stop():
+        result = service.controlled_stop()
+        return jsonify(result | service.status_payload()), 200
+
+    @app.post("/api/motion/abort")
+    def api_motion_abort():
+        result = service.stop()
+        result["result"] = "motion abort requested"
+        return jsonify(result | service.status_payload()), 200
 
     @app.post("/api/home/<axis_name>")
     def api_home_axis(axis_name: str):

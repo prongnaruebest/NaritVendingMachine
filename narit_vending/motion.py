@@ -43,6 +43,10 @@ class StopRequestedError(MotionError):
     pass
 
 
+class ControlledStopError(MotionError):
+    pass
+
+
 @dataclass(frozen=True)
 class AxisConfig:
     name: str
@@ -220,6 +224,7 @@ class AxisController:
         tail_limit: DigitalInputDevice,
         estop: DigitalInputDevice,
         stop_requested: Callable[[], bool],
+        controlled_stop_requested: Callable[[], bool],
         enable: OutputDevice | None = None,
     ) -> None:
         self.config = config
@@ -229,6 +234,7 @@ class AxisController:
         self.tail_limit = tail_limit
         self.estop = estop
         self.stop_requested = stop_requested
+        self.controlled_stop_requested = controlled_stop_requested
         self.enable = enable
         self.position_steps = 0
         self.is_homed = False
@@ -302,7 +308,12 @@ class AxisController:
         plan = self.plan_absolute_move(target_mm, speed_mm_s=speed_mm_s, time_s=time_s)
         return self._execute_plan(plan)
 
-    def home(self, backoff_steps: int = 20, max_steps: int = 200000) -> int:
+    def home(
+        self,
+        backoff_steps: int = 20,
+        max_steps: int = 200000,
+        progress: Callable[[str], None] | None = None,
+    ) -> int:
         _logger.info("Home %s: starting", self.config.name)
         if self.estop.value:
             raise EmergencyStopError(f"{self.config.name}: emergency stop is active")
@@ -313,6 +324,8 @@ class AxisController:
         self.direction.value = bool(self.config.home_direction)
         moved = 0
         limit_active = self.head_limit.value
+        if progress is not None:
+            progress("searching")
 
         while not limit_active:
             if moved >= max_steps:
@@ -333,6 +346,8 @@ class AxisController:
         sleep(self.config.settle_delay)
 
         if backoff_steps > 0:
+            if progress is not None:
+                progress("backoff")
             release_direction = 1 - self.config.home_direction
             self.direction.value = bool(release_direction)
             released = 0
@@ -349,6 +364,8 @@ class AxisController:
 
         self.position_steps = 0
         self.is_homed = True
+        if progress is not None:
+            progress("completed")
         _logger.info("Home %s: complete (%d steps)", self.config.name, moved)
         return moved
 
@@ -395,12 +412,25 @@ class AxisController:
         self.direction.value = bool(plan.direction)
         half_periods = _build_half_periods(plan.steps, plan.duration_s, ramp_ratio=1.6)
         moved = 0
+        controlled_remaining: int | None = None
+        controlled_total = 0
         for index, half_period in enumerate(half_periods):
             if index % 5 == 0:
                 self._guard_during_move(plan.direction)
-            self._pulse_once(half_period)
+            if controlled_remaining is None and self.controlled_stop_requested():
+                controlled_remaining = min(50, plan.steps - index)
+                controlled_total = controlled_remaining
+            stop_scale = 1.0
+            if controlled_remaining is not None:
+                stop_scale = 1.0 + (3.0 * (1.0 - controlled_remaining / max(controlled_total, 1)))
+            self._pulse_once(half_period * stop_scale)
             self.position_steps += 1 if plan.direction == self.config.forward_direction else -1
             moved += 1
+            if controlled_remaining is not None:
+                controlled_remaining -= 1
+                if controlled_remaining <= 0:
+                    self.stop()
+                    raise ControlledStopError(f"{self.config.name}: controlled stop completed")
         sleep(self.config.settle_delay)
         return moved
 
@@ -466,6 +496,7 @@ class MotionController:
         self.estop = estop
         self.config = config
         self._stop_requested = False
+        self._controlled_stop_requested = False
         self.led_idle = led_idle
         self.led_moving = led_moving
         self.led_success = led_success
@@ -482,9 +513,7 @@ class MotionController:
 
     def home_axis(self, axis_name: str, progress: Callable[[str, str], None] | None = None) -> None:
         axis = self.axes()[axis_name.lower()]
-        if progress is not None:
-            progress(axis.config.name, "homing")
-        axis.home()
+        axis.home(progress=(lambda phase: progress(axis.config.name, phase)) if progress is not None else None)
         if progress is not None:
             progress(axis.config.name, "passed")
 
@@ -677,11 +706,21 @@ class MotionController:
         for axis in self.axes().values():
             axis.stop()
 
+    def request_controlled_stop(self) -> None:
+        self._controlled_stop_requested = True
+
     def clear_stop(self) -> None:
         self._stop_requested = False
+        self._controlled_stop_requested = False
 
     def stop_requested(self) -> bool:
         return self._stop_requested
+
+    def controlled_stop_requested(self) -> bool:
+        return self._controlled_stop_requested
+
+    def clear_controlled_stop(self) -> None:
+        self._controlled_stop_requested = False
 
     def emergency_stop_active(self) -> bool:
         return bool(self.estop.value)
@@ -744,23 +783,41 @@ class MotionController:
 
         accumulators = {name: 0 for name in plan.axes}
         half_periods = _build_half_periods(master_steps, plan.duration_s, ramp_ratio=1.6)
+        controlled_remaining: int | None = None
+        controlled_total = 0
 
         try:
             for index, half_period in enumerate(half_periods):
                 if index % 5 == 0:
                     for axis_name, axis in axes.items():
                         axis._guard_during_move(directions[axis_name])
+                if controlled_remaining is None and self.controlled_stop_requested():
+                    controlled_remaining = min(50, master_steps - index)
+                    controlled_total = controlled_remaining
+                stop_scale = 1.0
+                if controlled_remaining is not None:
+                    stop_scale = 1.0 + (3.0 * (1.0 - controlled_remaining / max(controlled_total, 1)))
                 for axis_name, axis in axes.items():
                     accumulators[axis_name] += steps[axis_name]
                     if accumulators[axis_name] >= master_steps:
                         axis.pulse.on()
-                sleep(half_period)
+                sleep(half_period * stop_scale)
                 for axis_name, axis in axes.items():
                     if accumulators[axis_name] >= master_steps:
                         axis.pulse.off()
                         axis.position_steps += 1 if directions[axis_name] == axis.config.forward_direction else -1
                         accumulators[axis_name] -= master_steps
-                sleep(half_period)
+                sleep(half_period * stop_scale)
+                if controlled_remaining is not None:
+                    controlled_remaining -= 1
+                    if controlled_remaining <= 0:
+                        for axis in axes.values():
+                            axis.stop()
+                        raise ControlledStopError("coordinated controlled stop completed")
+        except ControlledStopError:
+            for axis in axes.values():
+                axis.stop()
+            raise
         except (EmergencyStopError, StopRequestedError, LimitTriggeredError):
             for axis in axes.values():
                 axis.stop()
@@ -1034,6 +1091,9 @@ def build_controller(config: MachineConfig, hw_config_path: str = "hardware_conf
     def stop_requested() -> bool:
         return controller_ref["controller"].stop_requested()
 
+    def controlled_stop_requested() -> bool:
+        return controller_ref["controller"].controlled_stop_requested()
+
     def make_axis(cfg: AxisConfig) -> AxisController:
         motor_info = motors_config.get(cfg.name, {})
         motor_active_high = bool(motor_info.get("active_high", True))
@@ -1055,6 +1115,7 @@ def build_controller(config: MachineConfig, hw_config_path: str = "hardware_conf
             tail_limit=make_input(cfg.tail_limit_pin, tail_info),
             estop=estop_button,
             stop_requested=stop_requested,
+            controlled_stop_requested=controlled_stop_requested,
             enable=enable_dev,
         )
 
