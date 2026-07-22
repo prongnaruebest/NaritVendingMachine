@@ -38,6 +38,10 @@
     visualTargetSlot: "",
     slotEditorDirty: false,
     visualEditorDirty: false,
+    visualEditMode: false,
+    visualPreview: null,
+    visualOriginalSlot: null,
+    lastStatusAt: 0,
     slotDrafts: {},
     dashboardSelectedSlot: "1",
     dashboardOperationStartedAt: null,
@@ -1013,7 +1017,6 @@
 
     const selectedCode = selectedSlotCode();
     const selectedSlot = MS.slots[selectedCode] || {};
-    const canConfigureSlot = MS.online && !MS.pending && !MS.payload?.busy;
     const canUseSlot = motionAllowed(true);
     const selectedSlotReady = slotStatus(selectedSlot) === "ready";
     const armedSlotMatches = MS.validation.stage === "armed" && AXES.every((axis) => {
@@ -1023,9 +1026,7 @@
     el("selected-slot-load-target").disabled = !MS.online || !selectedSlotReady;
     el("selected-slot-validate").disabled = !canUseSlot || !selectedSlotReady;
     el("selected-slot-goto").disabled = !canUseSlot || !selectedSlotReady || !armedSlotMatches;
-    if (el("visual-slot-load-current")) el("visual-slot-load-current").disabled = !canUseSlot;
-    if (el("visual-slot-save")) el("visual-slot-save").disabled = !canConfigureSlot;
-    if (el("visual-slot-goto")) el("visual-slot-goto").disabled = !canUseSlot || slotStatus(MS.slots[MS.visualTargetSlot || MS.selectedSlotCode || "1"] || {}) !== "ready";
+    if (document.getElementById("visual-load-preview")) updateVisualButtons();
 
     // Home buttons
     el("home-all").disabled = !canHome;
@@ -1221,11 +1222,15 @@
   }
 
   function loadCurrentIntoVisualSlot() {
+    if (!MS.visualEditMode) return;
     const current = getStatus().current_position || {};
     AXES.forEach((axis) => {
       el(`visual-slot-${axis}`).value = Number(current[`${axis}_mm`] || 0).toFixed(3);
     });
     MS.visualEditorDirty = true;
+    const original = MS.visualOriginalSlot || {};
+    setText("visual-edit-comparison", AXES.map((axis) => `${axis.toUpperCase()} ${fmtPos(original[`${axis}_mm`])} → ${fmtPos(current[`${axis}_mm`])}`).join(" · "));
+    updateVisualButtons();
   }
 
   async function saveVisualSlot() {
@@ -1237,6 +1242,273 @@
     if (result) {
       MS.visualEditorDirty = false;
       renderVisualSlotEditor(true);
+    }
+  }
+
+  function visualSlotIsValid(slot) {
+    return AXES.every((axis) => {
+      const value = Number(slot?.[`${axis}_mm`]);
+      const max = Number(MS.config?.axes?.[axis]?.max_travel_mm);
+      return Number.isFinite(value) && Number.isFinite(max) && value >= 0 && value <= max;
+    });
+  }
+
+  function visualDataState() {
+    const ageMs = MS.lastStatusAt ? Date.now() - MS.lastStatusAt : Infinity;
+    if (!MS.online) return { label: "OFFLINE", className: "fault", live: false, reason: "Controller API unavailable" };
+    if (ageMs > 2500) return { label: "STALE DATA", className: "warn", live: false, reason: `Last API update ${Math.round(ageMs / 1000)} seconds ago` };
+    return { label: "LIVE", className: "ok", live: true, reason: "API status updated within 1 second" };
+  }
+
+  function renderVisualizationV32() {
+    const slotGrid = document.getElementById("visual-slot-grid");
+    if (!slotGrid) return;
+
+    const dataState = visualDataState();
+    const status = getStatus();
+    const operation = getOperation();
+    const current = status.current_position || {};
+    const commandName = MS.payload?.active_command || "";
+    const commandTarget = commandName.match(/^goto_slot_(\d+)$/)?.[1];
+    const selectedCode = MS.visualTargetSlot || MS.selectedSlotCode || "1";
+    const targetCode = commandTarget || selectedCode;
+    const targetSlot = MS.slots[targetCode] || {};
+    const selectedSlot = MS.slots[selectedCode] || {};
+    const moving = dataState.live && Boolean(MS.payload?.busy);
+    const xMax = Number(MS.config?.axes?.x?.max_travel_mm || 1);
+    const yMax = Number(MS.config?.axes?.y?.max_travel_mm || 1);
+    const zMax = Number(MS.config?.axes?.z?.max_travel_mm || 1);
+    const safeZ = Number(MS.config?.safe_z_mm || 0);
+    const xPosition = dataState.live ? Number(current.x_mm ?? getAxis("x").position_mm) : NaN;
+    const yPosition = dataState.live ? Number(current.y_mm ?? getAxis("y").position_mm) : NaN;
+    const zPosition = dataState.live ? Number(current.z_mm ?? getAxis("z").position_mm) : NaN;
+    const targetValid = visualSlotIsValid(targetSlot) && slotStatus(targetSlot) === "ready";
+    const selectedValid = visualSlotIsValid(selectedSlot) && slotStatus(selectedSlot) === "ready";
+    const targetX = Number(targetSlot.x_mm);
+    const targetY = Number(targetSlot.y_mm);
+    const targetZ = Number(targetSlot.z_mm);
+    const xPct = Number.isFinite(xPosition) ? Math.max(0, Math.min(100, xPosition / xMax * 100)) : 0;
+    const yPct = Number.isFinite(yPosition) ? Math.max(0, Math.min(100, yPosition / yMax * 100)) : 0;
+    const zPct = Number.isFinite(zPosition) ? Math.max(0, Math.min(100, zPosition / zMax * 100)) : 0;
+    const targetXPct = targetValid ? Math.max(0, Math.min(100, targetX / xMax * 100)) : 0;
+    const targetYPct = targetValid ? Math.max(0, Math.min(100, targetY / yMax * 100)) : 0;
+    const targetZPct = targetValid ? Math.max(0, Math.min(100, targetZ / zMax * 100)) : 0;
+    const atPosition = dataState.live && targetValid && Math.hypot(xPosition - targetX, yPosition - targetY, zPosition - targetZ) <= 2;
+
+    slotGrid.innerHTML = Array.from({ length: 30 }, (_, index) => {
+      const code = String(index + 1);
+      const slot = MS.slots[code] || {};
+      const configured = slotStatus(slot) === "ready";
+      const valid = configured && visualSlotIsValid(slot);
+      const isSelected = code === selectedCode;
+      const isCommandTarget = code === targetCode && moving;
+      const isAtPosition = code === targetCode && atPosition;
+      const classes = ["visual-slot", !configured ? "empty" : valid ? "configured" : "invalid"];
+      if (isSelected) classes.push("selected");
+      if (isCommandTarget) classes.push("moving-target");
+      if (isAtPosition) classes.push("at-position");
+      const stateLabel = !configured ? "EMPTY" : !valid ? "INVALID" : isCommandTarget ? "TARGET" : isAtPosition ? "AT POSITION" : isSelected ? "SELECTED" : "READY";
+      return `<button type="button" class="${classes.join(" ")}" data-visual-slot="${code}" title="Select Slot ${code} for details only">
+        <span class="visual-slot-number">${String(index + 1).padStart(2, "0")}</span>
+        <small>${stateLabel}</small>
+      </button>`;
+    }).join("");
+
+    const markerX = 5 + xPct * .9;
+    const markerY = 5 + yPct * .9;
+    const targetMarkerX = 5 + targetXPct * .9;
+    const targetMarkerY = 5 + targetYPct * .9;
+    const xyMarker = document.getElementById("vis-xy-carriage");
+    const xyTarget = document.getElementById("vis-xy-target");
+    if (xyMarker) {
+      xyMarker.style.left = `${markerX}%`;
+      xyMarker.style.top = `${markerY}%`;
+      xyMarker.classList.toggle("moving", moving);
+      xyMarker.classList.toggle("unknown", !dataState.live);
+    }
+    if (xyTarget) {
+      xyTarget.style.left = `${targetMarkerX}%`;
+      xyTarget.style.top = `${targetMarkerY}%`;
+      xyTarget.classList.toggle("active", targetValid);
+    }
+
+    const trajectory = document.getElementById("visual-trajectory");
+    const trajectoryLine = document.getElementById("visual-trajectory-line");
+    if (trajectory && trajectoryLine) {
+      trajectory.classList.toggle("active", dataState.live && targetValid && Boolean(MS.visualPreview || moving));
+      trajectoryLine.setAttribute("x1", markerX);
+      trajectoryLine.setAttribute("y1", markerY);
+      trajectoryLine.setAttribute("x2", targetMarkerX);
+      trajectoryLine.setAttribute("y2", targetMarkerY);
+    }
+
+    const zAxis = getAxis("z");
+    const zMarker = document.getElementById("vis-z-carriage");
+    const zFill = document.getElementById("vis-z-fill");
+    const zTargetMarker = document.getElementById("vis-z-target-marker");
+    const zSafeMarker = document.getElementById("vis-z-safe-marker");
+    if (zMarker) { zMarker.style.bottom = `${zPct}%`; zMarker.classList.toggle("unknown", !dataState.live); }
+    if (zFill) zFill.style.height = dataState.live ? `${zPct}%` : "0%";
+    if (zTargetMarker) { zTargetMarker.style.bottom = `${targetZPct}%`; zTargetMarker.classList.toggle("active", targetValid); }
+    if (zSafeMarker) zSafeMarker.style.bottom = `${Math.max(0, Math.min(100, safeZ / zMax * 100))}%`;
+
+    const zState = document.getElementById("vis-z-state");
+    if (zState) {
+      const homed = dataState.live && Boolean(zAxis.is_homed);
+      zState.className = `axis-state-badge ${!dataState.live ? "fault" : homed ? "homed" : "not-homed"}`;
+      zState.textContent = !dataState.live ? dataState.label : homed ? "HOMED" : "NOT HOMED";
+    }
+
+    setText("visual-x-scale", `X+ ${fmt(xMax, 0)} mm`);
+    setText("visual-y-scale", `Y+ ${fmt(yMax, 0)} mm`);
+    setText("vis-x-value", dataState.live ? fmtPos(xPosition) : "UNKNOWN");
+    setText("vis-y-value", dataState.live ? fmtPos(yPosition) : "UNKNOWN");
+    setText("vis-z-value", dataState.live ? fmtPos(zPosition) : "UNKNOWN");
+    setText("vis-z-max", fmt(zMax, 1));
+    setText("vis-target-z", targetValid ? `${dataState.live ? fmtPos(zPosition) : "--"} / ${fmtPos(targetZ)} mm` : "-- / -- mm");
+    const zDelta = dataState.live && targetValid ? targetZ - zPosition : NaN;
+    setText("vis-z-delta", Number.isFinite(zDelta) ? `${fmtDelta(zDelta).text} / ${Math.abs(zDelta) < .001 ? "IDLE" : zDelta > 0 ? "+" : "−"}` : "-- / UNKNOWN");
+    setText("vis-z-steps", dataState.live ? fmtSteps(zAxis.position_steps) : "UNKNOWN");
+    setText("vis-z-safe", `${fmtPos(safeZ)} mm`);
+    setText("vis-z-limits", dataState.live ? `${zAxis.head_limit ? "ACTIVE" : "CLEAR"} / ${zAxis.tail_limit ? "ACTIVE" : "CLEAR"}` : "UNKNOWN / UNKNOWN");
+    setText("vis-z-drive", "NO DATA / NO DATA");
+
+    const stateChip = el("visual-data-state");
+    if (stateChip) { stateChip.textContent = dataState.label; stateChip.className = `page-status-chip ${dataState.className}`; }
+    setText("visual-state-controller", MS.online ? "ONLINE" : "OFFLINE");
+    const visualFault = getStatus().state === "alarm" || activeAlarmCount() > 0;
+    setText("visual-state-machine", !dataState.live ? "UNKNOWN" : visualFault ? "ALARM" : motionInhibitReason(true) ? "NOT READY" : "READY");
+    setText("visual-state-motion", !dataState.live ? "UNKNOWN" : moving ? String(operation.phase || "MOVING").toUpperCase() : "IDLE");
+    setText("visual-state-command", commandName || "NONE");
+    setText("visual-state-slot", targetCode ? `SLOT ${String(targetCode).padStart(2, "0")}` : "--");
+    setText("visual-state-reason", dataState.live ? (motionInhibitReason(true) || operation.message || dataState.reason) : dataState.reason);
+
+    setText("vis-target-summary", `SLOT ${String(selectedCode).padStart(2, "0")}`);
+    setText("vis-target-coordinates", selectedValid ? `X ${fmtPos(selectedSlot.x_mm)} · Y ${fmtPos(selectedSlot.y_mm)} · Z ${fmtPos(selectedSlot.z_mm)}` : "NOT CONFIGURED");
+    const deltas = AXES.map((axis) => Number(selectedSlot[`${axis}_mm`]) - Number(current[`${axis}_mm`]));
+    const pulses = AXES.map((axis, index) => Math.round(Math.abs(deltas[index]) * Number(MS.config?.axes?.[axis]?.steps_per_mm || 0)));
+    setText("visual-slot-delta", dataState.live && selectedValid ? AXES.map((axis, index) => `${axis.toUpperCase()} ${fmtDelta(deltas[index]).text}`).join(" · ") : "X -- · Y -- · Z --");
+    setText("visual-slot-pulses", dataState.live && selectedValid ? AXES.map((axis, index) => `${axis.toUpperCase()} ${fmtSteps(pulses[index])}`).join(" · ") : "X -- · Y -- · Z --");
+    setText("visual-slot-validity", !selectedValid ? "INVALID / NOT CONFIGURED" : MS.visualPreview ? "BACKEND VALIDATED" : "NOT VALIDATED");
+    setText("visual-slot-estimate", MS.visualPreview ? `${fmtPos(MS.visualPreview.total_distance_mm)} mm / ${fmtTime(MS.visualPreview.duration_s)} s` : "NO DATA");
+    setText("visual-slot-homing", !dataState.live ? "UNKNOWN" : allAxesHomed() ? "ALL HOMED" : "HOME ALL AXES REQUIRED");
+
+    const previewState = el("visual-preview-state");
+    if (previewState) {
+      previewState.textContent = MS.visualPreview ? "VALIDATED" : "NOT VALIDATED";
+      previewState.className = MS.visualPreview ? "ok" : "warn";
+    }
+    const previewDetails = el("visual-trajectory-details");
+    if (previewDetails) {
+      previewDetails.innerHTML = MS.visualPreview
+        ? `<b>${esc(MS.visualPreview.profile || "TRAPEZOIDAL")}</b> · MASTER ${esc(String(MS.visualPreview.master_axis || "--").toUpperCase())} · ${fmtTime(MS.visualPreview.duration_s)} s<br>${Object.values(MS.visualPreview.axes || {}).map((axis) => `${esc(axis.axis.toUpperCase())}: ${fmtPos(axis.distance_mm)} mm · ${fmtSteps(axis.steps)} pulses · ${fmt(axis.pulse_hz, 0)} Hz`).join("<br>")}<br>SOFT LIMIT: PASS · COLLISION ZONE: NO DATA · DRIVE FEEDBACK: NO DATA`
+        : "Select a configured slot, then click LOAD AS PREVIEW.";
+    }
+
+    const axisReadouts = el("visual-axis-readouts");
+    if (axisReadouts) axisReadouts.innerHTML = AXES.map((axis) => {
+      const axisData = getAxis(axis);
+      const actual = dataState.live ? Number(current[`${axis}_mm`]) : NaN;
+      const planned = MS.visualPreview?.axes?.[axis];
+      const target = planned?.target_mm ?? (selectedValid ? Number(selectedSlot[`${axis}_mm`]) : NaN);
+      const delta = Number.isFinite(actual) && Number.isFinite(target) ? target - actual : NaN;
+      return `<article class="visual-axis-row ${axisData.is_homed ? "ok" : "warn"}"><b>${axis.toUpperCase()}</b><div><span>Actual</span><strong>${Number.isFinite(actual) ? fmtPos(actual) : "UNKNOWN"}</strong></div><div><span>Target / Delta</span><strong>${Number.isFinite(target) ? `${fmtPos(target)} / ${fmtDelta(delta).text}` : "NO DATA"}</strong></div><div><span>Pulses</span><strong>${dataState.live ? fmtSteps(axisData.position_steps) : "UNKNOWN"}</strong></div><div><span>Speed Cmd / Eff</span><strong>${planned ? `${fmtSpd(Number(el("target-speed")?.value || 0))} / ${fmtSpd(planned.speed_mm_s)}` : "NO DATA"}</strong></div><div><span>Home / Limits</span><strong>${axisData.is_homed ? "HOMED" : "NOT HOMED"} · ${axisData.head_limit || axisData.tail_limit ? "ACTIVE" : "CLEAR"}</strong></div><div><span>Drive / Error</span><strong>NO DATA</strong></div></article>`;
+    }).join("");
+
+    renderVisualSlotEditorV32();
+    updateVisualButtons();
+  }
+
+  function renderVisualSlotEditorV32(force = false) {
+    const code = MS.visualTargetSlot || MS.selectedSlotCode || "1";
+    const slot = MS.slots[code] || {};
+    const derived = slotStatus(slot);
+    setText("visual-editor-title", `SLOT ${String(code).padStart(2, "0")}`);
+    const badge = el("visual-editor-status");
+    if (badge) { badge.className = `slot-badge ${visualSlotIsValid(slot) ? derived : "fault"}`; badge.textContent = visualSlotIsValid(slot) ? derived.toUpperCase() : "INVALID"; }
+    if (force || !MS.visualEditorDirty) {
+      AXES.forEach((axis) => { el(`visual-slot-${axis}`).value = Number(slot[`${axis}_mm`] || 0); });
+      MS.visualEditorDirty = false;
+    }
+    const editor = el("visual-slot-editor");
+    if (editor) editor.classList.toggle("view-only", !MS.visualEditMode);
+    setText("visual-edit-mode-state", MS.visualEditMode ? "ENGINEERING EDIT" : "VIEW ONLY");
+    AXES.forEach((axis) => { el(`visual-slot-${axis}`).readOnly = !MS.visualEditMode; });
+  }
+
+  function updateVisualButtons() {
+    const code = MS.visualTargetSlot || MS.selectedSlotCode || "1";
+    const slot = MS.slots[code] || {};
+    const validSlot = visualSlotIsValid(slot) && slotStatus(slot) === "ready";
+    const idle = MS.online && !MS.pending && !MS.payload?.busy;
+    el("visual-load-preview").disabled = !validSlot || !idle;
+    el("visual-send-motion").disabled = !validSlot;
+    el("visual-edit-enable").disabled = !idle || MS.visualEditMode;
+    el("visual-slot-load-current").disabled = !MS.visualEditMode || !idle || !allAxesHomed();
+    el("visual-slot-save").disabled = !MS.visualEditMode || !idle || !MS.visualEditorDirty;
+    el("visual-edit-cancel").disabled = !MS.visualEditMode;
+  }
+
+  async function previewVisualSlot() {
+    const code = MS.visualTargetSlot || MS.selectedSlotCode || "1";
+    const slot = MS.slots[code] || {};
+    if (!visualSlotIsValid(slot) || slotStatus(slot) !== "ready") return;
+    try {
+      const data = await apiCall("/api/motion/preview", "POST", {
+        x_mm: Number(slot.x_mm), y_mm: Number(slot.y_mm), z_mm: Number(slot.z_mm),
+        speed_mm_s: Number(el("target-speed")?.value || 10), timeout_s: Number(el("move-timeout")?.value || 30),
+      });
+      MS.visualPreview = data.plan;
+      toast(`Slot ${code} trajectory validated for preview only.`, "ok");
+      log(`Visualization preview validated for slot ${code}`, "info", "MOTION");
+    } catch (err) {
+      MS.visualPreview = null;
+      toast(humanizeError(err.message), "error");
+      log(`Visualization preview rejected: ${humanizeError(err.message)}`, "error", "INTERLOCK");
+    }
+    renderVisualizationV32();
+  }
+
+  function sendVisualTargetToMotion() {
+    const code = MS.visualTargetSlot || MS.selectedSlotCode || "1";
+    const slot = MS.slots[code] || {};
+    if (!visualSlotIsValid(slot) || slotStatus(slot) !== "ready") return;
+    AXES.forEach((axis) => { el(`move-${axis}`).value = Number(slot[`${axis}_mm`]).toFixed(3); });
+    invalidateMotionWorkflow(`Target loaded from Visualization — Slot ${code}.`);
+    switchWorkspace("motion");
+    toast(`Slot ${code} loaded. Complete VALIDATE → PREVIEW → ARM → EXECUTE.`, "ok");
+    log(`Target loaded from Visualization: slot ${code}`, "info", "MOTION");
+  }
+
+  function setVisualEditMode(enabled) {
+    const idle = MS.online && !MS.pending && !MS.payload?.busy;
+    if (enabled && !idle) { toast("Edit Mode requires controller online and machine idle.", "error"); return; }
+    MS.visualEditMode = enabled;
+    MS.visualOriginalSlot = enabled ? { ...(MS.slots[MS.visualTargetSlot || MS.selectedSlotCode || "1"] || {}) } : null;
+    MS.visualEditorDirty = false;
+    renderVisualSlotEditorV32(true);
+    setText("visual-edit-comparison", enabled ? "Engineering Edit Mode enabled. Review Old → New values before saving." : "Enable Engineering Edit Mode to modify stored coordinates. Saving never moves the machine.");
+    updateVisualButtons();
+  }
+
+  async function saveVisualSlotV32() {
+    const code = MS.visualTargetSlot || MS.selectedSlotCode || "1";
+    const values = visualSlotValues();
+    const candidate = { ...values };
+    if (!visualSlotIsValid(candidate)) { toast("Position is outside configured soft limits.", "error"); return; }
+    const duplicate = Object.entries(MS.slots).find(([otherCode, slot]) => otherCode !== code && AXES.every((axis) => Math.abs(Number(slot[`${axis}_mm`]) - Number(values[`${axis}_mm`])) < 0.001));
+    if (duplicate) { toast(`Position duplicates Slot ${duplicate[0]}.`, "error"); return; }
+    const original = MS.visualOriginalSlot || MS.slots[code] || {};
+    const comparison = AXES.map((axis) => `${axis.toUpperCase()} ${fmtPos(original[`${axis}_mm`])} → ${fmtPos(values[`${axis}_mm`])}`).join(" · ");
+    setText("visual-edit-comparison", comparison);
+    if (!window.confirm(`Save Slot ${code} position?\n${comparison}\nThis does not move the machine.`)) return;
+    const payload = slotPayloadFromValues(code, values);
+    if (!payload) return;
+    const result = await command(`Save visualization slot ${code}`, `/api/slots/${code}`, payload, { isStop: true, noCheck: true });
+    if (result) {
+      log(`Visualization slot ${code} saved: ${comparison}`, "info", "CONFIG");
+      setVisualEditMode(false);
+      renderVisualizationV32();
     }
   }
 
@@ -1399,7 +1671,7 @@
       return `<article class="dashboard-axis-card"><span>${axis.toUpperCase()} AXIS</span><strong>${fmtPos(data.position_mm)} mm</strong><small>${data.is_homed ? "HOMED" : "NOT HOMED"} · ${fmtSteps(data.position_steps)} steps</small></article>`;
     }).join("");
 
-    renderVisualization();
+    renderVisualizationV32();
 
     const diagnostics = document.getElementById("diagnostic-grid");
     if (diagnostics) {
@@ -1535,6 +1807,7 @@
       const payload = await apiCall("/api/status");
       if (!MS.online) log("Controller connection established", "info", "CONTROLLER");
       MS.online = true;
+      MS.lastStatusAt = Date.now();
       render(payload);
     } catch (err) {
       if (MS.online) log(`Controller connection lost: ${err.message}`, "error", "CONTROLLER");
@@ -1726,7 +1999,7 @@
       if (code) executeArmedMotion(`Go to validated slot ${code}`);
     });
 
-    /* --- Visualization slot map: select, edit, save, then move explicitly --- */
+    /* --- Visualization is view/preview only; slot click never commands motion --- */
     el("visual-slot-grid").addEventListener("click", (event) => {
       const slotButton = event.target.closest("[data-visual-slot]");
       if (!slotButton) return;
@@ -1734,16 +2007,25 @@
       MS.selectedSlotCode = code;
       MS.visualTargetSlot = code;
       MS.visualEditorDirty = false;
+      MS.visualPreview = null;
+      MS.visualEditMode = false;
       loadSelectedSlotEditor(true);
-      renderVisualization();
+      renderVisualizationV32();
     });
-    AXES.forEach((axis) => el(`visual-slot-${axis}`).addEventListener("input", () => { MS.visualEditorDirty = true; }));
+    AXES.forEach((axis) => el(`visual-slot-${axis}`).addEventListener("input", () => {
+      MS.visualEditorDirty = true;
+      MS.visualPreview = null;
+      const values = visualSlotValues();
+      const original = MS.visualOriginalSlot || {};
+      setText("visual-edit-comparison", AXES.map((item) => `${item.toUpperCase()} ${fmtPos(original[`${item}_mm`])} → ${fmtPos(values[`${item}_mm`])}`).join(" · "));
+      updateVisualButtons();
+    }));
     el("visual-slot-load-current").addEventListener("click", loadCurrentIntoVisualSlot);
-    el("visual-slot-save").addEventListener("click", saveVisualSlot);
-    el("visual-slot-goto").addEventListener("click", () => {
-      const code = MS.visualTargetSlot || MS.selectedSlotCode || "1";
-      command(`Go to slot ${code}`, `/api/slots/${code}/goto`, targetSpeedPayload(), { requireHome: true });
-    });
+    el("visual-slot-save").addEventListener("click", saveVisualSlotV32);
+    el("visual-load-preview").addEventListener("click", previewVisualSlot);
+    el("visual-send-motion").addEventListener("click", sendVisualTargetToMotion);
+    el("visual-edit-enable").addEventListener("click", () => setVisualEditMode(true));
+    el("visual-edit-cancel").addEventListener("click", () => setVisualEditMode(false));
 
     el("dashboard-slot-grid").addEventListener("click", (event) => {
       const slotButton = event.target.closest("[data-dashboard-slot]");
