@@ -32,10 +32,12 @@
     // UI state
     feedOverridePct: 100,   // 0–100, displayed
     selectedJogStep: 1.0,
-    selectedJogSpeed: 10.0,
+    selectedJogSpeed: 15.0,
     selectedSlotCode: "",
     visualTargetSlot: "",
     slotEditorDirty: false,
+    visualEditorDirty: false,
+    slotDrafts: {},
     silentErrorUntil: 0,
     logFilter: "all",
     currentView: "motion",
@@ -103,7 +105,32 @@
   }
 
   function activeAlarmCount() {
-    return MS.payload?.last_error ? 1 : 0;
+    return alarmChannels().filter((channel) => channel.active && channel.level === "fault").length;
+  }
+
+  function alarmChannels() {
+    const status = getStatus();
+    const channels = [
+      { code: "CTRL", label: "Controller Communication", active: !MS.online, level: "fault", detail: MS.online ? "API polling online" : "No response from Raspberry Pi controller" },
+      { code: "ESTOP", label: "Emergency Stop", active: Boolean(status.estop), level: "fault", detail: status.estop ? "Physical E-Stop input is active" : "Safety input clear" },
+      { code: "STOP", label: "Software Stop Latch", active: Boolean(MS.payload?.safety?.stop_requested), level: "fault", detail: MS.payload?.safety?.stop_requested ? "Reset alarms before motion" : "Software stop clear" },
+    ];
+    AXES.forEach((axis) => {
+      const data = getAxis(axis);
+      channels.push(
+        { code: `${axis.toUpperCase()}-MIN`, label: `${axis.toUpperCase()} Minimum Limit`, active: Boolean(data.head_limit), level: "fault", detail: data.head_limit ? "Minimum travel sensor active" : "Sensor clear" },
+        { code: `${axis.toUpperCase()}-MAX`, label: `${axis.toUpperCase()} Maximum Limit`, active: Boolean(data.tail_limit), level: "fault", detail: data.tail_limit ? "Maximum travel sensor active" : "Sensor clear" },
+        { code: `${axis.toUpperCase()}-HOME`, label: `${axis.toUpperCase()} Homing Reference`, active: !data.is_homed, level: "warn", detail: data.is_homed ? "Axis referenced" : "Axis requires homing" },
+      );
+    });
+    channels.push({
+      code: "CTRL-ERR",
+      label: "Controller Fault",
+      active: Boolean(MS.payload?.last_error),
+      level: "fault",
+      detail: MS.payload?.last_error || "No controller fault message",
+    });
+    return channels;
   }
 
   /* ── DERIVED MOTION PERMISSION ──────────────────────────────── */
@@ -500,21 +527,22 @@
     if (!tbody) return;
 
     const canMove = motionAllowed(true);
+    const canEdit = MS.online && !MS.pending && !MS.payload?.busy;
 
     tbody.innerHTML = entries.map(([code, slot]) => {
       const derived = slotStatus(slot);
       const productName = slot.product_name || "EMPTY";
       const canDispense = derived !== "empty" && canMove;
+      const draft = MS.slotDrafts[code] || slot;
       return `
         <tr>
           <td class="mono">${esc(code)}</td>
-          <td>${esc(productName)}</td>
           <td><span class="slot-badge ${derived}">${derived.toUpperCase()}</span></td>
-          <td class="mono">${fmtPos(slot.x_mm)}</td>
-          <td class="mono">${fmtPos(slot.y_mm)}</td>
-          <td class="mono">${fmtPos(slot.z_mm)}</td>
+          ${AXES.map((axis) => `<td><div class="slot-coordinate-input"><input type="number" min="0" step="0.1" value="${esc(draft[`${axis}_mm`] ?? 0)}" data-slot-coordinate="${esc(code)}" data-slot-axis="${axis}" ${canEdit ? "" : "disabled"}><span>mm</span></div></td>`).join("")}
           <td>
             <div class="slot-action-cell">
+              <button class="btn-slot-save" data-slot-update="${esc(code)}" ${canEdit ? "" : "disabled"}>SAVE</button>
+              <button class="btn-secondary" data-slot-teach="${esc(code)}" ${canMove ? "" : "disabled"}>CURRENT</button>
               <button class="btn-slot-goto" data-slot-goto="${esc(code)}"
                       ${canMove ? "" : "disabled"}
                       aria-label="Go to position of slot ${esc(code)}">
@@ -525,16 +553,35 @@
                       aria-label="Dispense slot ${esc(code)} (${esc(productName)})">
                 DISPENSE
               </button>
-              <button class="btn-slot-save" data-slot-save="${esc(code)}"
-                      ${canMove ? "" : "disabled"}
-                      aria-label="Save current machine position to slot ${esc(code)}">
-                TEACH
-              </button>
             </div>
           </td>
         </tr>
       `;
     }).join("");
+
+    $$('[data-slot-coordinate]').forEach((input) => {
+      input.addEventListener("input", () => {
+        const code = input.dataset.slotCoordinate;
+        const slot = MS.slots[code] || {};
+        MS.slotDrafts[code] ||= {
+          x_mm: Number(slot.x_mm || 0),
+          y_mm: Number(slot.y_mm || 0),
+          z_mm: Number(slot.z_mm || 0),
+        };
+        MS.slotDrafts[code][`${input.dataset.slotAxis}_mm`] = Number(input.value);
+      });
+    });
+
+    $$('[data-slot-update]').forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const code = btn.dataset.slotUpdate;
+        const payload = slotPayloadFromValues(code, MS.slotDrafts[code] || MS.slots[code] || {});
+        if (!payload) return;
+        const result = await command(`Save slot ${code} position`, `/api/slots/${code}`, payload,
+          { isStop: true, noCheck: true });
+        if (result) delete MS.slotDrafts[code];
+      });
+    });
 
     // Bind slot action buttons
     $$("[data-slot-goto]").forEach((btn) => {
@@ -552,14 +599,29 @@
           { slot: code, ...targetSpeedPayload() }, { requireHome: true });
       });
     });
-    $$("[data-slot-save]").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const code = btn.dataset.slotSave;
+    $$("[data-slot-teach]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const code = btn.dataset.slotTeach;
         MS.selectedSlotCode = code;
-        command(`Save current position to slot ${code}`, `/api/slots/${code}/save-current`, undefined,
+        const result = await command(`Save current position to slot ${code}`, `/api/slots/${code}/save-current`, undefined,
           { requireHome: true });
+        if (result) delete MS.slotDrafts[code];
       });
     });
+  }
+
+  function slotPayloadFromValues(code, values) {
+    const slot = MS.slots[code] || {};
+    const payload = {
+      product_name: slot.product_name || "",
+      dispense_delay_ms: Number(slot.dispense_delay_ms || 0),
+    };
+    AXES.forEach((axis) => { payload[`${axis}_mm`] = Number(values[`${axis}_mm`]); });
+    if (AXES.some((axis) => !Number.isFinite(payload[`${axis}_mm`]))) {
+      toast("Enter valid X, Y and Z coordinates.", "error");
+      return null;
+    }
+    return payload;
   }
 
   /* ── SELECTED SLOT DIRECT EDITOR ────────────────────────────── */
@@ -593,7 +655,6 @@
       `Current: X ${fmtPos(current.x_mm)} · Y ${fmtPos(current.y_mm)} · Z ${fmtPos(current.z_mm)} mm`);
 
     if (force || !MS.slotEditorDirty) {
-      el("selected-slot-delay").value = Number(slot.dispense_delay_ms || 0);
       AXES.forEach((axis) => {
         el(`selected-slot-${axis}`).value = Number(slot[`${axis}_mm`] || 0);
       });
@@ -605,7 +666,7 @@
     const currentSlot = MS.slots[selectedSlotCode()] || {};
     const payload = {
       product_name: currentSlot.product_name || "",
-      dispense_delay_ms: Number(el("selected-slot-delay").value || 0),
+      dispense_delay_ms: Number(currentSlot.dispense_delay_ms || 0),
     };
     AXES.forEach((axis) => {
       payload[`${axis}_mm`] = Number(el(`selected-slot-${axis}`).value);
@@ -642,8 +703,8 @@
   function renderAlarmSummary() {
     const node = el("alarm-summary");
     if (!node) return;
-    const error = MS.payload?.last_error;
-    if (!error) {
+    const active = alarmChannels().filter((channel) => channel.active && channel.level === "fault");
+    if (!active.length) {
       node.className = "alarm-summary";
       node.innerHTML = `<div class="alarm-summary-title">NO ACTIVE ALARMS</div><div class="alarm-detail">Machine operation normal.</div>`;
       return;
@@ -658,8 +719,8 @@
       : "Click Reset Alarm, then re-home if required.";
     node.className = "alarm-summary active";
     node.innerHTML = `
-      <div class="alarm-summary-title">1 ACTIVE ALARM — ${severity}</div>
-      <div class="alarm-detail">${esc(error)}<br>
+      <div class="alarm-summary-title">${active.length} ACTIVE ALARM${active.length > 1 ? "S" : ""} — ${severity}</div>
+      <div class="alarm-detail">${active.map((channel) => esc(`${channel.code}: ${channel.detail}`)).join("<br>")}<br>
         <b>Effect:</b> ${effect}<br>
         <b>Action:</b> ${action}
       </div>
@@ -843,6 +904,9 @@
     if (el("selected-slot-save")) el("selected-slot-save").disabled = !canConfigureSlot;
     if (el("selected-slot-goto")) el("selected-slot-goto").disabled = !canUseSlot;
     if (el("selected-slot-dispense")) el("selected-slot-dispense").disabled = !canUseSlot || !selectedSlotReady;
+    if (el("visual-slot-load-current")) el("visual-slot-load-current").disabled = !canUseSlot;
+    if (el("visual-slot-save")) el("visual-slot-save").disabled = !canConfigureSlot;
+    if (el("visual-slot-goto")) el("visual-slot-goto").disabled = !canUseSlot || slotStatus(MS.slots[MS.visualTargetSlot || MS.selectedSlotCode || "1"] || {}) !== "ready";
 
     // Jog inhibit banner
     const banner = el("jog-inhibit-banner");
@@ -956,7 +1020,7 @@
       if (code === targetCode && moving) classes.push("moving-target");
       if (code === nearestCode) classes.push("at-position");
       return `<button type="button" class="${classes.join(" ")}" data-visual-slot="${code}"
-        ${configured ? "" : "disabled"} title="${configured ? `Move gantry to Slot ${code}` : `Slot ${code} has no saved position`}">
+        title="Select Slot ${code} to edit, save or move">
         <span class="visual-slot-number">${String(index + 1).padStart(2, "0")}</span>
         <small>${configured ? `X${fmt(slot.x_mm, 0)} · Y${fmt(slot.y_mm, 0)}` : "NOT SET"}</small>
       </button>`;
@@ -1019,6 +1083,50 @@
       : "X -- · Y -- · Z --");
     setText("vis-gantry-state", moving ? `MOVING TO SLOT ${String(targetCode).padStart(2, "0")}` : "IDLE");
     setText("vis-gantry-detail", `X ${fmtPos(xPosition)} · Y ${fmtPos(yPosition)} · Z ${fmtPos(zPosition)} mm`);
+    renderVisualSlotEditor();
+  }
+
+  function renderVisualSlotEditor(force = false) {
+    const code = MS.visualTargetSlot || MS.selectedSlotCode || "1";
+    const slot = MS.slots[code] || {};
+    const derived = slotStatus(slot);
+    setText("visual-editor-title", `SLOT ${String(code).padStart(2, "0")}`);
+    const badge = el("visual-editor-status");
+    if (badge) {
+      badge.className = `slot-badge ${derived}`;
+      badge.textContent = derived.toUpperCase();
+    }
+    if (force || !MS.visualEditorDirty) {
+      AXES.forEach((axis) => {
+        const input = el(`visual-slot-${axis}`);
+        if (input) input.value = Number(slot[`${axis}_mm`] || 0);
+      });
+      MS.visualEditorDirty = false;
+    }
+  }
+
+  function visualSlotValues() {
+    return Object.fromEntries(AXES.map((axis) => [`${axis}_mm`, Number(el(`visual-slot-${axis}`)?.value)]));
+  }
+
+  function loadCurrentIntoVisualSlot() {
+    const current = getStatus().current_position || {};
+    AXES.forEach((axis) => {
+      el(`visual-slot-${axis}`).value = Number(current[`${axis}_mm`] || 0).toFixed(3);
+    });
+    MS.visualEditorDirty = true;
+  }
+
+  async function saveVisualSlot() {
+    const code = MS.visualTargetSlot || MS.selectedSlotCode || "1";
+    const payload = slotPayloadFromValues(code, visualSlotValues());
+    if (!payload) return;
+    const result = await command(`Save visualization slot ${code}`, `/api/slots/${code}`, payload,
+      { isStop: true, noCheck: true });
+    if (result) {
+      MS.visualEditorDirty = false;
+      renderVisualSlotEditor(true);
+    }
   }
 
   function renderWorkspacePages() {
@@ -1106,21 +1214,40 @@
     ).join("");
 
     const alarmList = document.getElementById("alarm-page-list");
-    if (alarmList) alarmList.innerHTML = alarmCount
-      ? `<article class="alarm-page-item"><strong>ACTIVE CONTROLLER ALARM</strong><small>${esc(humanizeError(MS.payload.last_error))}</small></article>`
-      : `<article class="alarm-page-item clear"><strong>NO ACTIVE ALARMS</strong><small>Safety circuit and controller report normal operation.</small></article>`;
+    if (alarmList) alarmList.innerHTML = alarmChannels().map((channel) => `
+      <article class="alarm-page-item ${channel.active ? channel.level : "clear"}">
+        <i class="alarm-point-light ${channel.active ? channel.level : "clear"}" aria-hidden="true"></i>
+        <div><span>${esc(channel.code)}</span><strong>${esc(channel.label)}</strong><small>${esc(channel.detail)}</small></div>
+        <b class="alarm-page-state">${channel.active ? (channel.level === "fault" ? "ALARM" : "WARNING") : "NORMAL"}</b>
+      </article>
+    `).join("");
 
     const flowState = document.getElementById("flow-state");
     if (flowState) {
       flowState.textContent = MS.payload?.busy ? "EXECUTING" : (ready ? "READY" : "INTERLOCKED");
       flowState.className = `page-status-chip ${ready ? "ok" : (alarmCount ? "fault" : "")}`;
     }
-    const flowController = document.getElementById("flow-controller");
-    const flowHome = document.getElementById("flow-home");
-    const flowMotion = document.getElementById("flow-motion");
-    if (flowController) flowController.className = `flow-node ${MS.online ? "complete" : "blocked"}`;
-    if (flowHome) flowHome.className = `flow-node ${homed ? "complete" : "blocked"}`;
-    if (flowMotion) flowMotion.className = `flow-node ${MS.payload?.busy ? "active" : (ready ? "complete" : "blocked")}`;
+    const commandName = MS.payload?.active_command || "";
+    const safetyClear = MS.online && !status.estop && !MS.payload?.safety?.stop_requested && alarmCount === 0;
+    const selectedSlot = MS.slots[MS.visualTargetSlot || MS.selectedSlotCode || ""] || {};
+    const selectedReady = slotStatus(selectedSlot) === "ready";
+    const safeZ = Number(MS.config?.safe_z_mm || 0);
+    const currentZ = Number(status.current_position?.z_mm || 0);
+    const operationMessage = String(operation.message || "").toLowerCase();
+    const setFlow = (id, state) => {
+      const node = document.getElementById(id);
+      if (node) node.className = `flow-node ${state}`;
+    };
+    setFlow("flow-controller", MS.online ? "complete" : "blocked");
+    setFlow("flow-safety", safetyClear ? "complete" : "blocked");
+    setFlow("flow-home-z", getAxis("z").is_homed ? "complete" : (commandName === "home_z" || (commandName === "home_all" && getOperation().active_axis === "z") ? "active" : "pending"));
+    setFlow("flow-home-x", getAxis("x").is_homed ? "complete" : (commandName === "home_x" || (commandName === "home_all" && getOperation().active_axis === "x") ? "active" : "pending"));
+    setFlow("flow-home-y", getAxis("y").is_homed ? "complete" : (commandName === "home_y" || (commandName === "home_all" && getOperation().active_axis === "y") ? "active" : "pending"));
+    setFlow("flow-slot", selectedReady ? "complete" : "pending");
+    setFlow("flow-safe-z", commandName.startsWith("goto_slot") || commandName === "dispense" ? (currentZ >= safeZ ? "complete" : "active") : "pending");
+    setFlow("flow-motion", MS.payload?.busy && (commandName.startsWith("goto_slot") || commandName === "absolute_move" || commandName === "dispense") ? "active" : (ready && selectedReady ? "complete" : "pending"));
+    setFlow("flow-z-target", MS.payload?.busy && (commandName.startsWith("goto_slot") || commandName === "dispense") ? "active" : "pending");
+    setFlow("flow-dispense", commandName === "dispense" ? "active" : (operationMessage.includes("completed dispense") ? "complete" : "pending"));
   }
 
   function updateAllUI() {
@@ -1329,7 +1456,7 @@
       loadSelectedSlotEditor(true);
       updateButtonStates();
     });
-    ["selected-slot-delay", "selected-slot-x", "selected-slot-y", "selected-slot-z"]
+    ["selected-slot-x", "selected-slot-y", "selected-slot-z"]
       .forEach((id) => el(id).addEventListener("input", () => { MS.slotEditorDirty = true; }));
     el("selected-slot-load-current").addEventListener("click", loadCurrentIntoSelectedSlot);
     el("selected-slot-save").addEventListener("click", saveSelectedSlot);
@@ -1348,15 +1475,22 @@
       }
     });
 
-    /* --- Visualization slot map: direct move to saved position --- */
+    /* --- Visualization slot map: select, edit, save, then move explicitly --- */
     el("visual-slot-grid").addEventListener("click", (event) => {
       const slotButton = event.target.closest("[data-visual-slot]");
-      if (!slotButton || slotButton.disabled) return;
+      if (!slotButton) return;
       const code = slotButton.dataset.visualSlot;
       MS.selectedSlotCode = code;
       MS.visualTargetSlot = code;
+      MS.visualEditorDirty = false;
       loadSelectedSlotEditor(true);
       renderVisualization();
+    });
+    AXES.forEach((axis) => el(`visual-slot-${axis}`).addEventListener("input", () => { MS.visualEditorDirty = true; }));
+    el("visual-slot-load-current").addEventListener("click", loadCurrentIntoVisualSlot);
+    el("visual-slot-save").addEventListener("click", saveVisualSlot);
+    el("visual-slot-goto").addEventListener("click", () => {
+      const code = MS.visualTargetSlot || MS.selectedSlotCode || "1";
       command(`Go to slot ${code}`, `/api/slots/${code}/goto`, targetSpeedPayload(), { requireHome: true });
     });
 
