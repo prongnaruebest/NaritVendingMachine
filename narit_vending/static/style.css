@@ -3954,6 +3954,65 @@ select.slot-filter {
   font-size: 14px;
 }
 
+.rp-jog-control-layout {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 96px;
+  gap: 12px;
+  align-items: start;
+}
+
+.rp-jog-main-column {
+  min-width: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.rp-jog-main-column .rp-jog-pad-area { margin: 0 auto; }
+
+.rp-step-control .rp-preset-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.rp-jog-speed-rail {
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: 7px;
+  padding: 9px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surf-1);
+}
+
+.rp-jog-speed-rail .rp-param-label {
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+  margin: 0;
+  text-align: center;
+}
+
+.rp-jog-speed-rail .rp-param-label .val { font-size: 9px; }
+
+.rp-jog-speed-rail .speed-preset-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+}
+
+.rp-jog-speed-rail .speed-preset {
+  width: 100%;
+  min-height: 42px;
+  padding: 5px 3px;
+}
+
+@media (max-width: 420px) {
+  .rp-jog-control-layout { grid-template-columns: minmax(0, 1fr) 84px; }
+}
+
 @media (max-width: 1200px) {
   .visual-slot-editor { grid-template-columns: 1fr; }
   .visual-slot-editor .visual-editor-head,

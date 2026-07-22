@@ -8,7 +8,7 @@
   <link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='favicon-transparent-large.png') }}?v=20260721_v12">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=20260722_v24">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=20260722_v25">
 </head>
 <body>
   <div class="hmi-shell">
@@ -518,51 +518,49 @@
         <input type="hidden" id="jog-time" value="">
         <input type="hidden" id="move-speed" value="15.0">
 
-        <!-- Jog Direction Pads -->
-        <div class="rp-jog-pad-area">
-          <!-- XY Pad -->
-          <div class="rp-xy-pad">
-            <button class="rp-jog-btn jog-y-pos" data-jog="y:1" title="Jog Y+ (Up)">Y+</button>
-            <button class="rp-jog-btn jog-x-neg" data-jog="x:-1" title="Jog X- (Left)">X-</button>
-            <div class="rp-jog-center">XY PAD</div>
-            <button class="rp-jog-btn jog-x-pos" data-jog="x:1" title="Jog X+ (Right)">X+</button>
-            <button class="rp-jog-btn jog-y-neg" data-jog="y:-1" title="Jog Y- (Down)">Y-</button>
-          </div>
+        <div class="rp-jog-control-layout">
+          <div class="rp-jog-main-column">
+            <div class="rp-jog-pad-area">
+              <div class="rp-xy-pad">
+                <button class="rp-jog-btn jog-y-pos" data-jog="y:1" title="Jog Y+ (Up)">Y+</button>
+                <button class="rp-jog-btn jog-x-neg" data-jog="x:-1" title="Jog X- (Left)">X-</button>
+                <div class="rp-jog-center">XY PAD</div>
+                <button class="rp-jog-btn jog-x-pos" data-jog="x:1" title="Jog X+ (Right)">X+</button>
+                <button class="rp-jog-btn jog-y-neg" data-jog="y:-1" title="Jog Y- (Down)">Y-</button>
+              </div>
 
-          <!-- Z Axis Pad -->
-          <div class="rp-z-pad">
-            <span class="rp-z-label">Z Axis</span>
-            <button class="rp-jog-btn" data-jog="z:1" title="Jog Z+ (Up)">Z+</button>
-            <button class="rp-jog-btn" data-jog="z:-1" title="Jog Z- (Down)">Z-</button>
-          </div>
-        </div>
-
-        <!-- Jog Preset Parameters -->
-        <div class="rp-params">
-          <div>
-            <div class="rp-param-label">
-              <span>Step Increment</span>
-              <span class="val"><strong id="jog-step-display">1.0</strong> mm</span>
+              <div class="rp-z-pad">
+                <span class="rp-z-label">Z Axis</span>
+                <button class="rp-jog-btn" data-jog="z:1" title="Jog Z+ (Up)">Z+</button>
+                <button class="rp-jog-btn" data-jog="z:-1" title="Jog Z- (Down)">Z-</button>
+              </div>
             </div>
-            <div class="rp-preset-row">
-              <button class="rp-preset-btn step-btn" data-step="0.1">0.1 mm</button>
-              <button class="rp-preset-btn step-btn active" data-step="1">1.0 mm</button>
-              <button class="rp-preset-btn step-btn" data-step="5">5.0 mm</button>
-              <button class="rp-preset-btn step-btn" data-step="10">10.0 mm</button>
+
+            <div class="rp-step-control">
+              <div class="rp-param-label">
+                <span>Step Increment</span>
+                <span class="val"><strong id="jog-step-display">1.0</strong> mm</span>
+              </div>
+              <div class="rp-preset-row">
+                <button class="rp-preset-btn step-btn" data-step="0.1">0.1 mm</button>
+                <button class="rp-preset-btn step-btn active" data-step="1">1.0 mm</button>
+                <button class="rp-preset-btn step-btn" data-step="5">5.0 mm</button>
+                <button class="rp-preset-btn step-btn" data-step="10">10.0 mm</button>
+              </div>
             </div>
           </div>
 
-          <div>
+          <aside class="rp-jog-speed-rail">
             <div class="rp-param-label">
               <span>Jog Speed</span>
               <span class="val"><strong id="jog-speed-display">10.0</strong> mm/s</span>
             </div>
-            <div class="rp-preset-row">
+            <div class="rp-preset-row speed-preset-row">
               <button class="rp-preset-btn speed-preset" data-speed="5"><b>SLOW</b><small>5 mm/s</small></button>
               <button class="rp-preset-btn speed-preset active" data-speed="15"><b>MED</b><small>15 mm/s</small></button>
               <button class="rp-preset-btn speed-preset" data-speed="30"><b>FAST</b><small>30 mm/s</small></button>
             </div>
-          </div>
+          </aside>
         </div>
       </div>
 
