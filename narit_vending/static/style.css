@@ -4680,13 +4680,14 @@ select.slot-filter {
 /* =============================================================
    CONFIGURATION V35 — editable motor pulse, GPIO and sensors
    ============================================================= */
-.workspace-view[data-view-page="configuration"] { min-height: 0; height: 100%; display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; overflow: hidden; font-size: 14px; }
-.configuration-toolbar { display: flex; flex: 0 0 auto; align-items: center; justify-content: space-between; gap: 16px; padding: 11px 14px; }
-.configuration-toolbar > div:first-child { display: grid; gap: 3px; }
-.configuration-toolbar strong { color: var(--text-0); font-size: 14px; }
-.configuration-toolbar span { color: var(--text-2); font-size: 11px; }
+.workspace-view[data-view-page="configuration"] { min-height: 0; height: 100%; grid-template-rows: auto minmax(0, 1fr) auto; overflow: hidden; font-size: 14px; }
+.workspace-view[data-view-page="configuration"] > .page-heading { display: none; }
+.configuration-toolbar { display: flex; flex: 0 0 auto; flex-direction: row; align-items: center; justify-content: space-between; gap: 12px; min-height: 48px; padding: 6px 10px; }
+.configuration-toolbar > div:first-child { display: flex; min-width: 0; align-items: center; gap: 10px; }
+.configuration-toolbar strong { color: var(--text-0); font-size: 12px; white-space: nowrap; }
+.configuration-toolbar span { overflow: hidden; color: var(--text-2); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
 .configuration-toolbar-actions { display: flex; gap: 8px; }
-.configuration-toolbar-actions button { min-height: 38px; padding: 0 14px; font-size: 11px; }
+.configuration-toolbar-actions button { min-height: 32px; padding: 0 11px; font-size: 9px; white-space: nowrap; }
 .configuration-scroll-area { display: grid; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-color: var(--blue-lt) var(--surf-0); gap: 10px; padding-right: 3px; }
 .motor-pulse-config-panel,
 .configuration-pin-panel { min-height: auto; overflow: visible; }
@@ -4737,8 +4738,8 @@ select.slot-filter {
 }
 
 @media (max-width: 1100px) {
-  .configuration-toolbar { align-items: stretch; flex-direction: column; }
-  .configuration-toolbar-actions { display: grid; grid-template-columns: repeat(3, 1fr); }
+  .configuration-toolbar { flex-wrap: wrap; }
+  .configuration-toolbar-actions { display: flex; margin-left: auto; }
   .motor-config-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .pin-editor-row { grid-template-columns: minmax(140px, 1fr) 90px 90px; }
   .pin-editor-row .config-switch { grid-column: auto; }
