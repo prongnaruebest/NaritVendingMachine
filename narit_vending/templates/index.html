@@ -8,7 +8,7 @@
   <link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='favicon-transparent-large.png') }}?v=20260721_v12">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=20260722_v28">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=20260722_v30">
 </head>
 <body>
   <div class="hmi-shell">
@@ -306,15 +306,73 @@
           <div><p class="panel-label">System Overview</p><h2>Machine Dashboard</h2></div>
           <span class="page-status-chip" id="dashboard-health">CONNECTING</span>
         </div>
-        <div class="overview-grid">
-          <article class="overview-card"><span>Controller</span><strong id="dashboard-controller">OFFLINE</strong><small>Raspberry Pi motion service</small></article>
-          <article class="overview-card"><span>Machine State</span><strong id="dashboard-state">NOT READY</strong><small id="dashboard-state-detail">Waiting for status</small></article>
-          <article class="overview-card"><span>Active Command</span><strong id="dashboard-command">NONE</strong><small>Current command queue</small></article>
-          <article class="overview-card"><span>Configured Slots</span><strong id="dashboard-slots">0</strong><small>Ready vending locations</small></article>
-        </div>
-        <div class="panel page-panel">
-          <div class="panel-head"><div><p class="panel-label">Live Position</p><h2 class="panel-title">Axis Summary</h2></div></div>
-          <div class="dashboard-axis-grid" id="dashboard-axis-grid"></div>
+        <div class="dashboard-command-center">
+          <section class="dashboard-panel dashboard-readiness">
+            <div class="dashboard-panel-head"><div><span>A</span><strong>Machine Readiness</strong></div><b id="dashboard-readiness-summary">OFFLINE</b></div>
+            <div class="dashboard-readiness-grid" id="dashboard-readiness-grid"></div>
+            <p class="dashboard-reason" id="dashboard-state-detail">Waiting for controller status</p>
+          </section>
+
+          <section class="dashboard-panel dashboard-operation">
+            <div class="dashboard-panel-head"><div><span>B</span><strong>Current Operation</strong></div><b id="dashboard-motion-state">OFFLINE</b></div>
+            <div class="dashboard-operation-grid">
+              <div><span>Command</span><strong id="dashboard-command">NONE</strong></div>
+              <div><span>Phase</span><strong id="dashboard-operation-phase">UNKNOWN</strong></div>
+              <div><span>Active Axis</span><strong id="dashboard-active-axis">--</strong></div>
+              <div><span>Target Slot</span><strong id="dashboard-target-slot">--</strong></div>
+              <div><span>Started</span><strong id="dashboard-start-time">--:--:--</strong></div>
+              <div><span>Elapsed</span><strong id="dashboard-elapsed-time">--</strong></div>
+              <div><span>Remaining</span><strong id="dashboard-remaining-time">NO DATA</strong></div>
+            </div>
+            <div class="dashboard-progress"><div id="dashboard-progress-bar"></div></div>
+            <small id="dashboard-operation-message">Waiting for controller</small>
+          </section>
+
+          <section class="dashboard-panel dashboard-alarms">
+            <div class="dashboard-panel-head"><div><span>E</span><strong>Active Alarms</strong></div><b id="dashboard-alarm-count">0</b></div>
+            <div class="dashboard-alarm-list" id="dashboard-alarm-list"></div>
+          </section>
+
+          <section class="dashboard-panel dashboard-axes">
+            <div class="dashboard-panel-head"><div><span>C</span><strong>Live Axis Position</strong></div><b>1 SEC LIVE</b></div>
+            <div class="dashboard-axis-table" id="dashboard-axis-grid"></div>
+          </section>
+
+          <section class="dashboard-panel dashboard-slots">
+            <div class="dashboard-panel-head"><div><span>D</span><strong>Slot Overview 6×5</strong></div><b id="dashboard-slots">0 READY</b></div>
+            <div class="dashboard-slot-content">
+              <div class="dashboard-slot-map" id="dashboard-slot-grid"></div>
+              <div class="dashboard-slot-detail">
+                <span>Selected</span><strong id="dashboard-selected-slot">SLOT 01</strong>
+                <small id="dashboard-selected-coordinates">X -- · Y -- · Z --</small>
+              </div>
+            </div>
+          </section>
+
+          <section class="dashboard-panel dashboard-cycle">
+            <div class="dashboard-panel-head"><div><span>F</span><strong>Cycle Statistics</strong></div><b>API REQUIRED</b></div>
+            <div class="dashboard-no-data-grid">
+              <div><span>Completed</span><strong>NO DATA</strong></div><div><span>Failed</span><strong>NO DATA</strong></div>
+              <div><span>Success Rate</span><strong>NO DATA</strong></div><div><span>Latest / Average</span><strong>NO DATA</strong></div>
+              <div><span>Operating Time</span><strong>NO DATA</strong></div>
+            </div>
+          </section>
+
+          <section class="dashboard-panel dashboard-maintenance">
+            <div class="dashboard-panel-head"><div><span>G</span><strong>Maintenance Status</strong></div><b>NO COUNTERS</b></div>
+            <div class="dashboard-maintenance-list">
+              <div><span>Motor Runtime X/Y/Z</span><strong>NO DATA</strong></div>
+              <div><span>Movement Cycles</span><strong>NO DATA</strong></div>
+              <div><span>Lead Screw Inspection</span><strong>NO DATA</strong></div>
+              <div><span>Limit Sensor Inspection</span><strong>NO DATA</strong></div>
+              <div><span>Last / Next Maintenance</span><strong>NO DATA</strong></div>
+            </div>
+          </section>
+
+          <section class="dashboard-panel dashboard-events">
+            <div class="dashboard-panel-head"><div><span>H</span><strong>Recent Events</strong></div><b>LAST 8</b></div>
+            <ol class="dashboard-event-list" id="dashboard-event-list"></ol>
+          </section>
         </div>
       </section>
 
@@ -651,6 +709,6 @@
   <!-- Toast notification -->
   <div class="toast" id="toast" role="status"></div>
 
-  <script src="{{ url_for('static', filename='app.js') }}?v=20260722_v20"></script>
+  <script src="{{ url_for('static', filename='app.js') }}?v=20260722_v30"></script>
 </body>
 </html>

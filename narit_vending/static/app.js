@@ -38,6 +38,10 @@
     slotEditorDirty: false,
     visualEditorDirty: false,
     slotDrafts: {},
+    dashboardSelectedSlot: "1",
+    dashboardOperationStartedAt: null,
+    dashboardTrackedCommand: "",
+    dashboardWasBusy: false,
     silentErrorUntil: 0,
     logFilter: "all",
     currentView: "motion",
@@ -93,6 +97,14 @@
   function fmtTime(value) {
     const n = Number(value);
     return isNaN(n) ? "---" : n.toFixed(2);
+  }
+
+  function fmtDuration(milliseconds) {
+    if (!Number.isFinite(milliseconds) || milliseconds < 0) return "--";
+    const totalSeconds = Math.floor(milliseconds / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
   }
 
   /* ── STATE ACCESSORS ────────────────────────────────────────── */
@@ -961,7 +973,10 @@
       button.setAttribute("aria-current", active ? "page" : "false");
     });
     const shell = $(".hmi-shell");
-    if (shell) shell.classList.toggle("view-wide", nextView !== "motion");
+    if (shell) {
+      shell.classList.toggle("view-wide", nextView !== "motion");
+      shell.classList.toggle("view-dashboard", nextView === "dashboard");
+    }
     if (updateHash && location.hash !== `#${nextView}`) history.replaceState(null, "", `#${nextView}`);
     renderWorkspacePages();
   }
@@ -1117,26 +1132,160 @@
     }
   }
 
+  function trackDashboardOperation(payload) {
+    const busy = Boolean(payload?.busy);
+    const commandName = payload?.active_command || payload?.operation?.phase || "";
+    if (busy && (!MS.dashboardWasBusy || MS.dashboardTrackedCommand !== commandName)) {
+      MS.dashboardOperationStartedAt = Date.now();
+      MS.dashboardTrackedCommand = commandName;
+    }
+    if (!busy) {
+      MS.dashboardOperationStartedAt = null;
+      MS.dashboardTrackedCommand = "";
+    }
+    MS.dashboardWasBusy = busy;
+  }
+
+  function dashboardAlarmAction(channel) {
+    if (channel.code === "CTRL") return "Check Pi power, network and web service";
+    if (channel.code === "ESTOP") return "Release physical E-Stop, then reset alarms";
+    if (channel.code === "STOP") return "Press Reset Alarms and verify safety";
+    if (channel.code.endsWith("-HOME")) return `Home ${channel.code[0]} axis before motion`;
+    if (channel.code.endsWith("-MIN") || channel.code.endsWith("-MAX")) return "Inspect limit sensor and axis position";
+    return "Open Alarm Management for diagnosis";
+  }
+
+  function renderDashboard() {
+    const status = getStatus();
+    const operation = getOperation();
+    const alarmCount = activeAlarmCount();
+    const homed = allAxesHomed();
+    const safetyClear = MS.online && !status.estop && !MS.payload?.safety?.stop_requested && alarmCount === 0;
+    const ready = safetyClear && homed && !MS.payload?.busy;
+    const configuredSlots = Object.values(MS.slots || {}).filter((slot) => slotStatus(slot) === "ready").length;
+    const summary = !MS.online ? "OFFLINE" : (alarmCount ? "ALARM" : (ready ? "READY" : "NOT READY"));
+    const summaryClass = !MS.online || alarmCount ? "fault" : (ready ? "ok" : "warn");
+
+    setText("dashboard-readiness-summary", summary);
+    setClass("dashboard-readiness-summary", summaryClass);
+    setText("dashboard-state-detail", operation.message || motionInhibitReason(true) || "Controller ready");
+    setText("dashboard-slots", `${configuredSlots} READY`);
+    const dashboardHealth = el("dashboard-health");
+    if (dashboardHealth) {
+      dashboardHealth.textContent = summary === "READY" ? "SYSTEM READY" : summary;
+      dashboardHealth.className = `page-status-chip ${summaryClass === "warn" ? "" : summaryClass}`;
+    }
+
+    const readinessItems = [
+      ["Controller", MS.online ? "ONLINE" : "OFFLINE", MS.online ? "ok" : "fault"],
+      ["E-Stop", status.estop ? "ACTIVE" : (MS.online ? "CLEAR" : "UNKNOWN"), status.estop || !MS.online ? "fault" : "ok"],
+      ["Interlock", safetyClear ? "ENABLED" : "INHIBITED", safetyClear ? "ok" : "warn"],
+      ...AXES.map((axis) => [`${axis.toUpperCase()} Home`, getAxis(axis).is_homed ? "HOMED" : "NOT HOMED", getAxis(axis).is_homed ? "ok" : "warn"]),
+      ...AXES.map((axis) => {
+        const data = getAxis(axis);
+        const active = data.head_limit || data.tail_limit;
+        return [`${axis.toUpperCase()} Limits`, active ? `${data.head_limit ? "MIN" : "MAX"} ACTIVE` : "CLEAR", active ? "fault" : "ok"];
+      }),
+      ["Alarms", String(alarmCount), alarmCount ? "fault" : "ok"],
+    ];
+    const readinessGrid = el("dashboard-readiness-grid");
+    if (readinessGrid) readinessGrid.innerHTML = readinessItems.map(([label, value, stateClass]) => `
+      <div class="dashboard-readiness-item ${stateClass}"><span>${esc(label)}</span><strong><i></i>${esc(value)}</strong></div>
+    `).join("");
+
+    const commandName = MS.payload?.active_command || "";
+    const targetCode = commandName.match(/(?:goto_slot_|dispense_?)(\d+)/)?.[1] || "";
+    const targetSlot = targetCode ? MS.slots[targetCode] : null;
+    const busy = Boolean(MS.payload?.busy);
+    const phase = MS.online ? String(operation.phase || (busy ? "running" : "ready")).toUpperCase() : "UNKNOWN";
+    const motionState = !MS.online ? "OFFLINE" : (status.estop ? "STOPPED" : (busy ? (commandName.startsWith("home") ? "HOMING" : commandName.includes("dispense") ? "DISPENSING" : "MOVING") : "IDLE"));
+    const elapsed = busy && MS.dashboardOperationStartedAt ? Date.now() - MS.dashboardOperationStartedAt : NaN;
+    setText("dashboard-command", commandName || "NONE");
+    setText("dashboard-operation-phase", phase);
+    setText("dashboard-active-axis", operation.active_axis ? operation.active_axis.toUpperCase() : "--");
+    setText("dashboard-target-slot", targetCode ? `SLOT ${String(targetCode).padStart(2, "0")}` : "--");
+    setText("dashboard-start-time", MS.dashboardOperationStartedAt ? new Date(MS.dashboardOperationStartedAt).toLocaleTimeString() : "--:--:--");
+    setText("dashboard-elapsed-time", Number.isFinite(elapsed) ? fmtDuration(elapsed) : "--");
+    setText("dashboard-remaining-time", "NO DATA");
+    setText("dashboard-operation-message", MS.online ? (operation.message || "Controller ready") : "Controller API unavailable");
+    setText("dashboard-motion-state", motionState);
+    setClass("dashboard-motion-state", busy ? "active" : (motionState === "OFFLINE" || motionState === "STOPPED" ? "fault" : "ok"));
+    const progressBar = el("dashboard-progress-bar");
+    if (progressBar) progressBar.className = busy ? "indeterminate" : "";
+
+    const dashboardAxes = el("dashboard-axis-grid");
+    if (dashboardAxes) dashboardAxes.innerHTML = AXES.map((axis) => {
+      const data = getAxis(axis);
+      const actual = Number(data.position_mm || 0);
+      const target = targetSlot ? Number(targetSlot[`${axis}_mm`]) : NaN;
+      const delta = Number.isFinite(target) ? target - actual : NaN;
+      const direction = !busy || !Number.isFinite(delta) || Math.abs(delta) < 0.001 ? "IDLE" : (delta > 0 ? `${axis.toUpperCase()}+` : `${axis.toUpperCase()}−`);
+      const limitState = data.head_limit ? "MIN ACTIVE" : (data.tail_limit ? "MAX ACTIVE" : "CLEAR");
+      const axisState = !MS.online ? "UNKNOWN" : (data.head_limit || data.tail_limit ? "FAULT" : (data.is_homed ? "HOMED" : "NOT HOMED"));
+      return `<article class="dashboard-axis-row ${data.head_limit || data.tail_limit ? "fault" : (data.is_homed ? "ok" : "warn")}">
+        <div class="dashboard-axis-name"><b>${axis.toUpperCase()}</b><span>${esc(axisState)}</span></div>
+        <div><span>Actual</span><strong>${MS.online ? fmtPos(actual) : "---"}<small> mm</small></strong></div>
+        <div><span>Target</span><strong>${Number.isFinite(target) ? fmtPos(target) : "---"}<small> mm</small></strong></div>
+        <div><span>Delta</span><strong>${Number.isFinite(delta) ? fmtDelta(delta).text : "---"}<small> mm</small></strong></div>
+        <div><span>Pulse</span><strong>${MS.online ? fmtSteps(data.position_steps) : "---"}</strong></div>
+        <div><span>Direction</span><strong>${esc(direction)}</strong></div>
+        <div><span>Limits</span><strong>${esc(limitState)}</strong></div>
+        <div><span>Cmd / Effective</span><strong>${fmtSpd(MS.selectedJogSpeed)} / ${fmtSpd(MS.selectedJogSpeed * MS.feedOverridePct / 100)}<small> mm/s</small></strong></div>
+      </article>`;
+    }).join("");
+
+    const selectedCode = MS.dashboardSelectedSlot || "1";
+    const selectedSlot = MS.slots[selectedCode] || {};
+    setText("dashboard-selected-slot", `SLOT ${String(selectedCode).padStart(2, "0")}`);
+    setText("dashboard-selected-coordinates", slotStatus(selectedSlot) === "ready"
+      ? `X ${fmtPos(selectedSlot.x_mm)} · Y ${fmtPos(selectedSlot.y_mm)} · Z ${fmtPos(selectedSlot.z_mm)} mm`
+      : "POSITION NOT CONFIGURED");
+    const currentPosition = status.current_position || {};
+    const nearestCode = Object.entries(MS.slots || {}).find(([, slot]) => AXES.every((axis) => Math.abs(Number(slot[`${axis}_mm`] || 0) - Number(currentPosition[`${axis}_mm`] || 0)) < 0.05))?.[0];
+    const slotGrid = el("dashboard-slot-grid");
+    if (slotGrid) slotGrid.innerHTML = Array.from({ length: 30 }, (_, index) => {
+      const code = String(index + 1);
+      const slot = MS.slots[code] || {};
+      const configured = slotStatus(slot) === "ready";
+      const invalid = configured && AXES.some((axis) => {
+        const value = Number(slot[`${axis}_mm`]);
+        const max = Number(MS.config?.axes?.[axis]?.max_travel_mm ?? Infinity);
+        return !Number.isFinite(value) || value < 0 || value > max;
+      });
+      const classes = ["dashboard-slot", configured ? "ready" : "empty"];
+      if (invalid) classes.push("fault");
+      if (code === selectedCode) classes.push("selected");
+      if (code === targetCode && busy) classes.push("moving");
+      if (code === nearestCode) classes.push("at-position");
+      return `<button type="button" class="${classes.join(" ")}" data-dashboard-slot="${code}" aria-label="Select slot ${code} details"><b>${String(index + 1).padStart(2, "0")}</b><small>${invalid ? "INVALID" : configured ? "READY" : "EMPTY"}</small></button>`;
+    }).join("");
+
+    const activeChannels = alarmChannels().filter((channel) => channel.active).slice(0, 5);
+    setText("dashboard-alarm-count", String(activeChannels.length));
+    const alarmList = el("dashboard-alarm-list");
+    const alarmTime = MS.payload?.timestamp ? new Date(MS.payload.timestamp).toLocaleTimeString() : "--:--:--";
+    if (alarmList) alarmList.innerHTML = activeChannels.length ? activeChannels.map((channel) => `
+      <article class="dashboard-alarm-item ${channel.level}">
+        <i></i><div><strong>${esc(channel.code)} · ${esc(channel.label)}</strong><span>${esc(channel.detail)}</span><small>${esc(alarmTime)} · ${esc(dashboardAlarmAction(channel))}</small></div>
+      </article>`).join("") : `<div class="dashboard-empty-state ok">✓ NO ACTIVE ALARMS</div>`;
+
+    const eventList = el("dashboard-event-list");
+    if (eventList) eventList.innerHTML = MS.events.slice(0, 8).map((event) => `
+      <li class="${esc(event.level)}"><time>${event.at.toLocaleTimeString()}</time><b>${esc(event.subsystem)}</b><span>${esc(event.message)}</span></li>
+    `).join("") || `<li class="empty"><span>NO EVENTS RECORDED</span></li>`;
+  }
+
   function renderWorkspacePages() {
     const status = getStatus();
     const operation = getOperation();
     const homed = allAxesHomed();
-    const ready = MS.online && !status.estop && homed && !MS.payload?.busy;
+    const ready = MS.online && !status.estop && !MS.payload?.safety?.stop_requested && homed && !MS.payload?.busy && activeAlarmCount() === 0;
     const alarmCount = activeAlarmCount();
     const configuredSlots = Object.values(MS.slots || {}).filter((slot) => slotStatus(slot) === "ready").length;
 
-    setText("dashboard-controller", MS.online ? "ONLINE" : "OFFLINE");
-    setText("dashboard-state", ready ? "READY" : "NOT READY");
-    setText("dashboard-state-detail", operation.message || motionInhibitReason(true) || "Controller ready");
-    setText("dashboard-command", MS.payload?.active_command || "NONE");
-    setText("dashboard-slots", configuredSlots);
-    const dashboardHealth = document.getElementById("dashboard-health");
-    if (dashboardHealth) {
-      dashboardHealth.textContent = ready ? "SYSTEM READY" : (MS.online ? "ATTENTION" : "OFFLINE");
-      dashboardHealth.className = `page-status-chip ${ready ? "ok" : (MS.online ? "" : "fault")}`;
-    }
+    renderDashboard();
 
-    const dashboardAxes = document.getElementById("dashboard-axis-grid");
+    const dashboardAxes = document.getElementById("legacy-dashboard-axis-grid");
     if (dashboardAxes) dashboardAxes.innerHTML = AXES.map((axis) => {
       const data = getAxis(axis);
       return `<article class="dashboard-axis-card"><span>${axis.toUpperCase()} AXIS</span><strong>${fmtPos(data.position_mm)} mm</strong><small>${data.is_homed ? "HOMED" : "NOT HOMED"} · ${fmtSteps(data.position_steps)} steps</small></article>`;
@@ -1248,6 +1397,7 @@
   }
 
   function render(payload) {
+    trackDashboardOperation(payload);
     MS.payload = payload;
     MS.slots   = payload.slots || {};
 
@@ -1480,6 +1630,13 @@
     el("visual-slot-goto").addEventListener("click", () => {
       const code = MS.visualTargetSlot || MS.selectedSlotCode || "1";
       command(`Go to slot ${code}`, `/api/slots/${code}/goto`, targetSpeedPayload(), { requireHome: true });
+    });
+
+    el("dashboard-slot-grid").addEventListener("click", (event) => {
+      const slotButton = event.target.closest("[data-dashboard-slot]");
+      if (!slotButton) return;
+      MS.dashboardSelectedSlot = slotButton.dataset.dashboardSlot;
+      renderDashboard();
     });
 
     /* --- Event log filter --- */
