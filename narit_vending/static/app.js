@@ -1308,7 +1308,7 @@
       if (isCommandTarget) classes.push("moving-target");
       if (isAtPosition) classes.push("at-position");
       const stateLabel = !configured ? "EMPTY" : !valid ? "INVALID" : isCommandTarget ? "TARGET" : isAtPosition ? "AT POSITION" : isSelected ? "SELECTED" : "READY";
-      return `<button type="button" class="${classes.join(" ")}" data-visual-slot="${code}" title="Select Slot ${code} for details only">
+      return `<button type="button" class="${classes.join(" ")}" data-visual-slot="${code}" title="Select Slot ${code}">
         <span class="visual-slot-number">${String(index + 1).padStart(2, "0")}</span>
         <small>${stateLabel}</small>
       </button>`;
@@ -1382,6 +1382,28 @@
     setText("visual-state-command", commandName || "NONE");
     setText("visual-state-slot", targetCode ? `SLOT ${String(targetCode).padStart(2, "0")}` : "--");
     setText("visual-state-reason", dataState.live ? (motionInhibitReason(true) || operation.message || dataState.reason) : dataState.reason);
+
+    const commandSelect = el("visual-command-slot");
+    if (commandSelect) {
+      const codes = Array.from({ length: 30 }, (_, index) => String(index + 1));
+      if (commandSelect.options.length !== codes.length) {
+        commandSelect.innerHTML = codes.map((code) => `<option value="${code}">Slot ${code}</option>`).join("");
+      }
+      commandSelect.value = selectedCode;
+    }
+    const commandStatus = el("visual-command-status");
+    if (commandStatus) {
+      const commandSlotState = !selectedValid ? (slotStatus(selectedSlot) === "empty" ? "empty" : "invalid") : "ready";
+      commandStatus.className = `slot-badge ${commandSlotState}`;
+      commandStatus.textContent = commandSlotState.toUpperCase();
+    }
+    AXES.forEach((axis) => {
+      const input = el(`visual-command-${axis}`);
+      if (input) input.value = selectedValid ? Number(selectedSlot[`${axis}_mm`]).toFixed(3) : "";
+    });
+    setText("visual-command-current", dataState.live
+      ? `Current: X ${fmtPos(xPosition)} · Y ${fmtPos(yPosition)} · Z ${fmtPos(zPosition)} mm`
+      : "Current: UNKNOWN — controller data unavailable");
 
     setText("vis-target-summary", `SLOT ${String(selectedCode).padStart(2, "0")}`);
     setText("vis-target-coordinates", selectedValid ? `X ${fmtPos(selectedSlot.x_mm)} · Y ${fmtPos(selectedSlot.y_mm)} · Z ${fmtPos(selectedSlot.z_mm)}` : "NOT CONFIGURED");
@@ -1468,6 +1490,19 @@
       log(`Visualization preview rejected: ${humanizeError(err.message)}`, "error", "INTERLOCK");
     }
     renderVisualizationV32();
+  }
+
+  function loadVisualSlotTarget() {
+    const code = MS.visualTargetSlot || MS.selectedSlotCode || "1";
+    const slot = MS.slots[code] || {};
+    if (!visualSlotIsValid(slot) || slotStatus(slot) !== "ready") {
+      toast(`Slot ${code} has no valid saved position.`, "error");
+      return;
+    }
+    AXES.forEach((axis) => { el(`move-${axis}`).value = Number(slot[`${axis}_mm`]).toFixed(3); });
+    invalidateMotionWorkflow(`Target loaded from Visualization — Slot ${code}.`);
+    toast(`Slot ${code} target loaded. Validate or press GOTO SLOT.`, "ok");
+    log(`Visualization target loaded: slot ${code}`, "info", "MOTION");
   }
 
   async function gotoVisualSlot() {
@@ -2076,6 +2111,16 @@
       loadSelectedSlotEditor(true);
       renderVisualizationV32();
     });
+    el("visual-command-slot").addEventListener("change", (event) => {
+      const code = String(event.target.value || "1");
+      MS.selectedSlotCode = code;
+      MS.visualTargetSlot = code;
+      MS.visualEditorDirty = false;
+      MS.visualPreview = null;
+      MS.visualEditMode = false;
+      loadSelectedSlotEditor(true);
+      renderVisualizationV32();
+    });
     AXES.forEach((axis) => el(`visual-slot-${axis}`).addEventListener("input", () => {
       MS.visualEditorDirty = true;
       MS.visualPreview = null;
@@ -2086,6 +2131,7 @@
     }));
     el("visual-slot-load-current").addEventListener("click", loadCurrentIntoVisualSlot);
     el("visual-slot-save").addEventListener("click", saveVisualSlotV32);
+    el("visual-command-load").addEventListener("click", loadVisualSlotTarget);
     el("visual-slot-goto").addEventListener("click", gotoVisualSlot);
     el("visual-load-preview").addEventListener("click", previewVisualSlot);
     el("visual-send-motion").addEventListener("click", sendVisualTargetToMotion);

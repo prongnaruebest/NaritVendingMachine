@@ -8,7 +8,7 @@
   <link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='favicon-transparent-large.png') }}?v=20260721_v12">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=20260722_v33">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=20260722_v34">
 </head>
 <body>
   <div class="hmi-shell">
@@ -476,7 +476,20 @@
           </section>
 
           <section class="visual-slot-inspector">
-            <div class="visual-section-head"><span>Selected Slot Details</span><strong id="vis-target-summary">SLOT --</strong></div>
+            <div class="visual-command-head"><span>SELECTED SLOT</span><strong class="slot-badge empty" id="visual-command-status">EMPTY</strong></div>
+            <div class="visual-command-form">
+              <label class="visual-command-select"><span>Slot</span><select id="visual-command-slot" class="hmi-select" aria-label="Visualization selected slot"></select></label>
+              <label><span>X Coordinate</span><div class="field-input-wrap"><input id="visual-command-x" class="hmi-input" type="number" readonly><span class="unit-tag">mm</span></div></label>
+              <label><span>Y Coordinate</span><div class="field-input-wrap"><input id="visual-command-y" class="hmi-input" type="number" readonly><span class="unit-tag">mm</span></div></label>
+              <label><span>Z Coordinate</span><div class="field-input-wrap"><input id="visual-command-z" class="hmi-input" type="number" readonly><span class="unit-tag">mm</span></div></label>
+            </div>
+            <div class="visual-command-current" id="visual-command-current">Current: X -- · Y -- · Z -- mm</div>
+            <div class="visual-command-actions">
+              <button class="btn-secondary" id="visual-command-load">LOAD TARGET</button>
+              <button class="btn-secondary" id="visual-load-preview">VALIDATE SLOT</button>
+              <button class="btn-execute visual-goto-slot" id="visual-slot-goto">GOTO SLOT</button>
+            </div>
+            <div class="visual-section-head visual-detail-head"><span>Selected Slot Details</span><strong id="vis-target-summary">SLOT --</strong></div>
             <div class="visual-slot-detail-grid">
               <div><span>Saved XYZ</span><strong id="vis-target-coordinates">X -- · Y -- · Z --</strong></div>
               <div><span>Delta XYZ</span><strong id="visual-slot-delta">X -- · Y -- · Z --</strong></div>
@@ -486,8 +499,6 @@
               <div><span>Homing Requirement</span><strong id="visual-slot-homing">UNKNOWN</strong></div>
             </div>
             <div class="visual-inspector-actions">
-              <button class="btn-execute visual-goto-slot" id="visual-slot-goto">GOTO SLOT</button>
-              <button class="btn-secondary" id="visual-load-preview">LOAD AS PREVIEW</button>
               <button class="btn-secondary" id="visual-send-motion">SEND TO MOTION CONTROL</button>
               <button class="btn-arm" id="visual-edit-enable">ENABLE EDIT MODE</button>
             </div>
@@ -799,6 +810,6 @@
   <!-- Toast notification -->
   <div class="toast" id="toast" role="status"></div>
 
-  <script src="{{ url_for('static', filename='app.js') }}?v=20260722_v33"></script>
+  <script src="{{ url_for('static', filename='app.js') }}?v=20260722_v34"></script>
 </body>
 </html>

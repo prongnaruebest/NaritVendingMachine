@@ -4896,9 +4896,22 @@ select.slot-filter {
 .visual-slot-detail-grid > div { min-width: 0; padding: 6px; border: 1px solid var(--border); border-radius: 4px; background: rgba(5, 17, 29, .45); }
 .visual-slot-detail-grid span { display: block; color: var(--text-3); font-size: 9px; text-transform: uppercase; }
 .visual-slot-detail-grid strong { display: block; margin-top: 4px; overflow: hidden; color: var(--text-1); font: 700 10px var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }
-.visual-inspector-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; margin-top: 8px; }
+.visual-inspector-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; margin-top: 8px; }
 .visual-inspector-actions button { min-height: 39px; padding: 7px; font-size: 10px; }
-.visual-inspector-actions .visual-goto-slot { grid-column: 1 / -1; min-height: 46px; font-size: 13px; letter-spacing: .08em; }
+.visual-command-head { display: flex; align-items: center; justify-content: space-between; color: var(--text-1); font-size: 15px; font-weight: 800; }
+.visual-command-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
+.visual-command-form label > span { display: block; margin-bottom: 5px; color: var(--text-3); font-size: 9px; letter-spacing: .12em; text-transform: uppercase; }
+.visual-command-form .visual-command-select { grid-column: 1 / -1; }
+.visual-command-form .hmi-select,
+.visual-command-form .hmi-input { width: 100%; min-height: 39px; }
+.visual-command-form .hmi-select { padding: 0 34px 0 11px; border: 1px solid var(--border-strong); border-radius: 5px; background: var(--surf-3); color: var(--text-1); font: 700 12px var(--font-mono); color-scheme: dark; }
+.visual-command-form .hmi-select option { background: var(--surf-3); color: var(--text-1); }
+.visual-command-form .hmi-input[readonly] { color: var(--accent-cyan); cursor: default; }
+.visual-command-current { margin-top: 9px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 4px; background: var(--surf-2); color: var(--accent-cyan); font: 700 10px var(--font-mono); }
+.visual-command-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; margin-top: 9px; }
+.visual-command-actions button { min-height: 40px; font-size: 10px; }
+.visual-command-actions .visual-goto-slot { grid-column: 1 / -1; min-height: 46px; font-size: 13px; letter-spacing: .08em; }
+.visual-detail-head { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
 
 .visual-trajectory-details {
   min-height: 92px;
