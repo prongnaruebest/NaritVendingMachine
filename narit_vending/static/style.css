@@ -3904,26 +3904,26 @@ select.slot-filter {
 }
 
 .rpz-jog .rp-jog-pad-area {
-  grid-template-columns: 122px 38px;
-  gap: 13px;
+  grid-template-columns: 134px 42px;
+  gap: 14px;
 }
 
 .rpz-jog .rp-xy-pad {
-  grid-template-columns: repeat(3, 38px);
-  grid-template-rows: repeat(3, 38px);
+  grid-template-columns: repeat(3, 42px);
+  grid-template-rows: repeat(3, 42px);
   gap: 4px;
 }
 
 .rpz-jog .rp-z-pad {
-  width: 38px;
-  grid-template-rows: auto 38px 38px;
+  width: 42px;
+  grid-template-rows: auto 42px 42px;
 }
 
 .rpz-jog .rp-jog-btn {
-  width: 38px;
-  min-width: 38px;
-  min-height: 38px;
-  font-size: 13px;
+  width: 42px;
+  min-width: 42px;
+  min-height: 42px;
+  font-size: 14px;
 }
 
 @media (max-width: 1200px) {
