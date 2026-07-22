@@ -8,7 +8,7 @@
   <link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='favicon-transparent-large.png') }}?v=20260721_v12">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=20260722_v34">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=20260722_v37">
 </head>
 <body>
   <div class="hmi-shell">
@@ -535,15 +535,26 @@
       </section>
 
       <section class="workspace-view" data-view-page="configuration">
-        <div class="page-heading"><div><p class="panel-label">Configuration</p><h2>Motion &amp; GPIO Parameters</h2></div><span class="page-note">Read-only engineering reference</span></div>
-        <div class="panel page-panel motion-config-panel">
-          <div class="panel-head"><div><p class="panel-label">Motion Configuration</p><h2 class="panel-title">Axis Parameters</h2></div></div>
-          <div class="config-table-wrap"><table class="config-table"><thead><tr><th>Axis</th><th>Travel</th><th>Steps/mm</th><th>Max Speed</th><th>Default Speed</th><th>Lead Screw</th></tr></thead><tbody id="configuration-axis-table"></tbody></table></div>
+        <div class="page-heading"><div><p class="panel-label">Controller Configuration</p><h2>Motor Pulse, GPIO &amp; Sensors</h2></div><span class="page-status-chip" id="configuration-save-status">LOADED</span></div>
+        <div class="configuration-toolbar panel">
+          <div><strong>Engineering Configuration</strong><span>Values are validated and saved atomically to the Raspberry Pi.</span></div>
+          <div class="configuration-toolbar-actions">
+            <button class="btn-secondary" id="configuration-reset">RESET CHANGES</button>
+            <button class="btn-slot-save" id="configuration-save">SAVE TO PI</button>
+            <button class="btn-execute" id="configuration-apply" disabled>APPLY &amp; RESTART</button>
+          </div>
         </div>
-        <div class="panel page-panel configuration-pin-panel">
-          <div class="panel-head"><div><p class="panel-label">Raspberry Pi GPIO</p><h2 class="panel-title">Pin Configuration &amp; Sensors</h2></div><span class="page-note" id="configuration-board-profile">Board: --</span></div>
-          <div class="config-table-wrap"><table class="config-table pin-config-table"><thead><tr><th>Signal</th><th>Category</th><th>GPIO Pin</th><th>Pull / Initial</th><th>Active Logic</th></tr></thead><tbody id="configuration-pin-table"></tbody></table></div>
+        <div class="configuration-scroll-area">
+          <div class="panel page-panel motor-pulse-config-panel">
+            <div class="panel-head"><div><p class="panel-label">Motor Pulse Configuration</p><h2 class="panel-title">Axis Pulse &amp; Motion Parameters</h2></div><span class="page-note">Maximum pulse output: 50 kHz</span></div>
+            <div class="motor-config-grid" id="configuration-motor-grid"></div>
+          </div>
+          <div class="panel page-panel configuration-pin-panel">
+            <div class="panel-head"><div><p class="panel-label">Raspberry Pi GPIO</p><h2 class="panel-title">Pin Configuration &amp; Sensors</h2></div><span class="page-note" id="configuration-board-profile">Board: --</span></div>
+            <div class="pin-editor-groups" id="configuration-pin-editor"></div>
+          </div>
         </div>
+        <div class="configuration-validation" id="configuration-validation">No unsaved changes.</div>
       </section>
 
       <section class="workspace-view" data-view-page="alarms">
@@ -810,6 +821,6 @@
   <!-- Toast notification -->
   <div class="toast" id="toast" role="status"></div>
 
-  <script src="{{ url_for('static', filename='app.js') }}?v=20260722_v34"></script>
+  <script src="{{ url_for('static', filename='app.js') }}?v=20260722_v37"></script>
 </body>
 </html>

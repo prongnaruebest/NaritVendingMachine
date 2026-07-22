@@ -8,16 +8,19 @@ $ErrorActionPreference = "Stop"
 
 ssh $HostName "mkdir -p $RemoteDir"
 
-# Try to pull the latest machine_config.json from the Pi to preserve slot settings
+# Pull the latest machine and hardware configuration from the Pi so web-saved
+# motor, slot, GPIO, and sensor settings survive future deployments.
 if (-not $NoPull) {
-    try {
-        $fileExists = ssh $HostName "if [ -f ${RemoteDir}/machine_config.json ]; then echo 'yes'; fi"
-        if ($fileExists.Trim() -eq "yes") {
-            scp "${HostName}:${RemoteDir}/machine_config.json" ./machine_config.json
-            Write-Host "Pulled latest machine_config.json from Pi to preserve slot configurations."
+    foreach ($configFile in @("machine_config.json", "hardware_config.json")) {
+        try {
+            $fileExists = ssh $HostName "if [ -f ${RemoteDir}/${configFile} ]; then echo 'yes'; fi"
+            if ($fileExists.Trim() -eq "yes") {
+                scp "${HostName}:${RemoteDir}/${configFile}" "./${configFile}"
+                Write-Host "Pulled latest ${configFile} from Pi to preserve controller configuration."
+            }
+        } catch {
+            Write-Warning "Could not pull ${configFile} from Pi. Proceeding with local configuration."
         }
-    } catch {
-        Write-Warning "Could not pull machine_config.json from Pi. Proceeding with local configuration."
     }
 }
 

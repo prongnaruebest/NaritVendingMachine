@@ -4677,6 +4677,73 @@ select.slot-filter {
   .motion-command-grid { grid-template-columns: max-content minmax(0, 1fr); }
 }
 
+/* =============================================================
+   CONFIGURATION V35 — editable motor pulse, GPIO and sensors
+   ============================================================= */
+.workspace-view[data-view-page="configuration"] { min-height: 0; height: 100%; display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; overflow: hidden; font-size: 14px; }
+.configuration-toolbar { display: flex; flex: 0 0 auto; align-items: center; justify-content: space-between; gap: 16px; padding: 11px 14px; }
+.configuration-toolbar > div:first-child { display: grid; gap: 3px; }
+.configuration-toolbar strong { color: var(--text-0); font-size: 14px; }
+.configuration-toolbar span { color: var(--text-2); font-size: 11px; }
+.configuration-toolbar-actions { display: flex; gap: 8px; }
+.configuration-toolbar-actions button { min-height: 38px; padding: 0 14px; font-size: 11px; }
+.configuration-scroll-area { display: grid; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-color: var(--blue-lt) var(--surf-0); gap: 10px; padding-right: 3px; }
+.motor-pulse-config-panel,
+.configuration-pin-panel { min-height: auto; overflow: visible; }
+.motor-config-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.motor-config-card { min-width: 0; padding: 11px; border: 1px solid var(--border-med); border-radius: var(--r-md); background: var(--surf-1); }
+.motor-config-card.fault { border-color: var(--red-brd); box-shadow: inset 0 0 0 1px var(--red-dim); }
+.motor-config-head { display: flex; align-items: center; justify-content: space-between; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+.motor-config-head strong { color: var(--text-0); font-size: 15px; }
+.motor-config-head span { color: var(--accent-cyan); font: 700 10px var(--font-mono); }
+.motor-config-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; margin-top: 9px; }
+.motor-config-fields label { position: relative; min-width: 0; }
+.motor-config-fields label > span { display: block; overflow: hidden; margin-bottom: 4px; color: var(--text-3); font-size: 9px; letter-spacing: .08em; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
+.motor-config-fields small { position: absolute; right: 7px; bottom: 9px; color: var(--text-3); font: 700 8px var(--font-mono); pointer-events: none; }
+.config-input,
+.config-select,
+.pin-input { width: 100%; min-height: 36px; border: 1px solid var(--border-med); border-radius: 5px; outline: none; background: var(--surf-3); color: var(--accent-cyan); font: 700 11px var(--font-mono); }
+.config-input { padding: 0 48px 0 9px; }
+.config-select { padding: 0 8px; color-scheme: dark; }
+.config-input:focus,
+.config-select:focus,
+.pin-input:focus { border-color: var(--blue-lt); box-shadow: 0 0 0 2px var(--blue-dim); }
+.motor-derived { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; margin-top: 8px; }
+.motor-derived span { min-width: 0; padding: 6px; border: 1px solid var(--border); border-radius: 4px; color: var(--text-3); font-size: 8px; text-transform: uppercase; }
+.motor-derived b { display: block; overflow: hidden; margin-top: 3px; color: var(--text-1); font: 700 9px var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }
+.pin-editor-groups { display: grid; gap: 9px; }
+.pin-editor-group { overflow: hidden; border: 1px solid var(--border-med); border-radius: var(--r-md); background: var(--surf-1); }
+.pin-editor-title { display: flex; align-items: center; justify-content: space-between; padding: 8px 11px; border-bottom: 1px solid var(--border); background: var(--surf-2); }
+.pin-editor-title strong { color: var(--text-0); font-size: 12px; }
+.pin-editor-title span { color: var(--text-3); font: 700 9px var(--font-mono); }
+.pin-editor-table { display: grid; max-height: 310px; overflow-y: auto; scrollbar-width: thin; }
+.pin-editor-row { display: grid; grid-template-columns: minmax(180px, 1.4fr) minmax(120px, .8fr) 110px 125px 125px; align-items: center; gap: 8px; min-height: 46px; padding: 5px 10px; border-bottom: 1px solid var(--border); }
+.pin-editor-row:last-child { border-bottom: 0; }
+.pin-editor-row > b { overflow: hidden; color: var(--text-1); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.pin-editor-row > span { color: var(--text-3); font-size: 8px; letter-spacing: .08em; }
+.pin-editor-row > label:not(.config-switch) { display: flex; align-items: center; gap: 5px; color: var(--text-3); font: 700 9px var(--font-mono); }
+.pin-input { min-height: 32px; padding: 0 7px; }
+.config-switch { display: flex; align-items: center; gap: 6px; color: var(--text-2); font-size: 9px; white-space: nowrap; }
+.config-switch input { width: 16px; height: 16px; accent-color: var(--blue-lt); }
+.pin-shared-logic { color: var(--text-4) !important; font: 700 8px var(--font-mono); }
+.configuration-validation { flex: 0 0 auto; min-height: 38px; padding: 10px 13px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--surf-1); color: var(--text-2); font: 700 10px var(--font-mono); }
+.configuration-validation.ok { border-color: var(--green-brd); color: var(--green); }
+.configuration-validation.warn { border-color: var(--amber-brd); color: var(--amber); }
+
+@media (max-width: 1450px) {
+  .motor-config-grid { grid-template-columns: 1fr; }
+  .motor-config-fields { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .pin-editor-row { grid-template-columns: minmax(150px, 1.2fr) 100px 95px 110px 110px; }
+}
+
+@media (max-width: 1100px) {
+  .configuration-toolbar { align-items: stretch; flex-direction: column; }
+  .configuration-toolbar-actions { display: grid; grid-template-columns: repeat(3, 1fr); }
+  .motor-config-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pin-editor-row { grid-template-columns: minmax(140px, 1fr) 90px 90px; }
+  .pin-editor-row .config-switch { grid-column: auto; }
+}
+
 @media (min-width: 1200px) and (max-width: 1500px) {
   .hmi-shell:not(.view-wide) {
     height: calc(100vh - 20px);

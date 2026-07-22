@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 import argparse
+import copy
+import json
 import logging
 import math
+import os
 import threading
 import time
 import uuid
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -15,6 +19,7 @@ from .motion import (
     ControlledStopError,
     EmergencyStopError,
     LimitTriggeredError,
+    MachineConfig,
     MotionError,
     build_controller,
     build_default_machine_config,
@@ -30,6 +35,39 @@ _logger = logging.getLogger(__name__)
 
 class APIInputError(ValueError):
     pass
+
+
+GPIO_MIN = 0
+GPIO_MAX = 27
+MAX_PULSE_FREQUENCY_HZ = 50_000.0
+
+
+def _config_number(payload: dict[str, object], key: str, *, minimum: float, maximum: float) -> float:
+    value = float(payload[key])
+    if not math.isfinite(value) or not minimum <= value <= maximum:
+        raise APIInputError(f"{key} must be within {minimum:g}-{maximum:g}")
+    return value
+
+
+def _config_integer(payload: dict[str, object], key: str, *, minimum: int, maximum: int) -> int:
+    value = int(payload[key])
+    if float(payload[key]) != value or not minimum <= value <= maximum:
+        raise APIInputError(f"{key} must be an integer within {minimum}-{maximum}")
+    return value
+
+
+def _config_boolean(payload: dict[str, object], key: str) -> bool:
+    value = payload[key]
+    if not isinstance(value, bool):
+        raise APIInputError(f"{key} must be true or false")
+    return value
+
+
+def _atomic_write_json(path: Path, payload: dict[str, object]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path = path.with_name(f".{path.name}.tmp")
+    temporary_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    os.replace(temporary_path, path)
 
 
 class MotionService:
@@ -51,6 +89,7 @@ class MotionService:
         self.command_estimated_duration_s: float | None = None
         self.armed_move: dict[str, object] | None = None
         self.completed_request_ids: dict[str, dict[str, object]] = {}
+        self.configuration_restart_required = False
 
         if self.config_path.exists():
             config = load_machine_config(self.config_path)
@@ -111,6 +150,7 @@ class MotionService:
                     "estop_active": controller_status["estop"],
                     "stop_requested": self.controller.stop_requested(),
                     "controlled_stop_requested": self.controller.controlled_stop_requested(),
+                    "configuration_restart_required": self.configuration_restart_required,
                 },
                 "status": controller_status,
                 "slots": slots,
@@ -125,6 +165,8 @@ class MotionService:
         command_id: str | None = None,
         estimated_duration_s: float | None = None,
     ):
+        if motion_command and self.configuration_restart_required:
+            return {"ok": False, "error": "Configuration changed; apply and restart the controller before motion"}
         if motion_command and self.controller.stop_requested():
             return {"ok": False, "error": "Motion is stopped; reset alarms before issuing another command"}
         if not self.command_lock.acquire(blocking=False):
@@ -215,6 +257,8 @@ class MotionService:
             errors.append("Emergency stop is active")
         if self.controller.stop_requested():
             errors.append("Software stop latch is active; reset alarms first")
+        if self.configuration_restart_required:
+            errors.append("Configuration changed; apply and restart the controller before motion")
         for axis_name in ("x", "y", "z"):
             axis = status[axis_name]
             if require_homed and not axis["is_homed"]:
@@ -422,10 +466,14 @@ class MotionService:
         return self._run("dispense", lambda: self.controller.move_to_slot(slot_code, speed_mm_s=speed_mm_s, time_s=time_s))
 
     def home_axis(self, axis_name: str) -> dict[str, object]:
+        if self.configuration_restart_required:
+            return {"ok": False, "error": "Configuration changed; apply and restart the controller before homing"}
         self._prepare_home((axis_name,))
         return self._run(f"home_{axis_name}", lambda: self.controller.home_axis(axis_name, progress=self._home_progress))
 
     def home_all(self) -> dict[str, object]:
+        if self.configuration_restart_required:
+            return {"ok": False, "error": "Configuration changed; apply and restart the controller before homing"}
         axes = self.controller.config.home_order
         self._prepare_home(axes)
         return self._run("home_all", lambda: self.controller.home_all(progress=self._home_progress))
@@ -523,7 +571,193 @@ class MotionService:
         with self.lock:
             config = self.controller.config.to_dict()
             config["hardware"] = load_hardware_config(str(self.hw_config_path))
+            config["restart_required"] = self.configuration_restart_required
             return config
+
+    def save_configuration(self, payload: dict[str, object]) -> dict[str, object]:
+        if self.busy:
+            raise MotionError("Stop motion before changing controller configuration")
+        axes_payload = payload.get("axes")
+        hardware_payload = payload.get("hardware")
+        if not isinstance(axes_payload, dict) or not isinstance(hardware_payload, dict):
+            raise APIInputError("axes and hardware objects are required")
+
+        current_hardware = load_hardware_config(str(self.hw_config_path))
+        updated_hardware = copy.deepcopy(current_hardware)
+        updated_hardware.setdefault("motors", {})
+        updated_hardware.setdefault("digital_inputs", {})
+        updated_hardware.setdefault("digital_outputs", {})
+        updated_hardware.setdefault("machine_parameters", {}).setdefault("axes", {})
+
+        updated_axes = {}
+        for axis_name in ("x", "y", "z"):
+            axis_payload = axes_payload.get(axis_name)
+            motor_payload = hardware_payload.get("motors", {}).get(axis_name) if isinstance(hardware_payload.get("motors"), dict) else None
+            if not isinstance(axis_payload, dict) or not isinstance(motor_payload, dict):
+                raise APIInputError(f"Axis {axis_name.upper()} motor and motion parameters are required")
+
+            motor_steps = _config_integer(axis_payload, "motor_steps_per_rev", minimum=1, maximum=10_000)
+            microsteps = _config_integer(axis_payload, "driver_microsteps", minimum=1, maximum=256)
+            lead_pitch = _config_number(axis_payload, "lead_screw_pitch_mm", minimum=0.01, maximum=100.0)
+            steps_per_mm = _config_number(axis_payload, "steps_per_mm", minimum=0.1, maximum=100_000.0)
+            max_travel = _config_number(axis_payload, "max_travel_mm", minimum=0.1, maximum=10_000.0)
+            max_speed = _config_number(axis_payload, "max_speed_mm_s", minimum=0.01, maximum=500.0)
+            default_speed = _config_number(axis_payload, "default_speed_mm_s", minimum=0.01, maximum=500.0)
+            acceleration = _config_number(axis_payload, "acceleration", minimum=0.01, maximum=10_000.0)
+            deceleration = _config_number(axis_payload, "deceleration", minimum=0.01, maximum=10_000.0)
+            jog_step = _config_number(axis_payload, "jog_step_mm", minimum=0.001, maximum=1_000.0)
+            settle_delay = _config_number(axis_payload, "settle_delay", minimum=0.0, maximum=10.0)
+            home_direction = _config_integer(axis_payload, "home_direction", minimum=0, maximum=1)
+            forward_direction = _config_integer(axis_payload, "forward_direction", minimum=0, maximum=1)
+            if home_direction == forward_direction:
+                raise APIInputError(f"{axis_name.upper()}: home and forward directions must be opposite")
+            if default_speed > max_speed:
+                raise APIInputError(f"{axis_name.upper()}: default speed cannot exceed max speed")
+            pulse_frequency = steps_per_mm * max_speed
+            if pulse_frequency > MAX_PULSE_FREQUENCY_HZ:
+                raise APIInputError(
+                    f"{axis_name.upper()}: maximum pulse frequency {pulse_frequency:.0f} Hz exceeds {MAX_PULSE_FREQUENCY_HZ:.0f} Hz"
+                )
+
+            step_pin = _config_integer(motor_payload, "step_pin", minimum=GPIO_MIN, maximum=GPIO_MAX)
+            dir_pin = _config_integer(motor_payload, "dir_pin", minimum=GPIO_MIN, maximum=GPIO_MAX)
+            enable_pin = _config_integer(motor_payload, "enable_pin", minimum=GPIO_MIN, maximum=GPIO_MAX)
+            active_high = _config_boolean(motor_payload, "active_high")
+            current_axis = getattr(self.controller.config, axis_name)
+            updated_axis = replace(
+                current_axis,
+                pulse_pin=step_pin,
+                direction_pin=dir_pin,
+                enable_pin=enable_pin,
+                motor_steps_per_rev=motor_steps,
+                driver_microsteps=microsteps,
+                lead_screw_pitch_mm=lead_pitch,
+                steps_per_mm=steps_per_mm,
+                max_travel_mm=max_travel,
+                max_speed_mm_s=max_speed,
+                default_speed_mm_s=default_speed,
+                acceleration=acceleration,
+                deceleration=deceleration,
+                jog_step_mm=jog_step,
+                settle_delay=settle_delay,
+                home_direction=home_direction,
+                forward_direction=forward_direction,
+            )
+            updated_axes[axis_name] = updated_axis
+            updated_hardware["motors"][axis_name] = {
+                "step_pin": step_pin,
+                "dir_pin": dir_pin,
+                "enable_pin": enable_pin,
+                "active_high": active_high,
+            }
+            updated_hardware["machine_parameters"]["axes"][axis_name] = {
+                "steps_per_mm": steps_per_mm,
+                "max_travel_mm": max_travel,
+                "max_speed_mm_s": max_speed,
+                "default_speed_mm_s": default_speed,
+                "acceleration": acceleration,
+                "deceleration": deceleration,
+                "settle_delay": settle_delay,
+                "jog_step_mm": jog_step,
+                "home_direction": home_direction,
+                "forward_direction": forward_direction,
+                "lead_screw_pitch_mm": lead_pitch,
+                "motor_steps_per_rev": motor_steps,
+                "driver_microsteps": microsteps,
+            }
+
+        for group_name in ("digital_inputs", "digital_outputs"):
+            group_payload = hardware_payload.get(group_name)
+            if not isinstance(group_payload, dict):
+                raise APIInputError(f"hardware.{group_name} is required")
+            expected_names = set(updated_hardware[group_name])
+            if set(group_payload) != expected_names:
+                raise APIInputError(f"hardware.{group_name} signals do not match the installed configuration")
+            for signal_name, signal_payload in group_payload.items():
+                if not isinstance(signal_payload, dict):
+                    raise APIInputError(f"{group_name}.{signal_name} must be an object")
+                pin = _config_integer(signal_payload, "pin", minimum=GPIO_MIN, maximum=GPIO_MAX)
+                active_high = _config_boolean(signal_payload, "active_high")
+                updated_signal = copy.deepcopy(updated_hardware[group_name][signal_name])
+                updated_signal["pin"] = pin
+                updated_signal["active_high"] = active_high
+                if group_name == "digital_inputs":
+                    pull_up = _config_boolean(signal_payload, "pull_up")
+                    if active_high != (not pull_up):
+                        raise APIInputError(
+                            f"{signal_name}: active_high must be {str(not pull_up).lower()} when pull_up is {str(pull_up).lower()}"
+                        )
+                    updated_signal["pull_up"] = pull_up
+                else:
+                    updated_signal["initial_value"] = _config_boolean(signal_payload, "initial_value")
+                updated_hardware[group_name][signal_name] = updated_signal
+
+        pin_assignments: dict[int, list[str]] = {}
+        for axis_name, motor in updated_hardware["motors"].items():
+            for key in ("step_pin", "dir_pin", "enable_pin"):
+                pin_assignments.setdefault(int(motor[key]), []).append(f"motor.{axis_name}.{key}")
+        for group_name in ("digital_inputs", "digital_outputs"):
+            for signal_name, signal in updated_hardware[group_name].items():
+                pin_assignments.setdefault(int(signal["pin"]), []).append(f"{group_name}.{signal_name}")
+        for pin, assignments in pin_assignments.items():
+            if len(assignments) <= 1:
+                continue
+            allowed_alias = False
+            for axis_name in ("x", "y", "z"):
+                alias = f"digital_inputs.home_sensor_{axis_name}"
+                limits = {f"digital_inputs.lim_{axis_name}_head", f"digital_inputs.lim_{axis_name}_tail"}
+                if alias in assignments and len(assignments) == 2 and any(limit in assignments for limit in limits):
+                    allowed_alias = True
+            if not allowed_alias:
+                raise APIInputError(f"GPIO {pin} is assigned more than once: {', '.join(assignments)}")
+
+        for axis_name in ("x", "y", "z"):
+            head_pin = int(updated_hardware["digital_inputs"][f"lim_{axis_name}_head"]["pin"])
+            tail_pin = int(updated_hardware["digital_inputs"][f"lim_{axis_name}_tail"]["pin"])
+            updated_axes[axis_name] = replace(updated_axes[axis_name], head_limit_pin=head_pin, tail_limit_pin=tail_pin)
+
+        updated_config = MachineConfig(
+            x=updated_axes["x"],
+            y=updated_axes["y"],
+            z=updated_axes["z"],
+            home_order=self.controller.config.home_order,
+            slots=self.controller.config.slots,
+            safe_z_mm=self.controller.config.safe_z_mm,
+        )
+        previous_machine = self.config_path.read_bytes() if self.config_path.exists() else None
+        previous_hardware = self.hw_config_path.read_bytes() if self.hw_config_path.exists() else None
+        try:
+            save_machine_config(updated_config, self.config_path)
+            _atomic_write_json(self.hw_config_path, updated_hardware)
+        except Exception:
+            if previous_machine is not None:
+                self.config_path.write_bytes(previous_machine)
+            if previous_hardware is not None:
+                self.hw_config_path.write_bytes(previous_hardware)
+            raise
+
+        self.controller.config = updated_config
+        self.configuration_restart_required = True
+        self.armed_move = None
+        self.operation_phase = "restart_required"
+        self.operation_message = "Configuration saved; apply and restart controller before motion"
+        config = updated_config.to_dict()
+        config["hardware"] = updated_hardware
+        config["restart_required"] = True
+        return config
+
+    def schedule_configuration_restart(self) -> dict[str, object]:
+        if self.busy:
+            raise MotionError("Stop motion before restarting the controller")
+        if not self.configuration_restart_required:
+            return {"ok": True, "restart_required": False, "message": "Configuration is already active"}
+
+        def restart_process() -> None:
+            time.sleep(0.8)
+            os._exit(0)
+
+        threading.Thread(target=restart_process, daemon=True).start()
+        return {"ok": True, "restart_required": True, "message": "Controller restart scheduled"}
 
     def reset_slot(self, slot_code: str) -> dict[str, object]:
         def action():
@@ -645,6 +879,21 @@ def create_app(config_path: str = "machine_config.json", hw_config_path: str = "
     @app.get("/api/config")
     def api_config():
         return jsonify(service.get_config())
+
+    @app.put("/api/config")
+    def api_save_config():
+        try:
+            config = service.save_configuration(_json_payload())
+            return jsonify({"ok": True, "config": config, "restart_required": True}), 200
+        except (APIInputError, KeyError, TypeError, ValueError, MotionError) as exc:
+            return jsonify({"ok": False, "error": str(exc)}), 400
+
+    @app.post("/api/config/apply")
+    def api_apply_config():
+        try:
+            return jsonify(service.schedule_configuration_restart()), 200
+        except MotionError as exc:
+            return jsonify({"ok": False, "error": str(exc)}), 400
 
     @app.post("/api/plan/move")
     def api_plan_move():

@@ -42,6 +42,8 @@
     visualPreview: null,
     visualOriginalSlot: null,
     lastStatusAt: 0,
+    configDirty: false,
+    configSaving: false,
     slotDrafts: {},
     dashboardSelectedSlot: "1",
     dashboardOperationStartedAt: null,
@@ -156,6 +158,9 @@
     if (!MS.online)                           return "Controller offline — reconnecting...";
     if (status.estop)                         return "MOTION LOCKED — Emergency stop active";
     if (MS.payload?.safety?.stop_requested)   return "MOTION LOCKED — reset alarms before continuing";
+    if (MS.payload?.safety?.configuration_restart_required || MS.config?.restart_required) {
+      return "MOTION LOCKED — apply configuration and restart controller";
+    }
     if (MS.pending || MS.payload?.busy)       return "Another command is executing";
     if (requireHome && !allAxesHomed()) {
       const first = AXES.find((a) => !getAxis(a).is_homed);
@@ -1458,6 +1463,172 @@
     AXES.forEach((axis) => { el(`visual-slot-${axis}`).readOnly = !MS.visualEditMode; });
   }
 
+  function configurationNumberInput(axis, field, value, step = "0.1") {
+    return `<input class="config-input" type="number" step="${step}" value="${esc(value)}" data-config-axis="${axis}" data-config-field="${field}">`;
+  }
+
+  function renderConfigurationEditor(force = false) {
+    if (!MS.config || (MS.configDirty && !force)) return;
+    const hardware = MS.config.hardware || {};
+    const motorGrid = el("configuration-motor-grid");
+    if (motorGrid) motorGrid.innerHTML = AXES.map((axis) => {
+      const config = MS.config.axes?.[axis] || {};
+      const pulsesPerRev = Number(config.motor_steps_per_rev || 0) * Number(config.driver_microsteps || 0);
+      const theoreticalSteps = pulsesPerRev / Math.max(Number(config.lead_screw_pitch_mm || 1), .0001);
+      const pulseFrequency = Number(config.steps_per_mm || 0) * Number(config.max_speed_mm_s || 0);
+      return `<article class="motor-config-card" data-motor-card="${axis}">
+        <div class="motor-config-head"><strong>AXIS ${axis.toUpperCase()}</strong><span>${fmt(pulseFrequency / 1000, 2)} kHz MAX</span></div>
+        <div class="motor-config-fields">
+          <label><span>Motor Steps / Rev</span>${configurationNumberInput(axis, "motor_steps_per_rev", config.motor_steps_per_rev, "1")}</label>
+          <label><span>Driver Microsteps</span>${configurationNumberInput(axis, "driver_microsteps", config.driver_microsteps, "1")}</label>
+          <label><span>Lead Screw Pitch</span>${configurationNumberInput(axis, "lead_screw_pitch_mm", config.lead_screw_pitch_mm)}<small>mm/rev</small></label>
+          <label><span>Pulse Calibration</span>${configurationNumberInput(axis, "steps_per_mm", config.steps_per_mm)}<small>pulse/mm</small></label>
+          <label><span>Maximum Travel</span>${configurationNumberInput(axis, "max_travel_mm", config.max_travel_mm)}<small>mm</small></label>
+          <label><span>Maximum Speed</span>${configurationNumberInput(axis, "max_speed_mm_s", config.max_speed_mm_s)}<small>mm/s</small></label>
+          <label><span>Default Speed</span>${configurationNumberInput(axis, "default_speed_mm_s", config.default_speed_mm_s)}<small>mm/s</small></label>
+          <label><span>Acceleration</span>${configurationNumberInput(axis, "acceleration", config.acceleration)}<small>mm/s²</small></label>
+          <label><span>Deceleration</span>${configurationNumberInput(axis, "deceleration", config.deceleration)}<small>mm/s²</small></label>
+          <label><span>Jog Step</span>${configurationNumberInput(axis, "jog_step_mm", config.jog_step_mm)}<small>mm</small></label>
+          <label><span>Settle Delay</span>${configurationNumberInput(axis, "settle_delay", config.settle_delay, "0.01")}<small>sec</small></label>
+          <label><span>Home Direction</span><select class="config-select" data-config-axis="${axis}" data-config-field="home_direction"><option value="0" ${Number(config.home_direction) === 0 ? "selected" : ""}>LOW / 0</option><option value="1" ${Number(config.home_direction) === 1 ? "selected" : ""}>HIGH / 1</option></select></label>
+          <label><span>Forward Direction</span><select class="config-select" data-config-axis="${axis}" data-config-field="forward_direction"><option value="0" ${Number(config.forward_direction) === 0 ? "selected" : ""}>LOW / 0</option><option value="1" ${Number(config.forward_direction) === 1 ? "selected" : ""}>HIGH / 1</option></select></label>
+        </div>
+        <div class="motor-derived"><span>Theoretical <b id="config-theoretical-${axis}">${fmt(theoreticalSteps, 3)} pulse/mm</b></span><span>Pulse Frequency <b id="config-frequency-${axis}">${fmt(pulseFrequency, 0)} Hz</b></span><span>Pulses / Rev <b id="config-ppr-${axis}">${fmt(pulsesPerRev, 0)}</b></span></div>
+      </article>`;
+    }).join("");
+
+    setText("configuration-board-profile", `Board: ${hardware.board_profile || "--"} · BCM GPIO 0–27`);
+    const pinGroups = [
+      ["motors", "Motor Outputs", hardware.motors || {}],
+      ["digital_inputs", "Safety & Position Sensors", hardware.digital_inputs || {}],
+      ["digital_outputs", "Status Outputs", hardware.digital_outputs || {}],
+    ];
+    const pinEditor = el("configuration-pin-editor");
+    if (pinEditor) pinEditor.innerHTML = pinGroups.map(([groupName, title, signals]) => `
+      <section class="pin-editor-group">
+        <div class="pin-editor-title"><strong>${esc(title)}</strong><span>${Object.keys(signals).length} SIGNALS</span></div>
+        <div class="pin-editor-table">
+          ${groupName === "motors" ? Object.entries(signals).flatMap(([axis, motor]) => [
+            [axis, "STEP / PULSE", "step_pin", motor.step_pin],
+            [axis, "DIRECTION", "dir_pin", motor.dir_pin],
+            [axis, "ENABLE", "enable_pin", motor.enable_pin],
+          ].map(([signalAxis, label, field, pin]) => `<div class="pin-editor-row"><b>${esc(signalAxis.toUpperCase())} ${label}</b><span>MOTOR OUTPUT</span><label>GPIO <input class="pin-input" type="number" min="0" max="27" step="1" value="${esc(pin)}" data-pin-group="motors" data-pin-name="${esc(signalAxis)}" data-pin-field="${field}"></label>${field === "step_pin" ? `<label class="config-switch"><input type="checkbox" ${motor.active_high ? "checked" : ""} data-pin-group="motors" data-pin-name="${esc(signalAxis)}" data-pin-field="active_high"><span>ACTIVE HIGH</span></label>` : `<span class="pin-shared-logic">AXIS LOGIC</span>`}</div>`)).join("") : ""}
+          ${groupName === "digital_inputs" ? Object.entries(signals).map(([name, input]) => `<div class="pin-editor-row"><b>${esc(name.replaceAll("_", " ").toUpperCase())}</b><span>${name.includes("lim_") || name.includes("home_") ? "POSITION SENSOR" : "SAFETY INPUT"}</span><label>GPIO <input class="pin-input" type="number" min="0" max="27" step="1" value="${esc(input.pin)}" data-pin-group="digital_inputs" data-pin-name="${esc(name)}" data-pin-field="pin"></label><label class="config-switch"><input type="checkbox" ${input.pull_up ? "checked" : ""} data-pin-group="digital_inputs" data-pin-name="${esc(name)}" data-pin-field="pull_up"><span>PULL-UP</span></label><label class="config-switch"><input type="checkbox" ${input.active_high ? "checked" : ""} data-pin-group="digital_inputs" data-pin-name="${esc(name)}" data-pin-field="active_high"><span>ACTIVE HIGH</span></label></div>`).join("") : ""}
+          ${groupName === "digital_outputs" ? Object.entries(signals).map(([name, output]) => `<div class="pin-editor-row"><b>${esc(name.replaceAll("_", " ").toUpperCase())}</b><span>DIGITAL OUTPUT</span><label>GPIO <input class="pin-input" type="number" min="0" max="27" step="1" value="${esc(output.pin)}" data-pin-group="digital_outputs" data-pin-name="${esc(name)}" data-pin-field="pin"></label><label class="config-switch"><input type="checkbox" ${output.initial_value ? "checked" : ""} data-pin-group="digital_outputs" data-pin-name="${esc(name)}" data-pin-field="initial_value"><span>INITIAL ON</span></label><label class="config-switch"><input type="checkbox" ${output.active_high ? "checked" : ""} data-pin-group="digital_outputs" data-pin-name="${esc(name)}" data-pin-field="active_high"><span>ACTIVE HIGH</span></label></div>`).join("") : ""}
+        </div>
+      </section>`).join("");
+
+    MS.configDirty = false;
+    updateConfigurationState();
+  }
+
+  function updateConfigurationDerived() {
+    AXES.forEach((axis) => {
+      const value = (field) => Number(document.querySelector(`[data-config-axis="${axis}"][data-config-field="${field}"]`)?.value || 0);
+      const pulsesPerRev = value("motor_steps_per_rev") * value("driver_microsteps");
+      const theoretical = pulsesPerRev / Math.max(value("lead_screw_pitch_mm"), .0001);
+      const frequency = value("steps_per_mm") * value("max_speed_mm_s");
+      setText(`config-theoretical-${axis}`, `${fmt(theoretical, 3)} pulse/mm`);
+      setText(`config-frequency-${axis}`, `${fmt(frequency, 0)} Hz`);
+      setText(`config-ppr-${axis}`, fmt(pulsesPerRev, 0));
+      const card = document.querySelector(`[data-motor-card="${axis}"]`);
+      if (card) card.classList.toggle("fault", frequency > 50000);
+    });
+  }
+
+  function updateConfigurationState(message = "") {
+    const restartRequired = Boolean(MS.config?.restart_required || MS.payload?.safety?.configuration_restart_required);
+    const statusNode = el("configuration-save-status");
+    if (statusNode) {
+      statusNode.textContent = MS.configSaving ? "SAVING" : MS.configDirty ? "UNSAVED" : restartRequired ? "RESTART REQUIRED" : "SAVED";
+      statusNode.className = `page-status-chip ${MS.configDirty || restartRequired ? "warn" : "ok"}`;
+    }
+    el("configuration-save").disabled = !MS.configDirty || MS.configSaving || Boolean(MS.payload?.busy);
+    el("configuration-reset").disabled = !MS.configDirty || MS.configSaving;
+    el("configuration-apply").disabled = !restartRequired || MS.configSaving || Boolean(MS.payload?.busy);
+    const validation = el("configuration-validation");
+    if (validation) {
+      validation.textContent = message || (MS.configDirty
+        ? "Unsaved configuration — SAVE TO PI validates GPIO assignments and pulse limits."
+        : restartRequired
+          ? "Configuration saved on Raspberry Pi. Motion is locked until APPLY & RESTART completes."
+          : "Configuration active. Changing pulse or GPIO values does not move the machine.");
+      validation.className = `configuration-validation ${MS.configDirty || restartRequired ? "warn" : "ok"}`;
+    }
+  }
+
+  function collectConfigurationPayload() {
+    const axes = {};
+    AXES.forEach((axis) => {
+      axes[axis] = {};
+      document.querySelectorAll(`[data-config-axis="${axis}"]`).forEach((input) => {
+        axes[axis][input.dataset.configField] = Number(input.value);
+      });
+    });
+    const hardware = { motors: {}, digital_inputs: {}, digital_outputs: {} };
+    document.querySelectorAll("[data-pin-group]").forEach((input) => {
+      const group = input.dataset.pinGroup;
+      const name = input.dataset.pinName;
+      const field = input.dataset.pinField;
+      hardware[group][name] ||= {};
+      hardware[group][name][field] = input.type === "checkbox" ? input.checked : Number(input.value);
+    });
+    return { axes, hardware };
+  }
+
+  async function saveControllerConfiguration() {
+    if (!MS.configDirty || MS.configSaving) return;
+    if (!window.confirm("Save motor pulse and GPIO configuration to Raspberry Pi?\nMotion will be locked until APPLY & RESTART.")) return;
+    MS.configSaving = true;
+    updateConfigurationState("Validating and saving configuration to Raspberry Pi...");
+    try {
+      const data = await apiCall("/api/config", "PUT", collectConfigurationPayload(), 12000);
+      MS.config = data.config;
+      MS.configDirty = false;
+      renderConfigurationEditor(true);
+      updateConfigurationState("Configuration saved. Review values, then press APPLY & RESTART.");
+      toast("Configuration saved to Raspberry Pi — restart required.", "ok");
+      log("Motor pulse and GPIO configuration saved", "info", "CONFIG");
+      await refresh();
+    } catch (err) {
+      updateConfigurationState(`SAVE REJECTED — ${humanizeError(err.message)}`);
+      toast(humanizeError(err.message), "error");
+      log(`Configuration save rejected: ${err.message}`, "error", "CONFIG");
+    } finally {
+      MS.configSaving = false;
+      updateConfigurationState();
+    }
+  }
+
+  async function applyControllerConfiguration() {
+    if (!window.confirm("Apply configuration and restart the Raspberry Pi controller service now?\nAll axes must be homed again after restart.")) return;
+    MS.configSaving = true;
+    updateConfigurationState("Controller restart requested. Waiting for API...");
+    try {
+      await apiCall("/api/config/apply", "POST", {}, 5000);
+      toast("Controller restarting — please wait.", "ok");
+      let reconnected = false;
+      for (let attempt = 0; attempt < 30; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        try {
+          await apiCall("/api/ping", "GET", undefined, 1500);
+          if (attempt > 1) { reconnected = true; break; }
+        } catch { /* Controller is restarting. */ }
+      }
+      if (!reconnected) throw new Error("Controller did not reconnect within 30 seconds");
+      MS.configSaving = false;
+      await loadConfig();
+      await refresh();
+      renderConfigurationEditor(true);
+      toast("Configuration applied — home all axes before motion.", "ok");
+      log("Controller restarted with saved configuration", "info", "CONFIG");
+    } catch (err) {
+      MS.configSaving = false;
+      updateConfigurationState(`RESTART STATUS — ${humanizeError(err.message)}`);
+      toast(humanizeError(err.message), "error");
+    }
+  }
+
   function updateVisualButtons() {
     const code = MS.visualTargetSlot || MS.selectedSlotCode || "1";
     const slot = MS.slots[code] || {};
@@ -1792,42 +1963,7 @@
       diagHealth.className = `page-status-chip ${alarmCount || !MS.online ? "fault" : "ok"}`;
     }
 
-    const configTable = document.getElementById("configuration-axis-table");
-    if (configTable) configTable.innerHTML = AXES.map((axis) => {
-      const cfg = MS.config?.axes?.[axis] || {};
-      return `<tr><td>${axis.toUpperCase()}</td><td>${fmt(cfg.max_travel_mm, 1)} mm</td><td>${fmt(cfg.steps_per_mm, 1)}</td><td>${fmt(cfg.max_speed_mm_s, 1)} mm/s</td><td>${fmt(cfg.default_speed_mm_s, 1)} mm/s</td><td>${fmt(cfg.lead_screw_pitch_mm, 1)} mm</td></tr>`;
-    }).join("");
-
-    const hardware = MS.config?.hardware || {};
-    setText("configuration-board-profile", `Board: ${hardware.board_profile || "--"}`);
-    const pinRows = [];
-    Object.entries(hardware.motors || {}).forEach(([axis, pins]) => {
-      [["STEP", pins.step_pin], ["DIR", pins.dir_pin], ["ENABLE", pins.enable_pin]].forEach(([signal, pin]) => {
-        pinRows.push([`${axis.toUpperCase()} ${signal}`, "Motor Output", pin, "--", pins.active_high ? "ACTIVE HIGH" : "ACTIVE LOW"]);
-      });
-    });
-    Object.entries(hardware.digital_inputs || {}).forEach(([name, input]) => {
-      pinRows.push([
-        name.replaceAll("_", " ").toUpperCase(),
-        name.includes("home") || name.includes("lim_") ? "Position Sensor" : "Safety Input",
-        input.pin,
-        input.pull_up ? "PULL-UP" : "NO PULL-UP",
-        input.active_high ? "ACTIVE HIGH" : "ACTIVE LOW",
-      ]);
-    });
-    Object.entries(hardware.digital_outputs || {}).forEach(([name, output]) => {
-      pinRows.push([
-        name.replaceAll("_", " ").toUpperCase(),
-        "Digital Output",
-        output.pin,
-        output.initial_value ? "INITIAL ON" : "INITIAL OFF",
-        output.active_high ? "ACTIVE HIGH" : "ACTIVE LOW",
-      ]);
-    });
-    const pinTable = document.getElementById("configuration-pin-table");
-    if (pinTable) pinTable.innerHTML = pinRows.map(([signal, category, pin, setup, logic]) =>
-      `<tr><td>${esc(signal)}</td><td>${esc(category)}</td><td>GPIO ${esc(pin)}</td><td>${esc(setup)}</td><td>${esc(logic)}</td></tr>`
-    ).join("");
+    renderConfigurationEditor();
 
     const alarmList = document.getElementById("alarm-page-list");
     if (alarmList) alarmList.innerHTML = alarmChannels().map((channel) => `
@@ -1930,6 +2066,7 @@
       // Rebuild homing sequence panel with actual order
       renderHomingSequence();
       renderWorkspacePages();
+      renderConfigurationEditor(true);
       log("Machine configuration loaded", "info", "SYSTEM");
     } catch (err) {
       log(`Config load failed: ${err.message}`, "error", "SYSTEM");
@@ -2137,6 +2274,23 @@
     el("visual-send-motion").addEventListener("click", sendVisualTargetToMotion);
     el("visual-edit-enable").addEventListener("click", () => setVisualEditMode(true));
     el("visual-edit-cancel").addEventListener("click", () => setVisualEditMode(false));
+
+    const configurationPage = document.querySelector('[data-view-page="configuration"]');
+    const markConfigurationDirty = (event) => {
+      if (!event.target.matches("[data-config-axis], [data-pin-group]")) return;
+      if (event.target.dataset.pinGroup === "digital_inputs" && event.target.dataset.pinField === "pull_up") {
+        const activeLogic = document.querySelector(`[data-pin-group="digital_inputs"][data-pin-name="${event.target.dataset.pinName}"][data-pin-field="active_high"]`);
+        if (activeLogic) activeLogic.checked = !event.target.checked;
+      }
+      MS.configDirty = true;
+      updateConfigurationDerived();
+      updateConfigurationState();
+    };
+    configurationPage.addEventListener("input", markConfigurationDirty);
+    configurationPage.addEventListener("change", markConfigurationDirty);
+    el("configuration-reset").addEventListener("click", () => renderConfigurationEditor(true));
+    el("configuration-save").addEventListener("click", saveControllerConfiguration);
+    el("configuration-apply").addEventListener("click", applyControllerConfiguration);
 
     el("dashboard-slot-grid").addEventListener("click", (event) => {
       const slotButton = event.target.closest("[data-dashboard-slot]");
