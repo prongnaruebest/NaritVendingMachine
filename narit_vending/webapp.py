@@ -40,7 +40,6 @@ class APIInputError(ValueError):
 GPIO_MIN = 0
 GPIO_MAX = 27
 MAX_PULSE_FREQUENCY_HZ = 50_000.0
-MOTOR_TEST_ARM_DURATION_S = 120.0
 MOTOR_TEST_MAX_DURATION_S = 3.0
 MOTOR_TEST_MAX_FREQUENCY_HZ = 2_000.0
 MOTOR_TEST_MAX_PULSES = 6_000
@@ -94,7 +93,7 @@ class MotionService:
         self.armed_move: dict[str, object] | None = None
         self.completed_request_ids: dict[str, dict[str, object]] = {}
         self.configuration_restart_required = False
-        self.motor_test_until_monotonic = 0.0
+        self.motor_test_armed = False
 
         if self.config_path.exists():
             config = load_machine_config(self.config_path)
@@ -170,13 +169,11 @@ class MotionService:
             or self.controller.stop_requested()
             or self.configuration_restart_required
         )
-        remaining_s = max(0.0, self.motor_test_until_monotonic - time.monotonic())
-        if unsafe or remaining_s <= 0:
-            self.motor_test_until_monotonic = 0.0
-            remaining_s = 0.0
+        if unsafe:
+            self.motor_test_armed = False
         return {
-            "armed": remaining_s > 0,
-            "expires_in_s": round(remaining_s, 1),
+            "armed": self.motor_test_armed,
+            "expires_in_s": None,
             "max_duration_s": MOTOR_TEST_MAX_DURATION_S,
             "max_frequency_hz": MOTOR_TEST_MAX_FREQUENCY_HZ,
             "max_pulses": MOTOR_TEST_MAX_PULSES,
@@ -190,10 +187,10 @@ class MotionService:
                 if errors:
                     return {"ok": False, "error": "; ".join(errors)}
                 self.armed_move = None
-                self.motor_test_until_monotonic = time.monotonic() + MOTOR_TEST_ARM_DURATION_S
+                self.motor_test_armed = True
                 self.operation_message = "Motor Test Mode armed; raw pulse test permitted"
             else:
-                self.motor_test_until_monotonic = 0.0
+                self.motor_test_armed = False
                 self.operation_message = "Motor Test Mode cancelled"
             return {"ok": True, "motor_test": self._motor_test_status()}
 
@@ -203,14 +200,11 @@ class MotionService:
         direction: str,
         pulse_count: int,
         pulse_frequency_hz: float,
-        unloaded_confirmed: bool,
     ) -> dict[str, object]:
         with self.lock:
             motor_test = self._motor_test_status()
         if not motor_test["armed"]:
-            return {"ok": False, "error": "Motor Test Mode is not armed or has expired"}
-        if not unloaded_confirmed:
-            return {"ok": False, "error": "Confirm that the motor is unloaded before testing"}
+            return {"ok": False, "error": "Motor Test Mode is not armed"}
         duration_s = pulse_count / pulse_frequency_hz
         if pulse_count > MOTOR_TEST_MAX_PULSES:
             return {"ok": False, "error": f"pulse_count is limited to {MOTOR_TEST_MAX_PULSES}"}
@@ -1089,7 +1083,6 @@ def create_app(config_path: str = "machine_config.json", hw_config_path: str = "
                 minimum=10.0,
                 maximum=MOTOR_TEST_MAX_FREQUENCY_HZ,
             )
-            unloaded_confirmed = _config_boolean(payload, "unloaded_confirmed")
         except (APIInputError, KeyError, TypeError, ValueError) as exc:
             return jsonify({"ok": False, "error": str(exc) or "Invalid motor test parameters"}), 400
         result = service.run_motor_test(
@@ -1097,7 +1090,6 @@ def create_app(config_path: str = "machine_config.json", hw_config_path: str = "
             direction,
             pulse_count,
             pulse_frequency_hz,
-            unloaded_confirmed,
         )
         status_code = 200 if result["ok"] else 400
         return jsonify(result | service.status_payload()), status_code

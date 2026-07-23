@@ -16,6 +16,7 @@
     // Connectivity
     online: false,
     pending: false,
+    motorTestJog: { active: false, token: 0, button: null },
 
     // From /api/status payload
     payload: null,
@@ -1089,6 +1090,7 @@
   function switchWorkspace(view, updateHash = true) {
     const nextView = VALID_VIEWS.has(view) ? view : "motion";
     if (MS.currentView === "motor-test" && nextView !== "motor-test" && motorTestState().armed) {
+      stopMotorTestJog("Motor Test Mode closed");
       apiCall("/api/maintenance/motor-test", "POST", { action: "cancel" }).then(refresh).catch(() => {});
     }
     MS.currentView = nextView;
@@ -1967,11 +1969,12 @@
     const duration = parameters.pulses / parameters.frequency;
     const distance = parameters.pulses / ppm;
     const rpm = parameters.frequency * 60 / ppr;
-    const valid = Number.isInteger(parameters.pulses) && parameters.pulses >= 1 && parameters.pulses <= 6000
-      && Number.isFinite(parameters.frequency) && parameters.frequency >= 10 && parameters.frequency <= 2000
+    const jogValid = Number.isFinite(parameters.frequency) && parameters.frequency >= 10 && parameters.frequency <= 2000
       && Number.isFinite(parameters.stepsPerRev) && parameters.stepsPerRev > 0
       && Number.isFinite(parameters.microsteps) && parameters.microsteps > 0
-      && Number.isFinite(parameters.pitch) && parameters.pitch > 0
+      && Number.isFinite(parameters.pitch) && parameters.pitch > 0;
+    const valid = jogValid
+      && Number.isInteger(parameters.pulses) && parameters.pulses >= 1 && parameters.pulses <= 6000
       && Number.isFinite(duration) && duration <= 3;
     setText("motor-test-ppr", Number.isFinite(ppr) ? Math.round(ppr).toLocaleString() : "INVALID");
     setText("motor-test-ppm", Number.isFinite(ppm) ? fmt(ppm, 3) : "INVALID");
@@ -1979,14 +1982,15 @@
     setText("motor-test-distance", Number.isFinite(distance) ? `${fmt(distance, 3)} mm` : "INVALID");
     setText("motor-test-rpm", Number.isFinite(rpm) ? `${fmt(rpm, 2)} rpm` : "INVALID");
     const armed = Boolean(motorTestState().armed);
-    const confirmed = Boolean(el("motor-test-unloaded")?.checked);
-    const canRun = valid && armed && confirmed && MS.online && !MS.pending
+    const ready = armed && MS.online && !MS.pending
       && !Boolean(MS.payload?.busy) && !Boolean(getStatus().estop) && !Boolean(MS.payload?.safety?.stop_requested);
-    el("motor-test-start").disabled = !canRun;
-    $$("[data-motor-test-jog]").forEach((button) => { button.disabled = !canRun; });
+    el("motor-test-start").disabled = !valid || !ready || MS.motorTestJog.active;
+    $$("[data-motor-test-jog]").forEach((button) => {
+      button.disabled = !jogValid || (MS.motorTestJog.active ? button !== MS.motorTestJog.button : !ready);
+    });
     setText(
       "motor-test-jog-profile",
-      valid ? `${parameters.pulses.toLocaleString()} pulse · ${fmt(parameters.frequency, 0)} Hz · ${fmt(duration, 3)} s` : "INVALID PROFILE",
+      jogValid ? `HOLD TO RUN · ${fmt(parameters.frequency, 0)} Hz` : "INVALID PROFILE",
     );
     if (!valid) setText("motor-test-result", "INVALID PROFILE — frequency 10–2,000 Hz, pulses 1–6,000, duration maximum 3 seconds.");
   }
@@ -1997,10 +2001,6 @@
     loadMotorTestAxisConfig();
     renderMotorTest();
     const parameters = motorTestParameters();
-    const confirmed = window.confirm(
-      `Send ${parameters.pulses} pulses to Axis ${axis.toUpperCase()} at ${parameters.frequency} Hz (${direction.toUpperCase()})?`,
-    );
-    if (!confirmed) return;
     setText("motor-test-result", "Pulse test running — use E-Stop if the motor responds unexpectedly.");
     const result = await command(
       `Motor test ${axis.toUpperCase()} ${direction}`,
@@ -2011,13 +2011,59 @@
         direction,
         pulse_count: parameters.pulses,
         pulse_frequency_hz: parameters.frequency,
-        unloaded_confirmed: Boolean(el("motor-test-unloaded").checked),
       },
       { noCheck: true, timeoutMs: 7000 },
     );
     if (result) {
       const completed = result.result || {};
       setText("motor-test-result", `TEST COMPLETE — ${completed.pulse_count || parameters.pulses} pulses at ${fmt(completed.pulse_frequency_hz || parameters.frequency, 0)} Hz. Axis ${axis.toUpperCase()} now requires homing.`);
+    }
+  }
+
+  function stopMotorTestJog(message = "JOG RELEASED — pulse output stopped.") {
+    if (!MS.motorTestJog.active) return;
+    MS.motorTestJog.active = false;
+    MS.motorTestJog.token += 1;
+    MS.motorTestJog.button?.classList.remove("running");
+    MS.motorTestJog.button = null;
+    setText("motor-test-result", message);
+  }
+
+  async function startMotorTestJog(axis, direction, button) {
+    if (MS.motorTestJog.active || button.disabled) return;
+    el("motor-test-axis").value = axis;
+    el("motor-test-direction").value = direction;
+    loadMotorTestAxisConfig();
+    const token = ++MS.motorTestJog.token;
+    MS.motorTestJog.active = true;
+    MS.motorTestJog.button = button;
+    button.classList.add("running");
+    setText("motor-test-result", `HOLD JOG ACTIVE — Axis ${axis.toUpperCase()} ${direction.toUpperCase()}. Release the button to stop.`);
+    try {
+      while (MS.motorTestJog.active && MS.motorTestJog.token === token) {
+        const frequency = Number(el("motor-test-frequency")?.value);
+        const pulseCount = Math.max(1, Math.min(6000, Math.round(frequency * 0.2)));
+        await apiCall(
+          "/api/maintenance/motor-test",
+          "POST",
+          {
+            action: "pulse",
+            axis,
+            direction,
+            pulse_count: pulseCount,
+            pulse_frequency_hz: frequency,
+          },
+          3000,
+        );
+      }
+    } catch (error) {
+      if (MS.motorTestJog.token === token) {
+        stopMotorTestJog(`JOG STOPPED — ${humanizeError(error.message)}`);
+        toast(humanizeError(error.message), "error");
+      }
+    } finally {
+      if (MS.motorTestJog.token === token) stopMotorTestJog();
+      refresh().catch(() => {});
     }
   }
 
@@ -2030,7 +2076,7 @@
     pageStatus.textContent = armed ? "ARMED" : "DISARMED";
     pageStatus.className = `page-status-chip ${armed ? "fault" : ""}`;
     el("motor-test-safety").classList.toggle("armed", armed);
-    setText("motor-test-countdown", armed ? `${Math.ceil(Number(test.expires_in_s || 0))} s remaining` : "120 s window");
+    setText("motor-test-countdown", armed ? "ACTIVE UNTIL CANCEL / E-STOP" : "PRESS ARM TO ENABLE");
     el("motor-test-arm").disabled = armed || !MS.online || MS.pending || Boolean(MS.payload?.busy)
       || Boolean(status.estop) || Boolean(MS.payload?.safety?.stop_requested);
     el("motor-test-cancel").disabled = !armed || !MS.online || MS.pending;
@@ -2403,23 +2449,17 @@
     el("visual-edit-cancel").addEventListener("click", () => setVisualEditMode(false));
 
     el("motor-test-arm").addEventListener("click", async () => {
-      const confirmed = window.confirm(
-        "ARM MOTOR TEST MODE FOR 120 SECONDS?\n\n"
-        + "Raw pulses can rotate an unreferenced motor. Disconnect the mechanical load, "
-        + "verify the driver current and keep the E-Stop within reach.",
-      );
-      if (!confirmed) return;
       const result = await command("Arm Motor Test Mode", "/api/maintenance/motor-test", { action: "arm" }, { isStop: true, noCheck: true });
       if (result) {
         MS.keyboardJogEnabled = false;
         el("jog-keyboard-enable").checked = false;
-        setText("motor-test-result", "TEST MODE ARMED — review the profile, confirm unloaded motor, then start the pulse test.");
+        setText("motor-test-result", "TEST MODE ARMED — press and hold a Test Jog button to rotate; release to stop.");
       }
     });
     el("motor-test-cancel").addEventListener("click", async () => {
+      stopMotorTestJog("Motor Test Mode cancelled. Pulse output is disabled.");
       const result = await command("Cancel Motor Test Mode", "/api/maintenance/motor-test", { action: "cancel" }, { isStop: true, noCheck: true });
       if (result) {
-        el("motor-test-unloaded").checked = false;
         setText("motor-test-result", "Motor Test Mode cancelled. Pulse output is disabled.");
       }
     });
@@ -2428,17 +2468,35 @@
       runMotorTestPulse(parameters.axis, parameters.direction);
     });
     $$("[data-motor-test-jog]").forEach((button) => {
-      button.addEventListener("click", () => {
+      const beginJog = (event) => {
+        event.preventDefault();
+        if (button.disabled) return;
         const [axis, direction] = button.dataset.motorTestJog.split(":");
-        runMotorTestPulse(axis, direction);
+        if (event.pointerId != null) button.setPointerCapture?.(event.pointerId);
+        startMotorTestJog(axis, direction, button);
+      };
+      button.addEventListener("pointerdown", beginJog);
+      button.addEventListener("pointerup", () => stopMotorTestJog());
+      button.addEventListener("pointercancel", () => stopMotorTestJog("JOG CANCELLED — pulse output stopped."));
+      button.addEventListener("lostpointercapture", () => stopMotorTestJog());
+      button.addEventListener("keydown", (event) => {
+        if ((event.key === "Enter" || event.key === " ") && !event.repeat) beginJog(event);
       });
+      button.addEventListener("keyup", (event) => {
+        if (event.key === "Enter" || event.key === " ") stopMotorTestJog();
+      });
+      button.addEventListener("contextmenu", (event) => event.preventDefault());
+    });
+    window.addEventListener("blur", () => stopMotorTestJog("WINDOW LOST FOCUS — pulse output stopped."));
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) stopMotorTestJog("PAGE HIDDEN — pulse output stopped.");
     });
     el("motor-test-open-config").addEventListener("click", () => switchWorkspace("configuration"));
     el("motor-test-axis").addEventListener("change", () => {
       loadMotorTestAxisConfig();
       renderMotorTest();
     });
-    ["motor-test-direction", "motor-test-frequency", "motor-test-pulses", "motor-test-steps-rev", "motor-test-microsteps", "motor-test-pitch", "motor-test-unloaded"].forEach((id) => {
+    ["motor-test-direction", "motor-test-frequency", "motor-test-pulses", "motor-test-steps-rev", "motor-test-microsteps", "motor-test-pitch"].forEach((id) => {
       el(id).addEventListener("input", updateMotorTestCalculations);
       el(id).addEventListener("change", updateMotorTestCalculations);
     });
