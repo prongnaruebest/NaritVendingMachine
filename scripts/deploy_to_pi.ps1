@@ -25,7 +25,7 @@ if (-not $NoPull) {
 }
 
 ssh $HostName "sudo systemctl stop narit-vending-web.service narit-vending-controller.service 2>/dev/null || true; sudo chown -R admin:admin $RemoteDir 2>/dev/null || true; find $RemoteDir -type d -exec chmod u+rwx {} +; find $RemoteDir -type f -exec chmod u+rw {} +"
-scp -r README.md main.py machine_config.json hardware_config.json requirements.txt narit_vending deploy scripts "Test motor.py" "${HostName}:${RemoteDir}/"
+scp -r README.md main.py machine_config.json hardware_config.json requirements.txt narit_vending deploy scripts "${HostName}:${RemoteDir}/"
 if ($LASTEXITCODE -ne 0) {
     throw "SCP upload failed with exit code $LASTEXITCODE"
 }

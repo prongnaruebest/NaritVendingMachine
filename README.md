@@ -9,9 +9,11 @@ Motion control base for a Raspberry Pi vending machine with `X/Y/Z` axes, head/t
 - `narit_vending/webapp.py`: Flask web server and JSON API
 - `main.py`: CLI entry point
 - `machine_config.json`: per-axis travel, `steps_per_mm`, jog sizes, and slot positions
-- `deploy/narit-vending-web.service`: systemd service for auto-start on boot
+- `deploy/narit-vending-controller.service`: systemd service for motion controller process
+- `deploy/narit-vending-web.service`: systemd service for web monitor process
 - `scripts/deploy_to_pi.ps1`: deploy this project from Windows to Raspberry Pi over SSH
 - `scripts/setup_pi.sh`: install runtime dependencies on the Pi
+- `docs/`: architecture specifications, proposals, and API documentation
 
 ## Features
 

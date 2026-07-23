@@ -1,5 +1,7 @@
 import asyncio
 import os
+import threading
+import time
 import unittest
 from unittest.mock import MagicMock
 
@@ -33,10 +35,6 @@ def _make_dummy_snapshot() -> MachineSnapshot:
         controlled_stop_requested=False,
         speed_override=None,
     )
-
-
-import threading
-import time
 
 
 class TestIPCRoundTrip(unittest.TestCase):
