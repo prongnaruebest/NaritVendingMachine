@@ -29,7 +29,7 @@
       "dir_pin": 24,
       "enable_pin": 13,
       "active_high": true,
-      "enable_active_high": true
+      "enable_active_high": false
     },
     "z": {
       "step_pin": 18,
