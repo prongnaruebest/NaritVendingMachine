@@ -699,6 +699,11 @@ class MotionService:
             dir_pin = _config_integer(motor_payload, "dir_pin", minimum=GPIO_MIN, maximum=GPIO_MAX)
             enable_pin = _config_integer(motor_payload, "enable_pin", minimum=GPIO_MIN, maximum=GPIO_MAX)
             active_high = _config_boolean(motor_payload, "active_high")
+            enable_active_high = (
+                _config_boolean(motor_payload, "enable_active_high")
+                if "enable_active_high" in motor_payload
+                else active_high
+            )
             current_axis = getattr(self.controller.config, axis_name)
             updated_axis = replace(
                 current_axis,
@@ -725,6 +730,7 @@ class MotionService:
                 "dir_pin": dir_pin,
                 "enable_pin": enable_pin,
                 "active_high": active_high,
+                "enable_active_high": enable_active_high,
             }
             updated_hardware["machine_parameters"]["axes"][axis_name] = {
                 "steps_per_mm": steps_per_mm,

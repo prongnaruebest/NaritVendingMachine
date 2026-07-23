@@ -1130,10 +1130,11 @@ def build_controller(config: MachineConfig, hw_config_path: str = "hardware_conf
     def make_axis(cfg: AxisConfig) -> AxisController:
         motor_info = motors_config.get(cfg.name, {})
         motor_active_high = bool(motor_info.get("active_high", True))
+        enable_active_high = bool(motor_info.get("enable_active_high", motor_active_high))
         pulse_dev = OutputDevice(cfg.pulse_pin, active_high=motor_active_high, initial_value=False)
         dir_dev = OutputDevice(cfg.direction_pin, active_high=motor_active_high, initial_value=False)
         enable_dev = (
-            OutputDevice(cfg.enable_pin, active_high=motor_active_high, initial_value=True)
+            OutputDevice(cfg.enable_pin, active_high=enable_active_high, initial_value=True)
             if cfg.enable_pin is not None
             else None
         )

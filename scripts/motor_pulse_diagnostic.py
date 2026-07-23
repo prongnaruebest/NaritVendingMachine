@@ -60,7 +60,7 @@ def main() -> int:
     motor = config["motors"][args.axis]
     estop_config = config["digital_inputs"]["estop"]
     direction_level = physical_level(args.direction_level)
-    configured_enable_level = bool(motor.get("active_high", True))
+    configured_enable_level = bool(motor.get("enable_active_high", motor.get("active_high", True)))
     profiles = [(args.enable_level, args.frequency, args.duration)]
     if args.sweep:
         profiles = [

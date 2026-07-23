@@ -21,19 +21,22 @@
       "step_pin": 16,
       "dir_pin": 23,
       "enable_pin": 12,
-      "active_high": true
+      "active_high": true,
+      "enable_active_high": true
     },
     "y": {
       "step_pin": 26,
       "dir_pin": 24,
       "enable_pin": 13,
-      "active_high": true
+      "active_high": true,
+      "enable_active_high": true
     },
     "z": {
       "step_pin": 18,
       "dir_pin": 25,
       "enable_pin": 19,
-      "active_high": true
+      "active_high": true,
+      "enable_active_high": false
     }
   },
   "digital_inputs": {
