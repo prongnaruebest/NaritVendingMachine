@@ -70,7 +70,7 @@ class HealthApiTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         for workspace in ("dashboard", "motion", "visualization", "slots", "diagnostics", "configuration", "mqtt", "alarms", "events", "flow"):
-            self.assertIn(f'data-view-page="{workspace}"', html)
+            self.assertIn(f'data-view-target="{workspace}"', html)
 
     def test_mqtt_monitor_endpoint_returns_connection_telemetry(self) -> None:
         response = self.client.get("/api/mqtt/status")
@@ -80,6 +80,22 @@ class HealthApiTests(unittest.TestCase):
         self.assertTrue(payload["connected"])
         self.assertEqual(payload["state"], "CONNECTED")
         self.assertEqual(payload["broker"]["host"], "mqtt.example.test")
+
+
+class WebAppNewProcessTests(unittest.TestCase):
+    def test_new_web_app_index_renders_template(self) -> None:
+        from unittest.mock import MagicMock
+        from narit_vending.web.app import create_web_app
+
+        mock_ctrl = MagicMock()
+        app = create_web_app(mock_ctrl)
+        app.testing = True
+        client = app.test_client()
+
+        response = client.get("/")
+        self.assertEqual(response.status_code, 200)
+        html = response.get_data(as_text=True)
+        self.assertIn("NARIT VENDING", html)
 
 
 if __name__ == "__main__":

@@ -8,6 +8,7 @@ All machine state is obtained via ControllerClient over IPC.
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 from flask import Flask, jsonify, render_template, request
 
@@ -25,10 +26,11 @@ def create_web_app(ctrl_client=None) -> Flask:
     if ctrl_client is None:
         ctrl_client = ControllerClient()
 
+    pkg_dir = Path(__file__).resolve().parent.parent
     app = Flask(
         __name__,
-        template_folder="../../templates",
-        static_folder="../../static",
+        template_folder=str(pkg_dir / "templates"),
+        static_folder=str(pkg_dir / "static"),
     )
     app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0
     app.extensions["ctrl"] = ctrl_client
