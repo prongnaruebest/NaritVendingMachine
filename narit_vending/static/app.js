@@ -1969,7 +1969,7 @@
     const duration = parameters.pulses / parameters.frequency;
     const distance = parameters.pulses / ppm;
     const rpm = parameters.frequency * 60 / ppr;
-    const jogValid = Number.isFinite(parameters.frequency) && parameters.frequency >= 10 && parameters.frequency <= 2000
+    const jogValid = Number.isFinite(parameters.frequency) && parameters.frequency >= 10
       && Number.isFinite(parameters.stepsPerRev) && parameters.stepsPerRev > 0
       && Number.isFinite(parameters.microsteps) && parameters.microsteps > 0
       && Number.isFinite(parameters.pitch) && parameters.pitch > 0;
@@ -1978,7 +1978,8 @@
       && Number.isFinite(duration) && duration <= 3;
     setText("motor-test-ppr", Number.isFinite(ppr) ? Math.round(ppr).toLocaleString() : "INVALID");
     setText("motor-test-ppm", Number.isFinite(ppm) ? fmt(ppm, 3) : "INVALID");
-    setText("motor-test-duration", Number.isFinite(duration) ? fmt(duration, 3) : "INVALID");
+    const durationField = el("motor-test-duration");
+    if (durationField) durationField.value = Number.isFinite(duration) ? fmt(duration, 3) : "INVALID";
     setText("motor-test-distance", Number.isFinite(distance) ? `${fmt(distance, 3)} mm` : "INVALID");
     setText("motor-test-rpm", Number.isFinite(rpm) ? `${fmt(rpm, 2)} rpm` : "INVALID");
     const armed = Boolean(motorTestState().armed);
@@ -1992,7 +1993,7 @@
       "motor-test-jog-profile",
       jogValid ? `HOLD TO RUN · ${fmt(parameters.frequency, 0)} Hz` : "INVALID PROFILE",
     );
-    if (!valid) setText("motor-test-result", "INVALID PROFILE — frequency 10–2,000 Hz, pulses 1–6,000, duration maximum 3 seconds.");
+    if (!valid) setText("motor-test-result", "INVALID PROFILE — frequency must be at least 10 Hz; one-shot duration maximum 3 seconds.");
   }
 
   async function runMotorTestPulse(axis, direction) {

@@ -8,7 +8,7 @@
   <link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='favicon-transparent-large.png') }}?v=20260721_v12">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=20260723_v45">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=20260723_v46">
 </head>
 <body>
   <div class="hmi-shell">
@@ -578,11 +578,11 @@
         </div>
         <div class="motor-test-layout">
           <div class="panel page-panel motor-test-controls-panel">
-            <div class="panel-head"><div><p class="panel-label">Pulse Generator</p><h2 class="panel-title">Single-Axis Motor Test</h2></div><span class="page-note">10–2,000 Hz · hold-to-run jog</span></div>
+            <div class="panel-head"><div><p class="panel-label">Pulse Generator</p><h2 class="panel-title">Single-Axis Motor Test</h2></div><span class="page-note">10 Hz minimum · hold-to-run jog</span></div>
             <div class="motor-test-form">
               <label><span>Axis</span><select class="hmi-input" id="motor-test-axis"><option value="x">X Axis</option><option value="y">Y Axis</option><option value="z" selected>Z Axis</option></select></label>
               <label><span>Direction</span><select class="hmi-input" id="motor-test-direction"><option value="forward">FORWARD (+)</option><option value="reverse">REVERSE (−)</option></select></label>
-              <label><span>Pulse Frequency</span><div class="field-input-wrap"><input class="hmi-input" id="motor-test-frequency" type="number" min="10" max="2000" step="10" value="100"><span class="unit-tag">Hz</span></div></label>
+              <label><span>Pulse Frequency</span><div class="field-input-wrap"><input class="hmi-input" id="motor-test-frequency" type="number" min="10" step="10" value="100"><span class="unit-tag">Hz</span></div></label>
               <label><span>Pulse Count</span><div class="field-input-wrap"><input class="hmi-input" id="motor-test-pulses" type="number" min="1" max="6000" step="1" value="300"><span class="unit-tag">pulse</span></div></label>
               <label><span>Motor Full Steps / Rev</span><input class="hmi-input" id="motor-test-steps-rev" type="number" min="1" max="10000" step="1" value="200"></label>
               <label><span>Driver Microstep</span><input class="hmi-input" id="motor-test-microsteps" type="number" min="1" max="256" step="1" value="10"></label>
@@ -887,6 +887,6 @@
   <!-- Toast notification -->
   <div class="toast" id="toast" role="status"></div>
 
-  <script src="{{ url_for('static', filename='app.js') }}?v=20260723_v45"></script>
+  <script src="{{ url_for('static', filename='app.js') }}?v=20260723_v46"></script>
 </body>
 </html>
