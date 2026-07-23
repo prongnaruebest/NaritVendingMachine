@@ -1,12 +1,14 @@
 [Unit]
-Description=Narit Vending Machine Web Controller
-After=network-online.target
+Description=Narit Vending Machine Web Monitor Process
+After=network-online.target narit-vending-controller.service
 Wants=network-online.target
+Requires=narit-vending-controller.service
 
 [Service]
 Type=simple
 WorkingDirectory=/home/admin/NaritVending
-ExecStart=/home/admin/NaritVending/.venv/bin/python3 -m narit_vending.webapp --host 0.0.0.0 --port 80 --config /home/admin/NaritVending/machine_config.json
+EnvironmentFile=-/etc/narit-vending.env
+ExecStart=/home/admin/NaritVending/.venv/bin/python3 -m narit_vending.web --host 0.0.0.0 --port 80 --hw-config /home/admin/NaritVending/hardware_config.json
 Restart=always
 RestartSec=2
 User=root

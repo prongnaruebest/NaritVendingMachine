@@ -8,7 +8,7 @@
   <link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='favicon-transparent-large.png') }}?v=20260721_v12">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=20260723_v46">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=20260723_v47">
 </head>
 <body>
   <div class="hmi-shell">
@@ -71,6 +71,13 @@
               <circle cx="8" cy="8" r="5"/><circle cx="8" cy="8" r="1.5"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2"/>
             </svg>
             <span>Motor Test Mode</span>
+          </button>
+          <button class="nav-item" id="nav-mqtt" data-view-target="mqtt">
+            <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+              <circle cx="8" cy="8" r="1.5"/><path d="M4.5 11.5a5 5 0 0 1 0-7M11.5 4.5a5 5 0 0 1 0 7M2.2 13.8a8.2 8.2 0 0 1 0-11.6M13.8 2.2a8.2 8.2 0 0 1 0 11.6"/>
+            </svg>
+            <span>MQTT Monitor</span>
+            <span class="nav-link-light disabled" id="nav-mqtt-light" aria-label="MQTT disabled"></span>
           </button>
           <button class="nav-item" id="nav-alarms" data-view-target="alarms">
             <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -623,6 +630,47 @@
         </div>
       </section>
 
+      <section class="workspace-view mqtt-page" data-view-page="mqtt">
+        <div class="page-heading">
+          <div><p class="panel-label">External Communication</p><h2>MQTT Broker Monitor</h2></div>
+          <span class="page-status-chip" id="mqtt-page-status">CHECKING</span>
+        </div>
+        <div class="mqtt-summary-grid">
+          <article class="mqtt-summary-card" id="mqtt-card-link"><span>Broker Link</span><strong id="mqtt-link-state">UNKNOWN</strong><small id="mqtt-link-detail">Waiting for telemetry</small></article>
+          <article class="mqtt-summary-card"><span>Cabinet Client</span><strong id="mqtt-client-id">--</strong><small id="mqtt-client-detail">Persistent session</small></article>
+          <article class="mqtt-summary-card"><span>Messages Received</span><strong id="mqtt-rx-count">0</strong><small id="mqtt-last-rx">Last RX: --</small></article>
+          <article class="mqtt-summary-card"><span>Messages Published</span><strong id="mqtt-tx-count">0</strong><small id="mqtt-last-tx">Last TX: --</small></article>
+          <article class="mqtt-summary-card"><span>Commands</span><strong id="mqtt-command-count">0</strong><small id="mqtt-rejected-count">Rejected: 0</small></article>
+        </div>
+        <div class="mqtt-monitor-layout">
+          <section class="panel page-panel mqtt-connection-panel">
+            <div class="panel-head"><div><p class="panel-label">Connection</p><h2 class="panel-title">Broker &amp; Session</h2></div><span class="page-note">Updates every 1 second</span></div>
+            <dl class="mqtt-detail-list">
+              <div><dt>Broker Address</dt><dd id="mqtt-broker-address">--</dd></div>
+              <div><dt>Keep Alive</dt><dd id="mqtt-keepalive">--</dd></div>
+              <div><dt>Authentication</dt><dd id="mqtt-auth-state">--</dd></div>
+              <div><dt>Connected At</dt><dd id="mqtt-connected-at">--</dd></div>
+              <div><dt>Disconnected At</dt><dd id="mqtt-disconnected-at">--</dd></div>
+              <div><dt>Connect / Disconnect</dt><dd id="mqtt-session-count">0 / 0</dd></div>
+            </dl>
+          </section>
+          <section class="panel page-panel mqtt-topic-panel">
+            <div class="panel-head"><div><p class="panel-label">Topic Contract</p><h2 class="panel-title">Subscriptions &amp; Publications</h2></div></div>
+            <div class="mqtt-topic-group"><span>SUBSCRIBE</span><div id="mqtt-subscribe-topics" class="mqtt-topic-list"><code>--</code></div></div>
+            <div class="mqtt-topic-group"><span>PUBLISH</span><div id="mqtt-publish-topics" class="mqtt-topic-list"><code>--</code></div></div>
+          </section>
+          <section class="panel page-panel mqtt-message-panel">
+            <div class="panel-head"><div><p class="panel-label">Live Traffic</p><h2 class="panel-title">MQTT RX / TX Message Stream</h2></div><span class="page-note">Latest 100 messages · sensitive tokens redacted</span></div>
+            <div class="mqtt-message-head"><span>TIME</span><span>DIR</span><span>QOS</span><span>TOPIC / PAYLOAD</span></div>
+            <div class="mqtt-message-stream" id="mqtt-message-stream"><div class="mqtt-empty-state">NO MQTT MESSAGES RECEIVED</div></div>
+          </section>
+          <section class="panel page-panel mqtt-error-panel" id="mqtt-error-panel">
+            <div><span>LAST CONNECTION ERROR</span><strong id="mqtt-last-error">NO ERROR</strong></div>
+            <small id="mqtt-telemetry-time">Telemetry: --</small>
+          </section>
+        </div>
+      </section>
+
       <section class="workspace-view" data-view-page="alarms">
         <div class="page-heading"><div><p class="panel-label">Alarm Management</p><h2>Alarm Points &amp; Safety Interlocks</h2></div><button class="btn-reset-alarm page-reset-alarm" id="page-clear-alarm">RESET ALARMS</button></div>
         <div class="panel page-panel"><div id="alarm-page-list" class="alarm-page-list"></div></div>
@@ -887,6 +935,6 @@
   <!-- Toast notification -->
   <div class="toast" id="toast" role="status"></div>
 
-  <script src="{{ url_for('static', filename='app.js') }}?v=20260723_v46"></script>
+  <script src="{{ url_for('static', filename='app.js') }}?v=20260723_v47"></script>
 </body>
 </html>

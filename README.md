@@ -85,6 +85,40 @@ Edit `machine_config.json` to tune:
 - `slots` for positions `1-30`
 - `safe_z_mm` for the height used before XY travel
 
+Before every configuration save, the service writes a timestamped copy of both JSON files under
+`backups/config/`. The active merged values and override warnings are available from:
+
+```text
+GET /api/config/effective
+```
+
+## Health Checks
+
+- `GET /health/live`: confirms that the Flask process is responding
+- `GET /health/ready`: confirms that configuration is valid and the service can accept requests
+
+`service_ready` is intentionally separate from `machine_ready`. A machine that has not been homed
+can still pass the deployment readiness check without being reported as ready for motion.
+
+Validate configuration without opening GPIO devices:
+
+```bash
+python scripts/validate_config.py
+```
+
+## MQTT Monitor
+
+Open `/#mqtt` or select **MQTT Monitor** under System Views. The monitor refreshes every second and shows:
+
+- broker connection state, address, keepalive and session timestamps
+- cabinet client ID and subscribed/published topics
+- RX/TX/command/rejected-message counters
+- the latest 100 MQTT messages with password and token fields redacted
+- the latest connection or payload error
+
+The same sanitized telemetry is available from `GET /api/mqtt/status`. MQTT credentials are never
+returned by this endpoint.
+
 ## Important Hardware Notes
 
 - If an axis moves in the wrong direction, swap `home_direction` and `forward_direction`

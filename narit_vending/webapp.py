@@ -15,6 +15,11 @@ from pathlib import Path
 
 from flask import Flask, jsonify, render_template, request
 
+from .config_foundation import (
+    create_config_backup,
+    validate_configuration_files,
+    validate_configuration_payloads,
+)
 from .motion import (
     ControlledStopError,
     EmergencyStopError,
@@ -100,6 +105,23 @@ class MotionService:
         else:
             config = build_default_machine_config()
             save_machine_config(config, self.config_path)
+
+        self.config_report = validate_configuration_files(self.config_path, self.hw_config_path)
+        if not self.config_report.valid:
+            errors = "; ".join(
+                f"{issue.path}: {issue.message}"
+                for issue in self.config_report.issues
+                if issue.severity == "error"
+            )
+            raise MotionError(f"Configuration validation failed: {errors}")
+        _logger.info(
+            "Configuration revision %s validated with %d warning(s)",
+            self.config_report.revision,
+            sum(issue.severity == "warning" for issue in self.config_report.issues),
+        )
+        for issue in self.config_report.issues:
+            if issue.severity == "warning":
+                _logger.warning("Configuration %s at %s: %s", issue.code, issue.path, issue.message)
 
         self.controller = build_controller(config, hw_config_path=str(self.hw_config_path))
         hw_config = load_hardware_config(str(self.hw_config_path))
@@ -644,6 +666,33 @@ class MotionService:
             config["restart_required"] = self.configuration_restart_required
             return config
 
+    def effective_config_payload(self) -> dict[str, object]:
+        with self.lock:
+            return self.config_report.to_dict() | {
+                "restart_required": self.configuration_restart_required,
+            }
+
+    def health_payload(self) -> dict[str, object]:
+        with self.lock:
+            controller_status = self.controller.status()
+            axes_homed = all(bool(controller_status[axis].get("is_homed")) for axis in ("x", "y", "z"))
+            machine_ready = (
+                axes_homed
+                and not bool(controller_status.get("estop"))
+                and controller_status.get("state") not in ("alarm", "moving")
+                and not self.configuration_restart_required
+            )
+            return {
+                "status": "UP" if self.config_report.valid else "DOWN",
+                "service_ready": self.config_report.valid,
+                "machine_ready": machine_ready,
+                "machine_state": controller_status.get("state", "unknown"),
+                "axes_homed": axes_homed,
+                "config_revision": self.config_report.revision,
+                "config_valid": self.config_report.valid,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+
     def save_configuration(self, payload: dict[str, object]) -> dict[str, object]:
         if self.busy:
             raise MotionError("Stop motion before changing controller configuration")
@@ -800,6 +849,20 @@ class MotionService:
             slots=self.controller.config.slots,
             safe_z_mm=self.controller.config.safe_z_mm,
         )
+        candidate_report = validate_configuration_payloads(updated_config.to_dict(), updated_hardware)
+        if not candidate_report.valid:
+            errors = "; ".join(
+                f"{issue.path}: {issue.message}"
+                for issue in candidate_report.issues
+                if issue.severity == "error"
+            )
+            raise APIInputError(f"Configuration validation failed: {errors}")
+
+        create_config_backup(
+            (self.config_path, self.hw_config_path),
+            self.config_path.parent / "backups" / "config",
+            reason="before_configuration_save",
+        )
         previous_machine = self.config_path.read_bytes() if self.config_path.exists() else None
         previous_hardware = self.hw_config_path.read_bytes() if self.hw_config_path.exists() else None
         try:
@@ -814,6 +877,7 @@ class MotionService:
 
         self.controller.config = updated_config
         self.configuration_restart_required = True
+        self.config_report = validate_configuration_files(self.config_path, self.hw_config_path)
         self.armed_move = None
         self.operation_phase = "restart_required"
         self.operation_message = "Configuration saved; apply and restart controller before motion"
@@ -948,13 +1012,30 @@ def create_app(config_path: str = "machine_config.json", hw_config_path: str = "
     def api_ping():
         return jsonify({"ok": True, "message": "pong"}), 200
 
+    @app.get("/health/live")
+    def health_live():
+        return jsonify({"status": "UP", "timestamp": datetime.now(timezone.utc).isoformat()}), 200
+
+    @app.get("/health/ready")
+    def health_ready():
+        health = service.health_payload()
+        return jsonify(health), 200 if health["service_ready"] else 503
+
     @app.get("/api/status")
     def api_status():
         return jsonify(service.status_payload())
 
+    @app.get("/api/mqtt/status")
+    def api_mqtt_status():
+        return jsonify(service.mqtt_service.status_payload()), 200
+
     @app.get("/api/config")
     def api_config():
         return jsonify(service.get_config())
+
+    @app.get("/api/config/effective")
+    def api_effective_config():
+        return jsonify(service.effective_config_payload()), 200
 
     @app.put("/api/config")
     def api_save_config():

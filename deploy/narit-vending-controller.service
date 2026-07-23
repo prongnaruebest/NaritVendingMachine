@@ -1,0 +1,18 @@
+[Unit]
+Description=Narit Vending Machine Controller Process
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+WorkingDirectory=/home/admin/NaritVending
+EnvironmentFile=-/etc/narit-vending.env
+ExecStart=/home/admin/NaritVending/.venv/bin/python3 -m narit_vending.controller --config /home/admin/NaritVending/machine_config.json --hw-config /home/admin/NaritVending/hardware_config.json
+RuntimeDirectory=narit-vending
+RuntimeDirectoryMode=0755
+Restart=on-failure
+RestartSec=3
+User=root
+
+[Install]
+WantedBy=multi-user.target

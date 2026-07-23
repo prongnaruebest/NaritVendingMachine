@@ -15,9 +15,14 @@ fi
 pip install --upgrade pip
 pip install -r requirements.txt
 
+sudo cp deploy/narit-vending-controller.service /etc/systemd/system/narit-vending-controller.service
 sudo cp deploy/narit-vending-web.service /etc/systemd/system/narit-vending-web.service
 sudo systemctl daemon-reload
+
+sudo systemctl enable narit-vending-controller.service
 sudo systemctl enable narit-vending-web.service
+
+sudo systemctl restart narit-vending-controller.service
 sudo systemctl restart narit-vending-web.service
 
-echo "Pi setup complete."
+echo "Pi setup complete (2-process architecture: controller + web)."

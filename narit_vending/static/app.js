@@ -22,6 +22,8 @@
     payload: null,
     config: null,
     slots: {},
+    mqtt: null,
+    mqttPollPending: false,
 
     // Event log
     events: [],
@@ -113,6 +115,12 @@
     const minutes = Math.floor(totalSeconds / 60);
     const seconds = totalSeconds % 60;
     return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+  }
+
+  function fmtTimestamp(value) {
+    if (!value) return "--";
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString();
   }
 
   /* ── STATE ACCESSORS ────────────────────────────────────────── */
@@ -1084,7 +1092,7 @@
   /* ── MASTER RENDER ──────────────────────────────────────────── */
   const VALID_VIEWS = new Set([
     "dashboard", "motion", "visualization", "diagnostics", "configuration",
-    "motor-test", "slots", "alarms", "events", "flow",
+    "motor-test", "mqtt", "slots", "alarms", "events", "flow",
   ]);
 
   function switchWorkspace(view, updateHash = true) {
@@ -2097,6 +2105,73 @@
     updateMotorTestCalculations();
   }
 
+  function renderMqttMonitor() {
+    if (!document.getElementById("mqtt-page-status")) return;
+    const data = MS.mqtt || {};
+    const state = String(data.state || "UNKNOWN").toUpperCase();
+    const enabled = Boolean(data.enabled);
+    const connected = Boolean(data.connected);
+    const stateClass = connected ? "ok" : (state === "CONNECTING" ? "warn" : (enabled ? "fault" : "disabled"));
+    const broker = data.broker || {};
+    const client = data.client || {};
+    const topics = data.topics || {};
+
+    setText("mqtt-page-status", state);
+    setClass("mqtt-page-status", `page-status-chip ${stateClass === "disabled" ? "" : stateClass}`);
+    setText("mqtt-link-state", connected ? "CONNECTED" : state);
+    setText("mqtt-link-detail", enabled ? `${broker.host || "--"}:${broker.port || "--"}` : "MQTT disabled in configuration");
+    setText("mqtt-client-id", client.cabinet_id || "--");
+    setText("mqtt-client-detail", data.client_available ? "Paho client available" : "Client unavailable");
+    setText("mqtt-rx-count", Number(data.received_count || 0).toLocaleString());
+    setText("mqtt-tx-count", Number(data.published_count || 0).toLocaleString());
+    setText("mqtt-command-count", Number(data.command_count || 0).toLocaleString());
+    setText("mqtt-rejected-count", `Rejected: ${Number(data.rejected_count || 0).toLocaleString()}`);
+    setText("mqtt-last-rx", `Last RX: ${fmtTimestamp(data.last_message_at)}`);
+    setText("mqtt-last-tx", `Last TX: ${fmtTimestamp(data.last_publish_at)}`);
+    setText("mqtt-broker-address", `${broker.host || "--"}:${broker.port || "--"}`);
+    setText("mqtt-keepalive", broker.keepalive_s == null ? "--" : `${broker.keepalive_s} seconds`);
+    setText("mqtt-auth-state", broker.authentication_configured ? "CONFIGURED" : "NOT CONFIGURED");
+    setText("mqtt-connected-at", fmtTimestamp(data.connected_at));
+    setText("mqtt-disconnected-at", fmtTimestamp(data.disconnected_at));
+    setText("mqtt-session-count", `${Number(data.connect_count || 0)} / ${Number(data.disconnect_count || 0)}`);
+    setText("mqtt-last-error", data.last_error || "NO ERROR");
+    setText("mqtt-telemetry-time", `Telemetry: ${fmtTimestamp(data.timestamp)}`);
+
+    const linkCard = document.getElementById("mqtt-card-link");
+    if (linkCard) linkCard.className = `mqtt-summary-card ${stateClass}`;
+    const errorPanel = document.getElementById("mqtt-error-panel");
+    if (errorPanel) errorPanel.classList.toggle("fault", Boolean(data.last_error));
+    const navLight = document.getElementById("nav-mqtt-light");
+    if (navLight) {
+      navLight.className = `nav-link-light ${connected ? "connected" : (enabled ? "fault" : "disabled")}`;
+      navLight.setAttribute("aria-label", `MQTT ${connected ? "connected" : state.toLowerCase()}`);
+    }
+
+    const renderTopics = (id, values) => {
+      const container = document.getElementById(id);
+      if (!container) return;
+      const items = Array.isArray(values) ? values : [];
+      container.innerHTML = items.length ? items.map((topic) => `<code>${esc(topic)}</code>`).join("") : "<code>--</code>";
+    };
+    renderTopics("mqtt-subscribe-topics", topics.subscribe);
+    renderTopics("mqtt-publish-topics", topics.publish);
+
+    const stream = document.getElementById("mqtt-message-stream");
+    if (stream) {
+      const messages = Array.isArray(data.messages) ? data.messages : [];
+      stream.innerHTML = messages.length ? messages.map((message) => {
+        const payload = typeof message.payload === "string" ? message.payload : JSON.stringify(message.payload, null, 2);
+        const direction = String(message.direction || "--").toUpperCase();
+        return `<article class="mqtt-message-row ${direction.toLowerCase()}">
+          <time>${esc(fmtTimestamp(message.timestamp))}</time>
+          <b>${esc(direction)}</b>
+          <span>${esc(message.qos ?? 0)}</span>
+          <div><code>${esc(message.topic || "--")}</code><pre>${esc(payload)}</pre></div>
+        </article>`;
+      }).join("") : '<div class="mqtt-empty-state">NO MQTT MESSAGES RECEIVED</div>';
+    }
+  }
+
   function renderWorkspacePages() {
     const status = getStatus();
     const operation = getOperation();
@@ -2137,6 +2212,7 @@
 
     renderConfigurationEditor();
     renderMotorTest();
+    renderMqttMonitor();
 
     const alarmList = document.getElementById("alarm-page-list");
     if (alarmList) alarmList.innerHTML = alarmChannels().map((channel) => `
@@ -2211,6 +2287,7 @@
 
   /* ── POLLING ────────────────────────────────────────────────── */
   async function refresh() {
+    const mqttRefresh = refreshMqtt();
     try {
       const payload = await apiCall("/api/status");
       if (!MS.online) log("Controller connection established", "info", "CONTROLLER");
@@ -2221,6 +2298,27 @@
       if (MS.online) log(`Controller connection lost: ${err.message}`, "error", "CONTROLLER");
       MS.online = false;
       updateAllUI();
+    }
+    await mqttRefresh;
+  }
+
+  async function refreshMqtt() {
+    if (MS.mqttPollPending) return;
+    MS.mqttPollPending = true;
+    try {
+      MS.mqtt = await apiCall("/api/mqtt/status", "GET", undefined, 4000);
+    } catch (err) {
+      MS.mqtt = {
+        enabled: true,
+        connected: false,
+        state: "API ERROR",
+        last_error: err.message,
+        timestamp: new Date().toISOString(),
+        messages: MS.mqtt?.messages || [],
+      };
+    } finally {
+      MS.mqttPollPending = false;
+      renderMqttMonitor();
     }
   }
 
