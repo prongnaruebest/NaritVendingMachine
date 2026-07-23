@@ -40,9 +40,10 @@ class APIInputError(ValueError):
 GPIO_MIN = 0
 GPIO_MAX = 27
 MAX_PULSE_FREQUENCY_HZ = 50_000.0
-UNHOMED_JOG_DURATION_S = 120.0
-UNHOMED_JOG_MAX_DISTANCE_MM = 1.0
-UNHOMED_JOG_MAX_SPEED_MM_S = 5.0
+MOTOR_TEST_ARM_DURATION_S = 120.0
+MOTOR_TEST_MAX_DURATION_S = 3.0
+MOTOR_TEST_MAX_FREQUENCY_HZ = 2_000.0
+MOTOR_TEST_MAX_PULSES = 6_000
 
 
 def _config_number(payload: dict[str, object], key: str, *, minimum: float, maximum: float) -> float:
@@ -93,7 +94,7 @@ class MotionService:
         self.armed_move: dict[str, object] | None = None
         self.completed_request_ids: dict[str, dict[str, object]] = {}
         self.configuration_restart_required = False
-        self.unhomed_jog_until_monotonic = 0.0
+        self.motor_test_until_monotonic = 0.0
 
         if self.config_path.exists():
             config = load_machine_config(self.config_path)
@@ -110,7 +111,7 @@ class MotionService:
     def status_payload(self) -> dict[str, object]:
         with self.lock:
             controller_status = self.controller.status()
-            unhomed_jog = self._unhomed_jog_status(controller_status)
+            motor_test = self._motor_test_status(controller_status)
             for axis_name, axis_status in ((name, controller_status[name]) for name in ("x", "y", "z")):
                 if axis_status["is_homed"] and self.homing[axis_name] == "not_homed":
                     self.homing[axis_name] = "passed"
@@ -156,43 +157,73 @@ class MotionService:
                     "stop_requested": self.controller.stop_requested(),
                     "controlled_stop_requested": self.controller.controlled_stop_requested(),
                     "configuration_restart_required": self.configuration_restart_required,
-                    "unhomed_jog": unhomed_jog,
+                    "motor_test": motor_test,
                 },
                 "status": controller_status,
                 "slots": slots,
             }
 
-    def _unhomed_jog_status(self, controller_status: dict[str, object] | None = None) -> dict[str, object]:
+    def _motor_test_status(self, controller_status: dict[str, object] | None = None) -> dict[str, object]:
         status = controller_status or self.controller.status()
         unsafe = (
             bool(status["estop"])
             or self.controller.stop_requested()
             or self.configuration_restart_required
         )
-        remaining_s = max(0.0, self.unhomed_jog_until_monotonic - time.monotonic())
+        remaining_s = max(0.0, self.motor_test_until_monotonic - time.monotonic())
         if unsafe or remaining_s <= 0:
-            self.unhomed_jog_until_monotonic = 0.0
+            self.motor_test_until_monotonic = 0.0
             remaining_s = 0.0
         return {
-            "enabled": remaining_s > 0,
+            "armed": remaining_s > 0,
             "expires_in_s": round(remaining_s, 1),
-            "max_distance_mm": UNHOMED_JOG_MAX_DISTANCE_MM,
-            "max_speed_mm_s": UNHOMED_JOG_MAX_SPEED_MM_S,
-            "scope": "manual_jog_only",
+            "max_duration_s": MOTOR_TEST_MAX_DURATION_S,
+            "max_frequency_hz": MOTOR_TEST_MAX_FREQUENCY_HZ,
+            "max_pulses": MOTOR_TEST_MAX_PULSES,
+            "scope": "motor_test_page_only",
         }
 
-    def set_unhomed_jog_mode(self, enabled: bool) -> dict[str, object]:
+    def set_motor_test_mode(self, armed: bool) -> dict[str, object]:
         with self.lock:
-            if enabled:
+            if armed:
                 errors = self._motion_safety_errors(require_homed=False)
                 if errors:
                     return {"ok": False, "error": "; ".join(errors)}
-                self.unhomed_jog_until_monotonic = time.monotonic() + UNHOMED_JOG_DURATION_S
-                self.operation_message = "Maintenance test mode enabled: unhomed manual jog only"
+                self.armed_move = None
+                self.motor_test_until_monotonic = time.monotonic() + MOTOR_TEST_ARM_DURATION_S
+                self.operation_message = "Motor Test Mode armed; raw pulse test permitted"
             else:
-                self.unhomed_jog_until_monotonic = 0.0
-                self.operation_message = "Maintenance test mode cancelled"
-            return {"ok": True, "unhomed_jog": self._unhomed_jog_status()}
+                self.motor_test_until_monotonic = 0.0
+                self.operation_message = "Motor Test Mode cancelled"
+            return {"ok": True, "motor_test": self._motor_test_status()}
+
+    def run_motor_test(
+        self,
+        axis_name: str,
+        direction: str,
+        pulse_count: int,
+        pulse_frequency_hz: float,
+        unloaded_confirmed: bool,
+    ) -> dict[str, object]:
+        with self.lock:
+            motor_test = self._motor_test_status()
+        if not motor_test["armed"]:
+            return {"ok": False, "error": "Motor Test Mode is not armed or has expired"}
+        if not unloaded_confirmed:
+            return {"ok": False, "error": "Confirm that the motor is unloaded before testing"}
+        duration_s = pulse_count / pulse_frequency_hz
+        if pulse_count > MOTOR_TEST_MAX_PULSES:
+            return {"ok": False, "error": f"pulse_count is limited to {MOTOR_TEST_MAX_PULSES}"}
+        if pulse_frequency_hz > MOTOR_TEST_MAX_FREQUENCY_HZ:
+            return {"ok": False, "error": f"pulse_frequency_hz is limited to {MOTOR_TEST_MAX_FREQUENCY_HZ:g} Hz"}
+        if duration_s > MOTOR_TEST_MAX_DURATION_S:
+            return {"ok": False, "error": f"Motor test duration is limited to {MOTOR_TEST_MAX_DURATION_S:g} seconds"}
+        axis = self.controller.axes()[axis_name]
+        return self._run(
+            f"motor_test_{axis_name}",
+            lambda: axis.test_pulses(pulse_count, pulse_frequency_hz, direction),
+            estimated_duration_s=duration_s,
+        )
 
     def _run(
         self,
@@ -203,6 +234,8 @@ class MotionService:
         command_id: str | None = None,
         estimated_duration_s: float | None = None,
     ):
+        if motion_command and not command_name.startswith("motor_test_") and self._motor_test_status()["armed"]:
+            return {"ok": False, "error": "Motor Test Mode is armed; cancel it before normal motion"}
         if motion_command and self.configuration_restart_required:
             return {"ok": False, "error": "Configuration changed; apply and restart the controller before motion"}
         if motion_command and self.controller.stop_requested():
@@ -297,6 +330,8 @@ class MotionService:
             errors.append("Software stop latch is active; reset alarms first")
         if self.configuration_restart_required:
             errors.append("Configuration changed; apply and restart the controller before motion")
+        if self._motor_test_status(status)["armed"]:
+            errors.append("Motor Test Mode is armed; cancel it before normal motion")
         for axis_name in ("x", "y", "z"):
             axis = status[axis_name]
             if require_homed and not axis["is_homed"]:
@@ -543,26 +578,8 @@ class MotionService:
 
     def jog(self, axis_name: str, distance_mm: float, speed_mm_s: float | None = None, time_s: float | None = None) -> dict[str, object]:
         axis = self.controller.axes()[axis_name]
-        with self.lock:
-            unhomed_jog = self._unhomed_jog_status()
         if not axis.is_homed:
-            if not unhomed_jog["enabled"]:
-                return {
-                    "ok": False,
-                    "error": f"{axis_name.upper()} axis is not homed; enable Maintenance Motor Test Mode first",
-                }
-            if abs(distance_mm) > UNHOMED_JOG_MAX_DISTANCE_MM:
-                return {
-                    "ok": False,
-                    "error": f"Unhomed jog distance is limited to {UNHOMED_JOG_MAX_DISTANCE_MM:g} mm",
-                }
-            if speed_mm_s is not None and speed_mm_s > UNHOMED_JOG_MAX_SPEED_MM_S:
-                return {
-                    "ok": False,
-                    "error": f"Unhomed jog speed is limited to {UNHOMED_JOG_MAX_SPEED_MM_S:g} mm/s",
-                }
-            if time_s is not None:
-                return {"ok": False, "error": "Timed jog is disabled in Maintenance Motor Test Mode"}
+            return {"ok": False, "error": f"{axis_name.upper()} axis is not homed; use Motor Test Mode for raw pulse testing"}
         return self._run(
             f"jog_{axis_name}",
             lambda: axis.move_mm(distance_mm, speed_mm_s=speed_mm_s, time_s=time_s),
@@ -1043,16 +1060,39 @@ def create_app(config_path: str = "machine_config.json", hw_config_path: str = "
             return jsonify({"ok": False, "error": f"Unknown axis '{axis_name}'"}), 400
         return jsonify(service.is_axis_homed(axis_name))
 
-    @app.post("/api/maintenance/unhomed-jog")
-    def api_maintenance_unhomed_jog():
+    @app.post("/api/maintenance/motor-test")
+    def api_maintenance_motor_test():
         payload = _json_payload()
-        if "enabled" not in payload:
-            return jsonify({"ok": False, "error": "Field 'enabled' is required"}), 400
+        action = str(payload.get("action", "")).lower()
+        if action not in ("arm", "cancel", "pulse"):
+            return jsonify({"ok": False, "error": "Field 'action' must be arm, cancel, or pulse"}), 400
+        if action in ("arm", "cancel"):
+            result = service.set_motor_test_mode(action == "arm")
+            status_code = 200 if result["ok"] else 400
+            return jsonify(result | service.status_payload()), status_code
+
+        axis = str(payload.get("axis", "")).lower()
+        direction = str(payload.get("direction", "")).lower()
+        if axis not in ("x", "y", "z"):
+            return jsonify({"ok": False, "error": "Field 'axis' must be one of: x, y, z"}), 400
         try:
-            enabled = _config_boolean(payload, "enabled")
-        except APIInputError as exc:
-            return jsonify({"ok": False, "error": str(exc)}), 400
-        result = service.set_unhomed_jog_mode(enabled)
+            pulse_count = _config_integer(payload, "pulse_count", minimum=1, maximum=MOTOR_TEST_MAX_PULSES)
+            pulse_frequency_hz = _config_number(
+                payload,
+                "pulse_frequency_hz",
+                minimum=10.0,
+                maximum=MOTOR_TEST_MAX_FREQUENCY_HZ,
+            )
+            unloaded_confirmed = _config_boolean(payload, "unloaded_confirmed")
+        except (APIInputError, KeyError, TypeError, ValueError) as exc:
+            return jsonify({"ok": False, "error": str(exc) or "Invalid motor test parameters"}), 400
+        result = service.run_motor_test(
+            axis,
+            direction,
+            pulse_count,
+            pulse_frequency_hz,
+            unloaded_confirmed,
+        )
         status_code = 200 if result["ok"] else 400
         return jsonify(result | service.status_payload()), status_code
 

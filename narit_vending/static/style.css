@@ -5024,44 +5024,65 @@ select.slot-filter {
   .visualization-v32 .visual-slot-editor { grid-template-columns: 1fr; }
 }
 
-/* v40 timed maintenance bypass for unloaded motor tests */
-.jog-test-mode-controls {
+/* v41 dedicated motor test workspace */
+.motor-test-page { min-height: 0; overflow: auto; }
+.motor-test-safety {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 10px;
+  padding: 12px 14px;
+  border-color: var(--amber-brd);
+  background: linear-gradient(90deg, var(--amber-dim), var(--surf-1) 48%);
+}
+.motor-test-safety.armed { border-color: var(--red-bright); background: linear-gradient(90deg, var(--red-dim), var(--surf-1) 48%); }
+.motor-test-safety > div:first-child { display: grid; gap: 4px; }
+.motor-test-safety strong { color: var(--amber); font-size: 14px; letter-spacing: .04em; }
+.motor-test-safety.armed strong { color: var(--red-bright); }
+.motor-test-safety span { color: var(--text-2); font-size: 11px; }
+.motor-test-arm-actions { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.motor-test-arm-actions > span { color: var(--amber); font: 700 11px var(--font-mono); }
+.motor-test-arm-actions button { min-height: 38px; padding: 8px 14px; }
+
+.motor-test-layout { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(340px, .8fr); gap: 10px; min-height: 0; }
+.motor-test-controls-panel { min-width: 0; }
+.motor-test-form { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
+.motor-test-form > label { min-width: 0; }
+.motor-test-form > label > span { display: block; margin-bottom: 5px; color: var(--text-3); font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.motor-test-form .hmi-input { width: 100%; min-height: 42px; color: var(--accent-cyan); font: 700 13px var(--font-mono); }
+.motor-test-form input[readonly] { color: var(--text-2); }
+.motor-test-derived { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+.motor-test-derived > div { padding: 10px; border: 1px solid var(--border); border-radius: 5px; background: var(--surf-2); }
+.motor-test-derived span { display: block; color: var(--text-3); font-size: 9px; letter-spacing: .07em; text-transform: uppercase; }
+.motor-test-derived strong { display: block; margin-top: 5px; color: var(--accent-cyan); font: 700 14px var(--font-mono); }
+.motor-test-confirm { display: flex; align-items: center; gap: 10px; margin-top: 14px; padding: 11px; border: 1px solid var(--amber-brd); border-radius: 5px; background: var(--amber-dim); color: var(--text-1); font-size: 12px; }
+.motor-test-confirm input { width: 18px; height: 18px; accent-color: var(--amber); }
+.motor-test-command-row { display: grid; grid-template-columns: 1.2fr 1fr; gap: 8px; margin-top: 10px; }
+.motor-test-command-row button { min-height: 46px; }
+.motor-test-controls-panel .configuration-validation { margin-top: 10px; }
+
+.motor-test-side-stack { display: grid; align-content: start; gap: 10px; min-width: 0; }
+.motor-test-axis-grid { display: grid; gap: 7px; margin-top: 10px; }
+.motor-test-axis-card { padding: 9px 10px; border: 1px solid var(--border); border-radius: 5px; background: var(--surf-2); }
+.motor-test-axis-card.selected { border-color: var(--accent-cyan); box-shadow: inset 3px 0 0 var(--accent-cyan); }
+.motor-test-axis-card.fault { border-color: var(--red-brd); }
+.motor-test-axis-card > div { display: flex; justify-content: space-between; gap: 10px; }
+.motor-test-axis-card > div strong { color: var(--text-0); font-size: 13px; }
+.motor-test-axis-card > div span { color: var(--amber); font: 700 9px var(--font-mono); }
+.motor-test-axis-card dl { display: grid; grid-template-columns: 1fr auto; gap: 5px 10px; margin: 8px 0 0; font-size: 10px; }
+.motor-test-axis-card dt { color: var(--text-3); }
+.motor-test-axis-card dd { margin: 0; color: var(--text-1); font-family: var(--font-mono); }
+.motor-test-checklist ol { display: grid; gap: 7px; margin: 10px 0 0; padding-left: 22px; color: var(--text-2); font-size: 11px; line-height: 1.45; }
+.motor-test-checklist li::marker { color: var(--amber); font-family: var(--font-mono); font-weight: 700; }
+
+@media (max-width: 1450px) {
+  .motor-test-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .motor-test-derived { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
-.jog-test-mode-btn {
-  min-height: 30px;
-  padding: 5px 10px;
-  border: 1px solid var(--amber-brd);
-  border-radius: 5px;
-  background: var(--amber-dim);
-  color: var(--amber);
-  font: 700 10px var(--font-ui);
-  letter-spacing: .04em;
-  cursor: pointer;
+@media (max-width: 1100px) {
+  .motor-test-safety { align-items: stretch; flex-direction: column; }
+  .motor-test-arm-actions { flex-wrap: wrap; }
+  .motor-test-layout { grid-template-columns: 1fr; }
 }
-
-.jog-test-mode-btn:hover:not(:disabled) { border-color: var(--amber); }
-.jog-test-mode-btn.active { border-color: var(--red-bright); background: var(--red-dim); color: var(--red-bright); }
-.jog-test-mode-btn:disabled { opacity: .4; cursor: not-allowed; }
-
-.jog-test-mode-warning {
-  display: none;
-  grid-template-columns: auto 1fr;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 8px;
-  padding: 7px 9px;
-  border: 1px solid var(--red-brd);
-  border-radius: 5px;
-  background: var(--red-dim);
-  color: var(--red-bright);
-  font-size: 10px;
-}
-
-.jog-test-mode-warning.active { display: grid; }
-.jog-test-mode-warning span { color: var(--text-2); }
-.jog-test-mode-warning b { color: var(--red-bright); font-family: var(--font-mono); }

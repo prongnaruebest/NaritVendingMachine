@@ -308,6 +308,39 @@ class AxisController:
         plan = self.plan_absolute_move(target_mm, speed_mm_s=speed_mm_s, time_s=time_s)
         return self._execute_plan(plan)
 
+    def test_pulses(self, pulse_count: int, pulse_frequency_hz: float, direction_name: str) -> dict[str, object]:
+        if pulse_count < 1:
+            raise MotionError(f"{self.config.name}: pulse_count must be greater than 0")
+        if not math.isfinite(pulse_frequency_hz) or pulse_frequency_hz <= 0:
+            raise MotionError(f"{self.config.name}: pulse_frequency_hz must be greater than 0")
+        if direction_name not in ("forward", "reverse"):
+            raise MotionError(f"{self.config.name}: direction must be forward or reverse")
+
+        direction = self.config.forward_direction if direction_name == "forward" else self.config.home_direction
+        delta_steps = pulse_count if direction == self.config.forward_direction else -pulse_count
+        self._guard_before_move(direction, delta_steps)
+        self.direction.value = bool(direction)
+        half_period_s = 0.5 / pulse_frequency_hz
+        moved = 0
+        try:
+            for index in range(pulse_count):
+                if index % 5 == 0:
+                    self._guard_during_move(direction)
+                self._pulse_once(half_period_s)
+                moved += 1
+        finally:
+            self.pulse.off()
+            self.is_homed = False
+        sleep(self.config.settle_delay)
+        return {
+            "axis": self.config.name,
+            "direction": direction_name,
+            "direction_level": direction,
+            "pulse_count": moved,
+            "pulse_frequency_hz": pulse_frequency_hz,
+            "duration_s": moved / pulse_frequency_hz,
+        }
+
     def home(
         self,
         backoff_steps: int = 20,

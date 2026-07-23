@@ -123,8 +123,8 @@
     return AXES.every((a) => Boolean(getAxis(a).is_homed));
   }
 
-  function unhomedJogState() {
-    return MS.payload?.safety?.unhomed_jog || { enabled: false, expires_in_s: 0 };
+  function motorTestState() {
+    return MS.payload?.safety?.motor_test || { armed: false, expires_in_s: 0 };
   }
 
   function activeAlarmCount() {
@@ -165,6 +165,7 @@
     if (MS.payload?.safety?.configuration_restart_required || MS.config?.restart_required) {
       return "MOTION LOCKED — apply configuration and restart controller";
     }
+    if (motorTestState().armed)              return "MOTION LOCKED — Motor Test Mode is armed";
     if (MS.pending || MS.payload?.busy)       return "Another command is executing";
     if (requireHome && !allAxesHomed()) {
       const first = AXES.find((a) => !getAxis(a).is_homed);
@@ -175,7 +176,7 @@
 
   function canJogAxis(axis) {
     if (motionInhibitReason(false) !== "") return false;
-    return Boolean(getAxis(axis).is_homed) || Boolean(unhomedJogState().enabled);
+    return Boolean(getAxis(axis).is_homed);
   }
   function canExecuteMove() { return MS.validation.valid && MS.validation.stage === "armed" && motionInhibitReason(true) === ""; }
   function canHomeAxis() { return motionInhibitReason(false) === ""; }
@@ -1026,28 +1027,7 @@
       btn.disabled = !canJogAxis(axis);
     });
 
-    const unhomedJog = unhomedJogState();
-    const unhomedJogEnabled = Boolean(unhomedJog.enabled);
-    const unhomedJogToggle = el("unhomed-jog-toggle");
-    const unhomedJogWarning = el("unhomed-jog-warning");
-    if (unhomedJogToggle) {
-      unhomedJogToggle.disabled = !MS.online || Boolean(MS.pending) || Boolean(MS.payload?.busy)
-        || Boolean(getStatus().estop) || Boolean(MS.payload?.safety?.stop_requested);
-      unhomedJogToggle.classList.toggle("active", unhomedJogEnabled);
-      unhomedJogToggle.textContent = unhomedJogEnabled ? "CANCEL TEST MODE" : "BYPASS HOME CHECK";
-    }
-    if (unhomedJogWarning) unhomedJogWarning.classList.toggle("active", unhomedJogEnabled);
-    $$(".step-btn").forEach((button) => {
-      button.disabled = unhomedJogEnabled && Number(button.dataset.step) > 1;
-    });
-    $$(".speed-preset").forEach((button) => {
-      button.disabled = unhomedJogEnabled && Number(button.dataset.speed) > 5;
-    });
-    setText("unhomed-jog-countdown", Math.max(0, Math.ceil(Number(unhomedJog.expires_in_s || 0))));
-    setText(
-      "jog-status-text",
-      unhomedJogEnabled ? "TEST MODE ACTIVE" : allAxesHomed() ? "READY" : "HOME REQUIRED",
-    );
+    setText("jog-status-text", allAxesHomed() ? "READY" : "HOME REQUIRED");
 
     const selectedCode = selectedSlotCode();
     const selectedSlot = MS.slots[selectedCode] || {};
@@ -1103,11 +1083,14 @@
   /* ── MASTER RENDER ──────────────────────────────────────────── */
   const VALID_VIEWS = new Set([
     "dashboard", "motion", "visualization", "diagnostics", "configuration",
-    "slots", "alarms", "events", "flow",
+    "motor-test", "slots", "alarms", "events", "flow",
   ]);
 
   function switchWorkspace(view, updateHash = true) {
     const nextView = VALID_VIEWS.has(view) ? view : "motion";
+    if (MS.currentView === "motor-test" && nextView !== "motor-test" && motorTestState().armed) {
+      apiCall("/api/maintenance/motor-test", "POST", { action: "cancel" }).then(refresh).catch(() => {});
+    }
     MS.currentView = nextView;
     $$('[data-view-page]').forEach((page) => page.classList.toggle("active", page.dataset.viewPage === nextView));
     $$('[data-view-target]').forEach((button) => {
@@ -1954,6 +1937,83 @@
     `).join("") || `<li class="empty"><span>NO EVENTS RECORDED</span></li>`;
   }
 
+  function motorTestParameters() {
+    return {
+      axis: el("motor-test-axis")?.value || "z",
+      direction: el("motor-test-direction")?.value || "forward",
+      frequency: Number(el("motor-test-frequency")?.value),
+      pulses: Number(el("motor-test-pulses")?.value),
+      stepsPerRev: Number(el("motor-test-steps-rev")?.value),
+      microsteps: Number(el("motor-test-microsteps")?.value),
+      pitch: Number(el("motor-test-pitch")?.value),
+    };
+  }
+
+  function loadMotorTestAxisConfig() {
+    const axis = el("motor-test-axis")?.value || "z";
+    const config = MS.config?.axes?.[axis];
+    if (!config) return;
+    el("motor-test-steps-rev").value = Number(config.motor_steps_per_rev || 200);
+    el("motor-test-microsteps").value = Number(config.driver_microsteps || 1);
+    el("motor-test-pitch").value = Number(config.lead_screw_pitch_mm || 5);
+    updateMotorTestCalculations();
+  }
+
+  function updateMotorTestCalculations() {
+    if (!document.getElementById("motor-test-start")) return;
+    const parameters = motorTestParameters();
+    const ppr = parameters.stepsPerRev * parameters.microsteps;
+    const ppm = ppr / parameters.pitch;
+    const duration = parameters.pulses / parameters.frequency;
+    const distance = parameters.pulses / ppm;
+    const rpm = parameters.frequency * 60 / ppr;
+    const valid = Number.isInteger(parameters.pulses) && parameters.pulses >= 1 && parameters.pulses <= 6000
+      && Number.isFinite(parameters.frequency) && parameters.frequency >= 10 && parameters.frequency <= 2000
+      && Number.isFinite(parameters.stepsPerRev) && parameters.stepsPerRev > 0
+      && Number.isFinite(parameters.microsteps) && parameters.microsteps > 0
+      && Number.isFinite(parameters.pitch) && parameters.pitch > 0
+      && Number.isFinite(duration) && duration <= 3;
+    setText("motor-test-ppr", Number.isFinite(ppr) ? Math.round(ppr).toLocaleString() : "INVALID");
+    setText("motor-test-ppm", Number.isFinite(ppm) ? fmt(ppm, 3) : "INVALID");
+    setText("motor-test-duration", Number.isFinite(duration) ? fmt(duration, 3) : "INVALID");
+    setText("motor-test-distance", Number.isFinite(distance) ? `${fmt(distance, 3)} mm` : "INVALID");
+    setText("motor-test-rpm", Number.isFinite(rpm) ? `${fmt(rpm, 2)} rpm` : "INVALID");
+    const armed = Boolean(motorTestState().armed);
+    const confirmed = Boolean(el("motor-test-unloaded")?.checked);
+    el("motor-test-start").disabled = !valid || !armed || !confirmed || !MS.online || MS.pending
+      || Boolean(MS.payload?.busy) || Boolean(getStatus().estop) || Boolean(MS.payload?.safety?.stop_requested);
+    if (!valid) setText("motor-test-result", "INVALID PROFILE — frequency 10–2,000 Hz, pulses 1–6,000, duration maximum 3 seconds.");
+  }
+
+  function renderMotorTest() {
+    if (!document.getElementById("motor-test-page-status")) return;
+    const test = motorTestState();
+    const armed = Boolean(test.armed);
+    const status = getStatus();
+    const pageStatus = el("motor-test-page-status");
+    pageStatus.textContent = armed ? "ARMED" : "DISARMED";
+    pageStatus.className = `page-status-chip ${armed ? "fault" : ""}`;
+    el("motor-test-safety").classList.toggle("armed", armed);
+    setText("motor-test-countdown", armed ? `${Math.ceil(Number(test.expires_in_s || 0))} s remaining` : "120 s window");
+    el("motor-test-arm").disabled = armed || !MS.online || MS.pending || Boolean(MS.payload?.busy)
+      || Boolean(status.estop) || Boolean(MS.payload?.safety?.stop_requested);
+    el("motor-test-cancel").disabled = !armed || !MS.online || MS.pending;
+
+    const hardwareMotors = MS.config?.hardware?.motors || {};
+    const axisGrid = el("motor-test-axis-grid");
+    if (axisGrid) axisGrid.innerHTML = AXES.map((axis) => {
+      const data = getAxis(axis);
+      const motor = hardwareMotors[axis] || {};
+      const selected = axis === (el("motor-test-axis")?.value || "z");
+      const limit = data.head_limit ? "MIN ACTIVE" : data.tail_limit ? "MAX ACTIVE" : "CLEAR";
+      return `<article class="motor-test-axis-card ${selected ? "selected" : ""} ${data.head_limit || data.tail_limit ? "fault" : ""}">
+        <div><strong>${axis.toUpperCase()} AXIS</strong><span>${data.is_homed ? "HOMED" : "NOT HOMED"}</span></div>
+        <dl><dt>STEP / DIR / EN</dt><dd>${esc(motor.step_pin ?? "--")} / ${esc(motor.dir_pin ?? "--")} / ${esc(motor.enable_pin ?? "--")}</dd><dt>Limits</dt><dd>${esc(limit)}</dd><dt>Driver Logic</dt><dd>${motor.active_high === false ? "ACTIVE LOW" : "ACTIVE HIGH"}</dd></dl>
+      </article>`;
+    }).join("");
+    updateMotorTestCalculations();
+  }
+
   function renderWorkspacePages() {
     const status = getStatus();
     const operation = getOperation();
@@ -1993,6 +2053,7 @@
     }
 
     renderConfigurationEditor();
+    renderMotorTest();
 
     const alarmList = document.getElementById("alarm-page-list");
     if (alarmList) alarmList.innerHTML = alarmChannels().map((channel) => `
@@ -2096,6 +2157,7 @@
       renderHomingSequence();
       renderWorkspacePages();
       renderConfigurationEditor(true);
+      loadMotorTestAxisConfig();
       log("Machine configuration loaded", "info", "SYSTEM");
     } catch (err) {
       log(`Config load failed: ${err.message}`, "error", "SYSTEM");
@@ -2146,37 +2208,6 @@
         command(`Jog ${axis.toUpperCase()} ${dir === "1" ? "+" : "-"}${MS.selectedJogStep} mm`,
           "/api/jog", buildJogPayload(axis, dir), { silent: true });
       });
-    });
-
-    el("unhomed-jog-toggle").addEventListener("click", async () => {
-      const enabled = Boolean(unhomedJogState().enabled);
-      if (!enabled) {
-        const confirmed = window.confirm(
-          "Enable Maintenance Motor Test Mode for 120 seconds?\n\n"
-          + "Manual Jog only. Position is unknown. Maximum 1 mm and 5 mm/s. "
-          + "Keep clear of the mechanism and keep E-Stop within reach.",
-        );
-        if (!confirmed) return;
-      }
-      const result = await command(
-        enabled ? "Cancel maintenance motor test" : "Enable maintenance motor test",
-        "/api/maintenance/unhomed-jog",
-        { enabled: !enabled },
-        { isStop: true, noCheck: true },
-      );
-      if (result && !enabled) {
-        MS.selectedJogStep = Math.min(MS.selectedJogStep, 1);
-        MS.selectedJogSpeed = Math.min(MS.selectedJogSpeed, 5);
-        $$(".step-btn").forEach((button) => button.classList.toggle("active", Number(button.dataset.step) === MS.selectedJogStep));
-        $$(".speed-preset").forEach((button) => button.classList.toggle("active", Number(button.dataset.speed) === MS.selectedJogSpeed));
-        setText("jog-step-display", fmtSpd(MS.selectedJogStep));
-        setText("jog-speed-display", fmtSpd(MS.selectedJogSpeed));
-        if (el("jog-step")) el("jog-step").value = MS.selectedJogStep;
-        if (el("move-speed")) el("move-speed").value = MS.selectedJogSpeed;
-        MS.keyboardJogEnabled = false;
-        el("jog-keyboard-enable").checked = false;
-        toast("Motor Test Mode active — use Manual Jog only.", "error");
-      }
     });
 
     /* --- Jog step presets --- */
@@ -2334,6 +2365,62 @@
     el("visual-send-motion").addEventListener("click", sendVisualTargetToMotion);
     el("visual-edit-enable").addEventListener("click", () => setVisualEditMode(true));
     el("visual-edit-cancel").addEventListener("click", () => setVisualEditMode(false));
+
+    el("motor-test-arm").addEventListener("click", async () => {
+      const confirmed = window.confirm(
+        "ARM MOTOR TEST MODE FOR 120 SECONDS?\n\n"
+        + "Raw pulses can rotate an unreferenced motor. Disconnect the mechanical load, "
+        + "verify the driver current and keep the E-Stop within reach.",
+      );
+      if (!confirmed) return;
+      const result = await command("Arm Motor Test Mode", "/api/maintenance/motor-test", { action: "arm" }, { isStop: true, noCheck: true });
+      if (result) {
+        MS.keyboardJogEnabled = false;
+        el("jog-keyboard-enable").checked = false;
+        setText("motor-test-result", "TEST MODE ARMED — review the profile, confirm unloaded motor, then start the pulse test.");
+      }
+    });
+    el("motor-test-cancel").addEventListener("click", async () => {
+      const result = await command("Cancel Motor Test Mode", "/api/maintenance/motor-test", { action: "cancel" }, { isStop: true, noCheck: true });
+      if (result) {
+        el("motor-test-unloaded").checked = false;
+        setText("motor-test-result", "Motor Test Mode cancelled. Pulse output is disabled.");
+      }
+    });
+    el("motor-test-start").addEventListener("click", async () => {
+      const parameters = motorTestParameters();
+      const confirmed = window.confirm(
+        `Send ${parameters.pulses} pulses to Axis ${parameters.axis.toUpperCase()} at ${parameters.frequency} Hz (${parameters.direction.toUpperCase()})?`,
+      );
+      if (!confirmed) return;
+      setText("motor-test-result", "Pulse test running — use E-Stop if the motor responds unexpectedly.");
+      const result = await command(
+        `Motor test ${parameters.axis.toUpperCase()} ${parameters.direction}`,
+        "/api/maintenance/motor-test",
+        {
+          action: "pulse",
+          axis: parameters.axis,
+          direction: parameters.direction,
+          pulse_count: parameters.pulses,
+          pulse_frequency_hz: parameters.frequency,
+          unloaded_confirmed: Boolean(el("motor-test-unloaded").checked),
+        },
+        { noCheck: true, timeoutMs: 7000 },
+      );
+      if (result) {
+        const completed = result.result || {};
+        setText("motor-test-result", `TEST COMPLETE — ${completed.pulse_count || parameters.pulses} pulses at ${fmt(completed.pulse_frequency_hz || parameters.frequency, 0)} Hz. Axis ${parameters.axis.toUpperCase()} now requires homing.`);
+      }
+    });
+    el("motor-test-open-config").addEventListener("click", () => switchWorkspace("configuration"));
+    el("motor-test-axis").addEventListener("change", () => {
+      loadMotorTestAxisConfig();
+      renderMotorTest();
+    });
+    ["motor-test-direction", "motor-test-frequency", "motor-test-pulses", "motor-test-steps-rev", "motor-test-microsteps", "motor-test-pitch", "motor-test-unloaded"].forEach((id) => {
+      el(id).addEventListener("input", updateMotorTestCalculations);
+      el(id).addEventListener("change", updateMotorTestCalculations);
+    });
 
     const configurationPage = document.querySelector('[data-view-page="configuration"]');
     const markConfigurationDirty = (event) => {

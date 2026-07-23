@@ -8,7 +8,7 @@
   <link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='favicon-transparent-large.png') }}?v=20260721_v12">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=20260723_v40">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=20260723_v41">
 </head>
 <body>
   <div class="hmi-shell">
@@ -65,6 +65,12 @@
               <circle cx="8" cy="8" r="2.5"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.1 3.1l1.4 1.4M11.5 11.5l1.4 1.4M12.9 3.1l-1.4 1.4M4.5 11.5l-1.4 1.4"/>
             </svg>
             <span>Configuration</span>
+          </button>
+          <button class="nav-item" id="nav-motor-test" data-view-target="motor-test">
+            <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+              <circle cx="8" cy="8" r="5"/><circle cx="8" cy="8" r="1.5"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2"/>
+            </svg>
+            <span>Motor Test Mode</span>
           </button>
           <button class="nav-item" id="nav-alarms" data-view-target="alarms">
             <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -557,6 +563,58 @@
         <div class="configuration-validation" id="configuration-validation">No unsaved changes.</div>
       </section>
 
+      <section class="workspace-view motor-test-page" data-view-page="motor-test">
+        <div class="page-heading">
+          <div><p class="panel-label">Maintenance Engineering</p><h2>Motor Test Mode</h2></div>
+          <span class="page-status-chip" id="motor-test-page-status">DISARMED</span>
+        </div>
+        <div class="motor-test-safety panel" id="motor-test-safety">
+          <div><strong>RAW PULSE OUTPUT — POSITION IS UNKNOWN</strong><span>Use only with the selected motor mechanically unloaded. E-Stop and directional limit inputs remain active.</span></div>
+          <div class="motor-test-arm-actions">
+            <span id="motor-test-countdown">120 s window</span>
+            <button class="btn-arm" id="motor-test-arm" type="button">ARM TEST MODE</button>
+            <button class="btn-abort" id="motor-test-cancel" type="button" disabled>CANCEL TEST MODE</button>
+          </div>
+        </div>
+        <div class="motor-test-layout">
+          <div class="panel page-panel motor-test-controls-panel">
+            <div class="panel-head"><div><p class="panel-label">Pulse Generator</p><h2 class="panel-title">Single-Axis Motor Test</h2></div><span class="page-note">10–2,000 Hz · maximum 3 seconds</span></div>
+            <div class="motor-test-form">
+              <label><span>Axis</span><select class="hmi-input" id="motor-test-axis"><option value="x">X Axis</option><option value="y">Y Axis</option><option value="z" selected>Z Axis</option></select></label>
+              <label><span>Direction</span><select class="hmi-input" id="motor-test-direction"><option value="forward">FORWARD (+)</option><option value="reverse">REVERSE (−)</option></select></label>
+              <label><span>Pulse Frequency</span><div class="field-input-wrap"><input class="hmi-input" id="motor-test-frequency" type="number" min="10" max="2000" step="10" value="100"><span class="unit-tag">Hz</span></div></label>
+              <label><span>Pulse Count</span><div class="field-input-wrap"><input class="hmi-input" id="motor-test-pulses" type="number" min="1" max="6000" step="1" value="300"><span class="unit-tag">pulse</span></div></label>
+              <label><span>Motor Full Steps / Rev</span><input class="hmi-input" id="motor-test-steps-rev" type="number" min="1" max="10000" step="1" value="200"></label>
+              <label><span>Driver Microstep</span><input class="hmi-input" id="motor-test-microsteps" type="number" min="1" max="256" step="1" value="10"></label>
+              <label><span>Lead Screw Pitch</span><div class="field-input-wrap"><input class="hmi-input" id="motor-test-pitch" type="number" min="0.01" max="100" step="0.01" value="5"><span class="unit-tag">mm</span></div></label>
+              <label><span>Calculated Duration</span><div class="field-input-wrap"><input class="hmi-input" id="motor-test-duration" type="text" value="3.000" readonly><span class="unit-tag">sec</span></div></label>
+            </div>
+            <div class="motor-test-derived">
+              <div><span>Pulses / Revolution</span><strong id="motor-test-ppr">2,000</strong></div>
+              <div><span>Calculated Pulses / mm</span><strong id="motor-test-ppm">400.000</strong></div>
+              <div><span>Theoretical Travel</span><strong id="motor-test-distance">0.750 mm</strong></div>
+              <div><span>Motor Speed</span><strong id="motor-test-rpm">3.00 rpm</strong></div>
+            </div>
+            <label class="motor-test-confirm"><input id="motor-test-unloaded" type="checkbox"><span>I confirm the selected motor is mechanically unloaded and the E-Stop is within reach.</span></label>
+            <div class="motor-test-command-row">
+              <button class="btn-execute" id="motor-test-start" type="button" disabled>START PULSE TEST</button>
+              <button class="btn-secondary" id="motor-test-open-config" type="button">OPEN MOTOR &amp; PIN CONFIGURATION</button>
+            </div>
+            <div class="configuration-validation" id="motor-test-result">Arm Motor Test Mode before sending pulses.</div>
+          </div>
+          <aside class="motor-test-side-stack">
+            <div class="panel page-panel">
+              <div class="panel-head"><div><p class="panel-label">Live I/O</p><h2 class="panel-title">Axis &amp; Driver Status</h2></div><span class="page-note">Updates every 1 second</span></div>
+              <div class="motor-test-axis-grid" id="motor-test-axis-grid"></div>
+            </div>
+            <div class="panel page-panel motor-test-checklist">
+              <div class="panel-head"><div><p class="panel-label">Required Checks</p><h2 class="panel-title">Before Every Pulse Test</h2></div></div>
+              <ol><li>Disconnect the motor from the mechanical load.</li><li>Verify driver voltage, current setting and DIP microstep value.</li><li>Verify STEP, DIR, ENABLE and common signal wiring.</li><li>Start at 100 Hz and 300 pulses; increase gradually.</li><li>Cancel Test Mode immediately after the motor responds.</li></ol>
+            </div>
+          </aside>
+        </div>
+      </section>
+
       <section class="workspace-view" data-view-page="alarms">
         <div class="page-heading"><div><p class="panel-label">Alarm Management</p><h2>Alarm Points &amp; Safety Interlocks</h2></div><button class="btn-reset-alarm page-reset-alarm" id="page-clear-alarm">RESET ALARMS</button></div>
         <div class="panel page-panel"><div id="alarm-page-list" class="alarm-page-list"></div></div>
@@ -672,15 +730,7 @@
       <div class="rpz rpz-jog">
         <div class="rpz-head">
           <span class="rpz-title">Manual Jog Control</span>
-          <div class="jog-test-mode-controls">
-            <span class="safety-ind-sub" id="jog-status-text">HOME REQUIRED</span>
-            <button class="jog-test-mode-btn" id="unhomed-jog-toggle" type="button">BYPASS HOME CHECK</button>
-          </div>
-        </div>
-
-        <div class="jog-test-mode-warning" id="unhomed-jog-warning" role="status">
-          <strong>MAINTENANCE MOTOR TEST</strong>
-          <span>Manual Jog only · max 1 mm · max 5 mm/s · expires in <b id="unhomed-jog-countdown">0</b>s</span>
+          <span class="safety-ind-sub" id="jog-status-text">HOME REQUIRED</span>
         </div>
 
         <div class="jog-inhibit-banner" id="jog-inhibit-banner">
@@ -829,6 +879,6 @@
   <!-- Toast notification -->
   <div class="toast" id="toast" role="status"></div>
 
-  <script src="{{ url_for('static', filename='app.js') }}?v=20260723_v40"></script>
+  <script src="{{ url_for('static', filename='app.js') }}?v=20260723_v41"></script>
 </body>
 </html>
