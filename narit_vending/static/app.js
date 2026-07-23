@@ -1980,9 +1980,45 @@
     setText("motor-test-rpm", Number.isFinite(rpm) ? `${fmt(rpm, 2)} rpm` : "INVALID");
     const armed = Boolean(motorTestState().armed);
     const confirmed = Boolean(el("motor-test-unloaded")?.checked);
-    el("motor-test-start").disabled = !valid || !armed || !confirmed || !MS.online || MS.pending
-      || Boolean(MS.payload?.busy) || Boolean(getStatus().estop) || Boolean(MS.payload?.safety?.stop_requested);
+    const canRun = valid && armed && confirmed && MS.online && !MS.pending
+      && !Boolean(MS.payload?.busy) && !Boolean(getStatus().estop) && !Boolean(MS.payload?.safety?.stop_requested);
+    el("motor-test-start").disabled = !canRun;
+    $$("[data-motor-test-jog]").forEach((button) => { button.disabled = !canRun; });
+    setText(
+      "motor-test-jog-profile",
+      valid ? `${parameters.pulses.toLocaleString()} pulse · ${fmt(parameters.frequency, 0)} Hz · ${fmt(duration, 3)} s` : "INVALID PROFILE",
+    );
     if (!valid) setText("motor-test-result", "INVALID PROFILE — frequency 10–2,000 Hz, pulses 1–6,000, duration maximum 3 seconds.");
+  }
+
+  async function runMotorTestPulse(axis, direction) {
+    el("motor-test-axis").value = axis;
+    el("motor-test-direction").value = direction;
+    loadMotorTestAxisConfig();
+    renderMotorTest();
+    const parameters = motorTestParameters();
+    const confirmed = window.confirm(
+      `Send ${parameters.pulses} pulses to Axis ${axis.toUpperCase()} at ${parameters.frequency} Hz (${direction.toUpperCase()})?`,
+    );
+    if (!confirmed) return;
+    setText("motor-test-result", "Pulse test running — use E-Stop if the motor responds unexpectedly.");
+    const result = await command(
+      `Motor test ${axis.toUpperCase()} ${direction}`,
+      "/api/maintenance/motor-test",
+      {
+        action: "pulse",
+        axis,
+        direction,
+        pulse_count: parameters.pulses,
+        pulse_frequency_hz: parameters.frequency,
+        unloaded_confirmed: Boolean(el("motor-test-unloaded").checked),
+      },
+      { noCheck: true, timeoutMs: 7000 },
+    );
+    if (result) {
+      const completed = result.result || {};
+      setText("motor-test-result", `TEST COMPLETE — ${completed.pulse_count || parameters.pulses} pulses at ${fmt(completed.pulse_frequency_hz || parameters.frequency, 0)} Hz. Axis ${axis.toUpperCase()} now requires homing.`);
+    }
   }
 
   function renderMotorTest() {
@@ -2387,30 +2423,15 @@
         setText("motor-test-result", "Motor Test Mode cancelled. Pulse output is disabled.");
       }
     });
-    el("motor-test-start").addEventListener("click", async () => {
+    el("motor-test-start").addEventListener("click", () => {
       const parameters = motorTestParameters();
-      const confirmed = window.confirm(
-        `Send ${parameters.pulses} pulses to Axis ${parameters.axis.toUpperCase()} at ${parameters.frequency} Hz (${parameters.direction.toUpperCase()})?`,
-      );
-      if (!confirmed) return;
-      setText("motor-test-result", "Pulse test running — use E-Stop if the motor responds unexpectedly.");
-      const result = await command(
-        `Motor test ${parameters.axis.toUpperCase()} ${parameters.direction}`,
-        "/api/maintenance/motor-test",
-        {
-          action: "pulse",
-          axis: parameters.axis,
-          direction: parameters.direction,
-          pulse_count: parameters.pulses,
-          pulse_frequency_hz: parameters.frequency,
-          unloaded_confirmed: Boolean(el("motor-test-unloaded").checked),
-        },
-        { noCheck: true, timeoutMs: 7000 },
-      );
-      if (result) {
-        const completed = result.result || {};
-        setText("motor-test-result", `TEST COMPLETE — ${completed.pulse_count || parameters.pulses} pulses at ${fmt(completed.pulse_frequency_hz || parameters.frequency, 0)} Hz. Axis ${parameters.axis.toUpperCase()} now requires homing.`);
-      }
+      runMotorTestPulse(parameters.axis, parameters.direction);
+    });
+    $$("[data-motor-test-jog]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const [axis, direction] = button.dataset.motorTestJog.split(":");
+        runMotorTestPulse(axis, direction);
+      });
     });
     el("motor-test-open-config").addEventListener("click", () => switchWorkspace("configuration"));
     el("motor-test-axis").addEventListener("change", () => {
