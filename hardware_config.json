@@ -157,7 +157,7 @@
         "driver_microsteps": 2
       },
       "z": {
-        "steps_per_mm": 400.0,
+        "steps_per_mm": 80.0,
         "max_travel_mm": 200.0,
         "max_speed_mm_s": 20.0,
         "default_speed_mm_s": 10.0,
@@ -169,7 +169,7 @@
         "forward_direction": 1,
         "lead_screw_pitch_mm": 5.0,
         "motor_steps_per_rev": 200,
-        "driver_microsteps": 10
+        "driver_microsteps": 2
       }
     }
   }

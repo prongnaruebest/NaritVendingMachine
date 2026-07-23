@@ -50,7 +50,7 @@
       "tail_limit_pin": 5,
       "home_direction": 0,
       "forward_direction": 1,
-      "steps_per_mm": 400.0,
+      "steps_per_mm": 80.0,
       "max_travel_mm": 200.0,
       "max_speed_mm_s": 20.0,
       "default_speed_mm_s": 10.0,
@@ -60,8 +60,8 @@
       "deceleration": 80.0,
       "lead_screw_pitch_mm": 5.0,
       "motor_steps_per_rev": 200,
-      "driver_microsteps": 10,
-      "pulses_per_rev": 2000
+      "driver_microsteps": 2,
+      "pulses_per_rev": 400
     }
   },
   "home_order": [
