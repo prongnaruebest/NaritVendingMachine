@@ -22,7 +22,7 @@
       "dir_pin": 23,
       "enable_pin": 12,
       "active_high": true,
-      "enable_active_high": true
+      "enable_active_high": false
     },
     "y": {
       "step_pin": 26,
