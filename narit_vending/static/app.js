@@ -123,6 +123,10 @@
     return AXES.every((a) => Boolean(getAxis(a).is_homed));
   }
 
+  function unhomedJogState() {
+    return MS.payload?.safety?.unhomed_jog || { enabled: false, expires_in_s: 0 };
+  }
+
   function activeAlarmCount() {
     return alarmChannels().filter((channel) => channel.active && channel.level === "fault").length;
   }
@@ -169,7 +173,10 @@
     return "";
   }
 
-  function canJogAxis() { return motionInhibitReason(false) === ""; }
+  function canJogAxis(axis) {
+    if (motionInhibitReason(false) !== "") return false;
+    return Boolean(getAxis(axis).is_homed) || Boolean(unhomedJogState().enabled);
+  }
   function canExecuteMove() { return MS.validation.valid && MS.validation.stage === "armed" && motionInhibitReason(true) === ""; }
   function canHomeAxis() { return motionInhibitReason(false) === ""; }
 
@@ -1011,14 +1018,36 @@
 
   /* ── RENDER: BUTTON STATES ──────────────────────────────────── */
   function updateButtonStates() {
-    const canJog  = canJogAxis();
     const canHome = canHomeAxis();
-    const inhibitReason = motionInhibitReason(false);
 
     // Jog buttons
     $$("[data-jog]").forEach((btn) => {
-      btn.disabled = !canJog;
+      const [axis] = btn.dataset.jog.split(":");
+      btn.disabled = !canJogAxis(axis);
     });
+
+    const unhomedJog = unhomedJogState();
+    const unhomedJogEnabled = Boolean(unhomedJog.enabled);
+    const unhomedJogToggle = el("unhomed-jog-toggle");
+    const unhomedJogWarning = el("unhomed-jog-warning");
+    if (unhomedJogToggle) {
+      unhomedJogToggle.disabled = !MS.online || Boolean(MS.pending) || Boolean(MS.payload?.busy)
+        || Boolean(getStatus().estop) || Boolean(MS.payload?.safety?.stop_requested);
+      unhomedJogToggle.classList.toggle("active", unhomedJogEnabled);
+      unhomedJogToggle.textContent = unhomedJogEnabled ? "CANCEL TEST MODE" : "BYPASS HOME CHECK";
+    }
+    if (unhomedJogWarning) unhomedJogWarning.classList.toggle("active", unhomedJogEnabled);
+    $$(".step-btn").forEach((button) => {
+      button.disabled = unhomedJogEnabled && Number(button.dataset.step) > 1;
+    });
+    $$(".speed-preset").forEach((button) => {
+      button.disabled = unhomedJogEnabled && Number(button.dataset.speed) > 5;
+    });
+    setText("unhomed-jog-countdown", Math.max(0, Math.ceil(Number(unhomedJog.expires_in_s || 0))));
+    setText(
+      "jog-status-text",
+      unhomedJogEnabled ? "TEST MODE ACTIVE" : allAxesHomed() ? "READY" : "HOME REQUIRED",
+    );
 
     const selectedCode = selectedSlotCode();
     const selectedSlot = MS.slots[selectedCode] || {};
@@ -2117,6 +2146,37 @@
         command(`Jog ${axis.toUpperCase()} ${dir === "1" ? "+" : "-"}${MS.selectedJogStep} mm`,
           "/api/jog", buildJogPayload(axis, dir), { silent: true });
       });
+    });
+
+    el("unhomed-jog-toggle").addEventListener("click", async () => {
+      const enabled = Boolean(unhomedJogState().enabled);
+      if (!enabled) {
+        const confirmed = window.confirm(
+          "Enable Maintenance Motor Test Mode for 120 seconds?\n\n"
+          + "Manual Jog only. Position is unknown. Maximum 1 mm and 5 mm/s. "
+          + "Keep clear of the mechanism and keep E-Stop within reach.",
+        );
+        if (!confirmed) return;
+      }
+      const result = await command(
+        enabled ? "Cancel maintenance motor test" : "Enable maintenance motor test",
+        "/api/maintenance/unhomed-jog",
+        { enabled: !enabled },
+        { isStop: true, noCheck: true },
+      );
+      if (result && !enabled) {
+        MS.selectedJogStep = Math.min(MS.selectedJogStep, 1);
+        MS.selectedJogSpeed = Math.min(MS.selectedJogSpeed, 5);
+        $$(".step-btn").forEach((button) => button.classList.toggle("active", Number(button.dataset.step) === MS.selectedJogStep));
+        $$(".speed-preset").forEach((button) => button.classList.toggle("active", Number(button.dataset.speed) === MS.selectedJogSpeed));
+        setText("jog-step-display", fmtSpd(MS.selectedJogStep));
+        setText("jog-speed-display", fmtSpd(MS.selectedJogSpeed));
+        if (el("jog-step")) el("jog-step").value = MS.selectedJogStep;
+        if (el("move-speed")) el("move-speed").value = MS.selectedJogSpeed;
+        MS.keyboardJogEnabled = false;
+        el("jog-keyboard-enable").checked = false;
+        toast("Motor Test Mode active — use Manual Jog only.", "error");
+      }
     });
 
     /* --- Jog step presets --- */

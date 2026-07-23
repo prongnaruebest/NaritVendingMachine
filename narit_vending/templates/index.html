@@ -8,7 +8,7 @@
   <link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='favicon-transparent-large.png') }}?v=20260721_v12">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=20260722_v39">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=20260723_v40">
 </head>
 <body>
   <div class="hmi-shell">
@@ -672,7 +672,15 @@
       <div class="rpz rpz-jog">
         <div class="rpz-head">
           <span class="rpz-title">Manual Jog Control</span>
-          <span class="safety-ind-sub" id="jog-status-text">Ready</span>
+          <div class="jog-test-mode-controls">
+            <span class="safety-ind-sub" id="jog-status-text">HOME REQUIRED</span>
+            <button class="jog-test-mode-btn" id="unhomed-jog-toggle" type="button">BYPASS HOME CHECK</button>
+          </div>
+        </div>
+
+        <div class="jog-test-mode-warning" id="unhomed-jog-warning" role="status">
+          <strong>MAINTENANCE MOTOR TEST</strong>
+          <span>Manual Jog only · max 1 mm · max 5 mm/s · expires in <b id="unhomed-jog-countdown">0</b>s</span>
         </div>
 
         <div class="jog-inhibit-banner" id="jog-inhibit-banner">
@@ -821,6 +829,6 @@
   <!-- Toast notification -->
   <div class="toast" id="toast" role="status"></div>
 
-  <script src="{{ url_for('static', filename='app.js') }}?v=20260722_v39"></script>
+  <script src="{{ url_for('static', filename='app.js') }}?v=20260723_v40"></script>
 </body>
 </html>

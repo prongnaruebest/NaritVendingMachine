@@ -40,6 +40,9 @@ class APIInputError(ValueError):
 GPIO_MIN = 0
 GPIO_MAX = 27
 MAX_PULSE_FREQUENCY_HZ = 50_000.0
+UNHOMED_JOG_DURATION_S = 120.0
+UNHOMED_JOG_MAX_DISTANCE_MM = 1.0
+UNHOMED_JOG_MAX_SPEED_MM_S = 5.0
 
 
 def _config_number(payload: dict[str, object], key: str, *, minimum: float, maximum: float) -> float:
@@ -90,6 +93,7 @@ class MotionService:
         self.armed_move: dict[str, object] | None = None
         self.completed_request_ids: dict[str, dict[str, object]] = {}
         self.configuration_restart_required = False
+        self.unhomed_jog_until_monotonic = 0.0
 
         if self.config_path.exists():
             config = load_machine_config(self.config_path)
@@ -106,6 +110,7 @@ class MotionService:
     def status_payload(self) -> dict[str, object]:
         with self.lock:
             controller_status = self.controller.status()
+            unhomed_jog = self._unhomed_jog_status(controller_status)
             for axis_name, axis_status in ((name, controller_status[name]) for name in ("x", "y", "z")):
                 if axis_status["is_homed"] and self.homing[axis_name] == "not_homed":
                     self.homing[axis_name] = "passed"
@@ -151,10 +156,43 @@ class MotionService:
                     "stop_requested": self.controller.stop_requested(),
                     "controlled_stop_requested": self.controller.controlled_stop_requested(),
                     "configuration_restart_required": self.configuration_restart_required,
+                    "unhomed_jog": unhomed_jog,
                 },
                 "status": controller_status,
                 "slots": slots,
             }
+
+    def _unhomed_jog_status(self, controller_status: dict[str, object] | None = None) -> dict[str, object]:
+        status = controller_status or self.controller.status()
+        unsafe = (
+            bool(status["estop"])
+            or self.controller.stop_requested()
+            or self.configuration_restart_required
+        )
+        remaining_s = max(0.0, self.unhomed_jog_until_monotonic - time.monotonic())
+        if unsafe or remaining_s <= 0:
+            self.unhomed_jog_until_monotonic = 0.0
+            remaining_s = 0.0
+        return {
+            "enabled": remaining_s > 0,
+            "expires_in_s": round(remaining_s, 1),
+            "max_distance_mm": UNHOMED_JOG_MAX_DISTANCE_MM,
+            "max_speed_mm_s": UNHOMED_JOG_MAX_SPEED_MM_S,
+            "scope": "manual_jog_only",
+        }
+
+    def set_unhomed_jog_mode(self, enabled: bool) -> dict[str, object]:
+        with self.lock:
+            if enabled:
+                errors = self._motion_safety_errors(require_homed=False)
+                if errors:
+                    return {"ok": False, "error": "; ".join(errors)}
+                self.unhomed_jog_until_monotonic = time.monotonic() + UNHOMED_JOG_DURATION_S
+                self.operation_message = "Maintenance test mode enabled: unhomed manual jog only"
+            else:
+                self.unhomed_jog_until_monotonic = 0.0
+                self.operation_message = "Maintenance test mode cancelled"
+            return {"ok": True, "unhomed_jog": self._unhomed_jog_status()}
 
     def _run(
         self,
@@ -504,9 +542,30 @@ class MotionService:
                 self.operation_message = f"Axis {axis_name.upper()} homed successfully"
 
     def jog(self, axis_name: str, distance_mm: float, speed_mm_s: float | None = None, time_s: float | None = None) -> dict[str, object]:
+        axis = self.controller.axes()[axis_name]
+        with self.lock:
+            unhomed_jog = self._unhomed_jog_status()
+        if not axis.is_homed:
+            if not unhomed_jog["enabled"]:
+                return {
+                    "ok": False,
+                    "error": f"{axis_name.upper()} axis is not homed; enable Maintenance Motor Test Mode first",
+                }
+            if abs(distance_mm) > UNHOMED_JOG_MAX_DISTANCE_MM:
+                return {
+                    "ok": False,
+                    "error": f"Unhomed jog distance is limited to {UNHOMED_JOG_MAX_DISTANCE_MM:g} mm",
+                }
+            if speed_mm_s is not None and speed_mm_s > UNHOMED_JOG_MAX_SPEED_MM_S:
+                return {
+                    "ok": False,
+                    "error": f"Unhomed jog speed is limited to {UNHOMED_JOG_MAX_SPEED_MM_S:g} mm/s",
+                }
+            if time_s is not None:
+                return {"ok": False, "error": "Timed jog is disabled in Maintenance Motor Test Mode"}
         return self._run(
             f"jog_{axis_name}",
-            lambda: self.controller.axes()[axis_name].move_mm(distance_mm, speed_mm_s=speed_mm_s, time_s=time_s),
+            lambda: axis.move_mm(distance_mm, speed_mm_s=speed_mm_s, time_s=time_s),
         )
 
     def move_to_slot(self, slot_code: str, speed_mm_s: float | None = None, time_s: float | None = None) -> dict[str, object]:
@@ -983,6 +1042,19 @@ def create_app(config_path: str = "machine_config.json", hw_config_path: str = "
         if axis_name.lower() not in ("x", "y", "z"):
             return jsonify({"ok": False, "error": f"Unknown axis '{axis_name}'"}), 400
         return jsonify(service.is_axis_homed(axis_name))
+
+    @app.post("/api/maintenance/unhomed-jog")
+    def api_maintenance_unhomed_jog():
+        payload = _json_payload()
+        if "enabled" not in payload:
+            return jsonify({"ok": False, "error": "Field 'enabled' is required"}), 400
+        try:
+            enabled = _config_boolean(payload, "enabled")
+        except APIInputError as exc:
+            return jsonify({"ok": False, "error": str(exc)}), 400
+        result = service.set_unhomed_jog_mode(enabled)
+        status_code = 200 if result["ok"] else 400
+        return jsonify(result | service.status_payload()), status_code
 
     @app.post("/api/jog")
     def api_jog():

@@ -5023,3 +5023,45 @@ select.slot-filter {
   .visual-inspector-actions { grid-template-columns: 1fr; }
   .visualization-v32 .visual-slot-editor { grid-template-columns: 1fr; }
 }
+
+/* v40 timed maintenance bypass for unloaded motor tests */
+.jog-test-mode-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.jog-test-mode-btn {
+  min-height: 30px;
+  padding: 5px 10px;
+  border: 1px solid var(--amber-brd);
+  border-radius: 5px;
+  background: var(--amber-dim);
+  color: var(--amber);
+  font: 700 10px var(--font-ui);
+  letter-spacing: .04em;
+  cursor: pointer;
+}
+
+.jog-test-mode-btn:hover:not(:disabled) { border-color: var(--amber); }
+.jog-test-mode-btn.active { border-color: var(--red-bright); background: var(--red-dim); color: var(--red-bright); }
+.jog-test-mode-btn:disabled { opacity: .4; cursor: not-allowed; }
+
+.jog-test-mode-warning {
+  display: none;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+  padding: 7px 9px;
+  border: 1px solid var(--red-brd);
+  border-radius: 5px;
+  background: var(--red-dim);
+  color: var(--red-bright);
+  font-size: 10px;
+}
+
+.jog-test-mode-warning.active { display: grid; }
+.jog-test-mode-warning span { color: var(--text-2); }
+.jog-test-mode-warning b { color: var(--red-bright); font-family: var(--font-mono); }
