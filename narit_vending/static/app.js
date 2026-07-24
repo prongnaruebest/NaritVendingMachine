@@ -189,6 +189,7 @@
   }
   function canExecuteMove() { return MS.validation.valid && MS.validation.stage === "armed" && motionInhibitReason(true) === ""; }
   function canHomeAxis() { return motionInhibitReason(false) === ""; }
+  function motionAllowed(requireHome = true) { return motionInhibitReason(requireHome) === ""; }
 
   /* ── SLOT STATUS ────────────────────────────────────────────── */
   function slotStatus(slot) {
@@ -634,7 +635,13 @@
     const search = el("slot-search")?.value.trim().toLowerCase() ?? "";
     const filter = el("slot-filter")?.value ?? "all";
 
-    const entries = Object.entries(MS.slots)
+    const slotsData = { ...MS.slots };
+    for (let i = 1; i <= 30; i++) {
+      const code = String(i);
+      slotsData[code] ||= { x_mm: 0, y_mm: 0, z_mm: 0, product_name: "", dispense_delay_ms: 0 };
+    }
+
+    const entries = Object.entries(slotsData)
       .sort(([a], [b]) => Number(a) - Number(b))
       .filter(([code, slot]) => {
         const derived = slotStatus(slot);
@@ -2181,6 +2188,8 @@
     const configuredSlots = Object.values(MS.slots || {}).filter((slot) => slotStatus(slot) === "ready").length;
 
     renderDashboard();
+    renderSlotTable();
+    loadSelectedSlotEditor();
 
     const dashboardAxes = document.getElementById("legacy-dashboard-axis-grid");
     if (dashboardAxes) dashboardAxes.innerHTML = AXES.map((axis) => {
