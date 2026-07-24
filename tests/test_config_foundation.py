@@ -25,8 +25,8 @@ class ConfigFoundationTests(unittest.TestCase):
 
         self.assertTrue(report.valid)
         self.assertEqual(report.effective_axes["x"]["pulse_pin"], 16)
-        self.assertEqual(report.effective_axes["y"]["head_limit_pin"], 9)
-        self.assertEqual(report.effective_axes["y"]["tail_limit_pin"], 22)
+        self.assertEqual(report.effective_axes["y"]["head_limit_pin"], 22)
+        self.assertEqual(report.effective_axes["y"]["tail_limit_pin"], 9)
         self.assertEqual(len(report.revision), 64)
 
     def test_duplicate_output_pin_is_rejected(self) -> None:
