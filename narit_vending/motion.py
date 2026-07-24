@@ -343,13 +343,19 @@ class AxisController:
 
     def home(
         self,
-        backoff_steps: int = 20,
+        backoff_steps: int | None = None,
         max_steps: int = 200000,
         progress: Callable[[str], None] | None = None,
     ) -> int:
         _logger.info("Home %s: starting", self.config.name)
         if self.estop.value:
             raise EmergencyStopError(f"{self.config.name}: emergency stop is active")
+
+        effective_backoff = (
+            backoff_steps
+            if backoff_steps is not None
+            else max(200, int(round(3.0 * self.config.steps_per_mm)))
+        )
 
         homing_speed = min(8.0, self.config.max_speed_mm_s)
         duration_s = max_steps / max(homing_speed * self.config.steps_per_mm, 1.0)
@@ -378,13 +384,13 @@ class AxisController:
 
         sleep(self.config.settle_delay)
 
-        if backoff_steps > 0:
+        if effective_backoff > 0:
             if progress is not None:
                 progress("backoff")
             release_direction = 1 - self.config.home_direction
             self.direction.value = bool(release_direction)
             released = 0
-            while self.head_limit.value and released < backoff_steps:
+            while self.head_limit.value and released < effective_backoff:
                 if released % 10 == 0:
                     self._guard_during_move(release_direction)
                 self._pulse_once(half_periods[min(released, len(half_periods) - 1)])
@@ -392,7 +398,7 @@ class AxisController:
             sleep(self.config.settle_delay)
             if self.head_limit.value:
                 raise LimitTriggeredError(
-                    f"{self.config.name}: home sensor did not release after {backoff_steps} backoff steps"
+                    f"{self.config.name}: home sensor did not release after {effective_backoff} backoff steps"
                 )
 
         self.position_steps = 0
