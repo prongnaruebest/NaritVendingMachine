@@ -190,6 +190,16 @@
   function canExecuteMove() { return MS.validation.valid && MS.validation.stage === "armed" && motionInhibitReason(true) === ""; }
   function canHomeAxis() { return motionInhibitReason(false) === ""; }
   function motionAllowed(requireHome = true) { return motionInhibitReason(requireHome) === ""; }
+  function buildJogPayload(axis, dir) {
+    const step = Number(MS.selectedJogStep || 1.0);
+    const direction = Number(dir);
+    const distance_mm = step * direction;
+    const speed_mm_s = Number(MS.selectedJogSpeed || 15.0);
+    return { axis, distance_mm, speed_mm_s };
+  }
+  function targetSpeedPayload() {
+    return { speed_mm_s: Number(MS.selectedJogSpeed || 15.0) };
+  }
 
   /* ── SLOT STATUS ────────────────────────────────────────────── */
   function slotStatus(slot) {
@@ -1038,6 +1048,12 @@
     const canHome = canHomeAxis();
 
     // Jog buttons
+    const inhibitReason = motionInhibitReason(false);
+    const jogBanner = el("jog-inhibit-banner");
+    if (jogBanner) {
+      jogBanner.style.display = inhibitReason ? "flex" : "none";
+      setText("jog-inhibit-text", inhibitReason);
+    }
     $$("[data-jog]").forEach((btn) => {
       const [axis] = btn.dataset.jog.split(":");
       btn.disabled = !canJogAxis(axis);
