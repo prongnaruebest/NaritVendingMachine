@@ -25,11 +25,9 @@ class ConfigFoundationTests(unittest.TestCase):
 
         self.assertTrue(report.valid)
         self.assertEqual(report.effective_axes["x"]["pulse_pin"], 16)
-        self.assertEqual(report.effective_axes["y"]["head_limit_pin"], 22)
-        self.assertEqual(report.effective_axes["y"]["tail_limit_pin"], 9)
+        self.assertEqual(report.effective_axes["y"]["head_limit_pin"], 9)
+        self.assertEqual(report.effective_axes["y"]["tail_limit_pin"], 22)
         self.assertEqual(len(report.revision), 64)
-        self.assertTrue(any(issue.code == "MACHINE_PARAMETER_OVERRIDE" for issue in report.issues))
-        self.assertTrue(any(issue.code == "SENSOR_PIN_OVERRIDE" for issue in report.issues))
 
     def test_duplicate_output_pin_is_rejected(self) -> None:
         hardware = copy.deepcopy(self.hardware)

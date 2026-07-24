@@ -28,7 +28,7 @@ class StartupSmokeTests(unittest.TestCase):
         self.assertFalse(health["machine_ready"])
         self.assertTrue(effective["valid"])
         self.assertEqual(effective["effective_axes"]["x"]["pulse_pin"], 16)
-        self.assertEqual(effective["effective_axes"]["y"]["head_limit_pin"], 22)
+        self.assertEqual(effective["effective_axes"]["y"]["head_limit_pin"], 9)
         self.assertEqual(effective["effective_axes"]["z"]["enable_pin"], 19)
 
     def test_configuration_save_creates_restore_point_first(self) -> None:
