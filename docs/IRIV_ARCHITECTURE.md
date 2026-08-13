@@ -3,6 +3,10 @@
 เอกสารฉบับนี้เป็นแหล่งอ้างอิงหลักของสถาปัตยกรรมระบบ NARIT Vending บน
 IRIV PiControl CM4 และ IRIV IO Controller อัปเดตล่าสุดวันที่ 13 สิงหาคม 2026
 
+> ขอบเขตเอกสาร: ใช้เฉพาะระบบ IRIV ชุดใหม่ ไม่แทนที่สถาปัตยกรรม Raspberry Pi
+> เครื่องเดิม เอกสารเดิมยังอยู่ที่ `ARCHITECTURE_TH.md` และ configuration เดิมยังคงใช้
+> `machine_config.json`/`hardware_config.json` ตาม deployment ของเครื่องเดิม
+
 ## 1. สถานะปัจจุบัน
 
 | รายการ | ค่าที่ใช้งาน |
@@ -221,5 +225,4 @@ health check และ rollback plan
 - ทดสอบ network loss, controller restart และ power-cycle
 - ผ่าน homing, jog, slot sequence, STOP และ E-Stop acceptance tests
 
-ดูผังต่อสายและรายการตรวจหน้างานที่ [WIRING.md](WIRING.md)
-
+ดูผังต่อสายและรายการตรวจหน้างานที่ [IRIV_WIRING.md](IRIV_WIRING.md)
