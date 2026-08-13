@@ -11,6 +11,7 @@ Covers:
 """
 
 import unittest
+import json
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -20,6 +21,8 @@ from narit_vending.mqtt_service import (
     _BACKOFF_MAX_S,
     _RC_REASON,
 )
+from narit_vending.shared.commands import CommandResult
+from narit_vending.web._mqtt_proxy import MqttControllerProxy
 
 
 # ---------------------------------------------------------------------------
@@ -54,6 +57,13 @@ def _enabled_service_fake_client(**extra_config: object) -> tuple[MQTTService, M
 # ---------------------------------------------------------------------------
 
 class TestEnvironmentPrecedence(unittest.TestCase):
+    def test_client_id_defaults_to_a_unique_stable_cabinet_id(self) -> None:
+        service = _disabled_service(cabinet_id="CAB-003")
+
+        self.assertEqual(service.cabinet_id, "CAB-003")
+        self.assertEqual(service.client_id, "narit-vending-CAB-003")
+        self.assertEqual(service.status_payload()["client"]["client_id"], "narit-vending-CAB-003")
+
     def test_environment_overrides_file_configuration(self) -> None:
         environment = {
             "NARIT_MQTT_ENABLED": "true",
@@ -118,6 +128,126 @@ class TestEnvironmentPrecedence(unittest.TestCase):
         self.assertEqual(status["rejected_count"], 1)
         self.assertEqual(status["messages"][0]["payload"]["scanned_token"], "***REDACTED***")
         self.assertEqual(client.subscriptions, [(service.T_COMMAND, 1)])
+
+    def test_runtime_control_starts_and_stops_client(self) -> None:
+        service, fake_client = _enabled_service_fake_client()
+        service.runtime_enabled = False
+
+        started = service.set_runtime_enabled(True)
+        self.assertTrue(started["runtime_enabled"])
+        self.assertEqual(started["state"], "CONNECTING")
+        fake_client.connect_async.assert_called_once()
+        fake_client.loop_start.assert_called_once()
+
+        stopped = service.set_runtime_enabled(False)
+        self.assertFalse(stopped["runtime_enabled"])
+        self.assertEqual(stopped["state"], "STOPPED")
+        fake_client.loop_stop.assert_called_once()
+        fake_client.disconnect.assert_called_once()
+
+    def test_move_slot_command_dispatches_once_to_controller_command_bus(self) -> None:
+        service, fake_client = _enabled_service_fake_client()
+        dispatcher = MagicMock(return_value=CommandResult(
+            accepted=True,
+            command_id="controller-command",
+            state="COMPLETED",
+            result={"ok": True, "result": {
+                "target_verification": {"target_reached": True},
+                "home_verification": {"home_reached": True},
+            }},
+        ))
+        service.set_command_dispatcher(dispatcher)
+        command = {
+            "action": "release",
+            "request_id": "mqtt-test-001",
+            "order_id": "order-001",
+            "slot": 3,
+            "speed_mm_s": 8.0,
+        }
+        message = SimpleNamespace(
+            topic=service.T_COMMAND,
+            payload=json.dumps(command).encode(),
+            qos=1,
+            retain=False,
+        )
+
+        with patch("narit_vending.mqtt_service.threading.Thread") as worker:
+            service._on_message(fake_client, None, message)
+            target = worker.call_args.kwargs["target"]
+            args = worker.call_args.kwargs["args"]
+            target(*args)
+
+        envelope = dispatcher.call_args.args[0]
+        self.assertEqual(envelope.command_type, "RUN_SLOT_SEQUENCE")
+        self.assertEqual(envelope.source, "mqtt")
+        self.assertEqual(envelope.idempotency_key, "mqtt-test-001")
+        self.assertEqual(envelope.parameters["slot_code"], "3")
+        self.assertEqual(envelope.parameters["speed_mm_s"], 8.0)
+        self.assertTrue(callable(envelope.parameters["_phase_callback"]))
+        published_states = [
+            json.loads(call.args[1])["state"]
+            for call in fake_client.publish.call_args_list
+            if call.args[0] == service.T_STATUS
+        ]
+        self.assertEqual(published_states, ["received", "success"])
+        final_payload = json.loads(fake_client.publish.call_args_list[-1].args[1])
+        self.assertTrue(final_payload["target_reached"])
+
+
+class TestMqttControllerProxy(unittest.TestCase):
+    def test_move_slot_uses_controller_owned_sequence_with_mqtt_request_id(self) -> None:
+        controller = MagicMock()
+        controller.submit_command.return_value = CommandResult(
+            accepted=True,
+            command_id="controller-command",
+            state="COMPLETED",
+            result={
+                "ok": True,
+                "target_verification": {"target_reached": True},
+                "home_verification": {"home_reached": True},
+            },
+        )
+        proxy = MqttControllerProxy(controller)
+        phases: list[tuple[str, str]] = []
+
+        result = proxy.move_to_slot(
+            "12",
+            request_id="mqtt-request-12",
+            speed_mm_s=9.0,
+            phase_callback=lambda state, detail: phases.append((state, detail["phase"])),
+        )
+
+        envelopes = [call.args[0] for call in controller.submit_command.call_args_list]
+        self.assertTrue(result["ok"])
+        self.assertEqual([envelope.command_type for envelope in envelopes], ["RUN_SLOT_SEQUENCE"])
+        self.assertTrue(all(envelope.source == "mqtt" for envelope in envelopes))
+        self.assertEqual(
+            [envelope.idempotency_key for envelope in envelopes], ["mqtt-request-12"],
+        )
+        self.assertEqual(envelopes[0].parameters, {"slot_code": "12", "speed_mm_s": 9.0})
+        self.assertTrue(result["target_verification"]["target_reached"])
+        self.assertTrue(result["home_verification"]["home_reached"])
+        self.assertEqual(
+            phases,
+            [
+                ("moving", "SEQUENCE_STARTED"),
+            ],
+        )
+
+    def test_move_slot_returns_controller_sequence_failure(self) -> None:
+        controller = MagicMock()
+        controller.submit_command.return_value = CommandResult(
+            accepted=False,
+            command_id="controller-command",
+            state="FAILED",
+            reason="Target position verification failed",
+            result={"ok": False, "error": "Target position verification failed"},
+        )
+        result = MqttControllerProxy(controller).move_to_slot("4", request_id="mqtt-request-4")
+
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["state"], "FAILED")
+        self.assertEqual(result["reason"], "Target position verification failed")
 
 
 # ---------------------------------------------------------------------------
@@ -214,6 +344,16 @@ class TestConnectionRejectionMessages(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 class TestReconnectBackoff(unittest.TestCase):
+    def test_paho_retry_delay_uses_service_backoff_limits(self) -> None:
+        service, fake_client = _enabled_service_fake_client()
+
+        service._configure_reconnect_delay()
+
+        fake_client.reconnect_delay_set.assert_called_once_with(
+            min_delay=_BACKOFF_INITIAL_S,
+            max_delay=_BACKOFF_MAX_S,
+        )
+
     def test_backoff_increments_on_repeated_unexpected_disconnects(self) -> None:
         service, fake_client = _enabled_service_fake_client()
         # Simulate initial connect

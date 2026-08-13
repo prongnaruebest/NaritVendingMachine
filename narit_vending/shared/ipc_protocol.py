@@ -56,6 +56,8 @@ METHOD_SUBMIT = "command.submit"
 METHOD_CMD_STATUS = "command.status"
 METHOD_CONFIG_GET = "config.get_effective"
 METHOD_CONFIG_SAVE = "config.save"
+METHOD_MQTT_STATUS = "mqtt.status"
+METHOD_MQTT_CONTROL = "mqtt.control"
 
 
 # ── Encoding / Decoding ───────────────────────────────────────────────────────

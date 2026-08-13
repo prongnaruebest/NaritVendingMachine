@@ -40,6 +40,10 @@ def _submit(ctrl: "ControllerClient", command_type: str, params: dict, source: s
     return result.to_dict()
 
 
+def _rejection_message(result: dict, fallback: str) -> str:
+    return str(result.get("reason") or (result.get("result") or {}).get("error") or fallback)
+
+
 def make_commands_bp(ctrl: "ControllerClient") -> Blueprint:
     bp = Blueprint("commands", __name__)
 
@@ -118,7 +122,11 @@ def make_commands_bp(ctrl: "ControllerClient") -> Blueprint:
             return jsonify({"ok": False, "error": str(exc)}), 400
         snap = ctrl.snapshot()
         plan = (r.get("result") or {})
-        return jsonify({"ok": r.get("accepted", False), "plan": plan} | _snap_status(snap)), 200
+        accepted = bool(r.get("accepted"))
+        response = r | {"ok": accepted, "plan": plan} | _snap_status(snap)
+        if not accepted:
+            response["error"] = _rejection_message(r, "Move planning rejected")
+        return jsonify(response), 200 if accepted else 400
 
     @bp.post("/api/motion/validate")
     @bp.post("/api/motion/preview")
@@ -130,7 +138,12 @@ def make_commands_bp(ctrl: "ControllerClient") -> Blueprint:
             return jsonify({"ok": False, "error": str(exc)}), 400
         snap = ctrl.snapshot()
         validation = r.get("result") or {}
-        return jsonify({"ok": r.get("accepted", False), "stage": "preview", **validation} | _snap_status(snap)), 200
+        accepted = bool(r.get("accepted"))
+        stage = "preview" if request.path.endswith("/preview") else "validated"
+        response = r | {"ok": accepted, "stage": stage, **validation} | _snap_status(snap)
+        if not accepted:
+            response["error"] = _rejection_message(r, "Target validation rejected")
+        return jsonify(response), 200 if accepted else 400
 
     @bp.post("/api/motion/arm")
     def api_motion_arm():
@@ -138,6 +151,11 @@ def make_commands_bp(ctrl: "ControllerClient") -> Blueprint:
         try:
             # First validate
             val_r = _submit(ctrl, "VALIDATE_TARGET", payload)
+            if not val_r.get("accepted"):
+                snap = ctrl.snapshot()
+                response = val_r | _snap_status(snap)
+                response["error"] = _rejection_message(val_r, "Target validation rejected")
+                return jsonify(response), 400
             validation = val_r.get("result") or {}
             # Then arm
             arm_r = _submit(ctrl, "ARM_MOVE", {"validation": validation, "payload": payload})
@@ -180,6 +198,18 @@ def make_commands_bp(ctrl: "ControllerClient") -> Blueprint:
         except (TypeError, ValueError):
             return jsonify({"ok": False, "error": "speed_mm_s and time_s must be numbers"}), 400
         r = _submit(ctrl, "MOVE_TO_SLOT", {"slot_code": slot_code, "speed_mm_s": speed_mm_s, "time_s": time_s})
+        snap = ctrl.snapshot()
+        return jsonify(r | _snap_status(snap)), 200 if r.get("accepted") else 400
+
+    @bp.post("/api/slots/<slot_code>/sequence")
+    def api_run_slot_sequence(slot_code: str):
+        """Run a Controller-owned slot cycle; never issue motion from Web."""
+        payload = _json_payload()
+        try:
+            speed_mm_s = _parse_opt_float(payload, "speed_mm_s")
+        except (TypeError, ValueError):
+            return jsonify({"ok": False, "error": "speed_mm_s must be a number"}), 400
+        r = _submit(ctrl, "RUN_SLOT_SEQUENCE", {"slot_code": slot_code, "speed_mm_s": speed_mm_s})
         snap = ctrl.snapshot()
         return jsonify(r | _snap_status(snap)), 200 if r.get("accepted") else 400
 

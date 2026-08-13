@@ -11,7 +11,7 @@ import time
 import uuid
 from collections import deque
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Callable
 
 try:
     import paho.mqtt.client as mqtt
@@ -28,6 +28,8 @@ MQTT_CONFIG = {
     "username": "",
     "password": "",
     "cabinet_id": "CAB-001",
+    "client_id": "",
+    "agent_version": "unknown",
     "keepalive_s": 20,
     # TLS defaults — all disabled unless explicitly enabled
     "tls_enabled": False,
@@ -47,8 +49,9 @@ _RC_REASON: dict[int, str] = {
     5: "Connection refused — authorization failure, check ACL/topic permissions (rc=5)",
 }
 
-# Exponential backoff caps
-_BACKOFF_INITIAL_S = 2
+# Reconnection backoff. Keep the first retry long enough that a broker-side
+# rejection does not make the HMI and presence topic flap every second.
+_BACKOFF_INITIAL_S = 4
 _BACKOFF_MAX_S = 60
 
 
@@ -59,6 +62,8 @@ def _environment_config() -> dict[str, object]:
         "username": "NARIT_MQTT_USERNAME",
         "password": "NARIT_MQTT_PASSWORD",
         "cabinet_id": "NARIT_MQTT_CABINET_ID",
+        "client_id": "NARIT_MQTT_CLIENT_ID",
+        "agent_version": "NARIT_MQTT_AGENT_VERSION",
         "tls_ca_cert": "NARIT_MQTT_CA_CERT",
         "tls_client_cert": "NARIT_MQTT_CLIENT_CERT",
         "tls_client_key": "NARIT_MQTT_CLIENT_KEY",
@@ -83,6 +88,21 @@ def _environment_config() -> dict[str, object]:
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _command_is_expired(value: object) -> bool:
+    """Accept Unix epoch seconds or ISO-8601 timestamps from the MQTT contract."""
+    if value in (None, ""):
+        return False
+    try:
+        if isinstance(value, (int, float)) or (isinstance(value, str) and value.strip().replace(".", "", 1).isdigit()):
+            return datetime.now(timezone.utc).timestamp() > float(value)
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            return True
+        return datetime.now(timezone.utc) > parsed.astimezone(timezone.utc)
+    except (TypeError, ValueError):
+        return True
 
 
 def _sanitize_payload(value: object) -> object:
@@ -115,14 +135,23 @@ class SimMotor:
             "state_trace": ["moving", "picking", "delivering", "confirming"],
         }
 
+    def move_to_slot(self, slot: object, **kwargs: object) -> dict[str, object]:
+        result = self.start_motion(slot)
+        result["target_verification"] = {"target_reached": True}
+        result["home_verification"] = {"home_reached": True}
+        return result
+
 
 class MQTTService:
     def __init__(self, motion_service: object | None = None, config: dict[str, Any] | None = None) -> None:
         supplied_config = dict(config or {})
         self.config = MQTT_CONFIG | supplied_config | _environment_config()
         self.service = motion_service or SimMotor()
+        self._command_dispatcher: Callable[[Any], Any] | None = None
         self.enabled = bool(self.config.get("enabled", False))
         self.cabinet_id = str(self.config.get("cabinet_id") or MQTT_CONFIG["cabinet_id"])
+        self.client_id = str(self.config.get("client_id") or f"narit-vending-{self.cabinet_id}")
+        self.agent_version = str(self.config.get("agent_version") or MQTT_CONFIG["agent_version"])
 
         prefix = f"cabinet/{self.cabinet_id}"
         self.T_SCAN = f"{prefix}/scan"
@@ -132,7 +161,10 @@ class MQTTService:
 
         self._done: dict[str, object] = {}
         self.client: Any = None
+        self.runtime_enabled = False
+        self._lifecycle_lock = threading.RLock()
         self._telemetry_lock = threading.RLock()
+
         self._messages: deque[dict[str, object]] = deque(maxlen=100)
         self._backoff_s: float = _BACKOFF_INITIAL_S
         self._telemetry: dict[str, object] = {
@@ -164,11 +196,13 @@ class MQTTService:
         try:
             self.client = mqtt.Client(
                 mqtt.CallbackAPIVersion.VERSION1,
-                client_id=self.cabinet_id,
+                client_id=self.client_id,
                 clean_session=False,
             )
         except (AttributeError, TypeError):
-            self.client = mqtt.Client(client_id=self.cabinet_id, clean_session=False)
+            self.client = mqtt.Client(client_id=self.client_id, clean_session=False)
+
+        self._configure_reconnect_delay()
 
         if self.config.get("username"):
             self.client.username_pw_set(
@@ -182,13 +216,26 @@ class MQTTService:
 
         self.client.will_set(
             self.T_PRESENCE,
-            json.dumps({"state": "offline", "cabinet_id": self.cabinet_id, "timestamp": None}),
+            json.dumps({"state": "offline", "cabinet_id": self.cabinet_id, "version": self.agent_version, "timestamp": None}),
             qos=1,
             retain=True,
         )
         self.client.on_connect = self._on_connect
         self.client.on_disconnect = self._on_disconnect
         self.client.on_message = self._on_message
+
+    def _configure_reconnect_delay(self) -> None:
+        """Use Paho's retry scheduler instead of its one-second default."""
+        if self.client is None:
+            return
+        try:
+            self.client.reconnect_delay_set(
+                min_delay=_BACKOFF_INITIAL_S,
+                max_delay=_BACKOFF_MAX_S,
+            )
+        except (AttributeError, TypeError):
+            # Older/mock MQTT clients may not provide reconnect_delay_set.
+            _log.warning("MQTT client does not support reconnect delay configuration")
 
     # ── TLS helpers ────────────────────────────────────────────────────────
 
@@ -226,6 +273,10 @@ class MQTTService:
             self._set_telemetry(state="ERROR", last_error=f"TLS setup failed: {exc}")
             _log.error("TLS setup error: %s", exc)
             raise
+
+    def set_command_dispatcher(self, dispatcher: Callable[[Any], Any]) -> None:
+        """Bind the Controller CommandBus before MQTT commands are accepted."""
+        self._command_dispatcher = dispatcher
 
     # ── Telemetry helpers ──────────────────────────────────────────────────
 
@@ -293,6 +344,7 @@ class MQTTService:
         }
         return {
             "enabled": self.enabled,
+            "runtime_enabled": self.runtime_enabled,
             "client_available": self.client is not None,
             "broker": {
                 "host": str(self.config.get("broker", "")),
@@ -301,49 +353,78 @@ class MQTTService:
                 "authentication_configured": bool(self.config.get("username")),
                 "tls": tls_status,
             },
-            "client": {"cabinet_id": self.cabinet_id, "clean_session": False},
+            "client": {"cabinet_id": self.cabinet_id, "client_id": self.client_id, "clean_session": False},
             "topics": {
                 "subscribe": [self.T_COMMAND],
                 "publish": [self.T_SCAN, self.T_STATUS, self.T_PRESENCE],
+            },
+            "command_contract": {
+                "actions": ["release"],
+                "required": ["request_id", "slot"],
+                "optional": ["order_id", "expires_at", "speed_mm_s", "time_s"],
             },
             **telemetry,
             "messages": messages,
             "timestamp": _now(),
         }
 
-    def start(self) -> None:
-        if not self.enabled or self.client is None:
-            return
-        broker = str(self.config.get("broker", "127.0.0.1"))
-        port = int(self.config.get("port", 1883))
-        keepalive = int(self.config.get("keepalive_s", 20))
-        self._backoff_s = _BACKOFF_INITIAL_S
-        self._set_telemetry(
-            state="CONNECTING",
-            started_at=_now(),
-            last_error="",
-            reconnect_backoff_s=self._backoff_s,
-        )
-        _log.info("connecting to broker %s:%d as %s", broker, port, self.cabinet_id)
-        try:
-            self.client.connect_async(broker, port, keepalive=keepalive)
-            self.client.loop_start()
-        except Exception as exc:
-            self._set_telemetry(state="ERROR", last_error=str(exc))
-            _log.error("MQTT connection startup failed: %s", exc)
+    def set_runtime_enabled(self, enabled: bool) -> dict[str, object]:
+        if enabled:
+            if not self.enabled:
+                raise RuntimeError("MQTT is disabled in configuration")
+            if self.client is None:
+                raise RuntimeError("MQTT client is unavailable")
+            self.start()
+        else:
+            self.stop()
+        return self.status_payload()
 
-    def stop(self) -> None:
+    def start(self) -> bool:
         if not self.enabled or self.client is None:
-            return
-        info = self._publish_presence("offline")
-        try:
-            if info is not None:
-                info.wait_for_publish(timeout=2.0)
-        except Exception:
-            pass
-        self.client.loop_stop()
-        self.client.disconnect()
-        self._set_telemetry(state="STOPPED", connected=False, disconnected_at=_now())
+            return False
+        with self._lifecycle_lock:
+            if self.runtime_enabled:
+                return False
+            broker = str(self.config.get("broker", "127.0.0.1"))
+            port = int(self.config.get("port", 1883))
+            keepalive = int(self.config.get("keepalive_s", 20))
+            self.runtime_enabled = True
+            self._backoff_s = _BACKOFF_INITIAL_S
+            self._set_telemetry(
+                state="CONNECTING",
+                connected=False,
+                started_at=_now(),
+                last_error="",
+                reconnect_backoff_s=self._backoff_s,
+            )
+            _log.info("connecting to broker %s:%d as client %s for cabinet %s", broker, port, self.client_id, self.cabinet_id)
+            try:
+                self.client.connect_async(broker, port, keepalive=keepalive)
+                self.client.loop_start()
+                return True
+            except Exception as exc:
+                self.runtime_enabled = False
+                self._set_telemetry(state="ERROR", last_error=str(exc))
+                _log.error("MQTT connection startup failed: %s", exc)
+                return False
+
+    def stop(self) -> bool:
+        if not self.enabled or self.client is None:
+            return False
+        with self._lifecycle_lock:
+            if not self.runtime_enabled:
+                return False
+            self.runtime_enabled = False
+            info = self._publish_presence("offline")
+            try:
+                if info is not None:
+                    info.wait_for_publish(timeout=2.0)
+            except Exception:
+                pass
+            self.client.loop_stop()
+            self.client.disconnect()
+            self._set_telemetry(state="STOPPED", connected=False, disconnected_at=_now(), last_error="")
+            return True
 
     # ── MQTT callbacks ─────────────────────────────────────────────────────
 
@@ -410,7 +491,8 @@ class MQTTService:
 
         self._record_message("RX", str(msg.topic), command, qos=int(msg.qos), retain=bool(msg.retain))
         self._set_telemetry(last_error="")
-        if command.get("action") != "release":
+        action = str(command.get("action", "")).strip().lower()
+        if action != "release":
             self._increment("rejected_count")
             return
 
@@ -428,7 +510,7 @@ class MQTTService:
             return
 
         expires_at = command.get("expires_at")
-        if expires_at and str(expires_at) < _now():
+        if _command_is_expired(expires_at):
             self._increment("rejected_count")
             self._status(request_id, command, "failed", reason="COMMAND_EXPIRED", final=True)
             return
@@ -439,28 +521,103 @@ class MQTTService:
 
         self._status(request_id, command, "received")
         self._done[request_id] = "processing"
+        worker = threading.Thread(
+            target=self._execute_slot_command,
+            args=(str(request_id), command),
+            name=f"mqtt-slot-{request_id}",
+            daemon=True,
+        )
+        worker.start()
+
+    def _execute_slot_command(self, request_id: str, command: dict[str, object]) -> None:
         try:
-            result = self.service.start_motion(command.get("slot"))
-            ok = bool(result.get("ok"))
+            if self._command_dispatcher is None:
+                self._status(request_id, command, "failed", reason="CONTROLLER_NOT_READY", final=True)
+                return
+            from narit_vending.shared.commands import CommandEnvelope
+            speed = command.get("speed_mm_s")
+            params: dict[str, object] = {
+                "slot_code": str(command.get("slot")),
+                "speed_mm_s": speed if speed not in (None, "") else None,
+                # Local-only callback; it is never serialized or exposed via API.
+                "_phase_callback": lambda state, details: self._publish_sequence_phase(
+                    request_id, command, state, details
+                ),
+            }
+            envelope = CommandEnvelope(
+                command_type="RUN_SLOT_SEQUENCE",
+                source="mqtt",
+                parameters=params,
+                idempotency_key=request_id,
+            )
+            dispatched = self._command_dispatcher(envelope)
+            result = dispatched.to_dict() if hasattr(dispatched, "to_dict") else dict(dispatched)
+            # MotionService keeps operation details inside its standard
+            # {ok, result} envelope. Accept either payload shape here so the
+            # MQTT final-status contract remains stable.
+            detail = result
+            while isinstance(detail, dict) and isinstance(detail.get("result"), dict):
+                detail = detail["result"]
+            verification = (
+                detail.get("target_verification") if isinstance(detail, dict) else None
+            ) or result.get("target_verification")
+            home_verification = (
+                detail.get("home_verification") if isinstance(detail, dict) else None
+            ) or result.get("home_verification")
+            verification_reason = verification.get("reason") if isinstance(verification, dict) else None
+            target_reached = bool(
+                isinstance(verification, dict)
+                and verification.get("target_reached") is True
+            )
+            home_reached = bool(
+                isinstance(home_verification, dict)
+                and home_verification.get("home_reached") is True
+            )
+            ok = bool(result.get("ok")) and target_reached and home_reached
+            reason = result.get("reason") or (detail.get("error") if isinstance(detail, dict) else None)
             self._status(
                 request_id,
                 command,
                 "success" if ok else "failed",
-                sensor_confirmed=result.get("sensor_confirmed"),
-                state_trace=result.get("state_trace"),
-                reason=None if ok else "DROP_NOT_DETECTED",
+                sensor_confirmed=detail.get("sensor_confirmed") if isinstance(detail, dict) else None,
+                state_trace=detail.get("state_trace") if isinstance(detail, dict) else None,
+                reason=None if ok else str(
+                    reason
+                    or verification_reason
+                    or ("HOME_NOT_REACHED" if target_reached else "TARGET_NOT_REACHED")
+                ),
+                target_verification=verification if isinstance(verification, dict) else None,
+                home_verification=home_verification if isinstance(home_verification, dict) else None,
+                phase="COMPLETED" if ok else str(result.get("failed_phase") or "FAILED"),
                 final=True,
             )
         except Exception:
-            _log.exception("motor error")
+            _log.exception("MQTT move-to-slot error")
             self._status(request_id, command, "failed", reason="MOTOR_EXCEPTION", final=True)
+
+    def _publish_sequence_phase(
+        self,
+        request_id: str,
+        command: dict[str, object],
+        state: str,
+        details: dict[str, object],
+    ) -> None:
+        verification = details.get("target_verification")
+        self._status(
+            request_id,
+            command,
+            state,
+            phase=str(details.get("phase") or state.upper()),
+            active_axis=details.get("active_axis"),
+            target_verification=verification if isinstance(verification, dict) else None,
+        )
 
     def _publish_presence(self, state: str) -> Any:
         if self.client is None:
             return None
         info = self._publish(
             self.T_PRESENCE,
-            {"state": state, "cabinet_id": self.cabinet_id, "timestamp": _now()},
+            {"state": state, "cabinet_id": self.cabinet_id, "version": self.agent_version, "timestamp": _now()},
             qos=1,
             retain=True,
         )
@@ -475,11 +632,16 @@ class MQTTService:
         reason: str | None = None,
         sensor_confirmed: object | None = None,
         state_trace: object | None = None,
+        target_verification: dict[str, object] | None = None,
+        home_verification: dict[str, object] | None = None,
+        phase: str | None = None,
+        active_axis: object | None = None,
         final: bool = False,
     ) -> dict[str, object]:
         payload: dict[str, object] = {
             "request_id": request_id,
             "order_id": command.get("order_id"),
+            "action": command.get("action"),
             "state": state,
             "slot": command.get("slot"),
             "timestamp": _now(),
@@ -490,6 +652,18 @@ class MQTTService:
             payload["sensor_confirmed"] = sensor_confirmed
         if state_trace is not None:
             payload["state_trace"] = state_trace
+        if target_verification is not None:
+            payload.update(target_verification)
+        if home_verification is not None:
+            payload.update(home_verification)
+        if phase is not None:
+            payload["phase"] = phase
+        if active_axis is not None:
+            payload["active_axis"] = active_axis
+        if final:
+            payload["sensor_confirmed"] = bool(sensor_confirmed)
+            payload["state_trace"] = state_trace if isinstance(state_trace, list) else []
+            payload["completed_at"] = payload["timestamp"]
         if final and request_id:
             self._done[str(request_id)] = payload
         self._publish(self.T_STATUS, payload, qos=1)
@@ -500,7 +674,7 @@ class MQTTService:
             _log.warning("scan ignored because MQTT is disabled or unavailable")
             return False
         payload = {
-            "request_id": f"scan-{uuid.uuid4().hex[:6]}",
+            "request_id": str(uuid.uuid4()),
             "cabinet_id": self.cabinet_id,
             "scanned_token": token,
             "scanned_at": _now(),

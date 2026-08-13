@@ -24,6 +24,7 @@
     slots: {},
     mqtt: null,
     mqttPollPending: false,
+    mqttControlPending: false,
 
     // Event log
     events: [],
@@ -38,12 +39,15 @@
     selectedJogSpeed: 15.0,
     keyboardJogEnabled: false,
     selectedSlotCode: "",
+    slotSequenceMode: false,
     visualTargetSlot: "",
     slotEditorDirty: false,
     visualEditorDirty: false,
     visualEditMode: false,
     visualPreview: null,
     visualOriginalSlot: null,
+    visualGotoPending: false,
+    axisVelocity: Object.fromEntries(AXES.map((axis) => [axis, { positionMm: null, sampledAt: 0, mmS: 0, direction: "IDLE" }])),
     lastStatusAt: 0,
     configDirty: false,
     configSaving: false,
@@ -54,6 +58,8 @@
     dashboardWasBusy: false,
     silentErrorUntil: 0,
     logFilter: "all",
+    eventFilters: { search: "", severity: "all", category: "all", outcome: "all" },
+    selectedEventId: "",
     currentView: "motion",
   };
 
@@ -127,6 +133,39 @@
   function getStatus() { return MS.payload?.status || {}; }
   function getOperation() { return MS.payload?.operation || {}; }
   function getAxis(axis) { return getStatus()[axis] || {}; }
+
+  function updateAxisVelocity(payload) {
+    const sampledAt = Date.now();
+    AXES.forEach((axis) => {
+      const sample = MS.axisVelocity[axis];
+      const positionMm = Number(payload?.status?.[axis]?.position_mm);
+      if (!Number.isFinite(positionMm)) {
+        sample.mmS = 0;
+        sample.direction = "UNKNOWN";
+        sample.positionMm = null;
+        sample.sampledAt = sampledAt;
+        return;
+      }
+      const elapsedS = sample.sampledAt ? (sampledAt - sample.sampledAt) / 1000 : 0;
+      const deltaMm = sample.positionMm == null ? 0 : positionMm - sample.positionMm;
+      if (elapsedS >= 0.1 && elapsedS <= 5 && Math.abs(deltaMm) >= 0.0005) {
+        sample.mmS = Math.abs(deltaMm / elapsedS);
+        sample.direction = deltaMm > 0 ? "+" : "−";
+      } else {
+        sample.mmS = 0;
+        sample.direction = "IDLE";
+      }
+      sample.positionMm = positionMm;
+      sample.sampledAt = sampledAt;
+    });
+  }
+
+  function realtimeSpeedText(axis) {
+    const velocity = MS.axisVelocity[axis];
+    if (!velocity || velocity.direction === "UNKNOWN") return "UNKNOWN";
+    const direction = velocity.direction === "IDLE" ? "IDLE" : velocity.direction;
+    return `${velocity.mmS.toFixed(3)} mm/s · ${direction}`;
+  }
 
   function allAxesHomed() {
     return AXES.every((a) => Boolean(getAxis(a).is_homed));
@@ -209,6 +248,37 @@
     return "ready";
   }
 
+  function slotManagerStatus(slot) {
+    const values = AXES.map((axis) => Number(slot?.[`${axis}_mm`]));
+    const hasProduct = Boolean(slot?.product_name);
+    const hasPosition = values.some((value) => value !== 0);
+    if (!hasProduct && !hasPosition) return "empty";
+    if (!values.every(Number.isFinite) || !hasPosition) return "not-configured";
+    const limitsLoaded = AXES.every((axis) => Number.isFinite(Number(MS.config?.axes?.[axis]?.max_travel_mm)));
+    if (values.some((value) => value < 0) || (limitsLoaded && !visualSlotIsValid(slot))) return "invalid";
+    if (activeAlarmCount() > 0) return "alarm";
+    return "ready";
+  }
+
+  function slotAtCurrentPosition(slot) {
+    return allAxesHomed() && AXES.every((axis) => {
+      const target = Number(slot?.[`${axis}_mm`]);
+      const actual = Number(getAxis(axis).position_mm);
+      return Number.isFinite(target) && Number.isFinite(actual) && Math.abs(target - actual) <= 0.05;
+    });
+  }
+
+  function selectSlotFromManager(code) {
+    MS.selectedSlotCode = code;
+    MS.visualTargetSlot = code;
+    MS.slotEditorDirty = false;
+    const picker = el("selected-slot-code");
+    if (picker) picker.value = code;
+    renderSlotTable();
+    loadSelectedSlotEditor(true);
+    updateButtonStates();
+  }
+
   /* ── API LAYER ──────────────────────────────────────────────── */
   async function apiCall(path, method = "GET", body, timeoutMs = 8000) {
     const ctrl = new AbortController();
@@ -230,7 +300,12 @@
         }
       }
       if (!res.ok || data.ok === false) {
-        throw new Error(data.error || `HTTP ${res.status}`);
+        throw new Error(
+          data.error
+          || data.reason
+          || data.message
+          || (res.ok ? "Controller rejected the command without a reason" : `HTTP ${res.status}`)
+        );
       }
       return data;
     } finally {
@@ -254,9 +329,89 @@
 
   /* ── EVENT LOG ──────────────────────────────────────────────── */
   function log(message, level = "info", subsystem = "SYSTEM") {
-    MS.events.unshift({ at: new Date(), message, level, subsystem });
+    MS.events.unshift({ id: `${Date.now()}-${Math.random().toString(16).slice(2)}`, at: new Date(), message: sanitizeEventText(message), level, subsystem });
     MS.events = MS.events.slice(0, 200);
     renderEventLog();
+  }
+
+  function sanitizeEventText(value) {
+    return String(value ?? "")
+      .replace(/((?:password|passwd|token|secret|authorization)\s*[=:]\s*)[^\s,;]+/gi, "$1***REDACTED***")
+      .replace(/\bBearer\s+[A-Za-z0-9._~+\/-]+=*/gi, "Bearer ***REDACTED***");
+  }
+
+  function eventSeverity(event) {
+    const level = String(event.level || "").toLowerCase();
+    const message = String(event.message || "").toLowerCase();
+    if (["error", "fault", "critical"].includes(level) || /failed|rejected|blocked|lost|alarm|e-stop/.test(message)) return "fault";
+    if (["warn", "warning"].includes(level) || /not homed|warning|requires/.test(message)) return "warn";
+    return "info";
+  }
+
+  function eventCategory(event) {
+    const source = `${event.subsystem || ""} ${event.message || ""}`.toUpperCase();
+    if (/MQTT/.test(source)) return "MQTT";
+    if (/HOME/.test(source)) return "HOMING";
+    if (/SLOT/.test(source)) return "SLOT";
+    if (/CONFIG/.test(source)) return "CONFIG";
+    if (/ESTOP|E-STOP|INTERLOCK|ALARM|LIMIT|SAFETY/.test(source)) return "SAFETY";
+    if (/MOTION|MOVE|JOG|GOTO|DISPENSE|TARGET|COMMAND/.test(source)) return "MOTION";
+    return "SYSTEM";
+  }
+
+  function eventOutcome(event) {
+    const message = String(event.message || "").toLowerCase();
+    if (/failed|rejected|blocked|lost|error/.test(message)) return "FAILED";
+    if (/requested|connecting|armed/.test(message)) return "STARTED";
+    return "SUCCESS";
+  }
+
+  function eventAt(event) { return event.at instanceof Date ? event.at : new Date(event.at); }
+  function eventTime(event) {
+    const at = eventAt(event);
+    return Number.isNaN(at.getTime()) ? "--" : at.toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
+  }
+  function eventPriority(event) { return ({ fault: 0, warn: 1, info: 2 })[eventSeverity(event)] ?? 2; }
+  function eventMatches(event) {
+    const filter = MS.eventFilters;
+    const searchable = `${event.message} ${event.subsystem} ${eventCategory(event)} ${eventOutcome(event)}`.toLowerCase();
+    return (!filter.search || searchable.includes(filter.search.toLowerCase()))
+      && (filter.severity === "all" || eventSeverity(event) === filter.severity)
+      && (filter.category === "all" || eventCategory(event) === filter.category)
+      && (filter.outcome === "all" || eventOutcome(event) === filter.outcome);
+  }
+  function sortedEvents() {
+    return MS.events.filter(eventMatches).slice().sort((a, b) => eventPriority(a) - eventPriority(b) || eventAt(b) - eventAt(a));
+  }
+
+  function renderEventDetail(event) {
+    const detail = el("event-detail-content");
+    const state = el("event-detail-state");
+    if (!detail || !state) return;
+    if (!event) {
+      state.textContent = "NONE";
+      state.className = "page-status-chip";
+      detail.innerHTML = "<p>Select an event to inspect its sanitized details. This page never sends a machine command.</p>";
+      return;
+    }
+    const severity = eventSeverity(event);
+    const status = getStatus();
+    const axisSnapshot = AXES.map((axis) => `${axis.toUpperCase()} ${fmtPos(getAxis(axis).position_mm)} mm`).join(" · ");
+    const active = alarmChannels().filter((channel) => channel.active).map((channel) => channel.code).join(", ") || "None";
+    const message = sanitizeEventText(event.message);
+    const slot = message.match(/slot\s*([A-Za-z0-9_-]+)/i)?.[1] || "--";
+    const axis = message.match(/\b([XYZ])\b/i)?.[1]?.toUpperCase() || "--";
+    state.textContent = severity.toUpperCase();
+    state.className = `page-status-chip ${severity === "fault" ? "fault" : (severity === "warn" ? "warn" : "ok")}`;
+    detail.innerHTML = `<dl>
+      <div><dt>Event ID</dt><dd>${esc(event.id || "local event")}</dd></div><div><dt>Timestamp (ICT)</dt><dd>${esc(eventTime(event))}</dd></div>
+      <div><dt>Severity / Outcome</dt><dd>${esc(severity.toUpperCase())} / ${esc(eventOutcome(event))}</dd></div><div><dt>Category</dt><dd>${esc(eventCategory(event))}</dd></div>
+      <div><dt>Message</dt><dd>${esc(message)}</dd></div><div><dt>Slot / Axis</dt><dd>${esc(slot)} / ${esc(axis)}</dd></div>
+      <div><dt>Live Machine State</dt><dd>${esc(MS.payload?.machine_state || "UNKNOWN")}</dd></div><div><dt>Active Command</dt><dd>${esc(MS.payload?.active_command || "None")}</dd></div>
+      <div><dt>Homing (live)</dt><dd>${esc(AXES.map((axisName) => `${axisName.toUpperCase()}:${getAxis(axisName).is_homed ? "YES" : "NO"}`).join(" "))}</dd></div>
+      <div><dt>Safety / Active Alarms (live)</dt><dd>${esc(status.estop ? "E-STOP ACTIVE" : `Clear · ${active}`)}</dd></div>
+      <div><dt>Current XYZ (live)</dt><dd>${esc(axisSnapshot)}</dd></div>
+    </dl><p class="event-detail-note">Event history stores a sanitized message and local timestamp. The machine values above are the current live snapshot, not a reconstructed historical state.</p>`;
   }
 
   function renderEventLog() {
@@ -275,7 +430,22 @@
     const compactLog = document.getElementById("event-log");
     const pageLog = document.getElementById("event-log-page");
     if (compactLog) compactLog.innerHTML = markup;
-    if (pageLog) pageLog.innerHTML = markup;
+    if (pageLog) {
+      const entries = sortedEvents();
+      const totals = MS.events.reduce((counts, event) => { counts[eventSeverity(event)] += 1; return counts; }, { fault: 0, warn: 0, info: 0 });
+      setText("event-total-count", String(MS.events.length));
+      setText("event-fault-count", String(totals.fault)); setText("event-warn-count", String(totals.warn)); setText("event-info-count", String(totals.info));
+      setText("event-filtered-count", `${entries.length} shown`);
+      setText("event-last-update", `Last update: ${MS.events[0] ? eventTime(MS.events[0]) : "--"}`);
+      setText("event-controller-state", MS.online ? "ONLINE" : "OFFLINE");
+      const activeAlarms = alarmChannels().filter((channel) => channel.active).sort((a, b) => (a.level === "fault" ? 0 : 1) - (b.level === "fault" ? 0 : 1));
+      const activeList = el("event-active-alarm-list");
+      const activeCount = el("event-active-alarm-count");
+      if (activeCount) { activeCount.textContent = activeAlarms.length ? `${activeAlarms.length} ACTIVE` : "0 CLEAR"; activeCount.className = `page-status-chip ${activeAlarms.some((channel) => channel.level === "fault") ? "fault" : (activeAlarms.length ? "warn" : "ok")}`; }
+      if (activeList) activeList.innerHTML = activeAlarms.length ? activeAlarms.map((channel) => `<div class="event-active-alarm ${channel.level}"><b>${channel.level === "fault" ? "! FAULT" : "! WARNING"}</b><span>${esc(channel.code)} · ${esc(channel.label)}</span><small>${esc(channel.detail)}</small></div>`).join("") : "<div class=\"event-active-clear\">✓ NO ACTIVE ALARMS — event history below is read-only.</div>";
+      pageLog.innerHTML = entries.map((event) => `<li class="event-history-item ${eventSeverity(event)}" data-event-id="${esc(event.id)}"><div><b>${eventSeverity(event) === "fault" ? "! FAULT" : (eventSeverity(event) === "warn" ? "! WARNING" : "• INFO")}</b><time>${esc(eventTime(event))} ICT</time></div><span class="event-category">${esc(eventCategory(event))}</span><p>${esc(sanitizeEventText(event.message))}</p><span class="event-outcome">${esc(eventOutcome(event))}</span><button type="button" class="event-detail-button" data-event-detail="${esc(event.id)}">DETAIL</button></li>`).join("") || "<li class=\"event-history-empty\">NO EVENTS MATCH THE CURRENT FILTERS</li>";
+      renderEventDetail(MS.events.find((event) => event.id === MS.selectedEventId));
+    }
   }
 
   /* ── TOAST ──────────────────────────────────────────────────── */
@@ -344,6 +514,57 @@
       body.speed_mm_s = body.speed_mm_s * (MS.feedOverridePct / 100);
     }
     return body;
+  }
+
+  function slotSequenceEnabled() {
+    return Boolean(MS.slotSequenceMode);
+  }
+
+  function slotMotionEndpoint(code) {
+    return slotSequenceEnabled() ? `/api/slots/${encodeURIComponent(code)}/sequence` : `/api/slots/${encodeURIComponent(code)}/goto`;
+  }
+
+  function slotMotionLabel(code) {
+    return slotSequenceEnabled() ? `Run slot ${code} sequence` : `Go to slot ${code}`;
+  }
+
+  function updateSlotSequenceMode() {
+    const enabled = slotSequenceEnabled();
+    const toggle = el("slot-sequence-toggle");
+    if (toggle) toggle.checked = enabled;
+    setText("slot-sequence-state", enabled ? "ON" : "OFF");
+    setText("slot-sequence-description", enabled
+      ? "ON — X → Y → Z target, 3 s hold, then Home Z → Y → X."
+      : "OFF — GO TO uses the standard Controller motion.");
+    const summary = el("slot-sequence-summary");
+    if (summary) summary.classList.toggle("active", enabled);
+  }
+
+  function fillManualTarget(coordinates, message) {
+    AXES.forEach((axis) => {
+      const value = Number(coordinates[`${axis}_mm`]);
+      el(`move-${axis}`).value = Number.isFinite(value) ? value.toFixed(3) : "";
+    });
+    invalidateMotionWorkflow(`${message} — edit the target if required, then press VALIDATE.`);
+    updateFeedOverride();
+    toast(`${message}. No movement has started.`, "ok");
+  }
+
+  function loadCurrentManualTarget() {
+    fillManualTarget(
+      Object.fromEntries(AXES.map((axis) => [`${axis}_mm`, getAxis(axis).position_mm])),
+      "Current XYZ loaded"
+    );
+  }
+
+  function loadSelectedSlotManualTarget() {
+    const code = selectedSlotCode();
+    const slot = MS.slots[code] || {};
+    if (slotStatus(slot) !== "ready") {
+      toast(`Slot ${code || "--"} has no saved position.`, "error");
+      return;
+    }
+    fillManualTarget(slot, `Slot ${code} loaded`);
   }
 
   function buildJogPayload(axis, direction) {
@@ -567,6 +788,7 @@
       const programmedSpeed = Number(el("target-speed")?.value || 0);
       const effectiveSpeed = axisPlan?.speed_mm_s;
       setText(`axis-speed-${a}`, programmedSpeed > 0 ? `${fmtSpd(programmedSpeed)} / ${effectiveSpeed == null ? "--" : fmtSpd(effectiveSpeed)}` : "-- / --");
+      setText(`axis-realtime-${a}`, realtimeSpeedText(a));
       setText(`axis-drive-${a}`, axisPlan?.drive_status ? `${axisPlan.drive_status} / ${axisPlan.following_error_mm == null ? "NO DATA" : fmtPos(axisPlan.following_error_mm)}` : "NO DATA");
 
       // Limits
@@ -613,6 +835,7 @@
     const homing    = getOperation().homing || {};
     const container = el("home-sequence-display");
     if (!container) return;
+    setText("home-sequence-label", homeOrder.map((axis) => axis.toUpperCase()).join("→"));
 
     container.innerHTML = homeOrder.map((axis, idx) => {
       const phase = homing[axis] || "not_homed";
@@ -654,9 +877,8 @@
     const entries = Object.entries(slotsData)
       .sort(([a], [b]) => Number(a) - Number(b))
       .filter(([code, slot]) => {
-        const derived = slotStatus(slot);
-        const matchFilter = filter === "all" || filter === derived ||
-          (filter === "configured" && derived !== "empty");
+        const derived = slotManagerStatus(slot);
+        const matchFilter = filter === "all" || filter === derived;
         const matchSearch = !search ||
           String(code).includes(search) ||
           String(slot.product_name || "").toLowerCase().includes(search);
@@ -670,13 +892,14 @@
     const canEdit = MS.online && !MS.pending && !MS.payload?.busy;
 
     tbody.innerHTML = entries.map(([code, slot]) => {
-      const derived = slotStatus(slot);
+      const derived = slotManagerStatus(slot);
       const productName = slot.product_name || "EMPTY";
-      const canDispense = derived !== "empty" && canMove;
+      const validSlot = derived === "ready";
+      const canDispense = validSlot && canMove && slotAtCurrentPosition(slot);
       const draft = MS.slotDrafts[code] || slot;
       return `
-        <tr>
-          <td class="mono">${esc(code)}</td>
+        <tr class="${MS.selectedSlotCode === code ? "selected" : ""}">
+          <td class="mono"><button class="slot-select-btn" data-slot-select="${esc(code)}" aria-label="Select slot ${esc(code)}">${esc(code)}</button></td>
           <td><span class="slot-badge ${derived}">${derived.toUpperCase()}</span></td>
           ${AXES.map((axis) => `<td><div class="slot-coordinate-input"><input type="number" min="0" step="0.1" value="${esc(draft[`${axis}_mm`] ?? 0)}" data-slot-coordinate="${esc(code)}" data-slot-axis="${axis}" ${canEdit ? "" : "disabled"}><span>mm</span></div></td>`).join("")}
           <td>
@@ -684,7 +907,7 @@
               <button class="btn-slot-save" data-slot-update="${esc(code)}" ${canEdit ? "" : "disabled"}>SAVE</button>
               <button class="btn-secondary" data-slot-teach="${esc(code)}" ${canMove ? "" : "disabled"}>CURRENT</button>
               <button class="btn-slot-goto" data-slot-goto="${esc(code)}"
-                      ${canMove ? "" : "disabled"}
+                      ${validSlot && canMove ? "" : "disabled"}
                       aria-label="Go to position of slot ${esc(code)}">
                 GO TO
               </button>
@@ -698,6 +921,9 @@
         </tr>
       `;
     }).join("");
+
+    renderSlotManagerSummary();
+    renderSlotManagerDetail();
 
     $$('[data-slot-coordinate]').forEach((input) => {
       input.addEventListener("input", () => {
@@ -723,17 +949,34 @@
       });
     });
 
+    $$('[data-slot-select]').forEach((btn) => {
+      btn.addEventListener("click", () => selectSlotFromManager(btn.dataset.slotSelect));
+    });
+
     // Bind slot action buttons
     $$("[data-slot-goto]").forEach((btn) => {
       btn.addEventListener("click", () => {
         const code = btn.dataset.slotGoto;
+        const slot = MS.slots[code] || {};
+        const confirmation = [
+          `${slotSequenceEnabled() ? "Run sequence" : "Move gantry"} to Slot ${code}?`,
+          `Target: X ${fmtPos(slot.x_mm)} · Y ${fmtPos(slot.y_mm)} · Z ${fmtPos(slot.z_mm)} mm`,
+          `Speed: ${fmtSpd(targetSpeedPayload().speed_mm_s)} mm/s`,
+          slotSequenceEnabled()
+            ? "Sequence: X → Y → Z → hold 3 s → Home Z → Home Y → Home X."
+            : "Confirm the travel area is clear before continuing.",
+          "Confirm the travel area is clear before continuing.",
+        ].join("\n");
+        if (!window.confirm(confirmation)) return;
+        selectSlotFromManager(code);
         MS.visualTargetSlot = code;
-        command(`Go to slot ${code}`, `/api/slots/${code}/goto`, targetSpeedPayload(), { requireHome: true });
+        command(slotMotionLabel(code), slotMotionEndpoint(code), targetSpeedPayload(), { requireHome: true, timeoutMs: 600000 });
       });
     });
     $$("[data-slot-dispense]").forEach((btn) => {
       btn.addEventListener("click", () => {
         const code = btn.dataset.slotDispense;
+        selectSlotFromManager(code);
         MS.visualTargetSlot = code;
         command(`Dispense slot ${code}`, "/api/start",
           { slot: code, ...targetSpeedPayload() }, { requireHome: true });
@@ -748,6 +991,59 @@
         if (result) delete MS.slotDrafts[code];
       });
     });
+  }
+
+  function slotManagerEntries() {
+    return Array.from({ length: 30 }, (_, index) => {
+      const code = String(index + 1);
+      return [code, MS.slots[code] || { x_mm: 0, y_mm: 0, z_mm: 0, product_name: "" }];
+    });
+  }
+
+  function renderSlotManagerSummary() {
+    const counts = { ready: 0, empty: 0, invalid: 0 };
+    slotManagerEntries().forEach(([, slot]) => {
+      const state = slotManagerStatus(slot);
+      if (state in counts) counts[state] += 1;
+    });
+    setText("slot-summary-total", 30);
+    setText("slot-summary-ready", counts.ready);
+    setText("slot-summary-empty", counts.empty);
+    setText("slot-summary-invalid", counts.invalid);
+    setText("slot-summary-selected", MS.selectedSlotCode ? `SLOT ${String(MS.selectedSlotCode).padStart(2, "0")}` : "--");
+  }
+
+  function renderSlotManagerDetail() {
+    const code = MS.selectedSlotCode;
+    const slot = code ? (MS.slots[code] || {}) : null;
+    const detailStatus = el("slot-detail-status");
+    if (!slot) {
+      setText("slot-detail-title", "SELECT A SLOT");
+      setText("slot-detail-saved", "--");
+      setText("slot-detail-current", "--");
+      setText("slot-detail-delta", "--");
+      setText("slot-detail-homing", "--");
+      setText("slot-detail-estimate", "--");
+      setText("slot-detail-readiness", "SELECT A SLOT");
+      detailStatus.className = "slot-badge empty";
+      setText("slot-detail-status", "NO SELECTION");
+      return;
+    }
+    const state = slotManagerStatus(slot);
+    const current = Object.fromEntries(AXES.map((axis) => [axis, Number(getAxis(axis).position_mm)]));
+    const target = Object.fromEntries(AXES.map((axis) => [axis, Number(slot[`${axis}_mm`])])) ;
+    const distance = Math.sqrt(AXES.reduce((sum, axis) => sum + (Number.isFinite(target[axis]) && Number.isFinite(current[axis]) ? (target[axis] - current[axis]) ** 2 : 0), 0));
+    const speed = Number(targetSpeedPayload().speed_mm_s);
+    const readiness = motionInhibitReason(true) || (state !== "ready" ? `Slot ${state.replace("-", " ")}` : "READY TO MOVE");
+    setText("slot-detail-title", `SLOT ${String(code).padStart(2, "0")}`);
+    detailStatus.className = `slot-badge ${state}`;
+    setText("slot-detail-status", state.toUpperCase());
+    setText("slot-detail-saved", `X ${fmtPos(target.x)} · Y ${fmtPos(target.y)} · Z ${fmtPos(target.z)} mm`);
+    setText("slot-detail-current", `X ${fmtPos(current.x)} · Y ${fmtPos(current.y)} · Z ${fmtPos(current.z)} mm`);
+    setText("slot-detail-delta", `X ${fmtDelta(target.x - current.x).text} · Y ${fmtDelta(target.y - current.y).text} · Z ${fmtDelta(target.z - current.z).text} mm`);
+    setText("slot-detail-homing", allAxesHomed() ? "ALL AXES HOMED" : "HOME REQUIRED");
+    setText("slot-detail-estimate", Number.isFinite(distance) && speed > 0 ? `${fmtPos(distance)} mm / ~${fmtTime(distance / speed)} s` : "NO DATA");
+    setText("slot-detail-readiness", readiness);
   }
 
   function slotPayloadFromValues(code, values) {
@@ -767,6 +1063,27 @@
   /* ── SELECTED SLOT DIRECT EDITOR ────────────────────────────── */
   function selectedSlotCode() {
     return el("selected-slot-code")?.value || MS.selectedSlotCode;
+  }
+
+  function renderSelectedSlotSequenceProcess() {
+    const operation = getOperation();
+    const command = String(MS.payload?.active_command || "");
+    const phase = String(operation.phase || "").toUpperCase();
+    const message = String(operation.message || "").toLowerCase();
+    const livePhases = new Set(["MOVE_X", "MOVE_Y", "MOVE_Z", "HOLD_AT_TARGET", "HOME_Z", "HOME_Y", "HOME_X"]);
+    const isSequence = command.startsWith("slot_sequence_") || livePhases.has(phase) || message.includes("slot sequence");
+    const failed = isSequence && ["FAILED", "STOPPED"].includes(phase);
+    const completed = isSequence && !failed && (phase === "COMPLETED" || message.includes("completed slot sequence"));
+    const slotMatch = command.match(/^slot_sequence_(.+)$/i);
+    const slot = slotMatch?.[1] || MS.visualTargetSlot || MS.selectedSlotCode;
+    const phaseLabel = failed ? "FAILED" : completed ? "COMPLETED" : isSequence ? (phase || "STARTING") : "IDLE";
+    const text = isSequence && slot ? `SEQUENCE: ${phaseLabel} · SLOT ${String(slot).padStart(2, "0")}` : `SEQUENCE: ${phaseLabel}`;
+    ["motion-selected-sequence", "visual-selected-sequence", "dashboard-selected-sequence"].forEach((id) => {
+      const node = el(id);
+      if (!node) return;
+      node.textContent = text;
+      node.className = `slot-sequence-mini ${failed ? "fault" : (completed ? "complete" : (isSequence ? "active" : ""))}`;
+    });
   }
 
   function loadSelectedSlotEditor(force = false) {
@@ -845,7 +1162,7 @@
     if (!node) return;
     const active = alarmChannels().filter((channel) => channel.active && channel.level === "fault");
     if (!active.length) {
-      node.className = "alarm-summary";
+      node.className = "alarm-summary clear";
       node.innerHTML = `<div class="alarm-summary-title">NO ACTIVE ALARMS</div><div class="alarm-detail">Machine operation normal.</div>`;
       return;
     }
@@ -941,7 +1258,19 @@
       sbAlarms.textContent = String(activeAlarmCount());
     }
     const navAlarmCount = el("nav-alarm-count");
-    if (navAlarmCount) navAlarmCount.textContent = String(activeAlarmCount());
+    if (navAlarmCount) {
+      const channels = alarmChannels();
+      const faultCount = channels.filter((channel) => channel.active && channel.level === "fault").length;
+      const warningCount = channels.filter((channel) => channel.active && channel.level === "warn").length;
+      const severity = faultCount > 0 ? "fault" : (warningCount > 0 ? "warn" : "clear");
+      navAlarmCount.textContent = String(faultCount + warningCount);
+      navAlarmCount.className = `nav-alarm-badge ${severity}`;
+      const navAlarms = el("nav-alarms");
+      if (navAlarms) {
+        navAlarms.classList.remove("alarm-fault", "alarm-warn", "alarm-clear");
+        navAlarms.classList.add(`alarm-${severity}`);
+      }
+    }
   }
 
   /* ── RENDER: HEADER ─────────────────────────────────────────── */
@@ -1065,13 +1394,12 @@
     const selectedSlot = MS.slots[selectedCode] || {};
     const canUseSlot = motionAllowed(true);
     const selectedSlotReady = slotStatus(selectedSlot) === "ready";
-    const armedSlotMatches = MS.validation.stage === "armed" && AXES.every((axis) => {
-      const plannedTarget = MS.validation.plan?.axes?.[axis]?.target_mm;
-      return plannedTarget != null && Math.abs(Number(plannedTarget) - Number(selectedSlot[`${axis}_mm`])) < 0.001;
-    });
+    updateSlotSequenceMode();
     el("selected-slot-load-target").disabled = !MS.online || !selectedSlotReady;
     el("selected-slot-validate").disabled = !canUseSlot || !selectedSlotReady;
-    el("selected-slot-goto").disabled = !canUseSlot || !selectedSlotReady || !armedSlotMatches;
+    el("selected-slot-goto").disabled = !canUseSlot || !selectedSlotReady;
+    el("target-load-current").disabled = !MS.online;
+    el("target-load-selected-slot").disabled = !MS.online || !selectedSlotReady;
     if (document.getElementById("visual-load-preview")) updateVisualButtons();
 
     // Home buttons
@@ -1115,7 +1443,7 @@
   /* ── MASTER RENDER ──────────────────────────────────────────── */
   const VALID_VIEWS = new Set([
     "dashboard", "motion", "visualization", "diagnostics", "configuration",
-    "motor-test", "mqtt", "slots", "alarms", "events", "flow",
+    "motor-test", "mqtt", "slots", "alarms", "events", "flow", "sequence-monitor",
   ]);
 
   function switchWorkspace(view, updateHash = true) {
@@ -1484,7 +1812,7 @@
       const planned = MS.visualPreview?.axes?.[axis];
       const target = planned?.target_mm ?? (selectedValid ? Number(selectedSlot[`${axis}_mm`]) : NaN);
       const delta = Number.isFinite(actual) && Number.isFinite(target) ? target - actual : NaN;
-      return `<article class="visual-axis-row ${axisData.is_homed ? "ok" : "warn"}"><b>${axis.toUpperCase()}</b><div><span>Actual</span><strong>${Number.isFinite(actual) ? fmtPos(actual) : "UNKNOWN"}</strong></div><div><span>Target / Delta</span><strong>${Number.isFinite(target) ? `${fmtPos(target)} / ${fmtDelta(delta).text}` : "NO DATA"}</strong></div><div><span>Pulses</span><strong>${dataState.live ? fmtSteps(axisData.position_steps) : "UNKNOWN"}</strong></div><div><span>Speed Cmd / Eff</span><strong>${planned ? `${fmtSpd(Number(el("target-speed")?.value || 0))} / ${fmtSpd(planned.speed_mm_s)}` : "NO DATA"}</strong></div><div><span>Home / Limits</span><strong>${axisData.is_homed ? "HOMED" : "NOT HOMED"} · ${axisData.head_limit || axisData.tail_limit ? "ACTIVE" : "CLEAR"}</strong></div><div><span>Drive / Error</span><strong>NO DATA</strong></div></article>`;
+      return `<article class="visual-axis-row ${axisData.is_homed ? "ok" : "warn"}"><b>${axis.toUpperCase()}</b><div><span>Actual</span><strong>${Number.isFinite(actual) ? fmtPos(actual) : "UNKNOWN"}</strong></div><div><span>Target / Delta</span><strong>${Number.isFinite(target) ? `${fmtPos(target)} / ${fmtDelta(delta).text}` : "NO DATA"}</strong></div><div><span>Pulses</span><strong>${dataState.live ? fmtSteps(axisData.position_steps) : "UNKNOWN"}</strong></div><div><span>Realtime Speed (CALC)</span><strong>${realtimeSpeedText(axis)}</strong></div><div><span>Home / Limits</span><strong>${axisData.is_homed ? "HOMED" : "NOT HOMED"} · ${axisData.head_limit || axisData.tail_limit ? "ACTIVE" : "CLEAR"}</strong></div><div><span>Drive / Error</span><strong>NO DATA</strong></div></article>`;
     }).join("");
 
     renderVisualSlotEditorV32();
@@ -1680,8 +2008,11 @@
     const validSlot = visualSlotIsValid(slot) && slotStatus(slot) === "ready";
     const idle = MS.online && !MS.pending && !MS.payload?.busy;
     el("visual-load-preview").disabled = !validSlot || !idle;
+    el("visual-home-all").disabled = !canHomeAxis();
     el("visual-send-motion").disabled = !validSlot;
-    el("visual-slot-goto").disabled = !validSlot || !idle || Boolean(motionInhibitReason(true));
+    const gotoButton = el("visual-slot-goto");
+    gotoButton.disabled = !validSlot || !idle || MS.visualGotoPending || Boolean(motionInhibitReason(true));
+    gotoButton.textContent = MS.visualGotoPending || MS.payload?.busy ? "MOVING..." : "GOTO SLOT";
     el("visual-edit-enable").disabled = !idle || MS.visualEditMode;
     el("visual-slot-load-current").disabled = !MS.visualEditMode || !idle || !allAxesHomed();
     el("visual-slot-save").disabled = !MS.visualEditMode || !idle || !MS.visualEditorDirty;
@@ -1741,35 +2072,21 @@
       z_mm: Number(slot.z_mm),
       speed_mm_s: Number(el("target-speed")?.value || 10) * (MS.feedOverridePct / 100),
       timeout_s: Number(el("move-timeout")?.value || 30),
-      acceleration_mm_s2: Number(el("move-acceleration")?.value || 80),
-      deceleration_mm_s2: Number(el("move-deceleration")?.value || 80),
     };
 
+    MS.visualGotoPending = true;
+    updateVisualButtons();
     try {
       const preview = await apiCall("/api/motion/preview", "POST", payload);
       MS.visualPreview = preview.plan;
       renderVisualizationV32();
-      const duration = Number(preview.plan?.duration_s);
-      const confirmation = [
-        `Move machine to Slot ${code}?`,
-        `X ${fmtPos(slot.x_mm)} mm · Y ${fmtPos(slot.y_mm)} mm · Z ${fmtPos(slot.z_mm)} mm`,
-        `Speed ${fmt(payload.speed_mm_s, 1)} mm/s${Number.isFinite(duration) ? ` · Estimated ${fmtTime(duration)} s` : ""}`,
-        "Confirm the travel area is clear before continuing.",
-      ].join("\n");
-      if (!window.confirm(confirmation)) {
-        toast(`GOTO Slot ${code} cancelled. Preview remains available.`, "");
-        log(`Visualization GOTO Slot ${code} cancelled after preview`, "info", "MOTION");
-        return;
-      }
+      toast(`Slot ${code} validated — movement starting.`, "ok");
 
-      const armed = await apiCall("/api/motion/arm", "POST", payload);
-      const requestId = globalThis.crypto?.randomUUID?.() || `visual-slot-${code}-${Date.now()}`;
-      const result = await command(`GOTO Slot ${code}`, "/api/motion/execute", {
-        arm_token: armed.arm_token,
-        request_id: requestId,
+      const result = await command(slotMotionLabel(code), slotMotionEndpoint(code), {
+        speed_mm_s: payload.speed_mm_s,
       }, {
         requireHome: true,
-        timeoutMs: Math.max(15000, (Number(payload.timeout_s) + 10) * 1000),
+        timeoutMs: 600000,
       });
       if (result) {
         MS.visualPreview = null;
@@ -1780,6 +2097,7 @@
       toast(message, "error");
       log(`Visualization GOTO Slot ${code} rejected: ${message}`, "error", "INTERLOCK");
     } finally {
+      MS.visualGotoPending = false;
       renderVisualizationV32();
     }
   }
@@ -1925,7 +2243,7 @@
         <div><span>Pulse</span><strong>${MS.online ? fmtSteps(data.position_steps) : "---"}</strong></div>
         <div><span>Direction</span><strong>${esc(direction)}</strong></div>
         <div><span>Limits</span><strong>${esc(limitState)}</strong></div>
-        <div><span>Cmd / Effective</span><strong>${fmtSpd(MS.selectedJogSpeed)} / ${fmtSpd(MS.selectedJogSpeed * MS.feedOverridePct / 100)}<small> mm/s</small></strong></div>
+        <div class="dashboard-axis-speed"><span>Cmd / Eff.</span><strong>${fmtSpd(MS.selectedJogSpeed)} / ${fmtSpd(MS.selectedJogSpeed * MS.feedOverridePct / 100)}<small> mm/s</small></strong></div>
       </article>`;
     }).join("");
 
@@ -2133,6 +2451,7 @@
     const data = MS.mqtt || {};
     const state = String(data.state || "UNKNOWN").toUpperCase();
     const enabled = Boolean(data.enabled);
+    const runtimeEnabled = Boolean(data.runtime_enabled);
     const connected = Boolean(data.connected);
     const stateClass = connected ? "ok" : (state === "CONNECTING" ? "warn" : (enabled ? "fault" : "disabled"));
     const broker = data.broker || {};
@@ -2159,6 +2478,11 @@
     setText("mqtt-session-count", `${Number(data.connect_count || 0)} / ${Number(data.disconnect_count || 0)}`);
     setText("mqtt-last-error", data.last_error || "NO ERROR");
     setText("mqtt-telemetry-time", `Telemetry: ${fmtTimestamp(data.timestamp)}`);
+
+    const connectButton = document.getElementById("mqtt-connect");
+    const disconnectButton = document.getElementById("mqtt-disconnect");
+    if (connectButton) connectButton.disabled = MS.mqttControlPending || !enabled || !data.client_available || runtimeEnabled;
+    if (disconnectButton) disconnectButton.disabled = MS.mqttControlPending || !runtimeEnabled;
 
     const linkCard = document.getElementById("mqtt-card-link");
     if (linkCard) linkCard.className = `mqtt-summary-card ${stateClass}`;
@@ -2195,6 +2519,66 @@
     }
   }
 
+  function renderSequenceMonitor() {
+    const operation = getOperation();
+    const activeCommand = String(MS.payload?.active_command || "");
+    const phase = String(operation.phase || "").toUpperCase();
+    const message = String(operation.message || "");
+    const messageLower = message.toLowerCase();
+    const phaseOrder = ["VALIDATE_SLOT", "MOVE_X", "MOVE_Y", "MOVE_Z", "VERIFY_TARGET", "HOLD_AT_TARGET", "HOME_Z", "HOME_Y", "HOME_X", "VERIFY_HOME", "COMPLETED"];
+    const phaseLabels = {
+      VALIDATE_SLOT: ["Validate Slot", "Read configured target and readiness"], MOVE_X: ["Move X", "Move X axis to saved target"],
+      MOVE_Y: ["Move Y", "Move Y axis to saved target"], MOVE_Z: ["Move Z", "Move Z axis to saved target"],
+      VERIFY_TARGET: ["Verify Target", "Confirm XYZ is within tolerance"], HOLD_AT_TARGET: ["Hold at Target", "Hold 3 s; poll E-Stop and stop"],
+      HOME_Z: ["Home Z", "Return vertical axis to reference"], HOME_Y: ["Home Y", "Return row axis to reference"],
+      HOME_X: ["Home X", "Return travel axis to reference"], VERIFY_HOME: ["Verify Home", "Confirm all axes homed at reference"],
+      COMPLETED: ["Completed", "Publish final result and verification"],
+    };
+    const phaseIndex = phaseOrder.indexOf(phase);
+    const liveSequencePhase = phaseOrder.slice(0, -1).includes(phase);
+    const sequenceContext = activeCommand.startsWith("slot_sequence_") || liveSequencePhase || messageLower.includes("slot sequence");
+    const sequenceFailed = sequenceContext && ["FAILED", "STOPPED"].includes(phase);
+    const sequenceCompleted = sequenceContext && !sequenceFailed && (phase === "COMPLETED" || messageLower.includes("completed slot sequence"));
+    const slotMatch = activeCommand.match(/^slot_sequence_(.+)$/i);
+    const slotCode = slotMatch?.[1] || (sequenceContext ? (MS.visualTargetSlot || MS.selectedSlotCode || "NO DATA") : "NO DATA");
+    const slot = MS.slots?.[slotCode] || {};
+    const activeIndex = phaseIndex;
+    const command = MS.payload?.motion_command || {};
+
+    const stateChip = el("sequence-monitor-state");
+    if (stateChip) {
+      const state = sequenceFailed ? "FAILED" : sequenceCompleted ? "COMPLETED" : sequenceContext ? "EXECUTING" : "NOT RUNNING";
+      stateChip.textContent = state;
+      stateChip.className = `page-status-chip ${sequenceFailed ? "fault" : (sequenceCompleted ? "ok" : "")}`;
+    }
+    setText("sequence-monitor-command", sequenceContext ? (activeCommand || "SLOT SEQUENCE") : "NO ACTIVE SEQUENCE");
+    setText("sequence-monitor-phase", sequenceContext ? (phase || "NO DATA") : "WAITING");
+    setText("sequence-monitor-axis", sequenceContext ? (operation.active_axis ? String(operation.active_axis).toUpperCase() : "--") : "--");
+    setText("sequence-monitor-slot", slotCode || "NO DATA");
+    setText("sequence-monitor-elapsed", sequenceContext && Number.isFinite(Number(command.elapsed_s)) ? `${fmtTime(command.elapsed_s)} s` : "--");
+    setText("sequence-monitor-message", sequenceContext ? (message || "Controller is updating sequence state") : "Waiting for a Slot Sequence");
+    setText("sequence-monitor-reason", sequenceFailed ? (MS.payload?.last_error || message || "Controller stopped the sequence before it could continue.") : sequenceCompleted ? "Controller reports target and home workflow complete. Review final status and verification before the next command." : sequenceContext ? "Live phase is reported by the Controller. This page is read-only and does not create a motion command." : "No Slot Sequence is active. Start a sequence from Slot Manager or receive a valid MQTT release command; this monitor will then show Controller-reported progress.");
+
+    const steps = el("sequence-step-list");
+    if (steps) steps.innerHTML = phaseOrder.map((step, index) => {
+      let state = "pending";
+      if (sequenceFailed && (index === activeIndex || activeIndex < 0 && index === 0)) state = "failed";
+      else if (sequenceCompleted || (sequenceContext && activeIndex > index)) state = "complete";
+      else if (sequenceContext && activeIndex === index) state = "active";
+      const [label, detail] = phaseLabels[step];
+      return `<li class="sequence-step ${state}"><span>${String(index + 1).padStart(2, "0")}</span><strong>${esc(label)}</strong><small>${esc(detail)}</small></li>`;
+    }).join("");
+
+    const position = el("sequence-monitor-position");
+    if (position) position.innerHTML = AXES.map((axis) => {
+      const current = Number(getAxis(axis).position_mm);
+      const target = Number(slot[`${axis}_mm`]);
+      const hasTarget = sequenceContext && Number.isFinite(target);
+      const delta = hasTarget && Number.isFinite(current) ? fmtDelta(target - current).text : "---";
+      return `<div><span>${axis.toUpperCase()} AXIS</span><strong>${fmtPos(current)} / ${hasTarget ? fmtPos(target) : "---"} mm</strong><small>Delta to target: ${esc(delta)} mm</small></div>`;
+    }).join("");
+  }
+
   function renderWorkspacePages() {
     const status = getStatus();
     const operation = getOperation();
@@ -2206,6 +2590,7 @@
     renderDashboard();
     renderSlotTable();
     loadSelectedSlotEditor();
+    renderSelectedSlotSequenceProcess();
 
     const dashboardAxes = document.getElementById("legacy-dashboard-axis-grid");
     if (dashboardAxes) dashboardAxes.innerHTML = AXES.map((axis) => {
@@ -2238,9 +2623,12 @@
     renderConfigurationEditor();
     renderMotorTest();
     renderMqttMonitor();
+    renderSequenceMonitor();
 
     const alarmList = document.getElementById("alarm-page-list");
-    if (alarmList) alarmList.innerHTML = alarmChannels().map((channel) => `
+    const alarmPriority = (channel) => channel.active ? (channel.level === "fault" ? 0 : 1) : 2;
+    const orderedAlarms = alarmChannels().sort((left, right) => alarmPriority(left) - alarmPriority(right));
+    if (alarmList) alarmList.innerHTML = orderedAlarms.map((channel) => `
       <article class="alarm-page-item ${channel.active ? channel.level : "clear"}">
         <i class="alarm-point-light ${channel.active ? channel.level : "clear"}" aria-hidden="true"></i>
         <div><span>${esc(channel.code)}</span><strong>${esc(channel.label)}</strong><small>${esc(channel.detail)}</small></div>
@@ -2273,7 +2661,30 @@
     setFlow("flow-safe-z", commandName.startsWith("goto_slot") || commandName === "dispense" ? (currentZ >= safeZ ? "complete" : "active") : "pending");
     setFlow("flow-motion", MS.payload?.busy && (commandName.startsWith("goto_slot") || commandName === "absolute_move" || commandName === "dispense") ? "active" : (ready && selectedReady ? "complete" : "pending"));
     setFlow("flow-z-target", MS.payload?.busy && (commandName.startsWith("goto_slot") || commandName === "dispense") ? "active" : "pending");
+    const verifyState = selectedReady && safetyClear && allAxesHomed() ? (MS.payload?.busy ? "active" : "complete") : "pending";
+    setFlow("flow-verify", verifyState);
     setFlow("flow-dispense", commandName === "dispense" ? "active" : (operationMessage.includes("completed dispense") ? "complete" : "pending"));
+    setFlow("flow-complete", operationMessage.includes("completed") ? "complete" : "pending");
+
+    const currentXYZ = AXES.map((axis) => `${axis.toUpperCase()} ${fmtPos(getAxis(axis).position_mm)}`).join(" · ");
+    const targetXYZ = selectedReady ? AXES.map((axis) => `${axis.toUpperCase()} ${fmtPos(selectedSlot[`${axis}_mm`])}`).join(" · ") : "NO DATA";
+    setText("flow-machine-command", `${MS.payload?.machine_state || "NO DATA"} / ${commandName || "IDLE"}`);
+    setText("flow-slot-phase", `${MS.visualTargetSlot || MS.selectedSlotCode || "NO SLOT"} / ${operation.phase || "NO DATA"}`);
+    setText("flow-current-xyz", currentXYZ); setText("flow-target-xyz", targetXYZ);
+    setText("flow-homing-limits", AXES.map((axis) => `${axis.toUpperCase()}:${getAxis(axis).is_homed ? "H" : "!"}${getAxis(axis).head_limit || getAxis(axis).tail_limit ? "/LIMIT" : ""}`).join(" "));
+    const blocked = [];
+    if (status.estop) blocked.push(["E-STOP", "Release physical E-Stop and reset alarms."]);
+    if (alarmCount) blocked.push(["ACTIVE ALARM", "Clear the active fault before motion."]);
+    if (!MS.online) blocked.push(["CONTROLLER OFFLINE", "Restore the Controller connection."]);
+    if (MS.payload?.safety?.stop_requested) blocked.push(["SOFTWARE STOP", "Reset alarms to clear the stop latch."]);
+    AXES.filter((axis) => !getAxis(axis).is_homed).forEach((axis) => blocked.push([`${axis.toUpperCase()} NOT HOMED`, `Home ${axis.toUpperCase()} before absolute motion.`]));
+    if (!selectedReady) blocked.push(["INVALID SLOT", "Select a slot with valid saved XYZ."]);
+    if (MS.payload?.busy) blocked.push(["MACHINE BUSY", "Wait for the current operation to finish."]);
+    const interlockList = el("flow-interlock-list"); const interlockState = el("flow-interlock-state");
+    if (interlockList) interlockList.innerHTML = blocked.length ? blocked.map(([title, reason]) => `<div class="flow-interlock-item"><b>${esc(title)}</b><span>${esc(reason)}</span></div>`).join("") : "<div class=\"flow-interlock-clear\">✓ Machine is clear for the next permitted operation.</div>";
+    if (interlockState) { interlockState.textContent = blocked.length ? `${blocked.length} BLOCKED` : "CLEAR"; interlockState.className = `page-status-chip ${blocked.length ? "fault" : "ok"}`; }
+    const history = el("flow-operation-history");
+    if (history) history.innerHTML = MS.events.filter((event) => ["MOTION", "COMMAND", "INTERLOCK", "MQTT"].includes(event.subsystem)).slice(0, 10).map((event) => `<li><time>${esc(eventTime(event))}</time><b>${esc(eventOutcome(event))}</b><span>${esc(sanitizeEventText(event.message))}</span></li>`).join("") || "<li>NO OPERATION HISTORY</li>";
   }
 
   function updateAllUI() {
@@ -2288,6 +2699,7 @@
 
   function render(payload) {
     trackDashboardOperation(payload);
+    updateAxisVelocity(payload);
     MS.payload = payload;
     MS.slots   = payload.slots || {};
     if (MS.validation.stage === "armed" && !payload.motion_command?.armed && !payload.busy && !MS.pending) {
@@ -2347,6 +2759,24 @@
     }
   }
 
+  async function controlMqtt(action) {
+    if (MS.mqttControlPending) return;
+    MS.mqttControlPending = true;
+    renderMqttMonitor();
+    try {
+      MS.mqtt = await apiCall("/api/mqtt/control", "POST", { action }, 10000);
+      renderMqttMonitor();
+      toast(`MQTT ${action === "connect" ? "connection started" : "disconnected"}.`, action === "connect" ? "ok" : "");
+      log(`MQTT ${action} requested from HMI`, "info", "MQTT");
+    } catch (err) {
+      toast(`MQTT CONTROL FAILED — ${err.message}`, "error");
+      log(`MQTT ${action} failed: ${err.message}`, "error", "MQTT");
+    } finally {
+      MS.mqttControlPending = false;
+      await refreshMqtt();
+    }
+  }
+
   async function loadConfig() {
     try {
       MS.config = await apiCall("/api/config");
@@ -2393,6 +2823,44 @@
       button.addEventListener("click", () => switchWorkspace(button.dataset.viewTarget));
     });
     window.addEventListener("hashchange", () => switchWorkspace(location.hash.slice(1), false));
+
+    $$(".flow-node").forEach((node) => node.addEventListener("click", () => {
+      const detail = el("flow-step-detail");
+      if (!detail) return;
+      const state = [...node.classList].find((name) => ["complete", "active", "blocked", "pending"].includes(name)) || "pending";
+      detail.innerHTML = `<strong>${esc(node.querySelector("strong")?.textContent || "Step")}</strong><p>State: ${esc(state.toUpperCase())}</p><p>Preconditions and live state are evaluated by Controller safety interlocks. Current command: ${esc(MS.payload?.active_command || "NONE")}. No machine command is sent from this panel.</p>`;
+    }));
+
+    /* --- Event History filters and read-only detail --- */
+    const eventFilterInputs = {
+      search: el("event-search"), severity: el("event-severity-filter"),
+      category: el("event-category-filter"), outcome: el("event-outcome-filter"),
+    };
+    Object.entries(eventFilterInputs).forEach(([key, input]) => input?.addEventListener("input", () => {
+      MS.eventFilters[key] = input.value;
+      renderEventLog();
+    }));
+    el("event-clear-filters")?.addEventListener("click", () => {
+      MS.eventFilters = { search: "", severity: "all", category: "all", outcome: "all" };
+      Object.entries(eventFilterInputs).forEach(([key, input]) => { if (input) input.value = MS.eventFilters[key]; });
+      $$("[data-event-quick]").forEach((button) => button.classList.toggle("active", button.dataset.eventQuick === "all"));
+      renderEventLog();
+    });
+    $$("[data-event-quick]").forEach((button) => button.addEventListener("click", () => {
+      const quick = button.dataset.eventQuick;
+      MS.eventFilters = { search: "", severity: "all", category: "all", outcome: "all" };
+      if (["fault", "warn"].includes(quick)) MS.eventFilters.severity = quick;
+      else if (quick !== "all") MS.eventFilters.category = quick;
+      Object.entries(eventFilterInputs).forEach(([key, input]) => { if (input) input.value = MS.eventFilters[key]; });
+      $$("[data-event-quick]").forEach((node) => node.classList.toggle("active", node === button));
+      renderEventLog();
+    }));
+    el("event-log-page")?.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-event-detail]");
+      if (!button) return;
+      MS.selectedEventId = button.dataset.eventDetail;
+      renderEventLog();
+    });
 
     /* --- Emergency Stop --- */
     el("stop-button").addEventListener("click", () => {
@@ -2473,16 +2941,18 @@
 
     /* --- Homing --- */
     el("home-all").addEventListener("click", () => {
-      command("Home all axes", "/api/home/all");
+      command("Home all axes", "/api/home/all", undefined, { timeoutMs: 300000 });
     });
     $$(".home-axis").forEach((btn) => {
       btn.addEventListener("click", () => {
         const axis = btn.dataset.axis;
-        command(`Home axis ${axis.toUpperCase()}`, `/api/home/${axis}`);
+        command(`Home axis ${axis.toUpperCase()}`, `/api/home/${axis}`, undefined, { timeoutMs: 300000 });
       });
     });
 
     /* --- Target positioning workflow --- */
+    el("target-load-current").addEventListener("click", loadCurrentManualTarget);
+    el("target-load-selected-slot").addEventListener("click", loadSelectedSlotManualTarget);
     el("validate-move").addEventListener("click", () => validateMove(true));
 
     el("plan-move").addEventListener("click", () => previewMove(true));
@@ -2527,9 +2997,21 @@
       const plan = await validateMove(true);
       if (plan) await previewMove(true);
     });
+    el("slot-sequence-toggle").addEventListener("change", (event) => {
+      MS.slotSequenceMode = Boolean(event.target.checked);
+      updateSlotSequenceMode();
+      toast(MS.slotSequenceMode
+        ? "Sequence Mode ON — slot commands will return all axes home."
+        : "Sequence Mode OFF — standard Go To Slot restored.", "ok");
+    });
     el("selected-slot-goto").addEventListener("click", () => {
       const code = selectedSlotCode();
-      if (code) executeArmedMotion(`Go to validated slot ${code}`);
+      if (code) {
+        command(slotMotionLabel(code), slotMotionEndpoint(code), targetSpeedPayload(), {
+          requireHome: true,
+          timeoutMs: 600000,
+        });
+      }
     });
 
     /* --- Visualization slot click selects only; GOTO requires an explicit button press. --- */
@@ -2566,6 +3048,9 @@
     el("visual-slot-load-current").addEventListener("click", loadCurrentIntoVisualSlot);
     el("visual-slot-save").addEventListener("click", saveVisualSlotV32);
     el("visual-command-load").addEventListener("click", loadVisualSlotTarget);
+    el("visual-home-all").addEventListener("click", () => {
+      command("Home all axes from visualization", "/api/home/all", undefined, { timeoutMs: 300000 });
+    });
     el("visual-slot-goto").addEventListener("click", gotoVisualSlot);
     el("visual-load-preview").addEventListener("click", previewVisualSlot);
     el("visual-send-motion").addEventListener("click", sendVisualTargetToMotion);
@@ -2648,6 +3133,9 @@
       MS.dashboardSelectedSlot = slotButton.dataset.dashboardSlot;
       renderDashboard();
     });
+
+    el("mqtt-connect").addEventListener("click", () => controlMqtt("connect"));
+    el("mqtt-disconnect").addEventListener("click", () => controlMqtt("disconnect"));
 
     /* --- Event log filter --- */
     $$(".evt-filter-btn").forEach((btn) => {

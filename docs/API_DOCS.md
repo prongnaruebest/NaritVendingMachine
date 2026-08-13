@@ -5,6 +5,58 @@
 
 ---
 
+## API Contract ปัจจุบัน (Production Reference — 2026-07)
+
+> หัวข้อนี้เป็น contract ที่อ้างอิงกับระบบ Controller/Web แบบ 2-process ที่ deploy อยู่จริง และใช้แทน endpoint/topic รุ่นเก่าที่มีชื่อหรือ payload ต่างจากรายการนี้
+
+### ขอบเขตและหลักความปลอดภัย
+
+- Web API เป็น HTTP facade เท่านั้น: ทุก motion command ถูกส่งผ่าน Unix IPC ไปยัง Controller
+- Controller เป็นผู้ตัดสินใจ final safety; client ห้ามถือว่าการ validate ฝั่ง UI เพียงอย่างเดียวอนุญาตให้ motor เคลื่อน
+- Controller ไม่พร้อม: endpoint ที่ต้องสั่งงานตอบ `503 Service Unavailable`; ห้าม retry แบบไม่จำกัด
+- Request/response ต้องเป็น JSON; credentials, password, token และ scanned token ต้องไม่อยู่ใน log หรือ response
+- `GET /health/live` ตรวจว่า Web ตอบได้, `GET /health/ready` แยก service-ready ออกจาก machine-ready
+
+### Endpoint groups
+
+| Group | Endpoints | วัตถุประสงค์ |
+|---|---|---|
+| Status | `GET /api/status`, `GET /api/slots`, `GET /api/slots/{code}` | อ่าน snapshot และ slot; ห้ามใช้ข้อมูลเก่าเป็นหลักฐานความปลอดภัย |
+| Health | `GET /health/live`, `GET /health/ready` | ตรวจ process/config readiness สำหรับ deploy/monitoring |
+| Homing/Jog | `POST /api/home/{x|y|z|all}`, `GET /api/home/{axis}/check`, `POST /api/jog` | Controller ตรวจ interlock และสถานะแกน |
+| Target motion | `POST /api/plan/move`, `/api/motion/validate`, `/api/motion/arm`, `/api/motion/execute`, `/api/move` | งานพิกัดที่ต้องใช้ Validate → Arm → Execute |
+| Slot | `POST /api/slots/{code}/goto`, `POST /api/slots/{code}`, `/save-current`, `/reset`, `DELETE /api/slots/{code}` | จัดการ slot/position ภายใต้ config validation |
+| Stop | `POST /api/stop`, `/api/motion/controlled-stop`, `/api/motion/abort`, `/api/clear-alarm` | หยุด/clear ตาม safety policy; physical E-Stop ต้องแก้ที่ hardware ก่อน |
+| Config | `GET /api/config`, `/api/config/effective`, `PUT /api/config`, `POST /api/config/apply` | อ่าน/validate/save/apply configuration พร้อม revision/backup |
+| MQTT | `GET /api/mqtt/status`, `POST /api/mqtt/control` | อ่าน telemetry ที่ sanitize แล้ว และเปิด/ปิด runtime MQTT ผ่าน Controller IPC |
+
+### รูปแบบ response และ HTTP status
+
+คำสั่งที่สำเร็จคืน `200` พร้อม `{"ok": true, ...}` และ snapshot/result ที่เกี่ยวข้อง. Validation หรือ interlock rejection คืน `400` พร้อม `{"ok": false, "error": "..."}`. Controller IPC unavailable คืน `503`. Invalid path/method ใช้ `404`/`405`. Client ต้องแสดง `error` ให้ผู้ใช้, refresh `/api/status`, และห้ามเดาว่าคำสั่งสำเร็จเมื่อ network timeout.
+
+### ตัวอย่าง motion ที่ปลอดภัย
+
+```bash
+# 1) ตรวจ state ล่าสุดก่อน
+curl -s http://NaritVendingMachine.local/api/status
+
+# 2) validate target; ใช้ payload ตาม schema ของ HMI/route ปัจจุบัน
+curl -X POST -H 'Content-Type: application/json' \
+  -d '{"x_mm":10,"y_mm":20,"z_mm":5,"speed_mm_s":10}' \
+  http://NaritVendingMachine.local/api/motion/validate
+
+# 3) arm ด้วยข้อมูลที่ผ่าน validation แล้ว และ execute ด้วย arm token ที่ได้รับ
+# ถ้า target/speed/state เปลี่ยน ต้อง validate ใหม่
+```
+
+### MQTT API contract
+
+`GET /api/mqtt/status` ไม่คืน credential และบอก `connected`, `state`, broker metadata, client ID, counters, last error และ message stream ที่ sanitize แล้ว. `POST /api/mqtt/control` รับ `{"action":"connect"}` หรือ `{"action":"disconnect"}`; Web ไม่เชื่อม MQTT เอง แต่ส่งคำขอไปยัง Controller
+
+MQTT broker contract ใช้ `cabinet/{cabinet_id}/command` สำหรับ subscribe และ `cabinet/{cabinet_id}/scan`, `/status`, `/presence` สำหรับ publish. action ที่รองรับคือ `release`, ต้องมี `request_id` และ `slot`; request หมดอายุ/ซ้ำ/รูปแบบไม่ถูกต้องถูกปฏิเสธ
+
+---
+
 ## ข้อมูลการเชื่อมต่อ
 
 | รายการ | ค่า |

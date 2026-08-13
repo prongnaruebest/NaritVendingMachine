@@ -94,6 +94,33 @@ class TestIPCRoundTrip(unittest.TestCase):
         self.assertTrue(res.ok())
         self.assertEqual(res.command_id, "cmd123")
 
+    def test_submit_command_uses_dedicated_long_timeout(self):
+        original_side_effect = self.bus.submit.side_effect
+
+        def delayed_submit(envelope):
+            time.sleep(0.15)
+            return CommandResult(
+                accepted=True,
+                command_id=envelope.command_id,
+                state="COMPLETED",
+                result={"ok": True},
+            )
+
+        self.bus.submit.side_effect = delayed_submit
+        try:
+            client = ControllerClient(
+                timeout=0.05,
+                command_timeout=0.5,
+                addr={"transport": "tcp", "host": "127.0.0.1", "port": 7399, "path": ""},
+            )
+            result = client.submit_command(
+                CommandEnvelope(command_type="HOME_AXIS", source="http", parameters={"axis": "y"})
+            )
+        finally:
+            self.bus.submit.side_effect = original_side_effect
+
+        self.assertTrue(result.ok())
+
     def test_get_effective_config(self):
         cfg = self.client.get_effective_config()
         self.assertEqual(cfg.get("test_config"), True)

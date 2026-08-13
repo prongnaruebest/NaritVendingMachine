@@ -19,6 +19,8 @@ from narit_vending.shared.ipc_protocol import (
     METHOD_CMD_STATUS,
     METHOD_CONFIG_GET,
     METHOD_CONFIG_SAVE,
+    METHOD_MQTT_CONTROL,
+    METHOD_MQTT_STATUS,
     METHOD_PING,
     METHOD_SNAPSHOT,
     METHOD_SUBMIT,
@@ -46,11 +48,15 @@ class IPCServer:
         snapshot_fn: Callable[[], Any],
         config_fn: Callable[[], dict],
         save_config_fn: Callable[[dict], dict],
+        mqtt_status_fn: Callable[[], dict] | None = None,
+        mqtt_control_fn: Callable[[bool], dict] | None = None,
     ) -> None:
         self._bus = command_bus
         self._snapshot_fn = snapshot_fn
         self._config_fn = config_fn
         self._save_config_fn = save_config_fn
+        self._mqtt_status_fn = mqtt_status_fn
+        self._mqtt_control_fn = mqtt_control_fn
         self._server: asyncio.AbstractServer | None = None
         self._addr = ipc_address()
 
@@ -158,6 +164,19 @@ class IPCServer:
         if method == METHOD_CONFIG_SAVE:
             proposed = params.get("config", {})
             return await loop.run_in_executor(_EXECUTOR, self._save_config_fn, proposed)
+
+        if method == METHOD_MQTT_STATUS:
+            if self._mqtt_status_fn is None:
+                raise MethodNotFoundError("MQTT status is unavailable")
+            return await loop.run_in_executor(_EXECUTOR, self._mqtt_status_fn)
+
+        if method == METHOD_MQTT_CONTROL:
+            if self._mqtt_control_fn is None:
+                raise MethodNotFoundError("MQTT control is unavailable")
+            enabled = params.get("enabled")
+            if not isinstance(enabled, bool):
+                raise InvalidParamsError("MQTT control requires boolean enabled")
+            return await loop.run_in_executor(_EXECUTOR, self._mqtt_control_fn, enabled)
 
         raise MethodNotFoundError(f"Unknown method: {method!r}")
 

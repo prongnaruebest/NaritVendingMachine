@@ -6,7 +6,7 @@ import logging
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
 
 if TYPE_CHECKING:
     from narit_vending.web.ipc_client import ControllerClient
@@ -88,8 +88,7 @@ def _status_from_snapshot(snap) -> dict:
             "estop": snap.estop,
             **axes_data,
         },
-        # slots will be populated by the controller snapshot or separately
-        "slots": {},
+        "slots": snap.slots,
     }
 
 
@@ -103,12 +102,19 @@ def make_status_bp(ctrl: "ControllerClient") -> Blueprint:
 
     @bp.get("/api/mqtt/status")
     def api_mqtt_status():
-        # MQTT service is still running in the web process (it was already there)
-        # Get it from Flask app extensions if available
-        from flask import current_app
-        mqtt_svc = current_app.extensions.get("mqtt_service")
-        if mqtt_svc is not None:
-            return jsonify(mqtt_svc.status_payload()), 200
-        return jsonify({"enabled": False, "connected": False, "state": "MQTT_NOT_CONFIGURED"}), 200
+        return jsonify(ctrl.mqtt_status()), 200
+
+    @bp.post("/api/mqtt/control")
+    def api_mqtt_control():
+        payload = request.get_json(silent=True) or {}
+        action = str(payload.get("action", "")).strip().lower()
+        if action not in {"connect", "disconnect"}:
+            return jsonify({"ok": False, "error": "action must be connect or disconnect"}), 400
+
+        try:
+            status = ctrl.mqtt_control(action == "connect")
+        except (RuntimeError, OSError) as exc:
+            return jsonify({"ok": False, "error": str(exc)}), 409
+        return jsonify({"ok": True, **status}), 200
 
     return bp

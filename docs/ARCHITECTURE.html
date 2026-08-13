@@ -172,6 +172,32 @@
       max-width: 620px
     }
 
+    .current-note { margin: 18px 0 30px; padding: 16px; border: 1px solid rgba(94,255,163,.35); border-radius: var(--radius); background: rgba(94,255,163,.07); color: var(--text); font-size: .9rem; }
+    .architecture-badges { display:flex; flex-wrap:wrap; gap:8px; margin-top:18px; }.architecture-badges span { padding:6px 10px; border:1px solid var(--line); border-radius:999px; color:var(--green); background:rgba(94,255,163,.08); font-size:.72rem; font-weight:700; }
+    .sidebar nav a[href="#boot"], .sidebar nav a[href="#todo"], .sidebar nav .sb-sect:last-of-type { display: none; }
+    .current-note strong { color: var(--green); }
+    .current-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 16px 0; }
+    .current-card { padding: 17px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+    .current-card h3 { color: var(--accent); font-size: .9rem; margin-bottom: 8px; }.current-card p,.current-card li { color: var(--muted); font-size: .83rem; }.current-card ul { padding-left: 18px; }.current-card li { margin: 5px 0; }
+    .contract-table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: .82rem; }.contract-table th,.contract-table td { padding: 9px; border: 1px solid var(--line); text-align: left; vertical-align: top; }.contract-table th { color: var(--accent); background: var(--surface2); }.contract-table td { color: var(--muted); }
+    .flow-strip { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 16px 0; }.flow-strip span { padding: 7px 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface2); color: var(--text); font: .75rem 'JetBrains Mono',monospace; }.flow-strip i { color: var(--accent); font-style: normal; }
+    #current-architecture .mermaid-wrap { justify-content: flex-start; overflow: auto; }
+    #current-architecture .mermaid svg { min-width: 1500px; max-width: none !important; }
+    /* Presentation readability: the current-runtime flow is viewed from a distance. */
+    #current-architecture .mermaid svg .nodeLabel,
+    #current-architecture .mermaid svg .nodeLabel p,
+    #current-architecture .mermaid svg .label,
+    #current-architecture .mermaid svg .label text { font-size: 24px !important; font-weight: 600; }
+    #current-architecture .mermaid svg .edgeLabel,
+    #current-architecture .mermaid svg .edgeLabel p,
+    #current-architecture .mermaid svg .edgeLabel text { font-size: 19px !important; font-weight: 700; }
+    #sys-flow .mermaid-wrap { justify-content: flex-start; overflow-x: auto; overflow-y: visible; }
+    #sys-flow .mermaid svg { min-width: 1800px; max-width: none !important; }
+    #flow-home .mermaid-wrap { justify-content: flex-start; overflow-x: auto; overflow-y: visible; }
+    #flow-home .mermaid svg { min-width: 1800px; max-width: none !important; }
+    #flow-slot .mermaid-wrap { justify-content: flex-start; overflow-x: auto; overflow-y: visible; }
+    #flow-slot .mermaid svg { min-width: 1800px; max-width: none !important; }
+
     /* SECTION */
     .section {
       margin-bottom: 48px;
@@ -623,12 +649,13 @@
     <!-- SIDEBAR -->
     <aside class="sidebar">
       <div class="sidebar-logo">
-        <div class="badge">Architecture</div><span class="v-badge">v2.0</span>
+        <div class="badge">Architecture</div><span class="v-badge">v3.0</span>
         <h2>Narit Vending<br>Machine</h2>
         <div style="font-size:0.7rem;color:var(--muted);margin-top:6px">Raspberry Pi · Flask · Python</div>
       </div>
       <nav>
         <div class="sb-sect">ภาพรวม</div>
+        <a href="#current-architecture"><span class="dot"></span>Current Production Architecture</a>
         <a href="#sys-flow"><span class="dot"></span>System Flow Diagram</a>
         <a href="#overview"><span class="dot"></span>ภาพรวมระบบ</a>
         <a href="#files"><span class="dot"></span>โครงสร้างไฟล์</a>
@@ -660,13 +687,136 @@
       <!-- HERO -->
       <div class="hero">
         <p class="eyebrow">Narit Vending Machine</p>
-        <h1>System Architecture <span style="font-size:1.2rem;-webkit-text-fill-color:var(--green)">v2.0</span></h1>
+        <h1>System Architecture <span style="font-size:1.2rem;-webkit-text-fill-color:var(--green)">v3.0</span></h1>
+        <p>Production reference for the two-process cabinet: Controller owns GPIO, Motion and MQTT; Web is the HMI/API facade.</p>
+        <div class="architecture-badges"><span>ACTUAL PRODUCTION ARCHITECTURE</span><span>2 PROCESSES</span><span>1 MQTT CLIENT</span><span>SAFETY-FIRST MOTION CONTROL</span></div>
         <p>เอกสารสมบูรณ์ อธิบายโครงสร้าง classes, API endpoints, กลไกความปลอดภัย, logging และ flowchart
           ของระบบควบคุมเครื่องจ่ายสินค้าอัตโนมัติ</p>
       </div>
 
-      <!-- SYSTEM FLOW DIAGRAM -->
+      <section class="section" id="current-architecture">
+        <h2 class="section-title">Current Production Architecture (v3)</h2>
+        <p class="lead">This is the authoritative description of the running cabinet architecture. It supersedes older single-process descriptions elsewhere in this document. Web presentation and machine control are deliberately separate processes.</p>
+        <div class="current-note"><strong>Safety boundary:</strong> only the Controller process can access MotionService, GPIO, safety interlocks, or the cabinet MQTT client. Browser and Web process requests must cross IPC; they cannot bypass Controller validation.</div>
+        <div class="flow-strip"><span>Operator Browser</span><i>HTTP/JSON</i><span>Web Process (Flask :80)</span><i>Unix IPC</i><span>Controller Process</span><i>GPIO</i><span>X/Y/Z + Sensors</span><i>MQTT</i><span>Broker</span></div>
+        <div class="current-grid">
+          <article class="current-card"><h3>Web HMI and Web Process</h3><p>Flask serves HTML, CSS, JavaScript and HMI APIs on port 80. It uses ControllerClient over <code>/run/narit-vending/ctrl.sock</code>. It never opens GPIO and never creates an MQTT client. If IPC is unavailable, commands fail safely with HTTP 503. A web-only deployment restarts only Web, preserving machine control and MQTT.</p></article>
+          <article class="current-card"><h3>Controller Process</h3><p>The Controller is the sole motion authority. It creates MotionService, SequenceService, StateMachine, CommandBus, handlers and IPC server, and produces the snapshot used by HMI/MQTT. It owns Stop, Clear Alarm, Home, Jog, Move, Slot, Dispense, validation/arm, Motor Test and RUN_SLOT_SEQUENCE handlers.</p></article>
+          <article class="current-card"><h3>Slot Sequence Ownership</h3><p><code>controller/sequence_service.py</code> owns: validate → Move X → Move Y → Move Z → verify target → hold 3 seconds → Home Z → Home Y → Home X → verify home. It orchestrates only; <code>motion.py</code> remains the GPIO owner and checks E-Stop, stop latch, limits and travel during each physical move.</p></article>
+          <article class="current-card"><h3>Safety and Motion</h3><p>Every motion request is rechecked by Controller: physical E-Stop, software stop, active fault alarms, limit switches, homing, configured travel and target validity. Target motion follows Validate → Arm → Execute. Standard Go To Slot uses Safe Z before X/Y travel; the separately selected Slot Sequence follows its defined X → Y → Z → hold → Home Z/Y/X workflow.</p></article>
+          <article class="current-card"><h3>MQTT Ownership</h3><p>Controller owns exactly one cabinet-specific MQTT client with <code>clean_session=false</code>. Web reads sanitized MQTT telemetry through IPC. Presence is retained QoS 1 with Last-Will offline; reconnect backoff is 4–60 seconds. This prevents duplicate client IDs and connection flapping.</p></article>
+        </div>
+        <h3 style="font-size:1rem;margin:24px 0 8px;color:var(--text)">Actual Running File Structure</h3>
+        <div class="current-note"><strong>Actual code, not proposal:</strong> the following is the running structure shown in the repository. The Target Architecture section elsewhere describes future refactoring only.</div>
+        <div class="current-note"><strong>Sequence files now running:</strong> <code>controller/sequence_service.py</code> and <code>controller/handlers/sequence.py</code>. <code>webapp.py</code> retains only the MotionService compatibility adapter and HMI state support.</div>
+        <pre style="overflow:auto;padding:16px;border:1px solid var(--line);border-radius:var(--radius);background:var(--surface2);color:var(--text);font:12px/1.55 'JetBrains Mono',monospace"><code>narit_vending/
+├── controller/     __main__.py, command_bus.py, safety.py, state_machine.py, server.py, handlers/
+├── shared/         commands.py, ipc_protocol.py, snapshot.py
+├── web/            __main__.py, app.py, ipc_client.py, routes/
+├── motion.py       MotionService and GPIO X/Y/Z implementation
+├── mqtt_service.py Controller-owned MQTT client
+├── config_foundation.py  configuration validation, revision and backup
+├── static/         app.js and style.css HMI rendering
+└── templates/      index.html HMI shell</code></pre>
+        <div class="current-note"><strong>Sequence implementation:</strong> <code>controller/handlers/sequence.py</code> receives <code>RUN_SLOT_SEQUENCE</code>; <code>controller/sequence_service.py</code> owns X → Y → Z → hold 3 s → Home Z → Home Y → Home X. <code>webapp.py</code> is a compatibility adapter only. MQTT converts <code>release</code> into this CommandBus command and preserves its request ID.</div>
+        <h3 style="font-size:1rem;margin:24px 0 8px;color:var(--text)">Deployed Runtime File Tree</h3>
+        <pre style="overflow:auto;padding:16px;border:1px solid var(--line);border-radius:var(--radius);background:var(--surface2);color:var(--text);font:12px/1.55 'JetBrains Mono',monospace"><code>narit_vending/
+├── controller/                         # Controller process: safety and motion authority
+│   ├── __main__.py                      # creates MotionService, SequenceService, CommandBus and IPC
+│   ├── command_bus.py                   # single-flight dispatch and SafetyInterlock gate
+│   ├── safety.py                        # E-Stop, stop latch, alarm, homing, limit and busy checks
+│   ├── state_machine.py                 # READY / NOT_READY / HOMING / MOVING / ALARM / E_STOP
+│   ├── server.py                        # Unix IPC: /run/narit-vending/ctrl.sock
+│   ├── sequence_service.py              # X → Y → Z → hold → Home Z → Y → X orchestration
+│   └── handlers/
+│       ├── home.py                      # HOME_AXIS / HOME_ALL
+│       ├── jog.py                       # JOG
+│       ├── move.py                      # MOVE_TO / MOVE_TO_SLOT / DISPENSE / validation
+│       ├── sequence.py                  # RUN_SLOT_SEQUENCE → SequenceService
+│       ├── stop.py                      # STOP / CONTROLLED_STOP / CLEAR_ALARM
+│       └── motor_test.py                # isolated motor-test commands
+├── shared/
+│   ├── commands.py                      # CommandEnvelope / CommandResult
+│   ├── ipc_protocol.py                  # IPC request-response contract
+│   └── snapshot.py                      # JSON-safe MachineSnapshot / AxisSnapshot
+├── web/                                 # Flask HMI/API facade; no GPIO and no MQTT client
+│   ├── __main__.py                      # Web process entry point (port 80)
+│   ├── app.py                           # Flask factory and route registration
+│   ├── ipc_client.py                    # ControllerClient for Unix IPC
+│   └── routes/                          # status, commands, slots, config and health routes
+├── motion.py                             # AxisController, GPIO pulses and per-move hardware guards
+├── mqtt_service.py                       # one Controller-owned MQTT client; release → CommandBus
+├── webapp.py                             # legacy MotionService adapter and HMI-readable runtime state
+├── config_foundation.py                  # configuration validation, revision and backup
+├── static/                               # app.js and style.css HMI rendering
+└── templates/                            # index.html HMI shell</code></pre>
+        <h3 style="font-size:1rem;margin:24px 0 8px;color:var(--text)">Actual Sequence Module Boundary</h3>
+        <div class="current-grid">
+          <article class="current-card"><h3>HTTP / HMI</h3><p><code>web/routes/commands.py</code> accepts the sequence endpoint and forwards a <code>RUN_SLOT_SEQUENCE</code> envelope over Unix IPC. Browser JavaScript only selects standard Go To or Sequence Mode; it never contains motor logic.</p></article>
+          <article class="current-card"><h3>MQTT</h3><p><code>mqtt_service.py</code> validates <code>release</code>, expiry and idempotency, then creates one in-memory <code>RUN_SLOT_SEQUENCE</code> CommandEnvelope with source <code>mqtt</code>. The original request ID is the idempotency key and every final MQTT status is sanitized.</p></article>
+          <article class="current-card"><h3>CommandBus / Handler</h3><p><code>controller/__main__.py</code> binds MQTT to <code>CommandBus.submit</code>. <code>handlers/sequence.py</code> is called only after SafetyInterlock accepts the command and delegates to <code>service.sequence_service</code>.</p></article>
+          <article class="current-card"><h3>Sequence / Motion</h3><p><code>SequenceService</code> publishes phases and aborts on a failed stage. It does not write GPIO. <code>motion.py</code> remains the hardware boundary: AxisController owns pulses, position, limits, E-Stop and stop checks.</p></article>
+        </div>
+        <h3 style="font-size:1rem;margin:24px 0 8px;color:var(--text)">Actual Runtime Flowchart</h3>
+        <div class="mermaid-wrap"><div class="mermaid">
+flowchart LR
+  B["Operator Browser / HMI"] -->|"HTTP JSON"| W["Web Process :80\nFlask routes + static HMI"]
+  W -->|"Unix IPC\n/run/narit-vending/ctrl.sock"| C["Controller Process\nCommandBus + StateMachine"]
+  C --> S{"SafetyInterlock\nE-Stop / stop / alarm / homing / limits / busy"}
+  S -->|"Rejected"| R["CommandResult rejected\nWeb → HMI reason"]
+  S -->|"Allowed"| H["Handler\nHome / Jog / Move / Slot / Dispense / Sequence"]
+  H --> SEQ["SequenceService\nX → Y → Z → hold 3s → Home Z → Y → X"]
+  H --> M["MotionService + GPIO\nX / Y / Z"]
+  SEQ --> M
+  M --> P["MachineSnapshot"]
+  P -->|"IPC response"| W
+  Q["MQTT Broker"] -->|"cabinet/{id}/command\nrelease + request_id + slot"| MQ["MQTTService\nController-owned single client"]
+  MQ -->|"RUN_SLOT_SEQUENCE CommandEnvelope\nrequest_id preserved"| C
+  MQ -->|"presence / status / scan"| Q
+  P -->|"sanitized MQTT telemetry"| MQ
+        </div></div>
+        <div class="current-grid"><article class="current-card"><h3>HMI Command Flow</h3><p>Browser loads <code>index.html</code> and <code>app.js</code> from Web. A route in <code>web/routes</code> uses <code>ipc_client.py</code> to send a CommandEnvelope to <code>controller/server.py</code>. CommandBus invokes SafetyInterlock; only then can handlers call <code>motion.py</code> and GPIO. Snapshot returns through IPC to Web and Browser.</p></article><article class="current-card"><h3>MQTT Command Flow</h3><p><code>controller/__main__.py</code> starts <code>mqtt_service.py</code>; Web never owns MQTT. MQTT validates release/request_id/slot/expiry/idempotency, creates one <code>RUN_SLOT_SEQUENCE</code> command, and publishes presence, phases and final status. Web MQTT Monitor reads sanitized telemetry through IPC.</p></article><article class="current-card"><h3>Pi Process Ownership</h3><p><code>narit-vending-controller.service</code> owns GPIO, Controller and MQTT. <code>narit-vending-web.service</code> serves port 80 and depends on Controller IPC. Web-only deployment restarts only Web; full deployment restarts Controller and presence is offline during the true restart window.</p></article><article class="current-card"><h3>Safety Rule</h3><p>HMI and MQTT cannot bypass Controller. E-Stop, stop latch, active alarm, busy state, homing, limits, travel and target/slot validity are checked before GPIO. Standard Go To Slot uses Validate → Arm → Execute and Safe Z; the selected sequence is an independently defined controller workflow.</p></article></div>
+        <h3 style="font-size:1rem;margin:24px 0 8px;color:var(--text)">Presentation: What This Architecture Proves</h3>
+        <div class="current-grid">
+          <article class="current-card"><h3>One Safety Authority</h3><p>HMI and MQTT are different inputs, not different control paths. Both converge at Controller <code>CommandBus</code> and <code>SafetyInterlock</code>; neither Web nor MQTT can access GPIO directly.</p></article>
+          <article class="current-card"><h3>Deterministic Commands</h3><p><code>CommandBus</code> serializes motion with a single-flight dispatch. MQTT preserves <code>request_id</code> as its idempotency key and rejects expired or duplicate release messages.</p></article>
+          <article class="current-card"><h3>Safety Is Continuous</h3><p>Interlocks decide whether a command may start. During each physical move, <code>AxisController</code> still checks E-Stop, stop latch, limits and travel. The 3-second sequence hold also polls stop/E-Stop.</p></article>
+          <article class="current-card"><h3>Independent Deployment</h3><p>Web-only deployment refreshes HMI assets without restarting Controller or the cabinet MQTT client. A full deployment is used only when the Controller runtime changes.</p></article>
+        </div>
+        <h3 style="font-size:1rem;margin:24px 0 8px;color:var(--text)">Three Operator Command Paths</h3>
+        <table class="contract-table"><thead><tr><th>Operator path</th><th>Controller command</th><th>Movement workflow</th><th>Completion boundary</th></tr></thead><tbody><tr><td>HMI: Standard Go To Slot</td><td><code>MOVE_TO_SLOT</code></td><td>Safe Z → X/Y → target Z</td><td>Gantry remains at verified slot; Dispense is a separate permitted command.</td></tr><tr><td>HMI: Sequence Mode</td><td><code>RUN_SLOT_SEQUENCE</code> over IPC</td><td>X → Y → Z → verify → hold 3 s → Home Z → Home Y → Home X</td><td>Returns target and home verification to HMI.</td></tr><tr><td>MQTT: <code>release</code></td><td><code>RUN_SLOT_SEQUENCE</code> via <code>CommandBus.submit</code></td><td>Same sequence workflow; request ID is preserved</td><td>Publishes phase and sanitized final status.</td></tr></tbody></table>
+        <div class="current-note"><strong>Important presentation distinction:</strong> Safe-Z travel is the standard Go To Slot workflow. The X → Y → Z → hold → Home Z/Y/X workflow is a separate controller-owned Slot Sequence. They should not be described as the same operation.</div>
+        <h3 style="font-size:1rem;margin:24px 0 8px;color:var(--text)">Demo Evidence and Current Scope</h3>
+        <div class="current-grid"><article class="current-card"><h3>Live evidence to show</h3><p>Show <code>/health/live</code>, <code>/health/ready</code> and <code>/api/mqtt/status</code>. Explain that service-ready and machine-ready are different: motion still needs homing and clear interlocks.</p></article><article class="current-card"><h3>Safe demonstration</h3><p>Mock/unit tests can demonstrate safety blocking, sequence order, stop-on-failure, IPC routing and MQTT idempotency without moving hardware. A physical motion demonstration needs area clearance, valid homing/slot data and explicit operator approval.</p></article><article class="current-card"><h3>Honest current boundary</h3><p><code>webapp.py</code> remains a compatibility adapter while the sequence logic is Controller-owned. Persistent audit storage, RBAC, MQTT TLS and atomic rollback are target architecture items, not claims about the current deployment.</p></article><article class="current-card"><h3>Recommended narrative</h3><p>Start with the safety problem, show the two-process boundary, trace one HMI and one MQTT command into the same CommandBus, then close with verification and the roadmap.</p></article></div>
+        <h3 style="font-size:1rem;margin:24px 0 8px;color:var(--text)">MQTT Contract and Command Boundary</h3>
+        <table class="contract-table"><thead><tr><th>Direction</th><th>Topic / Interface</th><th>Purpose and Safety Rule</th></tr></thead><tbody><tr><td>Subscribe</td><td><code>cabinet/{cabinet_id}/command</code></td><td>Accepts only <code>release</code> with <code>request_id</code> and <code>slot</code>; expired, invalid and duplicate requests are rejected.</td></tr><tr><td>Publish</td><td><code>/scan</code>, <code>/status</code>, <code>/presence</code></td><td>Publishes lifecycle, phase and final success/failed result. Presence reports online/offline state.</td></tr><tr><td>HMI command</td><td>HTTP → Web → IPC</td><td>Controller CommandBus and interlocks make the final safety decision. Browser never drives GPIO directly.</td></tr></tbody></table>
+        <div class="current-grid"><article class="current-card"><h3>Configuration and Audit</h3><p><code>machine_config.json</code> defines travel, steps/mm, Safe Z, homing and slot XYZ. <code>hardware_config.json</code> defines GPIO and communication. Valid saves are revisioned and backed up under <code>backups/config/</code>.</p></article><article class="current-card"><h3>Operational Checks</h3><p><code>/health/live</code> checks Web availability. <code>/health/ready</code> separates service readiness from machine readiness. <code>/api/mqtt/status</code> returns sanitized telemetry only. A machine may be service-ready but not ready for motion until homed and clear.</p></article><article class="current-card"><h3>Deployment Rule</h3><p>Use Web-only deployment for HMI assets. Use full deployment only for Controller, motion, GPIO, MQTT runtime or dependencies; Controller restart truthfully publishes offline during its restart window.</p></article><article class="current-card"><h3>Failure Behavior</h3><p>Web failure does not grant motor access. Controller failure makes commands unavailable. MQTT loss does not bypass local safety or stop local HMI control. Physical E-Stop is local and immediate.</p></article></div>
+      </section>
+
+      <!-- DETAILED PRODUCTION SYSTEM FLOW -->
       <section class="section" id="sys-flow">
+        <h2 class="section-title">Detailed Production System Flow</h2>
+        <p class="lead">This flow describes what the running system does for every HMI or MQTT motion request. The Controller is the only component allowed to make a safety decision or access GPIO.</p>
+        <div class="mermaid-wrap"><div class="mermaid">
+flowchart LR
+  A["1. Operator HMI or MQTT request"] --> B["2. Web route or MQTTService\nvalidate basic payload"]
+  B --> C["3. Unix IPC / Controller CommandEnvelope"]
+  C --> D["4. CommandBus\nsingle-flight command dispatch"]
+  D --> E{"5. SafetyInterlock\nE-Stop · stop latch · alarm · busy\nhoming · limits · target validity"}
+  E -->|"blocked"| F["Rejected CommandResult\nreason + corrective action"]
+  F --> G["Web/HMI or MQTT status\nno GPIO operation"]
+  E -->|"allowed"| H["6. Handler\nHome / Jog / Move / Slot / Dispense"]
+  H --> I["7. MotionService\nSafe Z → X/Y → Z target when required"]
+  I --> J["8. GPIO Step/Dir/Enable\nX/Y/Z and sensor feedback"]
+  J --> K["9. MachineSnapshot\nposition · homing · limits · operation"]
+  K --> L["10. IPC response → HMI render"]
+  K --> M["11. MQTT publish\npresence / status / scan"]
+        </div></div>
+        <div class="current-grid"><article class="current-card"><h3>Input and validation</h3><p>HMI requests arrive through Web/IPC. MQTT accepts only <code>release</code> with request ID and slot. Invalid, expired or duplicate MQTT requests are rejected before motion.</p></article><article class="current-card"><h3>Safety decision</h3><p>SafetyInterlock checks E-Stop first, then stop latch, alarm, busy state, motor test, homing, limit conflict and target validity. A rejected command returns a reason and never reaches GPIO.</p></article><article class="current-card"><h3>Motion sequence</h3><p>Handlers call MotionService only after approval. Slot travel raises Safe Z before X/Y movement, approaches target Z, verifies the position and permits dispense only at the verified slot.</p></article><article class="current-card"><h3>Result and visibility</h3><p>Controller returns a MachineSnapshot through IPC for HMI. MQTT publishes sanitized lifecycle/result telemetry. Both views reflect Controller state, not independent browser state.</p></article></div>
+      </section>
+
+      <!-- LEGACY SYSTEM FLOW DIAGRAM -->
+      <section class="section" id="legacy-sys-flow">
         <h2 class="section-title">🔄 System Flow Diagram</h2>
         <p class="lead">แผนผังแสดงการไหลของข้อมูลและคำสั่งตั้งแต่ผู้ใช้ถึงฮาร์ดแวร์</p>
         <div class="diagram-scroll">
@@ -1492,6 +1642,29 @@ Access-Control-Allow-Headers:
 
       <!-- 12. FLOW HOME -->
       <section class="section" id="flow-home">
+        <h2 class="section-title">Detailed Axis Homing Flow</h2>
+        <p class="lead">Homing establishes the physical reference used by absolute motion. The Controller executes the configured sequence (normally Z → Y → X) and rechecks safety continuously; an axis is not marked homed until its reference procedure completes.</p>
+        <div class="mermaid-wrap"><div class="mermaid">
+flowchart LR
+  A["1. HOME request\naxis or all"] --> B{"2. Controller safety check\nE-Stop · alarm · stop latch · busy"}
+  B -->|"blocked"| X["Reject\nshow corrective reason"]
+  B -->|"allowed"| C["3. Build configured sequence\nZ → Y → X for HOME ALL"]
+  C --> D["4. Select next axis\nclear previous homed flag"]
+  D --> E["5. Search toward home reference\nGPIO pulse + sensor polling"]
+  E --> F{"6. Home switch reached?"}
+  F -->|"no"| G{"timeout / limit conflict / stop?"}
+  G -->|"continue"| E
+  G -->|"fault"| H["Fail homing\nstop axis, record reason, no homed state"]
+  F -->|"yes"| I["7. Backoff / settle\nset reference position"]
+  I --> J["8. Mark axis homed\nupdate MachineSnapshot"]
+  J --> K{"more axes in sequence?"}
+  K -->|"yes"| D
+  K -->|"no"| L["9. HOME complete\nabsolute motion may be permitted"]
+        </div></div>
+        <div class="current-grid"><article class="current-card"><h3>Before Home</h3><p>Home is rejected when E-Stop, blocking alarm, stop latch or an active motion command makes it unsafe. Controller reports the specific reason; HMI cannot force the axis to move.</p></article><article class="current-card"><h3>Reference search</h3><p>Each axis moves toward its configured home direction while Controller monitors the home/limit input, timeout and stop state. Unexpected sensor conflict or timeout stops the axis and leaves it not homed.</p></article><article class="current-card"><h3>Reference confirmation</h3><p>After the home switch is detected, the controller performs configured backoff/settling and sets the axis reference position. Only a completed procedure marks that axis homed.</p></article><article class="current-card"><h3>After Home</h3><p>HOME ALL proceeds to the next configured axis. Absolute move, Go To Slot and Dispense remain blocked until all required axes are homed and all other safety interlocks are clear.</p></article></div>
+      </section>
+
+      <section class="section" id="legacy-flow-home">
         <h2 class="section-title">🏠 Flowchart การ Home แกน</h2>
         <div class="mermaid-wrap">
           <div class="mermaid">
@@ -1519,6 +1692,30 @@ Access-Control-Allow-Headers:
 
       <!-- 13. FLOW SLOT -->
       <section class="section" id="flow-slot">
+        <h2 class="section-title">Detailed Go To Slot Flow</h2>
+        <p class="lead">Go To Slot is a controlled positioning workflow. A selected slot is not enough: Controller must verify safety, homing and valid saved XYZ before any axis is moved.</p>
+        <div class="mermaid-wrap"><div class="mermaid">
+flowchart LR
+  A["1. Select slot\nload saved X/Y/Z"] --> B{"2. Slot valid?\nall XYZ finite and within travel"}
+  B -->|"no"| X["Reject\ncorrect slot configuration"]
+  B -->|"yes"| C{"3. Motion allowed?\nE-Stop · stop · alarm · busy · homing"}
+  C -->|"no"| Y["Blocked\nshow interlock reason"]
+  C -->|"yes"| D["4. Confirm target\nslot, XYZ, speed and safe area"]
+  D --> E["5. Raise Z to Safe Z\nclear product before X/Y travel"]
+  E --> F{"Safe Z reached?"}
+  F -->|"no / fault"| Z["Stop and fail\nrecord verification reason"]
+  F -->|"yes"| G["6. Move X/Y\ncontrolled trajectory to slot row/column"]
+  G --> H{"X/Y target reached?"}
+  H -->|"no / fault"| Z
+  H -->|"yes"| I["7. Move Z to saved target depth"]
+  I --> J{"8. Verify final XYZ\nwithin positioning tolerance"}
+  J -->|"no"| Z
+  J -->|"yes"| K["9. Publish success\nslot is eligible for Dispense"]
+        </div></div>
+        <div class="current-grid"><article class="current-card"><h3>Slot validation</h3><p>Controller requires a configured slot with valid finite X/Y/Z coordinates inside machine travel. Empty, unconfigured or invalid slots cannot start motion.</p></article><article class="current-card"><h3>Safety before travel</h3><p>Controller checks E-Stop, stop latch, active alarm, busy state and homing before Go To Slot. The HMI confirmation is informational; it does not bypass safety.</p></article><article class="current-card"><h3>Safe movement order</h3><p>Z is raised to configured Safe Z first, then X/Y move to the slot, then Z approaches the saved depth. A fault or failed target verification stops the workflow and returns a reason.</p></article><article class="current-card"><h3>Dispense boundary</h3><p>Go To Slot only positions the gantry. Dispense is a separate action and may be enabled only after the final position is verified within tolerance and all safety interlocks remain clear.</p></article></div>
+      </section>
+
+      <section class="section" id="legacy-flow-slot">
         <h2 class="section-title">📦 Flowchart Go To Slot</h2>
         <div class="mermaid-wrap">
           <div class="mermaid">
@@ -1675,9 +1872,9 @@ Access-Control-Allow-Headers:
         background: '#0d1f33', primaryColor: '#0d1f33',
         primaryTextColor: '#e4edf7', primaryBorderColor: '#1ea7ff',
         lineColor: '#1ea7ff', secondaryColor: '#112338',
-        edgeLabelBackground: '#0d1f33',
+        edgeLabelBackground: '#0d1f33', fontSize: '18px',
       },
-      flowchart: { curve: 'basis', padding: 20 }
+      flowchart: { curve: 'basis', padding: 28, htmlLabels: true }
     });
 
     // Sidebar active on scroll

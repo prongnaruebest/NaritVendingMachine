@@ -124,6 +124,8 @@ class MotionService:
                 _logger.warning("Configuration %s at %s: %s", issue.code, issue.path, issue.message)
 
         self.controller = build_controller(config, hw_config_path=str(self.hw_config_path))
+        from .controller.sequence_service import SequenceService
+        self.sequence_service = SequenceService(self)
         hw_config = load_hardware_config(str(self.hw_config_path))
         mqtt_config = hw_config.get("mqtt", {})
         self.mqtt_service = MQTTService(self, mqtt_config)
@@ -601,8 +603,54 @@ class MotionService:
             lambda: axis.move_mm(distance_mm, speed_mm_s=speed_mm_s, time_s=time_s),
         )
 
-    def move_to_slot(self, slot_code: str, speed_mm_s: float | None = None, time_s: float | None = None) -> dict[str, object]:
-        return self._run(f"goto_slot_{slot_code}", lambda: self.controller.move_to_slot(slot_code, speed_mm_s=speed_mm_s, time_s=time_s))
+    def move_to_slot(
+        self,
+        slot_code: str,
+        speed_mm_s: float | None = None,
+        time_s: float | None = None,
+        request_id: str | None = None,
+        phase_callback=None,
+    ) -> dict[str, object]:
+        # MQTT supplies a request ID/callback. Treat that as an explicit request
+        # for the Controller-owned return-home sequence. Direct HMI Go To Slot
+        # calls retain their standard positioning behaviour.
+        if request_id is not None or phase_callback is not None:
+            return self.run_slot_sequence(
+                slot_code,
+                speed_mm_s=speed_mm_s,
+                request_id=request_id,
+                phase_callback=phase_callback,
+            )
+        return self._run(
+            f"goto_slot_{slot_code}",
+            lambda: self.controller.move_to_slot(
+                slot_code,
+                speed_mm_s=speed_mm_s,
+                time_s=time_s,
+            ).to_dict(),
+        )
+
+    def run_slot_sequence(
+        self,
+        slot_code: str,
+        speed_mm_s: float | None = None,
+        request_id: str | None = None,
+        phase_callback=None,
+    ) -> dict[str, object]:
+        """Compatibility adapter; sequence orchestration lives in controller/."""
+        return self.sequence_service.run(
+            slot_code,
+            speed_mm_s=speed_mm_s,
+            request_id=request_id,
+            phase_callback=phase_callback,
+        )
+
+    def set_sequence_operation(self, phase: str, axis: str | None, message: str) -> None:
+        """Adapter used by SequenceService to update read-only HMI state."""
+        with self.lock:
+            self.operation_phase = phase
+            self.operation_axis = axis
+            self.operation_message = message
 
     def save_slot(
         self,

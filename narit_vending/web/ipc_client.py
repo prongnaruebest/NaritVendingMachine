@@ -20,6 +20,8 @@ from narit_vending.shared.commands import CommandEnvelope, CommandResult
 from narit_vending.shared.ipc_protocol import (
     METHOD_CONFIG_GET,
     METHOD_CONFIG_SAVE,
+    METHOD_MQTT_CONTROL,
+    METHOD_MQTT_STATUS,
     METHOD_PING,
     METHOD_SNAPSHOT,
     METHOD_SUBMIT,
@@ -46,8 +48,14 @@ class ControllerClient:
     later without changing the public API.
     """
 
-    def __init__(self, timeout: float = 2.0, addr: dict[str, Any] | None = None) -> None:
+    def __init__(
+        self,
+        timeout: float = 2.0,
+        command_timeout: float = 300.0,
+        addr: dict[str, Any] | None = None,
+    ) -> None:
         self._timeout = timeout
+        self._command_timeout = command_timeout
         self._custom_addr = addr
         self._lock = threading.Lock()
 
@@ -77,7 +85,7 @@ class ControllerClient:
     def submit_command(self, envelope: CommandEnvelope) -> CommandResult:
         """Submit a CommandEnvelope and return the CommandResult."""
         try:
-            data = self._call(METHOD_SUBMIT, envelope.to_dict())
+            data = self._call(METHOD_SUBMIT, envelope.to_dict(), timeout=self._command_timeout)
             return CommandResult.from_dict(data)
         except ControllerUnavailableError as exc:
             return CommandResult(
@@ -101,9 +109,23 @@ class ControllerClient:
         except ControllerUnavailableError as exc:
             return {"ok": False, "error": str(exc)}
 
+    def mqtt_status(self) -> dict[str, Any]:
+        try:
+            return self._call(METHOD_MQTT_STATUS)
+        except (ControllerUnavailableError, RuntimeError) as exc:
+            return {"enabled": False, "connected": False, "state": "CONTROLLER_UNAVAILABLE", "last_error": str(exc)}
+
+    def mqtt_control(self, enabled: bool) -> dict[str, Any]:
+        return self._call(METHOD_MQTT_CONTROL, {"enabled": enabled})
+
     # ── Low-level transport ────────────────────────────────────────────────────
 
-    def _call(self, method: str, params: dict[str, Any] | None = None) -> Any:
+    def _call(
+        self,
+        method: str,
+        params: dict[str, Any] | None = None,
+        timeout: float | None = None,
+    ) -> Any:
         """Send a JSON-RPC request and return the result dict.
 
         Raises ControllerUnavailableError on connection failure or timeout.
@@ -113,14 +135,15 @@ class ControllerClient:
         addr = self._addr
         sock = None
 
+        socket_timeout = self._timeout if timeout is None else timeout
         try:
             if addr["transport"] == "unix":
                 sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-                sock.settimeout(self._timeout)
+                sock.settimeout(socket_timeout)
                 sock.connect(addr["path"])
             else:
                 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                sock.settimeout(self._timeout)
+                sock.settimeout(socket_timeout)
                 sock.connect((addr["host"], addr["port"]))
 
             sock.sendall(request_bytes)

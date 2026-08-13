@@ -54,19 +54,7 @@ def main() -> int:
     app = create_web_app(ctrl_client=ctrl)
 
     # Attach MQTT service (monitor only — subscribes and publishes but does not touch GPIO)
-    try:
-        from narit_vending.mqtt_service import MQTTService
-        mqtt_cfg = hw_config.get("mqtt", {}) if "hw_config" in dir() else {}  # type: ignore[used-before-def]
-        # MQTT service needs a "motion_service" to dispatch commands
-        # In web process mode we give it a proxy that uses ctrl.submit_command
-        from narit_vending.web._mqtt_proxy import MqttControllerProxy
-        mqtt_proxy = MqttControllerProxy(ctrl)
-        mqtt_svc = MQTTService(mqtt_proxy, mqtt_cfg)
-        mqtt_svc.start()
-        app.extensions["mqtt_service"] = mqtt_svc
-        _log.info("MQTT monitor service started")
-    except Exception as exc:
-        _log.warning("MQTT service not started: %s", exc)
+    _log.info("MQTT is owned by the controller process; web monitoring uses IPC")
 
     _log.info("Web process starting — host=%s port=%s", host, port)
     app.run(host=host, port=port, debug=False, use_reloader=False)

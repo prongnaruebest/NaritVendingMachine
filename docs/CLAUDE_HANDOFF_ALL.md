@@ -35,7 +35,6 @@ M  narit_vending/static/app.js
 M  narit_vending/static/style.css
 M  narit_vending/templates/index.html
 M  narit_vending/webapp.py
-?? ARCHITECTURE_PROPOSAL_TH.md
 ?? CLAUDE_MQTT_HANDOFF.md
 ?? narit_vending/config_foundation.py
 ?? scripts/validate_config.py
@@ -341,8 +340,7 @@ Never print `/etc/narit-vending.env` during verification.
 
 ## 14. Key Documents
 
-- `ARCHITECTURE_PROPOSAL_TH.md` — target architecture and migration phases
-- `ARCHITECTURE_TH.md` — current architecture/manual
+- `ARCHITECTURE_TH.md` — current architecture, operator reference and future roadmap
 - `ARCHITECTURE.html` — operator manual presentation
 - `API_DOCS.md` and `API_DOCS.html` — existing API documentation
 - `CLAUDE_MQTT_HANDOFF.md` — MQTT-specific handoff
@@ -351,10 +349,9 @@ Never print `/etc/narit-vending.env` during verification.
 ## 15. Starting Instruction for Claude
 
 ```text
-Read CLAUDE_HANDOFF_ALL.md, CLAUDE_MQTT_HANDOFF.md, ARCHITECTURE_PROPOSAL_TH.md and git diff before editing.
+Read CLAUDE_HANDOFF_ALL.md, CLAUDE_MQTT_HANDOFF.md, ARCHITECTURE_TH.md and git diff before editing.
 Preserve every uncommitted file and create a backup first.
 Run the current tests to establish a baseline.
 Start with P0 only: protect/commit the existing Phase 1 and MQTT HMI work, verify configuration and safety invariants, then present the proposed Phase 2 file changes before modifying runtime motion behavior.
 Never expose MQTT secrets and never move real motors automatically during tests.
 ```
-

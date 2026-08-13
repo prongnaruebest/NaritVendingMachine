@@ -28,6 +28,7 @@ CommandType = Literal[
     "JOG",
     "MOVE_TO",
     "MOVE_TO_SLOT",
+    "RUN_SLOT_SEQUENCE",
     "DISPENSE",
     "STOP",
     "E_STOP",

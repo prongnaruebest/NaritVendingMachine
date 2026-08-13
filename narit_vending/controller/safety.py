@@ -32,6 +32,7 @@ _MOTION_COMMANDS = frozenset({
     "JOG",
     "MOVE_TO",
     "MOVE_TO_SLOT",
+    "RUN_SLOT_SEQUENCE",
     "DISPENSE",
     "EXECUTE_ARMED_MOVE",
 })

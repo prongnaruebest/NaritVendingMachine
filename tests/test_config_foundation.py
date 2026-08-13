@@ -29,6 +29,23 @@ class ConfigFoundationTests(unittest.TestCase):
         self.assertEqual(report.effective_axes["y"]["tail_limit_pin"], 9)
         self.assertEqual(len(report.revision), 64)
 
+    def test_home_order_is_z_y_x_in_both_configuration_sources(self) -> None:
+        expected = ["z", "y", "x"]
+
+        self.assertEqual(self.machine["home_order"], expected)
+        self.assertEqual(self.hardware["machine_parameters"]["home_order"], expected)
+
+    def test_all_test_slots_are_configured_inside_axis_limits(self) -> None:
+        slots = self.machine["slots"]
+        limits = {"x": 220.0, "y": 260.0, "z": 200.0}
+
+        self.assertEqual(set(slots), {str(slot) for slot in range(1, 31)})
+        for slot_code, slot in slots.items():
+            for axis, maximum in limits.items():
+                coordinate = float(slot[f"{axis}_mm"])
+                self.assertGreater(coordinate, 0.0, f"slot {slot_code} {axis} is not configured")
+                self.assertLess(coordinate, maximum, f"slot {slot_code} {axis} reaches a travel limit")
+
     def test_duplicate_output_pin_is_rejected(self) -> None:
         hardware = copy.deepcopy(self.hardware)
         hardware["digital_outputs"]["alarm_buzzer"]["pin"] = hardware["motors"]["x"]["step_pin"]

@@ -121,8 +121,8 @@
   "machine_parameters": {
     "home_order": [
       "z",
-      "x",
-      "y"
+      "y",
+      "x"
     ],
     "safe_z_mm": 10.0,
     "axes": {

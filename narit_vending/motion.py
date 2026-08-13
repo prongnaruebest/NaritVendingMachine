@@ -23,6 +23,10 @@ def _slot_sort_key(item: tuple[str, object]) -> tuple[int, int | str]:
     return (0, int(code)) if code.isdigit() else (1, code)
 
 
+def _home_backoff_limit_steps(steps_per_mm: float) -> int:
+    return max(400, int(round(10.0 * steps_per_mm)))
+
+
 class MotionError(RuntimeError):
     pass
 
@@ -111,6 +115,16 @@ class SlotPosition:
     product_name: str = ""
     dispense_delay_ms: int = 0
 
+    def to_dict(self) -> dict[str, float | int | str]:
+        return {
+            "code": self.code,
+            "x_mm": self.x_mm,
+            "y_mm": self.y_mm,
+            "z_mm": self.z_mm,
+            "product_name": self.product_name,
+            "dispense_delay_ms": self.dispense_delay_ms,
+        }
+
 
 @dataclass(frozen=True)
 class AxisMovePlan:
@@ -172,7 +186,7 @@ class MachineConfig:
     x: AxisConfig
     y: AxisConfig
     z: AxisConfig
-    home_order: tuple[str, ...] = ("z", "x", "y")
+    home_order: tuple[str, ...] = ("z", "y", "x")
     slots: dict[str, SlotPosition] = field(default_factory=dict)
     safe_z_mm: float = 10.0
 
@@ -354,7 +368,7 @@ class AxisController:
         effective_backoff = (
             backoff_steps
             if backoff_steps is not None
-            else max(200, int(round(3.0 * self.config.steps_per_mm)))
+            else _home_backoff_limit_steps(self.config.steps_per_mm)
         )
 
         homing_speed = min(8.0, self.config.max_speed_mm_s)
@@ -1011,7 +1025,7 @@ def build_default_machine_config() -> MachineConfig:
             motor_steps_per_rev=200,
             driver_microsteps=10,
         ),
-        home_order=("z", "x", "y"),
+        home_order=("z", "y", "x"),
         slots=build_default_slots(),
         safe_z_mm=10.0,
     )
@@ -1040,7 +1054,7 @@ def load_machine_config(path: str | Path) -> MachineConfig:
         x=x,
         y=y,
         z=z,
-        home_order=tuple(payload.get("home_order", ["z", "x", "y"])),
+        home_order=tuple(payload.get("home_order", ["z", "y", "x"])),
         slots=slots,
         safe_z_mm=float(payload.get("safe_z_mm", 10.0)),
     )

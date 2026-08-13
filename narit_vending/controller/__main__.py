@@ -29,6 +29,40 @@ if TYPE_CHECKING:
 _log = logging.getLogger("narit_vending.controller")
 
 
+def _normalize_machine_state(
+    raw_state: str,
+    *,
+    estop: bool,
+    busy: bool,
+    active_command: str | None,
+    axes_homed: bool,
+) -> str:
+    if estop:
+        return "E_STOP"
+    if busy:
+        command = str(active_command or "").lower()
+        if command.startswith("home"):
+            return "HOMING"
+        if command.startswith("dispense"):
+            return "DISPENSING"
+        return "MOVING"
+
+    normalized = {
+        "success": "READY",
+        "ready": "READY",
+        "idle": "READY" if axes_homed else "NOT_READY",
+        "not_ready": "NOT_READY",
+        "homing": "HOMING",
+        "moving": "MOVING",
+        "alarm": "ALARM",
+        "e_stop": "E_STOP",
+        "stopped": "STOPPED",
+    }.get(raw_state.lower(), raw_state.upper())
+    if normalized == "READY" and not axes_homed:
+        return "NOT_READY"
+    return normalized
+
+
 def _build_snapshot(service: Any) -> MachineSnapshot:
     """Convert MotionService state into a MachineSnapshot."""
     from narit_vending.shared.snapshot import AxisSnapshot, MachineSnapshot
@@ -52,11 +86,18 @@ def _build_snapshot(service: Any) -> MachineSnapshot:
     op = status.get("operation", {})
     mc = status.get("motion_command", {})
 
-    # Map legacy machine_state strings to MachineState enum values
-    raw_state = str(status.get("machine_state", "NOT_READY")).upper()
+    raw_state = str(status.get("machine_state", "NOT_READY"))
+    axes_homed = all(axis.is_homed for axis in axes.values())
+    machine_state = _normalize_machine_state(
+        raw_state,
+        estop=bool(ctrl_status.get("estop", False)),
+        busy=bool(status.get("busy", False)),
+        active_command=status.get("active_command"),
+        axes_homed=axes_homed,
+    )
 
     return MachineSnapshot(
-        state=raw_state,
+        state=machine_state,
         estop=bool(ctrl_status.get("estop", False)),
         axes=axes,
         busy=bool(status.get("busy", False)),
@@ -76,6 +117,7 @@ def _build_snapshot(service: Any) -> MachineSnapshot:
         stop_requested=bool(safety.get("stop_requested", False)),
         controlled_stop_requested=bool(safety.get("controlled_stop_requested", False)),
         speed_override=getattr(service.controller, "speed_override", None),
+        slots={str(code): dict(slot) for code, slot in dict(status.get("slots", {})).items()},
     )
 
 
@@ -100,6 +142,7 @@ def _register_handlers(bus: Any, service: Any) -> None:
         make_plan_move_handler,
         make_validate_target_handler,
     )
+    from narit_vending.controller.handlers.sequence import make_run_slot_sequence_handler
     from narit_vending.controller.handlers.stop import (
         make_clear_alarm_handler,
         make_controlled_stop_handler,
@@ -115,6 +158,7 @@ def _register_handlers(bus: Any, service: Any) -> None:
     bus.register("JOG", make_jog_handler(service))
     bus.register("MOVE_TO", make_move_to_handler(service))
     bus.register("MOVE_TO_SLOT", make_move_to_slot_handler(service))
+    bus.register("RUN_SLOT_SEQUENCE", make_run_slot_sequence_handler(service.sequence_service))
     bus.register("DISPENSE", make_dispense_handler(service))
     bus.register("VALIDATE_TARGET", make_validate_target_handler(service))
     bus.register("ARM_MOVE", make_arm_move_handler(service))
@@ -135,12 +179,15 @@ async def _async_main(service: Any, args: argparse.Namespace) -> None:
     snapshot_fn = lambda: _build_snapshot(service)  # noqa: E731
     bus = CommandBus(state_machine, snapshot_fn)
     _register_handlers(bus, service)
+    service.mqtt_service.set_command_dispatcher(bus.submit)
 
     ipc = IPCServer(
         command_bus=bus,
         snapshot_fn=snapshot_fn,
         config_fn=service.get_config,
         save_config_fn=service.save_configuration,
+        mqtt_status_fn=service.mqtt_service.status_payload,
+        mqtt_control_fn=service.mqtt_service.set_runtime_enabled,
     )
     await ipc.start()
     _log.info("Controller IPC server ready — state machine: %s", state_machine.state.value)

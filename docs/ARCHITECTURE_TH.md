@@ -4,6 +4,233 @@
 
 ---
 
+## สถานะระบบปัจจุบัน (Current Production Architecture — 2026-07)
+
+> ส่วนนี้เป็นแหล่งอ้างอิงหลักสำหรับระบบที่ deploy ใช้งานอยู่จริง และแทนที่คำอธิบายแบบ single-process หรือ MQTT topic รุ่นเก่าที่ปรากฏในหัวข้อถัดไป
+
+### โครงสร้างการทำงานจริง
+
+```text
+Operator Browser → Web Process (Flask :80) → Unix IPC → Controller Process → GPIO / Motion
+                                                       └→ MQTT Broker
+```
+
+- **Web Process** ให้บริการ HMI, static assets และ HTTP API เท่านั้น; ไม่เปิด GPIO และไม่สร้าง MQTT client
+- **Controller Process** เป็นเจ้าของ MotionService, state machine, command bus, safety interlock, GPIO และ MQTT client เพียงตัวเดียว
+- Web ติดต่อ Controller ผ่าน `/run/narit-vending/ctrl.sock`; หาก Controller ไม่พร้อม คำสั่งต้อง fail-safe ด้วย HTTP 503
+- การ restart Web ไม่หยุด motion หรือ MQTT; การ restart Controller เป็นการหยุดการควบคุมจริงและ presence จะ offline ชั่วคราว
+
+### Safety boundary และคำสั่งเคลื่อนที่
+
+Browser, REST API และ MQTT ไม่สามารถข้าม Controller ได้ ทุกคำสั่งต้องผ่านการตรวจ E-Stop, software stop, alarm, limit switch, homing, travel boundary และ target/slot validity ที่ Controller ก่อนสั่ง GPIO
+
+คำสั่งไปยังพิกัดใช้ `Validate → Arm → Execute`; การเปลี่ยนพิกัดหรือความเร็วหลัง validate ทำให้ arm state ใช้ไม่ได้. Go To Slot ยก Safe Z ก่อนเคลื่อน X/Y และ Dispense ใช้ได้เมื่อยืนยันว่า gantry อยู่ที่ slot ถูกต้องแล้วเท่านั้น
+
+### MQTT contract ปัจจุบัน
+
+| ทิศทาง | Topic | กติกา |
+|---|---|---|
+| Subscribe | `cabinet/{cabinet_id}/command` | รองรับ action `release` เท่านั้น; ต้องมี `request_id` และ `slot`; ปฏิเสธ request หมดอายุ/ซ้ำ/ไม่ถูกต้อง |
+| Publish | `cabinet/{cabinet_id}/scan`, `/status`, `/presence` | รายงาน phase และผลสำเร็จ/ล้มเหลว; presence เป็น QoS 1 retained พร้อม Last Will offline |
+
+MQTT ใช้ client ID เฉพาะ cabinet และ `clean_session=false`; reconnect backoff 4–60 วินาที. MQTT Monitor และ `/api/mqtt/status` แสดงเฉพาะ telemetry ที่ sanitize แล้ว ห้ามเปิดเผย password, token หรือ secret
+
+### Configuration, observability และ deployment
+
+- `machine_config.json`: travel, steps/mm, Safe Z, homing, slot XYZ
+- `hardware_config.json`: GPIO และ communication
+- การบันทึก config ที่ผ่าน validation สร้าง revision และ backup ใต้ `backups/config/`
+- `/health/live` ตรวจ Web, `/health/ready` แยก service-ready ออกจาก machine-ready, `/api/mqtt/status` แสดงสถานะ MQTT ที่ sanitize แล้ว
+- งาน HMI ใช้ Web-only deployment เพื่อไม่ตัด Controller/MQTT; Full deployment ใช้เมื่อแก้ controller, motion, GPIO, MQTT runtime หรือ dependency
+
+### Roadmap ที่ยังไม่ดำเนินการ (รวมจากเอกสาร Proposal)
+
+รายการต่อไปเป็นแผนพัฒนา ไม่ใช่ความสามารถที่เปิดใช้บน production ในปัจจุบัน:
+
+1. Persistent audit/event store เพื่อเก็บ event, command ID และผลการทำงานเกินกว่า in-memory ล่าสุด
+2. Authentication/RBAC สำหรับแยก Viewer, Operator, Engineer และ Admin
+3. MQTT TLS พร้อม CA/client certificate และ broker hardening
+4. ลดสิทธิ์ systemd จาก root หลังยืนยัน GPIO group/permission บน Pi
+5. Full deployment แบบ atomic release/health check/rollback
+6. เพิ่ม Pi integration tests สำหรับ cold boot, network loss, E-Stop, limit, configuration rollback และ MQTT reconnect
+
+ทุก roadmap ต้องรักษา two-process ownership, one-MQTT-client invariant, API compatibility และ safety gate ที่ Controller เป็นผู้ตัดสินใจเสมอ
+
+### Actual Running Architecture (โครงสร้างที่ใช้งานจริง)
+
+โครงสร้างด้านล่างคือไฟล์ที่มีอยู่และทำงานร่วมกันในระบบปัจจุบัน ไม่ใช่ proposal:
+
+```text
+narit_vending/
+├── controller/                         # Controller process: เจ้าของ safety และ motion command
+│   ├── __main__.py                      # เริ่ม MotionService, SequenceService, CommandBus, StateMachine และ IPC server
+│   ├── command_bus.py                   # จุดรวมทุก command; single-flight lock + SafetyInterlock
+│   ├── safety.py                        # ตรวจ E-Stop, stop latch, busy, homing, limits, motor test
+│   ├── state_machine.py                 # สถานะ READY/NOT_READY/HOMING/MOVING/ALARM/E_STOP
+│   ├── server.py                        # Unix IPC server ที่ /run/narit-vending/ctrl.sock
+│   ├── sequence_service.py              # ลำดับ X → Y → Z → hold → Home Z → Y → X
+│   └── handlers/
+│       ├── home.py                      # HOME_AXIS / HOME_ALL
+│       ├── jog.py                       # JOG
+│       ├── move.py                      # MOVE_TO / MOVE_TO_SLOT / DISPENSE / validation
+│       ├── sequence.py                  # RUN_SLOT_SEQUENCE → SequenceService
+│       ├── stop.py                      # STOP / CONTROLLED_STOP / CLEAR_ALARM
+│       └── motor_test.py                # motor test แบบแยกจาก normal motion
+├── shared/                              # โครงสร้างข้อมูลระหว่าง Web และ Controller
+│   ├── commands.py                      # CommandEnvelope และ CommandResult
+│   ├── ipc_protocol.py                  # ชื่อ method/รูปแบบ IPC request-response
+│   └── snapshot.py                      # MachineSnapshot, AxisSnapshot ที่ปลอดภัยต่อ JSON
+├── web/                                 # Web process: Flask HMI/API facade, ไม่จับ GPIO
+│   ├── __main__.py                      # เริ่ม Web service บน port 80
+│   ├── app.py                           # Flask app factory และ register routes
+│   ├── ipc_client.py                    # ControllerClient ส่งคำขอเข้า Unix socket
+│   └── routes/                          # status, commands, slots, config, health
+├── motion.py                             # MotionService, GPIO, axis/slot/home/move implementation
+├── mqtt_service.py                       # MQTT client ที่ Controller เป็นเจ้าของเพียงตัวเดียว
+├── webapp.py                             # MotionService compatibility adapter และ state สำหรับ HMI
+├── config_foundation.py                  # validate, revision และ backup configuration
+├── static/app.js + static/style.css      # browser HMI state/rendering
+└── templates/index.html                  # HMI page shell
+```
+
+#### สิ่งที่เกิดขึ้นจริงเมื่อเปิดหน้า HMI
+
+1. Browser โหลด `templates/index.html`, `static/app.js` และ `static/style.css` จาก **Web process**
+2. `app.js` polling API เพื่อขอ machine snapshot และอัปเดต Axis, Alarm, Slot, MQTT และ Event History
+3. Flask route ใน `web/routes/` ไม่เรียก GPIO; route ใช้ `web/ipc_client.py` ส่ง request ไป `controller/server.py`
+4. IPC server ส่ง CommandEnvelope เข้า `controller/command_bus.py`
+5. CommandBus เรียก `controller/safety.py`; ถ้า E-Stop/alarm/stop/homing/limit/busy ไม่ผ่าน จะคืน rejection โดยไม่เรียก motor
+6. เมื่อผ่าน safety handler ใน `controller/handlers/` จึงเรียก `motion.py` เพื่อขับ GPIO ของ X/Y/Z
+7. Controller สร้าง MachineSnapshot แล้วส่งกลับผ่าน IPC → Flask → Browser เพื่อแสดงผลเดียวกับที่ใช้ตัดสิน safety
+
+#### สิ่งที่เกิดขึ้นจริงเมื่อ MQTT รับคำสั่ง
+
+1. `controller/__main__.py` เริ่ม `mqtt_service.py` ภายใน **Controller process เท่านั้น**
+2. MQTT client subscribe `cabinet/{cabinet_id}/command` และตรวจ `action=release`, `request_id`, `slot`, expiry และ duplicate request
+3. MQTT แปลง `release` เป็น CommandEnvelope `RUN_SLOT_SEQUENCE` เพียงหนึ่งคำสั่ง โดยคง `request_id` เป็น idempotency key แล้วส่งเข้า `CommandBus.submit`
+4. CommandBus/SafetyInterlock ตรวจ safety ก่อน `handlers/sequence.py` เรียก `SequenceService`; MQTT, Web และ Browser ไม่สามารถเรียก GPIO หรือ AxisController โดยตรง
+5. SequenceService ทำตามลำดับ `Move X → Move Y → Move Z → verify target → hold 3 วินาที → Home Z → Home Y → Home X → verify home`; หากขั้นตอนใดผิดพลาดจะยกเลิกขั้นตอนที่เหลือ
+6. `motion.py`/AxisController เป็นเจ้าของ GPIO และตรวจ E-Stop, stop latch, limit และ travel boundary ระหว่างการเคลื่อนของทุกแกน
+7. Controller publish `/presence`, `/status` และ `/scan`; Web แสดง MQTT Monitor โดยอ่าน telemetry ผ่าน IPC ไม่ได้เชื่อม broker เอง
+
+#### Slot Sequence boundary ที่ใช้งานจริง
+
+| ชั้น | ไฟล์ | หน้าที่ |
+|---|---|---|
+| HTTP/HMI | `web/routes/commands.py`, `static/app.js` | เลือก Go To ปกติหรือ Sequence Mode และส่ง command ผ่าน IPC เท่านั้น |
+| MQTT | `mqtt_service.py` | ตรวจ payload/expiry/idempotency, สร้าง `RUN_SLOT_SEQUENCE`, publish phase/final status |
+| Controller | `controller/command_bus.py`, `controller/handlers/sequence.py` | single-flight lock, SafetyInterlock และส่งต่อให้ SequenceService |
+| Sequence | `controller/sequence_service.py` | เป็นเจ้าของลำดับขั้นตอนและ phase; ไม่จับ GPIO |
+| Hardware | `motion.py` | AxisController, GPIO pulse, position และ safety guard ระหว่างการเคลื่อน |
+
+#### Process และ systemd ที่ทำงานบน Pi
+
+- `narit-vending-controller.service` รัน `python -m narit_vending.controller` และเป็น owner ของ GPIO/MQTT
+- `narit-vending-web.service` รัน `python -m narit_vending.web --port 80` และต้องใช้ Controller IPC
+- Web-only deployment ส่งเฉพาะ `static/` และ `templates/` แล้ว restart Web; MQTT จึงไม่หลุด
+- Full deployment restart Controller และ Web; presence offline ชั่วคราวเป็นสถานะจริงระหว่าง Controller restart
+
+### สรุปสำหรับการพรีเซนต์ (Engineering Presentation Summary)
+
+**ปัญหาที่ architecture นี้แก้:** ระบบควบคุม gantry มีช่องทางสั่งงานหลายทาง (HMI และ MQTT) แต่การเคลื่อนที่ต้องมีเจ้าของเพียงหนึ่งเดียว เพื่อไม่ให้ Web, browser หรือ network message ข้าม interlock แล้วสั่ง GPIO ได้โดยตรง
+
+**คำตอบของระบบ:** แยกเป็น 2 processes ชัดเจน — Web เป็นเพียงหน้าจอและ API facade; Controller เป็น authority เดียวของ CommandBus, SafetyInterlock, Motion/GPIO และ MQTT. ดังนั้นไม่ว่าคำสั่งจะมาจาก HMI หรือ MQTT จะรวมที่ Controller แล้วผ่าน safety gate เดียวกันก่อนถึง hardware
+
+| ประเด็นที่จะสื่อ | หลักฐานในระบบที่รันจริง | ผลต่อการปฏิบัติงาน |
+|---|---|---|
+| ไม่มีทางลัดถึงมอเตอร์ | Web ใช้ Unix IPC และ MQTT สร้าง `CommandEnvelope` เข้า `CommandBus` | คำสั่งที่ไม่ผ่าน safety ไม่สร้าง GPIO pulse |
+| ป้องกันคำสั่ง motion ซ้อนกัน | `CommandBus` ใช้ single-flight dispatch และตรวจ busy | ลดความเสี่ยงจาก HMI/MQTT สั่งพร้อมกัน |
+| ป้องกันซ้ำจาก network | MQTT ใช้ `request_id` เป็น idempotency key และตรวจ expiry | retry message ไม่ทำให้ sequence เดิมวิ่งซ้ำ |
+| ตรวจทั้งก่อนและระหว่างเคลื่อน | SafetyInterlock ตรวจ readiness ก่อนเริ่ม; `AxisController` ตรวจ E-Stop/stop/limit/travel ทุกแกน | safety ยังทำงานหาก state เปลี่ยนขณะกำลังเคลื่อน |
+| แยก UI deployment จาก control | Web-only deployment restart เฉพาะ Web | ปรับ HMI โดยไม่ทำให้ MQTT หรือ Controller หลุด |
+
+### เส้นทางคำสั่ง 3 แบบที่ต้องแยกในการนำเสนอ
+
+| การใช้งาน | จุดเริ่ม | Command ที่ Controller ได้ | ลำดับการเคลื่อน | ผลลัพธ์ |
+|---|---|---|---|---|
+| Go To Slot ปกติ | HMI, Sequence Mode ปิด | `MOVE_TO_SLOT` ตาม API เดิม | Safe Z → X/Y → Z target | คง gantry ไว้ที่ slot เพื่อรอ Dispense; Dispense เป็นคำสั่งแยกและต้อง verify position |
+| Slot Sequence Mode | HMI, Sequence Mode เปิด | `RUN_SLOT_SEQUENCE` ผ่าน IPC | X → Y → Z → verify → hold 3 s → Home Z → Home Y → Home X | ส่งผล target/home verification กลับ HMI |
+| MQTT `release` | `cabinet/{cabinet_id}/command` | `RUN_SLOT_SEQUENCE` ผ่าน `CommandBus.submit` | ลำดับเดียวกับ Slot Sequence Mode | publish phase และ final status โดยคง `request_id` |
+
+> **ข้อควรเน้น:** Safe-Z flow เป็นพฤติกรรมของ Go To Slot ปกติ ส่วน Sequence Mode ที่ได้รับการกำหนดให้ทำงานตามลำดับ X → Y → Z → hold → Home Z → Y → X เป็น workflow แยกใน `SequenceService` จึงไม่ควรอธิบายว่าเป็น flow เดียวกัน
+
+### สิ่งที่ตรวจสอบได้ในการสาธิต
+
+1. เปิด HMI แล้วแสดงว่า Browser ติดต่อ Web แต่ Web ส่งคำสั่งผ่าน `/run/narit-vending/ctrl.sock` เท่านั้น
+2. แสดง `/health/live`, `/health/ready` และ `/api/mqtt/status` เพื่อแยก “service พร้อม” ออกจาก “machine พร้อมเคลื่อน”
+3. ใช้ HMI หรือ MQTT ส่งคำสั่งที่มี `request_id`; แสดงว่า phase/status และ CommandResult กลับมาโดยไม่เปิดเผย secret
+4. ทดสอบแบบไม่ขยับมอเตอร์ด้วย unit/mock test: safety block, sequence order, stop-on-failure, MQTT idempotency และ route ผ่าน IPC
+5. ก่อนทดสอบเครื่องจริง ให้ตรวจพื้นที่ปลอดภัย, E-Stop, homing, slot XYZ และอนุมัติการเคลื่อนที่โดยผู้รับผิดชอบก่อนเสมอ
+
+### ขอบเขตปัจจุบันและแผนต่อไป
+
+- ส่วน `webapp.py` ยังเป็น compatibility adapter เพื่อรักษา API เดิม; sequence business logic ย้ายไป `controller/sequence_service.py` แล้ว
+- Event history แบบ persistent, RBAC, MQTT TLS, atomic rollback และ Pi fault-injection suite เป็น **Target Modular Architecture / roadmap** ยังไม่ควรนำเสนอว่าเปิดใช้แล้ว
+- Unit/integration tests ที่ใช้ mock ไม่ได้แทนการรับรอง hardware; การทดสอบ motor จริงต้องเป็นขั้นตอนแยกที่มีการอนุมัติและ checklist หน้างาน
+
+### Target Modular Architecture (โครงสร้างเป้าหมาย)
+
+ผังต่อไปนี้อธิบายว่าระบบควรถูกแบ่งหน้าที่อย่างไรเมื่อ refactor ในอนาคต เพื่อให้การเปลี่ยนแปลง UI, API, MQTT, persistence หรือ GPIO ไม่กระทบ safety และ motion โดยตรง. **เป็น target structure ไม่ใช่การยืนยันว่าไฟล์ทั้งหมดมีอยู่ใน production ปัจจุบัน**.
+
+```text
+narit_vending/
+├── api/                         # HTTP boundary: parse/validate request, map errors, never drive GPIO
+│   ├── app_factory.py
+│   ├── error_handlers.py
+│   ├── legacy/routes.py          # compatibility endpoints during migration
+│   └── v1/routes/                # versioned public API
+│       ├── status.py
+│       ├── commands.py
+│       ├── motion.py
+│       ├── slots.py
+│       ├── configuration.py
+│       ├── alarms.py
+│       └── maintenance.py
+├── application/                  # use-cases: one command path and orchestration
+│   ├── command_bus.py
+│   ├── command_queue.py
+│   ├── command_handler.py
+│   ├── commands/                 # Home, Jog, Move, Slot, Motor Test, Safety commands
+│   └── services/                 # machine/motion/homing/safety/slot/config services
+├── domain/                       # pure business and safety rules; no Flask, MQTT or gpiozero import
+│   ├── models/                   # axis, slot, command, alarm, configuration
+│   ├── state_machine/            # machine state and allowed transitions
+│   └── safety/                   # interlock and policy
+├── infrastructure/               # replaceable technical adapters
+│   ├── gpio/                     # gpiozero, pigpio and mock backends behind interfaces
+│   ├── config/                   # schema, loader, migration and backup
+│   ├── mqtt/                     # controller-owned adapter and payload schemas
+│   └── persistence/              # JSON/SQLite implementations
+├── repositories/                 # slot/event/command persistence contracts
+├── diagnostics/                  # health, startup checks and metrics
+├── static/                       # frontend modules: core, API, workspaces, components, CSS layers
+└── templates/                    # HMI shell and reusable partials
+
+config/                           # versioned machine/hardware/slot/MQTT configuration
+└── schema/
+
+tests/                            # unit, integration, fault injection, browser and Pi smoke tests
+```
+
+#### เส้นทางการทำงานตามโครงสร้างเป้าหมาย
+
+1. Browser เรียก `api/v1/routes` หรือ compatibility route; API ตรวจรูปแบบ request และสิทธิ์ แต่ไม่ตัดสิน safety ของ motor เอง
+2. API สร้าง command แล้วส่งเข้า `application/command_bus.py`; command queue ป้องกันคำสั่ง motion ซ้อนกันและเก็บ command ID
+3. Command handler ขอ snapshot จาก domain state machine และส่งผ่าน `domain/safety/interlock.py` ก่อนเรียก service ใด ๆ
+4. Application service ใช้ repository เพื่ออ่าน slot/config/audit และใช้ infrastructure adapter เพื่อสื่อสาร GPIO หรือ MQTT
+5. GPIO backend เป็น implementation detail; tests ใช้ mock backend ได้โดยไม่ขยับ motor จริง
+6. MQTT adapter แปลง message เป็น command เดียวกับ HTTP; ห้าม MQTT เรียก GPIO หรือ MotionService โดยตรง
+7. Diagnostics อ่าน state/metrics แบบ read-only; persistence เก็บ event/command ที่ sanitize แล้วเพื่อ audit และ export
+
+#### กฎการย้ายระบบ
+
+- ย้ายทีละ boundary พร้อม compatibility route และ regression tests; ห้ามย้าย GPIO/motion ทั้งก้อนครั้งเดียว
+- Controller process ยังคงเป็นเจ้าของ `application`, `domain`, `infrastructure/gpio` และ `infrastructure/mqtt`; Web process เป็น API/HMI facade
+- สร้าง interface และ test ก่อนสลับ implementation เช่น `gpiozero_backend` ไป `pigpio_backend`
+- การเพิ่ม SQLite, auth/RBAC, TLS หรือ command queue ต้องเริ่มจาก migration plan, rollback และ Pi smoke test
+
+---
+
 ## ภาพรวมระบบ
 
 ระบบทำงานบน `Raspberry Pi` โดยให้ Pi เป็น `web server` สำหรับควบคุมเครื่องจ่ายสินค้า ผู้ใช้เปิดหน้าเว็บผ่านชื่อเครื่อง `NaritVendingMachine.local` แล้วสั่งงาน `Home`, `Jog`, `Go To Slot`, `Save Slot` และ `Stop` ได้จาก browser หรือเรียกผ่าน REST API โดยตรง

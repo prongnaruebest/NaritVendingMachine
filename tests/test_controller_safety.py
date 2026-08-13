@@ -1,6 +1,7 @@
 import unittest
 
 from narit_vending.controller.safety import SafetyInterlock
+from narit_vending.controller.__main__ import _normalize_machine_state
 from narit_vending.shared.commands import CommandEnvelope
 from narit_vending.shared.snapshot import AxisSnapshot, MachineSnapshot
 
@@ -86,6 +87,34 @@ class TestControllerSafety(unittest.TestCase):
         env = CommandEnvelope(command_type="MOVE_TO", source="http", parameters={"x_mm": 10})
         dec = self.safety.evaluate(env, snap)
         self.assertTrue(dec.allowed)
+
+    def test_slot_sequence_is_blocked_until_machine_is_ready(self):
+        env = CommandEnvelope(command_type="RUN_SLOT_SEQUENCE", source="http", parameters={"slot_code": "01"})
+        decision = self.safety.evaluate(env, _make_snapshot(state="NOT_READY"))
+        self.assertFalse(decision.allowed)
+        self.assertIn("AXES_NOT_HOMED", decision.reason_codes)
+
+    def test_legacy_success_state_normalizes_to_ready_after_homing(self):
+        state = _normalize_machine_state(
+            "success",
+            estop=False,
+            busy=False,
+            active_command=None,
+            axes_homed=True,
+        )
+
+        self.assertEqual(state, "READY")
+
+    def test_legacy_idle_state_stays_not_ready_until_all_axes_homed(self):
+        state = _normalize_machine_state(
+            "idle",
+            estop=False,
+            busy=False,
+            active_command=None,
+            axes_homed=False,
+        )
+
+        self.assertEqual(state, "NOT_READY")
 
 
 if __name__ == "__main__":

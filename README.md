@@ -14,6 +14,7 @@ Motion control base for a Raspberry Pi vending machine with `X/Y/Z` axes, head/t
 - `scripts/deploy_to_pi.ps1`: deploy this project from Windows to Raspberry Pi over SSH
 - `scripts/setup_pi.sh`: install runtime dependencies on the Pi
 - `docs/`: architecture specifications, proposals, and API documentation
+- `docs/IRIV_WIRING_TH.md`: approved IRIV PiControl/IRIV IO wiring allocation and safety boundary
 
 ## Features
 
