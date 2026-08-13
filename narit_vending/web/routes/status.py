@@ -88,6 +88,8 @@ def _status_from_snapshot(snap) -> dict:
             "estop": snap.estop,
             **axes_data,
         },
+        "alarm_channels": snap.alarm_channels,
+        "io": snap.io_status,
         "slots": snap.slots,
     }
 

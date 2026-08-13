@@ -61,6 +61,10 @@ class SequenceService:
         if not target_verification["target_reached"]:
             raise MotionError("Target position verification failed")
 
+        self._set_phase("DISPENSE", None, "Activating IRIV IO dispense output", phase_callback)
+        self._motion.activate_dispense()
+        completed.append("DISPENSE")
+
         self._set_phase("HOLD_AT_TARGET", None, "Holding at slot target for 3 seconds", phase_callback)
         for _ in range(round(self.HOLD_SECONDS / self.HOLD_POLL_SECONDS)):
             self._check_stop()

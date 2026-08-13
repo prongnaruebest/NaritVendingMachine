@@ -118,6 +118,7 @@ def _build_snapshot(service: Any) -> MachineSnapshot:
         controlled_stop_requested=bool(safety.get("controlled_stop_requested", False)),
         speed_override=getattr(service.controller, "speed_override", None),
         slots={str(code): dict(slot) for code, slot in dict(status.get("slots", {})).items()},
+        io_status=dict(status.get("io", {})),
     )
 
 
@@ -209,7 +210,7 @@ async def _async_main(service: Any, args: argparse.Namespace) -> None:
     await stop_event.wait()
     _log.info("Shutting down IPC server")
     await ipc.stop()
-    service.mqtt_service.stop()
+    service.close()
     _log.info("Controller stopped")
 
 

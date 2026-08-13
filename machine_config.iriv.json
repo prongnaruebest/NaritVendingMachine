@@ -1,0 +1,41 @@
+{
+  "axes": {
+    "x": {"name":"x","pulse_pin":16,"direction_pin":23,"head_limit_pin":17,"tail_limit_pin":27,"home_direction":0,"forward_direction":1,"steps_per_mm":80.0,"max_travel_mm":220.0,"max_speed_mm_s":20.0,"default_speed_mm_s":10.0,"settle_delay":0.05,"jog_step_mm":1.0,"acceleration":40.0,"deceleration":40.0,"lead_screw_pitch_mm":5.0,"motor_steps_per_rev":200,"driver_microsteps":2,"pulses_per_rev":400},
+    "y": {"name":"y","pulse_pin":26,"direction_pin":24,"head_limit_pin":22,"tail_limit_pin":9,"home_direction":0,"forward_direction":1,"steps_per_mm":80.0,"max_travel_mm":260.0,"max_speed_mm_s":15.0,"default_speed_mm_s":8.0,"settle_delay":0.05,"jog_step_mm":1.0,"acceleration":30.0,"deceleration":30.0,"lead_screw_pitch_mm":5.0,"motor_steps_per_rev":200,"driver_microsteps":2,"pulses_per_rev":400},
+    "z": {"name":"z","pulse_pin":18,"direction_pin":25,"head_limit_pin":11,"tail_limit_pin":5,"home_direction":0,"forward_direction":1,"steps_per_mm":80.0,"max_travel_mm":200.0,"max_speed_mm_s":20.0,"default_speed_mm_s":10.0,"settle_delay":0.05,"jog_step_mm":2.0,"acceleration":80.0,"deceleration":80.0,"lead_screw_pitch_mm":5.0,"motor_steps_per_rev":200,"driver_microsteps":2,"pulses_per_rev":400}
+  },
+  "home_order": ["z", "y", "x"],
+  "safe_z_mm": 10.0,
+  "slots": {
+    "1":{"x_mm":21.9,"y_mm":22.0,"z_mm":35.0,"product_name":"","dispense_delay_ms":0},
+    "2":{"x_mm":53.1,"y_mm":19.5,"z_mm":20.0,"product_name":"","dispense_delay_ms":0},
+    "3":{"x_mm":91.0,"y_mm":18.9,"z_mm":35.0,"product_name":"","dispense_delay_ms":0},
+    "4":{"x_mm":126.7,"y_mm":18.1,"z_mm":35.0,"product_name":"","dispense_delay_ms":0},
+    "5":{"x_mm":160.5,"y_mm":21.4,"z_mm":25.0,"product_name":"","dispense_delay_ms":0},
+    "6":{"x_mm":193.8,"y_mm":20.9,"z_mm":25.0,"product_name":"","dispense_delay_ms":0},
+    "7":{"x_mm":20.5,"y_mm":76.6,"z_mm":30.0,"product_name":"","dispense_delay_ms":0},
+    "8":{"x_mm":56.6,"y_mm":75.2,"z_mm":25.0,"product_name":"","dispense_delay_ms":0},
+    "9":{"x_mm":90.5,"y_mm":73.4,"z_mm":45.0,"product_name":"","dispense_delay_ms":0},
+    "10":{"x_mm":125.0,"y_mm":76.1,"z_mm":25.0,"product_name":"","dispense_delay_ms":0},
+    "11":{"x_mm":159.8,"y_mm":77.0,"z_mm":15.0,"product_name":"","dispense_delay_ms":0},
+    "12":{"x_mm":195.8,"y_mm":76.0,"z_mm":25.0,"product_name":"","dispense_delay_ms":0},
+    "13":{"x_mm":20.0,"y_mm":131.0,"z_mm":45.0,"product_name":"","dispense_delay_ms":0},
+    "14":{"x_mm":55.3,"y_mm":131.1,"z_mm":25.0,"product_name":"","dispense_delay_ms":0},
+    "15":{"x_mm":88.9,"y_mm":129.7,"z_mm":35.0,"product_name":"","dispense_delay_ms":0},
+    "16":{"x_mm":125.6,"y_mm":131.5,"z_mm":20.0,"product_name":"","dispense_delay_ms":0},
+    "17":{"x_mm":158.0,"y_mm":129.1,"z_mm":30.0,"product_name":"","dispense_delay_ms":0},
+    "18":{"x_mm":195.4,"y_mm":130.2,"z_mm":15.0,"product_name":"","dispense_delay_ms":0},
+    "19":{"x_mm":20.2,"y_mm":185.7,"z_mm":25.0,"product_name":"","dispense_delay_ms":0},
+    "20":{"x_mm":56.5,"y_mm":183.4,"z_mm":15.0,"product_name":"","dispense_delay_ms":0},
+    "21":{"x_mm":91.2,"y_mm":185.8,"z_mm":35.0,"product_name":"","dispense_delay_ms":0},
+    "22":{"x_mm":126.1,"y_mm":183.2,"z_mm":25.0,"product_name":"","dispense_delay_ms":0},
+    "23":{"x_mm":158.5,"y_mm":183.7,"z_mm":25.0,"product_name":"","dispense_delay_ms":0},
+    "24":{"x_mm":194.8,"y_mm":184.9,"z_mm":15.0,"product_name":"","dispense_delay_ms":0},
+    "25":{"x_mm":22.0,"y_mm":239.6,"z_mm":45.0,"product_name":"","dispense_delay_ms":0},
+    "26":{"x_mm":56.1,"y_mm":239.7,"z_mm":40.0,"product_name":"","dispense_delay_ms":0},
+    "27":{"x_mm":88.2,"y_mm":239.0,"z_mm":20.0,"product_name":"","dispense_delay_ms":0},
+    "28":{"x_mm":123.4,"y_mm":241.5,"z_mm":45.0,"product_name":"","dispense_delay_ms":0},
+    "29":{"x_mm":161.7,"y_mm":241.3,"z_mm":15.0,"product_name":"","dispense_delay_ms":0},
+    "30":{"x_mm":196.0,"y_mm":238.9,"z_mm":20.0,"product_name":"","dispense_delay_ms":0}
+  }
+}

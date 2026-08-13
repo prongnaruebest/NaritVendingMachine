@@ -203,6 +203,7 @@ def validate_configuration_payloads(
 
     _validate_signal_polarity(inputs, issues)
     _validate_pin_assignments(motors, inputs, outputs, issues)
+    _validate_iriv_io(hardware.get("iriv_io"), issues)
 
     revision = _canonical_hash(machine, hardware)
     return ConfigReport(
@@ -311,6 +312,63 @@ def _validate_pin_assignments(
         if len(paths) <= 1 or _is_allowed_home_alias(paths):
             continue
         issues.append(ConfigIssue("error", "GPIO_PIN_COLLISION", f"GPIO.{pin}", ", ".join(paths)))
+
+
+def _validate_iriv_io(payload: object, issues: list[ConfigIssue]) -> None:
+    if payload is None:
+        return
+    if not isinstance(payload, dict):
+        issues.append(ConfigIssue("error", "IRIV_IO_INVALID", "hardware.iriv_io", "iriv_io must be an object"))
+        return
+    if not payload.get("enabled"):
+        return
+    if not str(payload.get("host", "")).strip():
+        issues.append(ConfigIssue("error", "IRIV_IO_HOST_MISSING", "hardware.iriv_io.host", "host is required"))
+    for field, minimum, maximum in (("port", 1, 65535), ("unit_id", 0, 255)):
+        try:
+            value = int(payload[field])
+        except (KeyError, TypeError, ValueError):
+            issues.append(ConfigIssue("error", "IRIV_IO_VALUE_INVALID", f"hardware.iriv_io.{field}", "integer is required"))
+            continue
+        if not minimum <= value <= maximum:
+            issues.append(ConfigIssue("error", "IRIV_IO_VALUE_RANGE", f"hardware.iriv_io.{field}", f"must be {minimum}-{maximum}"))
+
+    required_inputs = {
+        "estop", "x_head_limit", "x_tail_limit", "y_head_limit", "y_tail_limit",
+        "z_head_limit", "z_tail_limit", "x_alarm", "y_alarm", "z_alarm", "door",
+    }
+    inputs = payload.get("inputs")
+    outputs = payload.get("outputs")
+    if not isinstance(inputs, dict):
+        issues.append(ConfigIssue("error", "IRIV_INPUTS_MISSING", "hardware.iriv_io.inputs", "inputs object is required"))
+        inputs = {}
+    if not isinstance(outputs, dict):
+        issues.append(ConfigIssue("error", "IRIV_OUTPUTS_MISSING", "hardware.iriv_io.outputs", "outputs object is required"))
+        outputs = {}
+    for name in sorted(required_inputs - set(inputs)):
+        issues.append(ConfigIssue("error", "IRIV_INPUT_MISSING", f"hardware.iriv_io.inputs.{name}", "required mapping is missing"))
+    for name in sorted({"ready", "moving", "alarm", "dispense"} - set(outputs)):
+        issues.append(ConfigIssue("error", "IRIV_OUTPUT_MISSING", f"hardware.iriv_io.outputs.{name}", "required mapping is missing"))
+
+    def validate_channels(group: dict[str, object], group_name: str, maximum: int) -> None:
+        used: dict[int, str] = {}
+        for name, info in group.items():
+            if not isinstance(info, dict):
+                issues.append(ConfigIssue("error", "IRIV_CHANNEL_INVALID", f"hardware.iriv_io.{group_name}.{name}", "mapping must be an object"))
+                continue
+            try:
+                channel = int(info["channel"])
+            except (KeyError, TypeError, ValueError):
+                issues.append(ConfigIssue("error", "IRIV_CHANNEL_INVALID", f"hardware.iriv_io.{group_name}.{name}.channel", "integer is required"))
+                continue
+            if not 0 <= channel <= maximum:
+                issues.append(ConfigIssue("error", "IRIV_CHANNEL_RANGE", f"hardware.iriv_io.{group_name}.{name}.channel", f"must be 0-{maximum}"))
+            if channel in used:
+                issues.append(ConfigIssue("error", "IRIV_CHANNEL_COLLISION", f"hardware.iriv_io.{group_name}.{name}.channel", f"also used by {used[channel]}"))
+            used[channel] = name
+
+    validate_channels(inputs, "inputs", 10)
+    validate_channels(outputs, "outputs", 3)
 
 
 def _is_allowed_home_alias(paths: list[str]) -> bool:

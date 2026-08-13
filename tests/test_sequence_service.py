@@ -37,7 +37,8 @@ class SequenceServiceTests(unittest.TestCase):
 
         self.assertTrue(result["ok"])
         self.assertEqual(events, ["MOVE_X", "MOVE_Y", "MOVE_Z", "HOME_Z", "HOME_Y", "HOME_X"])
-        self.assertEqual(phases, ["MOVE_X", "MOVE_Y", "MOVE_Z", "HOLD_AT_TARGET", "HOME_Z", "HOME_Y", "HOME_X", "COMPLETED"])
+        self.assertEqual(phases, ["MOVE_X", "MOVE_Y", "MOVE_Z", "DISPENSE", "HOLD_AT_TARGET", "HOME_Z", "HOME_Y", "HOME_X", "COMPLETED"])
+        service._motion.activate_dispense.assert_called_once_with()
         self.assertTrue(result["result"]["target_verification"]["target_reached"])
         self.assertTrue(result["result"]["home_verification"]["home_reached"])
 

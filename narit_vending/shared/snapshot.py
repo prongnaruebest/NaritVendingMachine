@@ -75,6 +75,7 @@ class MachineSnapshot:
     controlled_stop_requested: bool
     speed_override: float | None
     slots: dict[str, dict[str, Any]] = field(default_factory=dict)
+    io_status: dict[str, Any] = field(default_factory=dict)
     snapshot_at: str = field(default_factory=_now_iso)
 
     def to_dict(self) -> dict[str, Any]:
@@ -110,6 +111,7 @@ class MachineSnapshot:
             controlled_stop_requested=bool(data.get("controlled_stop_requested", False)),
             speed_override=data.get("speed_override"),
             slots={str(code): dict(slot) for code, slot in dict(data.get("slots", {})).items()},
+            io_status=dict(data.get("io_status", {})),
             snapshot_at=str(data.get("snapshot_at", _now_iso())),
         )
 

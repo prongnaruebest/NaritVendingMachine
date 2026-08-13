@@ -1,0 +1,17 @@
+[Unit]
+Description=Narit Vending Web Monitor (IRIV)
+After=network-online.target narit-vending-controller-iriv.service
+Wants=network-online.target
+Requires=narit-vending-controller-iriv.service
+
+[Service]
+Type=simple
+WorkingDirectory=/home/admin/NaritVending
+EnvironmentFile=-/etc/narit-vending.env
+ExecStart=/home/admin/NaritVending/.venv/bin/python3 -m narit_vending.web --host 0.0.0.0 --port 80 --hw-config /home/admin/NaritVending/hardware_config.iriv.json
+Restart=always
+RestartSec=1
+User=root
+
+[Install]
+WantedBy=multi-user.target

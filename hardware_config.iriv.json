@@ -1,0 +1,59 @@
+{
+  "board_profile": "IRIV_PiControl_CM4",
+  "communication": {"ip_address":"0.0.0.0","port":80,"baudrate":115200,"protocol_settings":"HTTP/1.1 REST + Modbus TCP"},
+  "mqtt": {"enabled":false,"broker":"broker.emqx.io","port":1883,"client_id":"vending_machine_iriv_01","username":"","password":"","topic_prefix":"vending/machine_iriv_01","keepalive_s":60},
+  "motion_backend": {"type":"mock_gpio","production_enabled":false,"note":"IRIV IO SSR outputs are not step/direction pulse outputs"},
+  "motors": {
+    "x":{"step_pin":16,"dir_pin":23,"enable_pin":12,"active_high":true,"enable_active_high":false},
+    "y":{"step_pin":26,"dir_pin":24,"enable_pin":13,"active_high":true,"enable_active_high":false},
+    "z":{"step_pin":18,"dir_pin":25,"enable_pin":19,"active_high":true,"enable_active_high":false}
+  },
+  "digital_inputs": {
+    "estop":{"pin":6,"pull_up":false,"active_high":true},
+    "home_sensor_x":{"pin":17,"pull_up":false,"active_high":true},"home_sensor_y":{"pin":22,"pull_up":false,"active_high":true},"home_sensor_z":{"pin":11,"pull_up":false,"active_high":true},
+    "lim_x_head":{"pin":17,"pull_up":false,"active_high":true},"lim_x_tail":{"pin":27,"pull_up":false,"active_high":true},
+    "lim_y_head":{"pin":22,"pull_up":false,"active_high":true},"lim_y_tail":{"pin":9,"pull_up":false,"active_high":true},
+    "lim_z_head":{"pin":11,"pull_up":false,"active_high":true},"lim_z_tail":{"pin":5,"pull_up":false,"active_high":true}
+  },
+  "digital_outputs": {
+    "alarm_warning":{"pin":21,"active_high":true,"initial_value":false},"led_idle":{"pin":20,"active_high":true,"initial_value":false},
+    "led_moving":{"pin":4,"active_high":true,"initial_value":false},"led_success":{"pin":14,"active_high":true,"initial_value":false},"alarm_buzzer":{"pin":7,"active_high":true,"initial_value":false}
+  },
+  "iriv_io": {
+    "enabled": true,
+    "host": "10.0.0.10",
+    "port": 502,
+    "unit_id": 255,
+    "timeout_s": 0.25,
+    "poll_interval_s": 0.1,
+    "stale_after_s": 0.35,
+    "inputs": {
+      "estop":{"channel":0,"active_state":false,"fail_safe":true,"label":"Safety relay / E-Stop unsafe"},
+      "x_head_limit":{"channel":1,"active_state":true,"fail_safe":false,"label":"X head/home limit"},
+      "x_tail_limit":{"channel":2,"active_state":true,"fail_safe":false,"label":"X tail limit"},
+      "y_head_limit":{"channel":3,"active_state":true,"fail_safe":false,"label":"Y head/home limit"},
+      "y_tail_limit":{"channel":4,"active_state":true,"fail_safe":false,"label":"Y tail limit"},
+      "z_head_limit":{"channel":5,"active_state":true,"fail_safe":false,"label":"Z head/home limit"},
+      "z_tail_limit":{"channel":6,"active_state":true,"fail_safe":false,"label":"Z tail limit"},
+      "x_alarm":{"channel":7,"active_state":true,"fail_safe":true,"label":"X drive alarm"},
+      "y_alarm":{"channel":8,"active_state":true,"fail_safe":true,"label":"Y drive alarm"},
+      "z_alarm":{"channel":9,"active_state":true,"fail_safe":true,"label":"Z drive alarm"},
+      "door":{"channel":10,"active_state":false,"fail_safe":true,"label":"Door interlock unsafe"}
+    },
+    "outputs": {
+      "ready":{"channel":0,"active_high":true,"initial_value":false,"label":"Green ready light"},
+      "moving":{"channel":1,"active_high":true,"initial_value":false,"label":"Yellow moving light"},
+      "alarm":{"channel":2,"active_high":true,"initial_value":false,"label":"Alarm light / buzzer"},
+      "dispense":{"channel":3,"active_high":true,"initial_value":false,"label":"Dispense interposing relay"}
+    },
+    "dispense": {"pulse_ms":500}
+  },
+  "machine_parameters": {
+    "home_order":["z","y","x"],"safe_z_mm":10.0,
+    "axes": {
+      "x":{"steps_per_mm":80.0,"max_travel_mm":220.0,"max_speed_mm_s":20.0,"default_speed_mm_s":10.0,"acceleration":40.0,"deceleration":40.0,"settle_delay":0.05,"jog_step_mm":1.0,"home_direction":0,"forward_direction":1,"lead_screw_pitch_mm":5.0,"motor_steps_per_rev":200,"driver_microsteps":2},
+      "y":{"steps_per_mm":80.0,"max_travel_mm":260.0,"max_speed_mm_s":15.0,"default_speed_mm_s":8.0,"acceleration":30.0,"deceleration":30.0,"settle_delay":0.05,"jog_step_mm":1.0,"home_direction":0,"forward_direction":1,"lead_screw_pitch_mm":5.0,"motor_steps_per_rev":200,"driver_microsteps":2},
+      "z":{"steps_per_mm":80.0,"max_travel_mm":200.0,"max_speed_mm_s":20.0,"default_speed_mm_s":10.0,"acceleration":80.0,"deceleration":80.0,"settle_delay":0.05,"jog_step_mm":2.0,"home_direction":0,"forward_direction":1,"lead_screw_pitch_mm":5.0,"motor_steps_per_rev":200,"driver_microsteps":2}
+    }
+  }
+}

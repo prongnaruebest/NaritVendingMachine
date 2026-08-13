@@ -36,20 +36,23 @@ def make_health_bp(ctrl: "ControllerClient") -> Blueprint:
             }), 503
 
         snap = ctrl.snapshot()
+        io_ready = bool(snap.io_status.get("communication_ok", True))
         axes_homed = all(snap.axes.get(ax, None) and snap.axes[ax].is_homed for ax in ("x", "y", "z"))
         machine_ready = (
             axes_homed
+            and io_ready
             and not snap.estop
             and snap.state not in ("ALARM", "MOVING", "CONFIG_REQUIRED", "E_STOP", "CONTROLLER_OFFLINE")
             and not snap.configuration_restart_required
         )
-        service_ready = snap.state not in ("CONFIG_REQUIRED", "CONTROLLER_OFFLINE")
+        service_ready = io_ready and snap.state not in ("CONFIG_REQUIRED", "CONTROLLER_OFFLINE")
         return jsonify({
             "status": "UP" if service_ready else "DOWN",
             "service_ready": service_ready,
             "machine_ready": machine_ready,
             "machine_state": snap.state,
             "axes_homed": axes_homed,
+            "iriv_io_ready": io_ready,
             "config_revision": snap.config_revision,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }), 200 if service_ready else 503

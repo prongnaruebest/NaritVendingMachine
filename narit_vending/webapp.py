@@ -33,6 +33,7 @@ from .motion import (
     save_machine_config,
 )
 from .mqtt_service import MQTTService
+from .iriv_io import IRIVIOBackend, IRIVIOError
 
 
 _logger = logging.getLogger(__name__)
@@ -123,10 +124,20 @@ class MotionService:
             if issue.severity == "warning":
                 _logger.warning("Configuration %s at %s: %s", issue.code, issue.path, issue.message)
 
-        self.controller = build_controller(config, hw_config_path=str(self.hw_config_path))
+        hw_config = load_hardware_config(str(self.hw_config_path))
+        iriv_config = hw_config.get("iriv_io", {})
+        self.io_backend: IRIVIOBackend | None = None
+        if isinstance(iriv_config, dict) and iriv_config.get("enabled"):
+            self.io_backend = IRIVIOBackend(iriv_config)
+            self.io_backend.start()
+
+        self.controller = build_controller(
+            config,
+            hw_config_path=str(self.hw_config_path),
+            io_backend=self.io_backend,
+        )
         from .controller.sequence_service import SequenceService
         self.sequence_service = SequenceService(self)
-        hw_config = load_hardware_config(str(self.hw_config_path))
         mqtt_config = hw_config.get("mqtt", {})
         self.mqtt_service = MQTTService(self, mqtt_config)
         self.mqtt_service.start()
@@ -134,6 +145,12 @@ class MotionService:
     def status_payload(self) -> dict[str, object]:
         with self.lock:
             controller_status = self.controller.status()
+            io_status = self.io_backend.status_payload() if self.io_backend else {"enabled": False, "communication_ok": True}
+            alarm_channels = self.io_backend.alarm_channels() if self.io_backend else []
+            io_fault = any(channel["active"] and channel["level"] == "fault" for channel in alarm_channels)
+            if io_fault and controller_status["state"] not in ("moving", "alarm"):
+                controller_status["state"] = "alarm"
+            self._sync_iriv_outputs(controller_status, io_fault)
             motor_test = self._motor_test_status(controller_status)
             for axis_name, axis_status in ((name, controller_status[name]) for name in ("x", "y", "z")):
                 if axis_status["is_homed"] and self.homing[axis_name] == "not_homed":
@@ -155,6 +172,8 @@ class MotionService:
                 "last_error": self.last_error,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
                 "machine_state": controller_status["state"],
+                "alarm_channels": alarm_channels,
+                "io": io_status,
                 "operation": {
                     "phase": self.operation_phase,
                     "message": self.operation_message,
@@ -185,6 +204,19 @@ class MotionService:
                 "status": controller_status,
                 "slots": slots,
             }
+
+    def _sync_iriv_outputs(self, controller_status: dict[str, object], io_fault: bool) -> None:
+        if self.io_backend is None or not self.io_backend.communication_ok:
+            return
+        axes_homed = all(bool(controller_status[axis].get("is_homed")) for axis in ("x", "y", "z"))
+        moving = self.busy or controller_status.get("state") == "moving"
+        ready = axes_homed and not io_fault and not moving and not self.configuration_restart_required
+        try:
+            self.io_backend.set_output("ready", ready)
+            self.io_backend.set_output("moving", moving)
+            self.io_backend.set_output("alarm", io_fault or controller_status.get("state") == "alarm")
+        except IRIVIOError as exc:
+            self.last_error = str(exc)
 
     def _motor_test_status(self, controller_status: dict[str, object] | None = None) -> dict[str, object]:
         status = controller_status or self.controller.status()
@@ -252,6 +284,13 @@ class MotionService:
         command_id: str | None = None,
         estimated_duration_s: float | None = None,
     ):
+        if motion_command and self.io_backend is not None:
+            active_io_faults = [
+                channel["label"] for channel in self.io_backend.alarm_channels()
+                if channel["active"] and channel["level"] == "fault"
+            ]
+            if active_io_faults:
+                return {"ok": False, "error": "MOTION LOCKED - " + "; ".join(active_io_faults)}
         if motion_command and not command_name.startswith("motor_test_") and self._motor_test_status()["armed"]:
             return {"ok": False, "error": "Motor Test Mode is armed; cancel it before normal motion"}
         if motion_command and self.configuration_restart_required:
@@ -294,7 +333,7 @@ class MotionService:
                 self.operation_message = str(exc)
             _logger.info("Controlled stop: %s", exc)
             return {"ok": False, "controlled_stop": True, "error": str(exc)}
-        except (MotionError, EmergencyStopError, LimitTriggeredError) as exc:
+        except (MotionError, EmergencyStopError, LimitTriggeredError, IRIVIOError) as exc:
             with self.lock:
                 self.last_error = str(exc)
                 if motion_command:
@@ -554,7 +593,22 @@ class MotionService:
     def start_motion(self, slot_code: str | None = None, speed_mm_s: float | None = None, time_s: float | None = None) -> dict[str, object]:
         if not slot_code:
             return {"ok": False, "error": "A slot is required to start a dispense operation"}
-        return self._run("dispense", lambda: self.controller.move_to_slot(slot_code, speed_mm_s=speed_mm_s, time_s=time_s))
+        def action():
+            slot = self.controller.move_to_slot(slot_code, speed_mm_s=speed_mm_s, time_s=time_s)
+            self.activate_dispense()
+            return slot.to_dict()
+
+        return self._run("dispense", action)
+
+    def activate_dispense(self) -> None:
+        if self.io_backend is None:
+            return
+        pulse_ms = int(self.io_backend.config.get("dispense", {}).get("pulse_ms", 500))
+        self.io_backend.pulse_output(
+            "dispense",
+            pulse_ms / 1000.0,
+            stop_requested=lambda: self.controller.stop_requested() or self.controller.emergency_stop_active(),
+        )
 
     def home_axis(self, axis_name: str) -> dict[str, object]:
         if self.configuration_restart_required:
@@ -723,23 +777,34 @@ class MotionService:
     def health_payload(self) -> dict[str, object]:
         with self.lock:
             controller_status = self.controller.status()
+            io_ready = self.io_backend is None or self.io_backend.communication_ok
+            io_alarms = self.io_backend.alarm_channels() if self.io_backend else []
+            io_safe = not any(channel["active"] and channel["level"] == "fault" for channel in io_alarms)
             axes_homed = all(bool(controller_status[axis].get("is_homed")) for axis in ("x", "y", "z"))
             machine_ready = (
                 axes_homed
+                and io_ready
+                and io_safe
                 and not bool(controller_status.get("estop"))
                 and controller_status.get("state") not in ("alarm", "moving")
                 and not self.configuration_restart_required
             )
             return {
-                "status": "UP" if self.config_report.valid else "DOWN",
-                "service_ready": self.config_report.valid,
+                "status": "UP" if self.config_report.valid and io_ready else "DOWN",
+                "service_ready": self.config_report.valid and io_ready,
                 "machine_ready": machine_ready,
                 "machine_state": controller_status.get("state", "unknown"),
                 "axes_homed": axes_homed,
                 "config_revision": self.config_report.revision,
                 "config_valid": self.config_report.valid,
+                "iriv_io_ready": io_ready,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
+
+    def close(self) -> None:
+        self.mqtt_service.stop()
+        if self.io_backend is not None:
+            self.io_backend.close()
 
     def save_configuration(self, payload: dict[str, object]) -> dict[str, object]:
         if self.busy:

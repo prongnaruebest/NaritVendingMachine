@@ -181,6 +181,7 @@
 
   function alarmChannels() {
     const status = getStatus();
+    const backendChannels = Array.isArray(MS.payload?.alarm_channels) ? MS.payload.alarm_channels : [];
     const channels = [
       { code: "CTRL", label: "Controller Communication", active: !MS.online, level: "fault", detail: MS.online ? "API polling online" : "No response from Raspberry Pi controller" },
       { code: "ESTOP", label: "Emergency Stop", active: Boolean(status.estop), level: "fault", detail: status.estop ? "Physical E-Stop input is active" : "Safety input clear" },
@@ -201,12 +202,18 @@
       level: "fault",
       detail: MS.payload?.last_error || "No controller fault message",
     });
+    backendChannels.forEach((channel) => {
+      if (!channels.some((existing) => existing.code === channel.code)) channels.push(channel);
+    });
     return channels;
   }
 
   /* ── DERIVED MOTION PERMISSION ──────────────────────────────── */
   function motionInhibitReason(requireHome = false) {
     const status = getStatus();
+    if (MS.payload?.io?.communication_ok === false) return "MOTION LOCKED - IRIV IO communication lost";
+    const ioFault = (MS.payload?.alarm_channels || []).find((channel) => channel.active && ["DOOR", "DRV-X", "DRV-Y", "DRV-Z"].includes(channel.code));
+    if (ioFault) return `MOTION LOCKED - ${ioFault.label}`;
     if (!MS.online)                           return "Controller offline — reconnecting...";
     if (status.estop)                         return "MOTION LOCKED — Emergency stop active";
     if (MS.payload?.safety?.stop_requested)   return "MOTION LOCKED — reset alarms before continuing";
@@ -2604,6 +2611,7 @@
     if (diagnostics) {
       const diagnosticItems = [
         ["Controller Link", MS.online ? "ONLINE" : "OFFLINE", MS.online ? "API polling every 1 second" : "No response from controller", MS.online ? "ok" : "fault"],
+        ["IRIV IO Link", MS.payload?.io?.communication_ok === false ? "OFFLINE" : (MS.payload?.io?.enabled ? "ONLINE" : "DISABLED"), MS.payload?.io?.enabled ? `${MS.payload.io.host}:${MS.payload.io.port} Modbus TCP` : "Legacy GPIO configuration", MS.payload?.io?.communication_ok === false ? "fault" : "ok"],
         ["Emergency Stop", status.estop ? "ACTIVE" : "CLEAR", "Hardware safety input", status.estop ? "fault" : "ok"],
         ["Homing", homed ? "COMPLETE" : "REQUIRED", AXES.map((a) => `${a.toUpperCase()}:${getAxis(a).is_homed ? "OK" : "--"}`).join("  "), homed ? "ok" : "warn"],
         ["Motion Queue", MS.payload?.busy ? "BUSY" : "IDLE", MS.payload?.active_command || "No pending command", MS.payload?.busy ? "warn" : "ok"],

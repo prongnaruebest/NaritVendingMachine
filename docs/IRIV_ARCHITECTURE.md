@@ -16,8 +16,8 @@ IRIV PiControl CM4 และ IRIV IO Controller อัปเดตล่าส�
 | OT network | `eth1 = 10.0.0.2/24` |
 | Remote I/O | IRIV IO Controller, `10.0.0.10:502`, Modbus TCP Unit ID `255` |
 | Application path | `/home/admin/NaritVending` |
-| Controller service | `narit-vending-controller.service` |
-| Web service | `narit-vending-web.service` |
+| Controller service | `narit-vending-controller-iriv.service` |
+| Web service | `narit-vending-web-iriv.service` |
 | IPC | Unix socket `/run/narit-vending/ctrl.sock` |
 | Hardware mode | `GPIOZERO_PIN_FACTORY=mock` — ห้ามสั่งมอเตอร์จริง |
 
@@ -83,6 +83,12 @@ flowchart TD
 - สร้าง machine snapshot ชุดเดียวสำหรับ Web และ MQTT telemetry
 
 ### Configuration
+
+- `machine_config.iriv.json`: IRIV-only motion/slot configuration
+- `hardware_config.iriv.json`: IRIV Pi, Modbus TCP DI0-DI10 and DO0-DO3 mapping
+- `scripts/deploy_to_iriv.ps1`: SSH deployment to `pi@iriv.local`
+- The legacy `machine_config.json`, `hardware_config.json`, and
+  `scripts/deploy_to_pi.ps1` remain the deployment set for the original Pi.
 
 - `machine_config.json`: travel, speed, acceleration, homing order, Safe Z และตำแหน่ง slot
 - `hardware_config.json`: legacy GPIO mapping และ communication settings
@@ -203,7 +209,7 @@ STEP/DIR/ENABLE รวม 9 สัญญาณและต้องการ pul
 | Check | ความหมาย |
 |---|---|
 | `GET /health/live` | Web process ตอบสนอง |
-| `GET /health/ready` | Configuration ถูกต้องและ Controller รับคำสั่งได้ |
+| `GET /health/ready` | Configuration ถูกต้อง, Controller รับคำสั่งได้ และ IRIV IO communication ยังสดอยู่ |
 | `service_ready=true` | Software พร้อม แต่ไม่ได้แปลว่าเครื่องพร้อมเคลื่อน |
 | `machine_ready=true` | Interlock ผ่านและทุกแกน Home แล้ว |
 
@@ -216,7 +222,7 @@ health check และ rollback plan
 ห้ามลบ `GPIOZERO_PIN_FACTORY=mock` จนกว่าจะครบทุกข้อ:
 
 - ติดตั้ง hardware-timed motion controller และกำหนด protocol
-- Implement และทดสอบ IRIV IO backend
+- Commission และทดสอบ IRIV IO backend กับสายจริงทุกช่อง
 - ตรวจ DI/DO polarity ทีละช่องโดยถอดโหลดกำลัง
 - ตรวจ E-Stop ว่าตัด driver ได้โดยไม่พึ่ง software
 - ตรวจ limit ทั้งหกตัวและ door interlock

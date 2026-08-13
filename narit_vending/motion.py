@@ -1080,11 +1080,17 @@ def load_hardware_config(path: str | Path = "hardware_config.json") -> dict:
     return {}
 
 
-def build_controller(config: MachineConfig, hw_config_path: str = "hardware_config.json") -> MotionController:
+def build_controller(
+    config: MachineConfig,
+    hw_config_path: str = "hardware_config.json",
+    io_backend: object | None = None,
+) -> MotionController:
     hw_config = load_hardware_config(hw_config_path)
     di_config = hw_config.get("digital_inputs", {})
 
-    def make_input(pin: int, info: dict[str, object]) -> DigitalInputDevice:
+    def make_input(pin: int, info: dict[str, object], iriv_name: str | None = None):
+        if io_backend is not None and iriv_name is not None:
+            return io_backend.input_device(iriv_name)
         pull_up_value = info.get("pull_up", False)
         if pull_up_value is None:
             return DigitalInputDevice(
@@ -1102,7 +1108,7 @@ def build_controller(config: MachineConfig, hw_config_path: str = "hardware_conf
         return DigitalInputDevice(pin, pull_up=pull_up)
 
     estop_info = di_config.get("estop", {})
-    estop_button = make_input(int(estop_info.get("pin", 6)), estop_info)
+    estop_button = make_input(int(estop_info.get("pin", 6)), estop_info, "estop")
 
     motors_config = hw_config.get("motors", {})
 
@@ -1165,8 +1171,8 @@ def build_controller(config: MachineConfig, hw_config_path: str = "hardware_conf
             config=cfg,
             pulse=pulse_dev,
             direction=dir_dev,
-            head_limit=make_input(cfg.head_limit_pin, head_info),
-            tail_limit=make_input(cfg.tail_limit_pin, tail_info),
+            head_limit=make_input(cfg.head_limit_pin, head_info, f"{cfg.name}_head_limit"),
+            tail_limit=make_input(cfg.tail_limit_pin, tail_info, f"{cfg.name}_tail_limit"),
             estop=estop_button,
             stop_requested=stop_requested,
             controlled_stop_requested=controlled_stop_requested,
@@ -1179,7 +1185,17 @@ def build_controller(config: MachineConfig, hw_config_path: str = "hardware_conf
 
     do_config = hw_config.get("digital_outputs", {})
 
-    def make_output(name: str, default: bool = False) -> OutputDevice | None:
+    iriv_output_names = {
+        "led_moving": "moving",
+        "led_success": "ready",
+        "alarm_warning": "alarm",
+        "alarm_buzzer": "alarm",
+    }
+
+    def make_output(name: str, default: bool = False):
+        if io_backend is not None:
+            iriv_name = iriv_output_names.get(name)
+            return io_backend.output_device(iriv_name) if iriv_name is not None else None
         info = do_config.get(name, {})
         if "pin" not in info:
             return None
