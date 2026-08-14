@@ -91,6 +91,7 @@ class HealthApiTests(unittest.TestCase):
         app_js = (Path(__file__).resolve().parents[1] / "narit_vending" / "static" / "app.js").read_text(encoding="utf-8")
 
         self.assertIn('isIriv ? "V1" : "MOCKUP"', app_js)
+        self.assertIn("const hasIdentity = Boolean(MS.lastStatusAt);", app_js)
         self.assertNotIn("OLD · MOCKUP", app_js)
         self.assertNotIn("NEW · IRIV", app_js)
 

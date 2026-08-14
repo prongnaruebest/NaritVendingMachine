@@ -1290,7 +1290,9 @@
     // legacy Pi has no IRIV IO backend, while the new controller does.
     const deviceNode = el("hdr-device");
     const sidebarDeviceNode = el("sidebar-device-label");
-    const hasIdentity = Boolean(MS.payload?.io);
+    // A legacy status payload does not contain `io`; receiving any status is
+    // enough to classify that controller as MOCKUP unless IRIV is explicit.
+    const hasIdentity = Boolean(MS.lastStatusAt);
     const isIriv = MS.payload?.io?.enabled === true;
     const deviceShort = !hasIdentity ? "IDENTIFYING" : (isIriv ? "V1" : "MOCKUP");
     const deviceLabel = !hasIdentity
