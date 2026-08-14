@@ -1292,10 +1292,10 @@
     const sidebarDeviceNode = el("sidebar-device-label");
     const hasIdentity = Boolean(MS.payload?.io);
     const isIriv = MS.payload?.io?.enabled === true;
-    const deviceShort = !hasIdentity ? "IDENTIFYING" : (isIriv ? "NEW · IRIV" : "OLD · MOCKUP");
+    const deviceShort = !hasIdentity ? "IDENTIFYING" : (isIriv ? "V1" : "MOCKUP");
     const deviceLabel = !hasIdentity
       ? "กำลังตรวจสอบอุปกรณ์..."
-      : (isIriv ? "อุปกรณ์ใหม่ · IRIV (เตรียมใช้งานจริง)" : "อุปกรณ์เก่า · Raspberry Pi Mockup");
+      : (isIriv ? "V1" : "MOCKUP");
     const deviceClass = !hasIdentity ? "device-identifying" : (isIriv ? "device-new" : "device-legacy");
     if (deviceNode) {
       deviceNode.textContent = deviceShort;
