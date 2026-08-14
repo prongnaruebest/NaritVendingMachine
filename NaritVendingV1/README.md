@@ -6,12 +6,18 @@ Deployment profile for the IRIV Pi and IRIV IO machine.
 - Web: `http://iriv.local/`
 - SSH host: `pi@iriv.local`
 - Remote application: `/home/admin/NaritVendingV1`
-- Machine config source: `../machine_config.iriv.json`
-- Hardware config source: `../hardware_config.iriv.json`
+- Machine config: `machine_config.iriv.json`
+- Hardware config: `hardware_config.iriv.json`
+- Application source: `narit_vending/`
+- Tests: `tests/`
 
-The Python application remains in the shared `narit_vending/` source folder.
-IRIV-specific configuration, deployment path, and system services are isolated
-from the MOCKUP profile.
+`machine_config.json` and `hardware_config.json` are local generic-GPIO test
+fixtures inherited by the shared test suite. V1 runtime and deployment
+explicitly use the authoritative `*.iriv.json` files.
+
+This folder contains its own deployable copy of the Python application. Run
+`..\scripts\sync_profile_code.ps1` from the repository root when a shared fix
+must be copied into both independent profiles.
 
 Deploy from the repository root:
 

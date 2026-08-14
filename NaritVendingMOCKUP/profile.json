@@ -1,6 +1,8 @@
 {
   "name": "MOCKUP",
   "kind": "legacy_raspberry_pi_mockup",
+  "self_contained": true,
+  "source_dir": "narit_vending",
   "ssh_host": "narit-pi",
   "web_url": "http://naritvendingmachine/",
   "remote_dir": "/home/admin/NaritVendingMOCKUP",

@@ -65,10 +65,14 @@ python3 main.py goto-slot 1
 .\NaritVendingMOCKUP\deploy.ps1
 ```
 
-The MOCKUP deploy script copies the shared application to
+The MOCKUP deploy script copies the application stored inside its profile to
 `/home/admin/NaritVendingMOCKUP` on host `narit-pi`. Deploy V1 separately with
 `.\NaritVendingV1\deploy.ps1`, which targets `/home/admin/NaritVendingV1` on
 `pi@iriv.local`.
+
+Both profile folders contain independent copies of the application code. After
+changing the repository-level source, run `scripts/sync_profile_code.ps1` to
+refresh both deployable copies before testing and deployment.
 
 ## Web UI
 

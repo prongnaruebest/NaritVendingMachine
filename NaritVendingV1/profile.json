@@ -1,6 +1,8 @@
 {
   "name": "V1",
   "kind": "iriv_pi_iriv_io",
+  "self_contained": true,
+  "source_dir": "narit_vending",
   "ssh_host": "pi@iriv.local",
   "web_url": "http://iriv.local/",
   "remote_dir": "/home/admin/NaritVendingV1",

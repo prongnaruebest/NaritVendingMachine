@@ -1,0 +1,1140 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="NARIT Vending Machine Industrial Gantry Motion Control HMI">
+  <title>NARIT VENDING — Industrial Gantry HMI</title>
+  <link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='favicon-transparent-large.png') }}?v=20260721_v12">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=20260814_device_names_v3">
+</head>
+<body>
+  <div class="hmi-shell">
+    <!-- ── SIDEBAR ─────────────────────────────────────────────── -->
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <div class="brand-mark">NV</div>
+        <div class="sidebar-brand-text">
+          NARIT VENDING
+          <span id="sidebar-device-label">กำลังตรวจสอบอุปกรณ์...</span>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <div class="nav-section">
+          <p class="nav-section-label">Workspaces</p>
+          <button class="nav-item" id="nav-dashboard" data-view-target="dashboard">
+            <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+              <rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/>
+              <rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/>
+            </svg>
+            <span>Dashboard</span>
+          </button>
+          <button class="nav-item active" id="nav-motion" data-view-target="motion">
+            <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+              <circle cx="8" cy="8" r="2.5"/><path d="M8 1v2.5M8 12.5V15M1 8h2.5M12.5 8H15"/>
+            </svg>
+            <span>Motion Control</span>
+          </button>
+          <button class="nav-item" id="nav-visualization" data-view-target="visualization">
+            <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+              <polyline points="1 13 5 7 9 11 15 3"/>
+            </svg>
+            <span>Visualization</span>
+          </button>
+          <button class="nav-item" id="nav-slots" data-view-target="slots">
+            <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M2 5.5 8 2l6 3.5v6L8 15l-6-3.5z"/><path d="M2 5.5 8 9l6-3.5M8 9v6"/>
+            </svg>
+            <span>Slot Manager</span>
+          </button>
+          <button class="nav-item" id="nav-diagnostics" data-view-target="diagnostics">
+            <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+              <circle cx="8" cy="8" r="6"/><line x1="8" y1="5" x2="8" y2="8"/><circle cx="8" cy="11" r="0.5" fill="currentColor"/>
+            </svg>
+            <span>Diagnostics</span>
+          </button>
+        </div>
+
+        <div class="nav-section">
+          <p class="nav-section-label">System Views</p>
+          <button class="nav-item" id="nav-configuration" data-view-target="configuration">
+            <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+              <circle cx="8" cy="8" r="2.5"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.1 3.1l1.4 1.4M11.5 11.5l1.4 1.4M12.9 3.1l-1.4 1.4M4.5 11.5l-1.4 1.4"/>
+            </svg>
+            <span>Configuration</span>
+          </button>
+          <button class="nav-item" id="nav-motor-test" data-view-target="motor-test">
+            <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+              <circle cx="8" cy="8" r="5"/><circle cx="8" cy="8" r="1.5"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2"/>
+            </svg>
+            <span>Motor Test Mode</span>
+          </button>
+          <button class="nav-item" id="nav-mqtt" data-view-target="mqtt">
+            <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+              <circle cx="8" cy="8" r="1.5"/><path d="M4.5 11.5a5 5 0 0 1 0-7M11.5 4.5a5 5 0 0 1 0 7M2.2 13.8a8.2 8.2 0 0 1 0-11.6M13.8 2.2a8.2 8.2 0 0 1 0 11.6"/>
+            </svg>
+            <span>MQTT Monitor</span>
+            <span class="nav-link-light disabled" id="nav-mqtt-light" aria-label="MQTT disabled"></span>
+          </button>
+          <button class="nav-item" id="nav-alarms" data-view-target="alarms">
+            <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M8 2 15 14H1z"/><path d="M8 6v4M8 12v.5"/>
+            </svg>
+            <span>Alarms</span>
+            <span class="nav-alarm-badge clear" id="nav-alarm-count">0</span>
+          </button>
+          <button class="nav-item" id="nav-events" data-view-target="events">
+            <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M3 1.5h8l2 2V14.5H3z"/><path d="M11 1.5v3h2M5 7h6M5 10h6M5 13h4"/>
+            </svg>
+            <span>Event Logs</span>
+          </button>
+          <button class="nav-item" id="nav-flow" data-view-target="flow">
+            <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+              <rect x="2" y="2" width="12" height="12" rx="1"/><path d="M5 5h3v3h3v3M8 5 6.5 3.5M8 5 6.5 6.5M11 11l-1.5-1.5M11 11l-1.5 1.5"/>
+            </svg>
+            <span>System Flow</span>
+          </button>
+          <button class="nav-item" id="nav-sequence-monitor" data-view-target="sequence-monitor">
+            <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+              <circle cx="3" cy="3" r="1.2"/><circle cx="8" cy="8" r="1.2"/><circle cx="13" cy="13" r="1.2"/>
+              <path d="M4 4l3 3M9 9l3 3M8 3h5M13 3v5"/>
+            </svg>
+            <span>Sequence Monitor</span>
+          </button>
+        </div>
+      </nav>
+
+      <div class="sidebar-readiness">
+        <div class="readiness-row">
+          <span>Controller</span>
+          <strong class="readiness-val fault" id="sb-controller">OFFLINE</strong>
+        </div>
+        <div class="readiness-row">
+          <span>E-Stop</span>
+          <strong class="readiness-val ok" id="sb-estop">CLEAR</strong>
+        </div>
+        <div class="readiness-row">
+          <span>Alarms</span>
+          <strong class="readiness-val ok" id="sb-alarms">0</strong>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ── ZONE A: HEADER ──────────────────────────────────────── -->
+    <header class="hmi-header">
+      <div class="header-title">
+        <img class="header-brand-logo" src="{{ url_for('static', filename='narit-vending-logo.png') }}?v=20260721_v9" alt="NARIT Vending Smart Vending Control System">
+      </div>
+      <div class="header-control-area">
+        <section class="safety-strip" aria-label="Machine safety status and controls">
+          <div class="estop-zone">
+            <button class="btn-estop" id="stop-button" title="Emergency Stop Motion">
+              <span class="estop-icon">🛑</span> EMERGENCY STOP
+            </button>
+            <button class="btn-reset-alarm" id="clear-alarm" title="Reset Alarms & Interlocks">
+              🔄 RESET ALARMS
+            </button>
+          </div>
+          <div class="header-unified-status">
+            <div class="header-meta">
+              <div class="header-chip"><span>Controller</span><strong id="hdr-connection" class="offline">OFFLINE</strong></div>
+              <div class="header-chip"><span>State</span><strong id="hdr-machine-state" class="state-notready">NOT READY</strong></div>
+              <div class="header-chip device-identity-chip"><span>Device</span><strong id="hdr-device" class="device-identifying">IDENTIFYING</strong></div>
+              <div class="header-chip"><span>System Time</span><strong id="hdr-time" class="monospace">--:--:--</strong></div>
+            </div>
+            <div class="safety-indicators">
+              <div class="safety-ind"><span class="safety-ind-label">E-Stop Pin</span><div class="safety-ind-value ok" id="strip-estop">CLEAR</div></div>
+              <div class="safety-ind"><span class="safety-ind-label">Homing Status</span><div class="safety-ind-value warn" id="strip-homing">NOT READY</div><span class="safety-ind-sub" id="strip-homing-detail">X !  Y !  Z !</span></div>
+              <div class="safety-ind"><span class="safety-ind-label">Motion Interlock</span><div class="safety-ind-value warn" id="strip-motion">INHIBITED</div></div>
+              <div class="safety-ind"><span class="safety-ind-label">Active Alarms</span><div class="safety-ind-value ok" id="strip-alarms">0</div></div>
+              <div class="motion-inhibit-reason" id="strip-motion-reason">Connecting to controller...</div>
+            </div>
+          </div>
+        </section>
+        </div>
+    </header>
+
+    <!-- ── MAIN WORKSPACE (CENTER) ─────────────────────────────── -->
+    <main class="hmi-workspace">
+      <section class="workspace-view active" data-view-page="motion">
+      <!-- Top Row: Feed Override + Homing Sequence -->
+      <div class="wz-top">
+        <!-- Feed Override -->
+        <div class="feed-override-card">
+          <div class="fo-label">Feed Rate Override (Next Command)</div>
+          <div class="fo-value">
+            <span id="fo-pct-display">100</span><span class="fo-pct">%</span>
+          </div>
+          <div class="fo-presets">
+            <button class="fo-preset-btn" data-fo="10">10%</button>
+            <button class="fo-preset-btn" data-fo="25">25%</button>
+            <button class="fo-preset-btn" data-fo="50">50%</button>
+            <button class="fo-preset-btn" data-fo="75">75%</button>
+            <button class="fo-preset-btn active" data-fo="100">100%</button>
+          </div>
+          <div class="fo-speeds">
+            <div class="fo-speed-row"><span>Programmed Speed</span><strong id="fo-prog-speed">-- mm/s</strong></div>
+            <div class="fo-speed-row"><span>Effective Speed</span><strong id="fo-eff-speed">-- mm/s</strong></div>
+          </div>
+          <p class="fo-help">Scales the programmed speed without changing target position. The current pulse engine applies this value when planning the next command; it does not retime a move already in progress.</p>
+        </div>
+
+        <!-- Homing Workflow -->
+        <div class="panel home-panel">
+          <div class="panel-head">
+            <div>
+              <p class="panel-label">Homing Workflow</p>
+              <h2 class="panel-title">Axis Reference Sequence</h2>
+            </div>
+            <span class="home-seq-num" id="home-sequence-label" title="Sequence Order">Z→Y→X</span>
+          </div>
+          <div class="panel-body">
+            <div class="home-sequence-display" id="home-sequence-display">
+              <!-- Rendered by app.js -->
+            </div>
+            <div class="home-actions">
+              <button class="btn-home-all" id="home-all">HOME ALL AXES</button>
+              <div class="home-axis-row">
+                <button class="btn-home-axis home-axis" data-axis="z">HOME Z</button>
+                <button class="btn-home-axis home-axis" data-axis="y">HOME Y</button>
+                <button class="btn-home-axis home-axis" data-axis="x">HOME X</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Target Positioning Workflow Panel -->
+      <div class="panel target-panel" hidden>
+        <div class="panel-head">
+          <div>
+            <p class="panel-label">Target Positioning</p>
+            <h2 class="panel-title">Validate · Preview · Arm · Execute</h2>
+            <small class="target-purpose">Manual engineering XYZ move — enter a coordinate or load a starting position below.</small>
+          </div>
+          <span class="safety-ind-sub" id="operation-message">Controller ready</span>
+        </div>
+        <div class="panel-body motion-target-grid">
+          <div class="target-col">
+            <div class="field-label">X Coordinate</div>
+            <div class="field-input-wrap">
+              <input id="move-x" class="hmi-input" type="number" step="0.1" min="0" placeholder="0.0">
+              <span class="unit-tag">mm</span>
+            </div>
+          </div>
+          <div class="target-col">
+            <div class="field-label">Y Coordinate</div>
+            <div class="field-input-wrap">
+              <input id="move-y" class="hmi-input" type="number" step="0.1" min="0" placeholder="0.0">
+              <span class="unit-tag">mm</span>
+            </div>
+          </div>
+          <div class="target-col">
+            <div class="field-label">Z Coordinate</div>
+            <div class="field-input-wrap">
+              <input id="move-z" class="hmi-input" type="number" step="0.1" min="0" placeholder="0.0">
+              <span class="unit-tag">mm</span>
+            </div>
+          </div>
+          <div class="target-col">
+            <div class="field-label">Command Speed</div>
+            <div class="field-input-wrap">
+              <input id="target-speed" class="hmi-input" type="number" step="0.5" min="0.1" value="10.0">
+              <span class="unit-tag">mm/s</span>
+            </div>
+          </div>
+          <div class="target-col">
+            <div class="field-label">Target Duration (Optional)</div>
+            <div class="field-input-wrap">
+              <input id="target-duration" class="hmi-input" type="number" step="0.5" min="0.1" placeholder="Auto">
+              <span class="unit-tag">sec</span>
+            </div>
+          </div>
+          <div class="target-col">
+            <div class="field-label">Move Timeout</div>
+            <div class="field-input-wrap">
+              <input id="move-timeout" class="hmi-input" type="number" step="0.5" min="0.1" value="30.0">
+              <span class="unit-tag">sec</span>
+            </div>
+          </div>
+          <div class="target-col">
+            <div class="field-label">Acceleration</div>
+            <div class="field-input-wrap">
+              <input id="move-acceleration" class="hmi-input" type="number" step="1" min="1" max="30" placeholder="AUTO">
+              <span class="unit-tag">mm/s²</span>
+            </div>
+          </div>
+          <div class="target-col">
+            <div class="field-label">Deceleration</div>
+            <div class="field-input-wrap">
+              <input id="move-deceleration" class="hmi-input" type="number" step="1" min="1" max="30" placeholder="AUTO">
+              <span class="unit-tag">mm/s²</span>
+            </div>
+          </div>
+          <div class="target-load-actions">
+            <button type="button" class="btn-secondary" id="target-load-current">LOAD CURRENT XYZ</button>
+            <button type="button" class="btn-secondary" id="target-load-selected-slot">LOAD SELECTED SLOT</button>
+            <span>Loading only fills the fields; the machine moves only after ARM + EXECUTE.</span>
+          </div>
+          <div class="target-actions">
+            <button class="btn-secondary" id="validate-move">1 VALIDATE</button>
+            <button class="btn-secondary" id="plan-move" disabled>2 PREVIEW</button>
+            <button class="btn-arm" id="arm-move" disabled>3 ARM MOVE</button>
+            <button class="btn-execute" id="absolute-move" disabled>4 EXECUTE</button>
+          </div>
+        </div>
+
+        <div class="motion-preview-grid">
+          <div class="motion-validation-stack">
+            <div class="validation-message" id="validation-box">Target not validated.</div>
+            <div class="validation-message" id="move-plan">Preview not generated.</div>
+            <div class="motion-validation-axes" id="motion-validation-axes">Per-axis safety validation pending.</div>
+          </div>
+          <div class="preview-table">
+            <div class="preview-table-label">Position Delta Preview</div>
+            <div class="preview-row"><span>X</span><div class="pv" id="prev-cur-x">--</div><div class="pv" id="prev-tgt-x">--</div><div class="pd zero" id="prev-delta-x">---</div></div>
+            <div class="preview-row"><span>Y</span><div class="pv" id="prev-cur-y">--</div><div class="pv" id="prev-tgt-y">--</div><div class="pd zero" id="prev-delta-y">---</div></div>
+            <div class="preview-row"><span>Z</span><div class="pv" id="prev-cur-z">--</div><div class="pv" id="prev-tgt-z">--</div><div class="pd zero" id="prev-delta-z">---</div></div>
+            <div class="preview-dist"><span>Est. Trajectory</span><strong id="prev-dist">--- mm</strong></div>
+            <div class="preview-dist"><span>Duration / Master</span><strong><span id="prev-time">--- s</span> · <span id="prev-master">---</span></strong></div>
+          </div>
+          <section class="motion-command-card">
+            <div class="preview-table-label">Current Motion Command</div>
+            <div class="motion-command-grid">
+              <span>ID</span><strong id="motion-command-id">NONE</strong>
+              <span>Type / Phase</span><strong id="motion-command-phase">IDLE</strong>
+              <span>Elapsed / Remaining</span><strong id="motion-command-time">-- / --</strong>
+              <span>Trajectory</span><strong id="motion-command-trajectory">READY</strong>
+              <span>Queue</span><strong id="motion-command-queue">0</strong>
+            </div>
+            <div class="motion-stop-actions">
+              <button class="btn-controlled-stop" id="controlled-stop">CONTROLLED STOP</button>
+              <button class="btn-abort" id="abort-motion">ABORT MOTION</button>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      </section>
+
+      <!-- Slot positioning Table Panel -->
+      <section class="workspace-view" data-view-page="slots">
+      <div class="panel slot-panel page-fill-panel">
+        <div class="panel-head">
+          <div>
+            <p class="panel-label">Slot Positioning Manager</p>
+            <h2 class="panel-title">Teach · Go To Position · Dispense</h2>
+          </div>
+          <div class="slot-toolbar">
+            <input id="slot-search" class="slot-search" placeholder="Search slot code or product name...">
+            <select id="slot-filter" class="hmi-input" style="width: auto; padding-right: 20px;">
+              <option value="all">All Slots</option>
+              <option value="ready">Ready</option>
+              <option value="empty">Empty</option>
+              <option value="not-configured">Not Configured</option>
+              <option value="invalid">Invalid</option>
+              <option value="alarm">Alarm</option>
+            </select>
+          </div>
+        </div>
+        <div class="slot-summary-grid" aria-label="Slot summary">
+          <div><span>Total</span><strong id="slot-summary-total">30</strong></div>
+          <div><span>Ready</span><strong id="slot-summary-ready">0</strong></div>
+          <div><span>Empty</span><strong id="slot-summary-empty">0</strong></div>
+          <div><span>Invalid</span><strong id="slot-summary-invalid">0</strong></div>
+          <div><span>Selected</span><strong id="slot-summary-selected">--</strong></div>
+        </div>
+        <section class="slot-detail-panel" aria-live="polite">
+          <div class="slot-detail-head"><span>Selected slot</span><strong id="slot-detail-title">SELECT A SLOT</strong><span class="slot-badge empty" id="slot-detail-status">NO SELECTION</span></div>
+          <div class="slot-detail-grid">
+            <div><span>Saved XYZ</span><strong id="slot-detail-saved">--</strong></div>
+            <div><span>Current XYZ</span><strong id="slot-detail-current">--</strong></div>
+            <div><span>Delta XYZ</span><strong id="slot-detail-delta">--</strong></div>
+            <div><span>Homing</span><strong id="slot-detail-homing">--</strong></div>
+            <div><span>Distance / time</span><strong id="slot-detail-estimate">--</strong></div>
+            <div><span>Motion readiness</span><strong id="slot-detail-readiness">SELECT A SLOT</strong></div>
+          </div>
+        </section>
+        <div class="slot-table-wrap">
+          <table class="slot-table">
+            <thead>
+              <tr>
+                <th>Slot</th>
+                <th>Status</th>
+                <th>X (mm)</th>
+                <th>Y (mm)</th>
+                <th>Z (mm)</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="slot-grid">
+              <!-- Dynamic slot rows rendered by app.js -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+      </section>
+
+      <section class="workspace-view" data-view-page="dashboard">
+        <div class="page-heading">
+          <div><p class="panel-label">System Overview</p><h2>Machine Dashboard</h2></div>
+          <span class="page-status-chip" id="dashboard-health">CONNECTING</span>
+        </div>
+        <div class="dashboard-command-center">
+          <section class="dashboard-panel dashboard-readiness">
+            <div class="dashboard-panel-head"><div><span>A</span><strong>Machine Readiness</strong></div><b id="dashboard-readiness-summary">OFFLINE</b></div>
+            <div class="dashboard-readiness-grid" id="dashboard-readiness-grid"></div>
+            <p class="dashboard-reason" id="dashboard-state-detail">Waiting for controller status</p>
+          </section>
+
+          <section class="dashboard-panel dashboard-operation">
+            <div class="dashboard-panel-head"><div><span>B</span><strong>Current Operation</strong></div><b id="dashboard-motion-state">OFFLINE</b></div>
+            <div class="dashboard-operation-grid">
+              <div><span>Command</span><strong id="dashboard-command">NONE</strong></div>
+              <div><span>Phase</span><strong id="dashboard-operation-phase">UNKNOWN</strong></div>
+              <div><span>Active Axis</span><strong id="dashboard-active-axis">--</strong></div>
+              <div><span>Target Slot</span><strong id="dashboard-target-slot">--</strong></div>
+              <div><span>Started</span><strong id="dashboard-start-time">--:--:--</strong></div>
+              <div><span>Elapsed</span><strong id="dashboard-elapsed-time">--</strong></div>
+              <div><span>Remaining</span><strong id="dashboard-remaining-time">NO DATA</strong></div>
+            </div>
+            <div class="dashboard-progress"><div id="dashboard-progress-bar"></div></div>
+            <small id="dashboard-operation-message">Waiting for controller</small>
+          </section>
+
+          <section class="dashboard-panel dashboard-alarms">
+            <div class="dashboard-panel-head"><div><span>E</span><strong>Active Alarms</strong></div><b id="dashboard-alarm-count">0</b></div>
+            <div class="dashboard-alarm-list" id="dashboard-alarm-list"></div>
+          </section>
+
+          <section class="dashboard-panel dashboard-axes">
+            <div class="dashboard-panel-head"><div><span>C</span><strong>Live Axis Position</strong></div><b>1 SEC LIVE</b></div>
+            <div class="dashboard-axis-table" id="dashboard-axis-grid"></div>
+          </section>
+
+          <section class="dashboard-panel dashboard-slots">
+            <div class="dashboard-panel-head"><div><span>D</span><strong>Slot Overview 6×5</strong></div><b id="dashboard-slots">0 READY</b></div>
+            <div class="dashboard-slot-content">
+              <div class="dashboard-slot-map" id="dashboard-slot-grid"></div>
+              <div class="dashboard-slot-detail">
+                <span>Selected</span><strong id="dashboard-selected-slot">SLOT 01</strong>
+                <small class="slot-sequence-mini" id="dashboard-selected-sequence" aria-live="polite">SEQUENCE: IDLE</small>
+                <small id="dashboard-selected-coordinates">X -- · Y -- · Z --</small>
+              </div>
+            </div>
+          </section>
+
+          <section class="dashboard-panel dashboard-cycle">
+            <div class="dashboard-panel-head"><div><span>F</span><strong>Cycle Statistics</strong></div><b>API REQUIRED</b></div>
+            <div class="dashboard-no-data-grid">
+              <div><span>Completed</span><strong>NO DATA</strong></div><div><span>Failed</span><strong>NO DATA</strong></div>
+              <div><span>Success Rate</span><strong>NO DATA</strong></div><div><span>Latest / Average</span><strong>NO DATA</strong></div>
+              <div><span>Operating Time</span><strong>NO DATA</strong></div>
+            </div>
+          </section>
+
+          <section class="dashboard-panel dashboard-maintenance">
+            <div class="dashboard-panel-head"><div><span>G</span><strong>Maintenance Status</strong></div><b>NO COUNTERS</b></div>
+            <div class="dashboard-maintenance-list">
+              <div><span>Motor Runtime X/Y/Z</span><strong>NO DATA</strong></div>
+              <div><span>Movement Cycles</span><strong>NO DATA</strong></div>
+              <div><span>Lead Screw Inspection</span><strong>NO DATA</strong></div>
+              <div><span>Limit Sensor Inspection</span><strong>NO DATA</strong></div>
+              <div><span>Last / Next Maintenance</span><strong>NO DATA</strong></div>
+            </div>
+          </section>
+
+          <section class="dashboard-panel dashboard-events">
+            <div class="dashboard-panel-head"><div><span>H</span><strong>Recent Events</strong></div><b>LAST 8</b></div>
+            <ol class="dashboard-event-list" id="dashboard-event-list"></ol>
+          </section>
+        </div>
+      </section>
+
+      <section class="workspace-view" data-view-page="visualization">
+        <div class="page-heading"><div><p class="panel-label">Machine Visualization</p><h2>Live Gantry Position &amp; Slot Preview</h2></div><span class="page-status-chip" id="visual-data-state">CONNECTING</span></div>
+        <div class="visual-state-strip">
+          <div><span>Controller</span><strong id="visual-state-controller">OFFLINE</strong></div>
+          <div><span>Machine</span><strong id="visual-state-machine">UNKNOWN</strong></div>
+          <div><span>Motion</span><strong id="visual-state-motion">UNKNOWN</strong></div>
+          <div><span>Command</span><strong id="visual-state-command">NONE</strong></div>
+          <div><span>Target Slot</span><strong id="visual-state-slot">--</strong></div>
+          <div class="visual-state-reason"><span>Interlock / Data</span><strong id="visual-state-reason">Waiting for API status</strong></div>
+        </div>
+        <div class="panel page-panel visualization-panel visualization-v32">
+          <section class="xy-visual-card">
+            <div class="visual-card-head">
+              <div><span class="panel-label">X–Y Gantry Plane</span><strong>Soft-Limit Workspace · Slot Matrix 01–30</strong></div>
+              <div class="xy-live-coordinates"><span>X <b id="vis-x-value">0.000</b> mm</span><span>Y <b id="vis-y-value">0.000</b> mm</span></div>
+            </div>
+            <div class="xy-slot-stage" id="vis-xy-stage">
+              <div class="xy-engineering-grid"></div>
+              <div class="xy-soft-limit-boundary"><span>SOFT LIMIT</span></div>
+              <span class="xy-home-marker">HOME 0,0</span>
+              <span class="xy-axis-tag xy-axis-x" id="visual-x-scale">X+ -- mm</span>
+              <span class="xy-axis-tag xy-axis-y" id="visual-y-scale">Y+ -- mm</span>
+              <div class="visual-slot-grid" id="visual-slot-grid"></div>
+              <svg class="visual-trajectory" id="visual-trajectory" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><line id="visual-trajectory-line"></line></svg>
+              <div class="xy-target-marker" id="vis-xy-target"><span>TARGET</span></div>
+              <div class="xy-gantry-marker" id="vis-xy-carriage"><span>HEAD</span></div>
+            </div>
+            <div class="visual-legend">
+              <span><i class="legend-dot current"></i>Actual Head</span>
+              <span><i class="legend-dot target"></i>Selected Target</span>
+              <span><i class="legend-dot ready"></i>Ready / At Position</span>
+              <span><i class="legend-dot warning"></i>Not Homed / Warning</span>
+              <span><i class="legend-dot alarm"></i>Invalid / Alarm</span>
+              <span><i class="legend-dot empty"></i>Empty / No Data</span>
+            </div>
+          </section>
+
+          <aside class="z-visual-card">
+            <div class="visual-card-head z-head">
+              <div><span class="panel-label">Independent Axis</span><strong>Z Axis</strong></div>
+              <span class="axis-state-badge not-homed" id="vis-z-state">NOT HOMED</span>
+            </div>
+            <div class="z-position-value"><strong id="vis-z-value">0.000</strong><span>mm</span></div>
+            <div class="z-travel-assembly">
+              <div class="z-scale"><span id="vis-z-max">200.0</span><span>MAX</span><span>0.0</span></div>
+              <div class="z-track">
+                <div class="z-track-fill" id="vis-z-fill"></div>
+                <div class="z-safe-marker" id="vis-z-safe-marker"><span>SAFE Z</span></div>
+                <div class="z-carriage-marker" id="vis-z-carriage">Z</div>
+                <div class="z-target-marker" id="vis-z-target-marker" title="Target Z"></div>
+              </div>
+            </div>
+            <div class="z-detail-grid">
+              <div><span>Actual / Target</span><strong id="vis-target-z">-- / -- mm</strong></div>
+              <div><span>Delta / Direction</span><strong id="vis-z-delta">-- / IDLE</strong></div>
+              <div><span>Position Steps</span><strong id="vis-z-steps">0</strong></div>
+              <div><span>Safe Z</span><strong id="vis-z-safe">-- mm</strong></div>
+              <div><span>Min / Max Limit</span><strong id="vis-z-limits">-- / --</strong></div>
+              <div><span>Drive / Error</span><strong id="vis-z-drive">NO DATA</strong></div>
+            </div>
+          </aside>
+
+          <section class="visual-live-axis-card">
+            <div class="visual-section-head"><span>Live Position Readout</span><strong>API ACTUAL POSITION</strong></div>
+            <div class="visual-axis-readouts" id="visual-axis-readouts"></div>
+          </section>
+
+          <section class="visual-slot-inspector">
+            <div class="visual-command-head"><span>SELECTED SLOT</span><strong class="slot-badge empty" id="visual-command-status">EMPTY</strong></div>
+            <p class="slot-sequence-mini" id="visual-selected-sequence" aria-live="polite">SEQUENCE: IDLE</p>
+            <div class="visual-command-form">
+              <label class="visual-command-select"><span>Slot</span><select id="visual-command-slot" class="hmi-select" aria-label="Visualization selected slot"></select></label>
+              <label><span>X Coordinate</span><div class="field-input-wrap"><input id="visual-command-x" class="hmi-input" type="number" readonly><span class="unit-tag">mm</span></div></label>
+              <label><span>Y Coordinate</span><div class="field-input-wrap"><input id="visual-command-y" class="hmi-input" type="number" readonly><span class="unit-tag">mm</span></div></label>
+              <label><span>Z Coordinate</span><div class="field-input-wrap"><input id="visual-command-z" class="hmi-input" type="number" readonly><span class="unit-tag">mm</span></div></label>
+            </div>
+            <div class="visual-command-current" id="visual-command-current">Current: X -- · Y -- · Z -- mm</div>
+            <div class="visual-command-actions">
+              <button type="button" class="btn-secondary" id="visual-command-load" hidden>LOAD TARGET</button>
+              <button type="button" class="btn-secondary" id="visual-load-preview">VALIDATE SLOT</button>
+              <button type="button" class="btn-home-all" id="visual-home-all">HOME ALL AXES</button>
+              <button type="button" class="btn-execute visual-goto-slot" id="visual-slot-goto">GOTO SLOT</button>
+            </div>
+            <div class="visual-section-head visual-detail-head"><span>Selected Slot Details</span><strong id="vis-target-summary">SLOT --</strong></div>
+            <div class="visual-slot-detail-grid">
+              <div><span>Saved XYZ</span><strong id="vis-target-coordinates">X -- · Y -- · Z --</strong></div>
+              <div><span>Delta XYZ</span><strong id="visual-slot-delta">X -- · Y -- · Z --</strong></div>
+              <div><span>Estimated Pulses</span><strong id="visual-slot-pulses">X -- · Y -- · Z --</strong></div>
+              <div><span>Position Validity</span><strong id="visual-slot-validity">NOT VALIDATED</strong></div>
+              <div><span>Distance / Time</span><strong id="visual-slot-estimate">NO DATA</strong></div>
+              <div><span>Homing Requirement</span><strong id="visual-slot-homing">UNKNOWN</strong></div>
+            </div>
+            <div class="visual-inspector-actions">
+              <button class="btn-secondary" id="visual-send-motion" hidden>SEND TO MOTION CONTROL</button>
+              <button class="btn-arm" id="visual-edit-enable">ENABLE EDIT MODE</button>
+            </div>
+          </section>
+
+          <section class="visual-trajectory-card">
+            <div class="visual-section-head"><span>Trajectory Preview</span><strong id="visual-preview-state">NOT VALIDATED</strong></div>
+            <div class="visual-trajectory-details" id="visual-trajectory-details">Select a configured slot, then click LOAD AS PREVIEW.</div>
+          </section>
+
+          <section class="visual-slot-editor view-only" id="visual-slot-editor" aria-label="Visualization slot position editor">
+            <div class="visual-editor-head">
+              <div><span class="panel-label">Selected Slot</span><strong id="visual-editor-title">SLOT 01</strong></div>
+              <div><span class="slot-badge empty" id="visual-editor-status">EMPTY</span><small id="visual-edit-mode-state">VIEW ONLY</small></div>
+            </div>
+            <div class="visual-editor-fields">
+              <label><span>X Position</span><div class="field-input-wrap"><input id="visual-slot-x" class="hmi-input" type="number" min="0" step="0.1" readonly><span class="unit-tag">mm</span></div></label>
+              <label><span>Y Position</span><div class="field-input-wrap"><input id="visual-slot-y" class="hmi-input" type="number" min="0" step="0.1" readonly><span class="unit-tag">mm</span></div></label>
+              <label><span>Z Position</span><div class="field-input-wrap"><input id="visual-slot-z" class="hmi-input" type="number" min="0" step="0.1" readonly><span class="unit-tag">mm</span></div></label>
+            </div>
+            <div class="visual-edit-comparison" id="visual-edit-comparison">Enable Engineering Edit Mode to modify stored coordinates. Saving never moves the machine.</div>
+            <div class="visual-editor-actions">
+              <button class="btn-secondary" id="visual-slot-load-current" disabled>LOAD CURRENT</button>
+              <button class="btn-slot-save" id="visual-slot-save" disabled>SAVE POSITION</button>
+              <button class="btn-secondary" id="visual-edit-cancel" disabled>CANCEL EDIT</button>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section class="workspace-view" data-view-page="diagnostics">
+        <div class="page-heading"><div><p class="panel-label">Diagnostics</p><h2>Controller &amp; I/O Health</h2></div><span class="page-status-chip" id="diag-health">CHECKING</span></div>
+        <div class="diagnostic-grid" id="diagnostic-grid"></div>
+      </section>
+
+      <section class="workspace-view" data-view-page="configuration">
+        <div class="page-heading"><div><p class="panel-label">Controller Configuration</p><h2>Motor Pulse, GPIO &amp; Sensors</h2></div><span class="page-status-chip" id="configuration-save-status">LOADED</span></div>
+        <div class="configuration-toolbar panel">
+          <div><strong>Engineering Configuration</strong><span>Values are validated and saved atomically to the Raspberry Pi.</span></div>
+          <div class="configuration-toolbar-actions">
+            <button class="btn-secondary" id="configuration-reset">RESET CHANGES</button>
+            <button class="btn-slot-save" id="configuration-save">SAVE TO PI</button>
+            <button class="btn-execute" id="configuration-apply" disabled>APPLY &amp; RESTART</button>
+          </div>
+        </div>
+        <div class="configuration-scroll-area">
+          <div class="panel page-panel motor-pulse-config-panel">
+            <div class="panel-head"><div><p class="panel-label">Motor Pulse Configuration</p><h2 class="panel-title">Axis Pulse &amp; Motion Parameters</h2></div><span class="page-note">Maximum pulse output: 50 kHz</span></div>
+            <div class="motor-config-grid" id="configuration-motor-grid"></div>
+          </div>
+          <div class="panel page-panel configuration-pin-panel">
+            <div class="panel-head"><div><p class="panel-label">Raspberry Pi GPIO</p><h2 class="panel-title">Pin Configuration &amp; Sensors</h2></div><span class="page-note" id="configuration-board-profile">Board: --</span></div>
+            <div class="pin-editor-groups" id="configuration-pin-editor"></div>
+          </div>
+        </div>
+        <div class="configuration-validation" id="configuration-validation">No unsaved changes.</div>
+      </section>
+
+      <section class="workspace-view motor-test-page" data-view-page="motor-test">
+        <div class="page-heading">
+          <div><p class="panel-label">Maintenance Engineering</p><h2>Motor Test Mode</h2></div>
+          <span class="page-status-chip" id="motor-test-page-status">DISARMED</span>
+        </div>
+        <div class="motor-test-safety panel" id="motor-test-safety">
+          <div><strong>RAW PULSE OUTPUT — POSITION IS UNKNOWN</strong><span>Arm once, then press and hold Test Jog to rotate. Release stops the pulse stream; E-Stop and directional limits remain active.</span></div>
+          <div class="motor-test-arm-actions">
+            <span id="motor-test-countdown">PRESS ARM TO ENABLE</span>
+            <button class="btn-arm" id="motor-test-arm" type="button">ARM TEST MODE</button>
+            <button class="btn-abort" id="motor-test-cancel" type="button" disabled>CANCEL TEST MODE</button>
+          </div>
+        </div>
+        <div class="motor-test-layout">
+          <div class="panel page-panel motor-test-controls-panel">
+            <div class="panel-head"><div><p class="panel-label">Pulse Generator</p><h2 class="panel-title">Single-Axis Motor Test</h2></div><span class="page-note">10 Hz minimum · hold-to-run jog</span></div>
+            <div class="motor-test-form">
+              <label><span>Axis</span><select class="hmi-input" id="motor-test-axis"><option value="x">X Axis</option><option value="y">Y Axis</option><option value="z" selected>Z Axis</option></select></label>
+              <label><span>Direction</span><select class="hmi-input" id="motor-test-direction"><option value="forward">FORWARD (+)</option><option value="reverse">REVERSE (−)</option></select></label>
+              <label><span>Pulse Frequency</span><div class="field-input-wrap"><input class="hmi-input" id="motor-test-frequency" type="number" min="10" step="10" value="2000"><span class="unit-tag">Hz</span></div></label>
+              <label><span>Pulse Count</span><div class="field-input-wrap"><input class="hmi-input" id="motor-test-pulses" type="number" min="1" max="6000" step="1" value="300"><span class="unit-tag">pulse</span></div></label>
+              <label><span>Motor Full Steps / Rev</span><input class="hmi-input" id="motor-test-steps-rev" type="number" min="1" max="10000" step="1" value="200"></label>
+              <label><span>Driver Microstep</span><input class="hmi-input" id="motor-test-microsteps" type="number" min="1" max="256" step="1" value="10"></label>
+              <label><span>Lead Screw Pitch</span><div class="field-input-wrap"><input class="hmi-input" id="motor-test-pitch" type="number" min="0.01" max="100" step="0.01" value="5"><span class="unit-tag">mm</span></div></label>
+              <label><span>Calculated Duration</span><div class="field-input-wrap"><input class="hmi-input" id="motor-test-duration" type="text" value="3.000" readonly><span class="unit-tag">sec</span></div></label>
+            </div>
+            <section class="motor-test-jog-panel" aria-labelledby="motor-test-jog-title">
+              <div class="motor-test-jog-head"><div><span>Pulse Jog Control</span><strong id="motor-test-jog-title">TEST EACH AXIS DIRECTION</strong></div><small id="motor-test-jog-profile">300 pulse · 100 Hz</small></div>
+              <div class="motor-test-jog-grid">
+                <span>X Axis</span><button type="button" data-motor-test-jog="x:reverse" disabled>X−</button><button type="button" data-motor-test-jog="x:forward" disabled>X+</button>
+                <span>Y Axis</span><button type="button" data-motor-test-jog="y:reverse" disabled>Y−</button><button type="button" data-motor-test-jog="y:forward" disabled>Y+</button>
+                <span>Z Axis</span><button type="button" data-motor-test-jog="z:reverse" disabled>Z−</button><button type="button" data-motor-test-jog="z:forward" disabled>Z+</button>
+              </div>
+              <p>Press and hold to rotate continuously at the Pulse Frequency above. Release the button to stop. Position feedback is not used.</p>
+            </section>
+            <div class="motor-test-derived">
+              <div><span>Pulses / Revolution</span><strong id="motor-test-ppr">2,000</strong></div>
+              <div><span>Calculated Pulses / mm</span><strong id="motor-test-ppm">400.000</strong></div>
+              <div><span>Theoretical Travel</span><strong id="motor-test-distance">0.750 mm</strong></div>
+              <div><span>Motor Speed</span><strong id="motor-test-rpm">3.00 rpm</strong></div>
+            </div>
+            <div class="motor-test-command-row">
+              <button class="btn-execute" id="motor-test-start" type="button" disabled>RUN ONE PULSE BURST</button>
+              <button class="btn-secondary" id="motor-test-open-config" type="button">OPEN MOTOR &amp; PIN CONFIGURATION</button>
+            </div>
+            <div class="configuration-validation" id="motor-test-result">Arm Motor Test Mode before sending pulses.</div>
+          </div>
+          <aside class="motor-test-side-stack">
+            <div class="panel page-panel">
+              <div class="panel-head"><div><p class="panel-label">Live I/O</p><h2 class="panel-title">Axis &amp; Driver Status</h2></div><span class="page-note">Updates every 1 second</span></div>
+              <div class="motor-test-axis-grid" id="motor-test-axis-grid"></div>
+            </div>
+            <div class="panel page-panel motor-test-checklist">
+              <div class="panel-head"><div><p class="panel-label">Operating Notes</p><h2 class="panel-title">Hold-to-Run Test Jog</h2></div></div>
+              <ol><li>Press ARM TEST MODE once before using Test Jog.</li><li>Press and hold X±, Y± or Z± to rotate continuously.</li><li>Release the Jog button to stop normal test motion.</li><li>Use the physical E-Stop immediately for an unsafe response.</li><li>Cancel Test Mode before returning to normal motion.</li></ol>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <section class="workspace-view mqtt-page" data-view-page="mqtt">
+        <div class="page-heading">
+          <div><p class="panel-label">External Communication</p><h2>MQTT Broker Monitor</h2></div>
+          <div class="mqtt-page-controls">
+            <button class="mqtt-control-btn connect" id="mqtt-connect" type="button">CONNECT MQTT</button>
+            <button class="mqtt-control-btn disconnect" id="mqtt-disconnect" type="button">DISCONNECT MQTT</button>
+            <span class="page-status-chip" id="mqtt-page-status">CHECKING</span>
+          </div>
+        </div>
+        <div class="mqtt-summary-grid">
+          <article class="mqtt-summary-card" id="mqtt-card-link"><span>Broker Link</span><strong id="mqtt-link-state">UNKNOWN</strong><small id="mqtt-link-detail">Waiting for telemetry</small></article>
+          <article class="mqtt-summary-card"><span>Cabinet Client</span><strong id="mqtt-client-id">--</strong><small id="mqtt-client-detail">Persistent session</small></article>
+          <article class="mqtt-summary-card"><span>Messages Received</span><strong id="mqtt-rx-count">0</strong><small id="mqtt-last-rx">Last RX: --</small></article>
+          <article class="mqtt-summary-card"><span>Messages Published</span><strong id="mqtt-tx-count">0</strong><small id="mqtt-last-tx">Last TX: --</small></article>
+          <article class="mqtt-summary-card"><span>Commands</span><strong id="mqtt-command-count">0</strong><small id="mqtt-rejected-count">Rejected: 0</small></article>
+        </div>
+        <div class="mqtt-monitor-layout">
+          <section class="panel page-panel mqtt-connection-panel">
+            <div class="panel-head"><div><p class="panel-label">Connection</p><h2 class="panel-title">Broker &amp; Session</h2></div><span class="page-note">Updates every 1 second</span></div>
+            <dl class="mqtt-detail-list">
+              <div><dt>Broker Address</dt><dd id="mqtt-broker-address">--</dd></div>
+              <div><dt>Keep Alive</dt><dd id="mqtt-keepalive">--</dd></div>
+              <div><dt>Authentication</dt><dd id="mqtt-auth-state">--</dd></div>
+              <div><dt>Connected At</dt><dd id="mqtt-connected-at">--</dd></div>
+              <div><dt>Disconnected At</dt><dd id="mqtt-disconnected-at">--</dd></div>
+              <div><dt>Connect / Disconnect</dt><dd id="mqtt-session-count">0 / 0</dd></div>
+            </dl>
+          </section>
+          <section class="panel page-panel mqtt-topic-panel">
+            <div class="panel-head"><div><p class="panel-label">Topic Contract</p><h2 class="panel-title">Subscriptions &amp; Publications</h2></div></div>
+            <div class="mqtt-topic-group"><span>SUBSCRIBE</span><div id="mqtt-subscribe-topics" class="mqtt-topic-list"><code>--</code></div></div>
+            <div class="mqtt-topic-group"><span>PUBLISH</span><div id="mqtt-publish-topics" class="mqtt-topic-list"><code>--</code></div></div>
+          </section>
+          <section class="panel page-panel mqtt-message-panel">
+            <div class="panel-head"><div><p class="panel-label">Live Traffic</p><h2 class="panel-title">MQTT RX / TX Message Stream</h2></div><span class="page-note">Latest 100 messages · sensitive tokens redacted</span></div>
+            <div class="mqtt-message-head"><span>TIME</span><span>DIR</span><span>QOS</span><span>TOPIC / PAYLOAD</span></div>
+            <div class="mqtt-message-stream" id="mqtt-message-stream"><div class="mqtt-empty-state">NO MQTT MESSAGES RECEIVED</div></div>
+          </section>
+          <section class="panel page-panel mqtt-error-panel" id="mqtt-error-panel">
+            <div><span>LAST CONNECTION ERROR</span><strong id="mqtt-last-error">NO ERROR</strong></div>
+            <small id="mqtt-telemetry-time">Telemetry: --</small>
+          </section>
+        </div>
+      </section>
+
+      <section class="workspace-view architecture-page" data-view-page="architecture" hidden>
+        <div class="page-heading">
+          <div><p class="panel-label">System Design Reference</p><h2>NARIT Vending Architecture</h2></div>
+          <span class="page-status-chip ok">2 PROCESS / 1 MQTT CLIENT</span>
+        </div>
+        <p class="architecture-intro">ระบบแบ่งหน้าที่ชัดเจน: Web HMI แสดงผลและส่งคำขอ, Controller เป็นผู้ตัดสินใจด้านความปลอดภัยและควบคุม GPIO, ส่วน MQTT ทำงานเพียงหนึ่ง client ภายใน Controller เพื่อป้องกัน client ID ซ้ำและการเชื่อมต่อกระพริบ</p>
+
+        <section class="architecture-flow" aria-label="System architecture data flow">
+          <article class="architecture-node hmi"><span class="architecture-step">01</span><h3>Operator HMI</h3><p>Browser ของผู้ปฏิบัติงาน เปิดหน้า Dashboard, Motion, Slots, Alarms และ MQTT Monitor</p><small>HTTP polling: <code>GET /api/state</code> ทุก 1.5 วินาที</small></article>
+          <div class="architecture-arrow"><span>HTTP / JSON</span>→</div>
+          <article class="architecture-node web"><span class="architecture-step">02</span><h3>Web Process</h3><p>Flask บน port 80 รับหน้า HTML/CSS/JS และ API เท่านั้น ไม่เปิด GPIO และไม่สร้าง MQTT client</p><small>Controller unavailable → command API ตอบ 503</small></article>
+          <div class="architecture-arrow"><span>Unix IPC</span>→</div>
+          <article class="architecture-node controller"><span class="architecture-step">03</span><h3>Controller Process</h3><p>เจ้าของ machine state, command bus, interlock, MotionService, GPIO และ MQTT client เพียงตัวเดียว</p><small><code>/run/narit-vending/ctrl.sock</code></small></article>
+          <div class="architecture-arrow split"><span>GPIO</span>↘<br><span>MQTT</span>↗</div>
+          <article class="architecture-node hardware"><span class="architecture-step">04</span><h3>Machine / Broker</h3><p>สั่ง Step/Dir/Enable ของแกน X/Y/Z, อ่าน limit/E-Stop และแลกเปลี่ยนคำสั่งกับ MQTT broker</p><small>Hardware safety remains local</small></article>
+        </section>
+
+        <div class="architecture-grid">
+          <article class="panel page-panel architecture-card">
+            <div class="panel-head"><div><p class="panel-label">A. Web HMI</p><h2 class="panel-title">Presentation &amp; Request Layer</h2></div></div>
+            <ul>
+              <li>HTML/CSS/JavaScript แสดงตำแหน่ง XYZ, สถานะ homing, alarm, slot และ log จากข้อมูล Controller</li>
+              <li>ผู้ใช้กด Home, Jog, GO TO SLOT, Dispense หรือ Reset Alarm ผ่าน REST API; หน้าเว็บไม่ควบคุม motor โดยตรง</li>
+              <li>Web ใช้ <strong>ControllerClient</strong> ส่งต่อ request ผ่าน IPC จึงแยก web crash/restart ออกจากการเคลื่อนที่ของเครื่อง</li>
+              <li>MQTT Monitor อ่าน telemetry ผ่าน IPC; จึงไม่มี MQTT client ซ้ำใน Web process</li>
+            </ul>
+          </article>
+          <article class="panel page-panel architecture-card controller-card">
+            <div class="panel-head"><div><p class="panel-label">B. Controller</p><h2 class="panel-title">Safety &amp; Motion Authority</h2></div></div>
+            <ul>
+              <li>เริ่ม MotionService แล้วสร้าง StateMachine, CommandBus และ IPC Server ก่อนรับคำสั่ง</li>
+              <li>Command handlers ครอบคลุม Stop, Clear Alarm, Home, Jog, Move, Go To Slot, Dispense, Validate/Arm และ Motor Test</li>
+              <li>ทุกคำสั่งตรวจ interlock ก่อนสั่ง GPIO: Controller online, E-Stop clear, software stop clear, ไม่มี alarm ที่บล็อก, homing และพิกัด/ขอบเขตถูกต้อง</li>
+              <li>คำสั่ง move แบบมีเป้าหมายใช้ Validate → Arm → Execute เพื่อไม่ให้พิกัดหรือความเร็วที่เปลี่ยนหลังตรวจถูกนำไปวิ่งทันที</li>
+            </ul>
+          </article>
+          <article class="panel page-panel architecture-card safety-card">
+            <div class="panel-head"><div><p class="panel-label">C. Hardware Safety</p><h2 class="panel-title">Local, Immediate Interlocks</h2></div></div>
+            <ul>
+              <li>GPIO ขับสัญญาณ Step/Direction/Enable สำหรับ X, Y และ Z; MotionService เป็นผู้เดียวที่เข้าถึงอุปกรณ์เหล่านี้</li>
+              <li>อ่าน limit switch ต่ำสุด/สูงสุดของทุกแกน และ physical E-Stop เพื่อหยุดหรือปฏิเสธการเคลื่อนที่ที่ไม่ปลอดภัย</li>
+              <li>Homing สร้างจุดอ้างอิงก่อนอนุญาต absolute move หรือ slot positioning; การ restart ทำให้ต้องตรวจ homing ใหม่ตามสถานะจริง</li>
+              <li>GO TO SLOT ใช้ Safe Z ก่อนเคลื่อน X/Y และ Dispense ใช้ได้เมื่อหัว gantry อยู่พิกัด slot ที่ยืนยันแล้วเท่านั้น</li>
+            </ul>
+          </article>
+          <article class="panel page-panel architecture-card mqtt-card">
+            <div class="panel-head"><div><p class="panel-label">D. MQTT Contract</p><h2 class="panel-title">Controller-owned Persistent Session</h2></div></div>
+            <ul>
+              <li>Controller เปิด connection เดียวด้วย client ID เฉพาะ cabinet และ <strong>clean session = false</strong>; Web ไม่ connect broker</li>
+              <li>Subscribe: <code>cabinet/{cabinet_id}/command</code>; action ที่รองรับคือ <code>release</code> และต้องมี <code>request_id</code> กับ <code>slot</code></li>
+              <li>Publish: <code>/scan</code>, <code>/status</code>, <code>/presence</code>; presence ใช้ QoS 1 และ retained พร้อม Last Will offline</li>
+              <li>เมื่อ network/broker ขาด ระบบ reconnect ด้วย backoff 4–60 วินาที; telemetry แสดง connect/disconnect count และ error ล่าสุด</li>
+            </ul>
+          </article>
+          <article class="panel page-panel architecture-card config-card">
+            <div class="panel-head"><div><p class="panel-label">E. Configuration &amp; Audit</p><h2 class="panel-title">Validated Machine Definition</h2></div></div>
+            <ul>
+              <li><code>machine_config.json</code> เก็บ travel, steps/mm, safe Z, home sequence และ slot XYZ; <code>hardware_config.json</code> เก็บ GPIO และ communication</li>
+              <li>ก่อนบันทึก configuration ระบบตรวจความถูกต้อง สร้าง revision และสำรองไฟล์ไว้ใต้ <code>backups/config/</code></li>
+              <li>Event log, machine snapshot และ MQTT telemetry เป็นข้อมูลสำหรับวิเคราะห์เหตุขัดข้องโดยไม่แสดง password หรือ token</li>
+            </ul>
+          </article>
+          <article class="panel page-panel architecture-card deploy-card">
+            <div class="panel-head"><div><p class="panel-label">F. Deployment Rule</p><h2 class="panel-title">Keep MQTT Online During UI Work</h2></div></div>
+            <ul>
+              <li>Web-only deployment ส่งเฉพาะ <code>static/</code> และ <code>templates/</code> แล้ว restart Web process เท่านั้น</li>
+              <li>Controller และ MQTT connection จึงทำงานต่อเนื่องระหว่างการปรับ UI</li>
+              <li>Full deployment ใช้เมื่อแก้ controller, GPIO, motion หรือ MQTT; การ restart Controller จะทำให้ presence offline ชั่วคราวตามความจริงของเครื่อง</li>
+            </ul>
+          </article>
+        </div>
+
+        <section class="panel page-panel architecture-sequence">
+          <div class="panel-head"><div><p class="panel-label">Command Path</p><h2 class="panel-title">ตัวอย่าง: สั่ง Dispense จาก Backend</h2></div></div>
+          <ol>
+            <li>Backend publish <code>release</code> ไปที่ <code>cabinet/{cabinet_id}/command</code> พร้อม request_id, slot และเวลา expiry ถ้ามี</li>
+            <li>MQTTService ใน Controller ตรวจ JSON, action, request_id, slot, expiry และป้องกันการประมวลผล request_id เดิมซ้ำ</li>
+            <li>Controller ตรวจ safety interlocks, homing, slot XYZ และลำดับ Safe Z → X/Y → Z target ก่อนสั่ง motion</li>
+            <li>ผลลัพธ์ถูก publish เป็น received / phase / success หรือ failed พร้อมเหตุผลและ target/home verification</li>
+            <li>HMI ดึง state ผ่าน Web → IPC เพื่อแสดงสถานะเดียวกับที่ Controller ใช้ตัดสินใจ ไม่มี browser หรือ MQTT path ใด bypass safety layer ได้</li>
+          </ol>
+        </section>
+      </section>
+
+      <section class="workspace-view" data-view-page="alarms">
+        <div class="page-heading"><div><p class="panel-label">Alarm Management</p><h2>Alarm Points &amp; Safety Interlocks</h2></div><button class="btn-reset-alarm page-reset-alarm" id="page-clear-alarm">RESET ALARMS</button></div>
+        <div class="panel page-panel"><div id="alarm-page-list" class="alarm-page-list"></div></div>
+      </section>
+
+      <section class="workspace-view" data-view-page="events">
+        <div class="page-heading"><div><p class="panel-label">Event History</p><h2>Controller Event Logs</h2></div><span class="page-note">Read-only · latest 200 in-memory events · ICT (UTC+7)</span></div>
+        <div class="event-summary-grid">
+          <article class="event-summary-card"><span>Total Events</span><strong id="event-total-count">0</strong><small id="event-filtered-count">0 shown</small></article>
+          <article class="event-summary-card fault"><span>Critical / Fault</span><strong id="event-fault-count">0</strong><small>Requires attention first</small></article>
+          <article class="event-summary-card warn"><span>Warning</span><strong id="event-warn-count">0</strong><small>Review before operation</small></article>
+          <article class="event-summary-card ok"><span>Info / Success</span><strong id="event-info-count">0</strong><small id="event-last-update">Last update: --</small></article>
+          <article class="event-summary-card"><span>Controller</span><strong id="event-controller-state">CHECKING</strong><small>Live controller connection</small></article>
+        </div>
+        <div class="event-page-layout">
+          <div class="event-main-column">
+            <section class="panel page-panel event-active-alarms">
+              <div class="panel-head"><div><p class="panel-label">Current Active Alarm</p><h2 class="panel-title">Live Safety State</h2></div><span id="event-active-alarm-count" class="page-status-chip ok">0 CLEAR</span></div>
+              <div id="event-active-alarm-list" class="event-active-alarm-list"></div>
+            </section>
+            <section class="panel page-panel event-history-panel">
+              <div class="event-filter-bar">
+                <label class="event-search"><span>Search</span><input id="event-search" type="search" placeholder="Message, slot, command ID, request ID, axis"></label>
+                <label><span>Severity</span><select id="event-severity-filter"><option value="all">All severity</option><option value="fault">Critical / Fault</option><option value="warn">Warning</option><option value="info">Info / Success</option></select></label>
+                <label><span>Category</span><select id="event-category-filter"><option value="all">All categories</option><option value="SAFETY">Safety</option><option value="MOTION">Motion</option><option value="HOMING">Homing</option><option value="MQTT">MQTT</option><option value="SLOT">Slot</option><option value="CONFIG">Configuration</option><option value="SYSTEM">System</option></select></label>
+                <label><span>Outcome</span><select id="event-outcome-filter"><option value="all">All outcomes</option><option value="FAILED">Failed / Rejected</option><option value="SUCCESS">Success</option><option value="STARTED">Started</option></select></label>
+                <button id="event-clear-filters" class="event-clear-filters" type="button">CLEAR FILTERS</button>
+              </div>
+              <div class="event-quick-filters" role="group" aria-label="Quick event filters">
+                <button type="button" data-event-quick="all" class="active">All</button><button type="button" data-event-quick="fault">Critical</button><button type="button" data-event-quick="warn">Warning</button><button type="button" data-event-quick="MOTION">Motion</button><button type="button" data-event-quick="SAFETY">Safety</button><button type="button" data-event-quick="MQTT">MQTT</button>
+              </div>
+              <div class="event-list-head"><span>Severity / Time</span><span>Category</span><span>Event</span><span>Outcome</span><span>Detail</span></div>
+              <ol class="event-history-list" id="event-log-page" aria-live="polite"></ol>
+            </section>
+          </div>
+          <aside class="panel page-panel event-detail-panel" aria-live="polite">
+            <div class="panel-head"><div><p class="panel-label">Selected Event</p><h2 class="panel-title">Event Detail</h2></div><span id="event-detail-state" class="page-status-chip">NONE</span></div>
+            <div id="event-detail-content" class="event-detail-content"><p>Select an event to inspect its sanitized details. This page never sends a machine command.</p></div>
+          </aside>
+        </div>
+      </section>
+
+      <section class="workspace-view" data-view-page="flow">
+        <div class="page-heading"><div><p class="panel-label">Detailed System Flow</p><h2>Safety · Homing · Positioning · Dispense</h2></div><span class="page-status-chip" id="flow-state">IDLE</span></div>
+        <div class="flow-live-summary"><div><span>Machine / Command</span><strong id="flow-machine-command">NO DATA</strong></div><div><span>Slot / Phase</span><strong id="flow-slot-phase">NO DATA</strong></div><div><span>Current XYZ</span><strong id="flow-current-xyz">NO DATA</strong></div><div><span>Target XYZ</span><strong id="flow-target-xyz">NO DATA</strong></div><div><span>Homing / Limits</span><strong id="flow-homing-limits">NO DATA</strong></div></div>
+        <section class="panel page-panel flow-block-panel"><div class="panel-head"><div><p class="panel-label">Why Blocked?</p><h2 class="panel-title">Motion Interlock Explanation</h2></div><span id="flow-interlock-state" class="page-status-chip">CHECKING</span></div><div id="flow-interlock-list" class="flow-interlock-list"></div></section>
+        <div class="flow-diagram">
+          <div class="flow-node" id="flow-controller"><span>01</span><strong>Controller Link</strong><small>Pi API online and status polling</small></div>
+          <div class="flow-node" id="flow-safety"><span>02</span><strong>Safety Circuit</strong><small>E-Stop, software stop and alarms clear</small></div>
+          <div class="flow-node" id="flow-home-z"><span>03</span><strong>Home Z Axis</strong><small>Reference vertical axis first</small></div>
+          <div class="flow-node" id="flow-home-x"><span>04</span><strong>Home X Axis</strong><small>Reference horizontal travel</small></div>
+          <div class="flow-node" id="flow-home-y"><span>05</span><strong>Home Y Axis</strong><small>Reference cabinet rows</small></div>
+          <div class="flow-node" id="flow-slot"><span>06</span><strong>Select Slot</strong><small>Load and validate saved X/Y/Z</small></div>
+          <div class="flow-node" id="flow-safe-z"><span>07</span><strong>Raise Safe Z</strong><small>Clear products before X/Y travel</small></div>
+          <div class="flow-node" id="flow-motion"><span>08</span><strong>Move X/Y</strong><small>Coordinated pulse trajectory</small></div>
+          <div class="flow-node" id="flow-z-target"><span>09</span><strong>Move Z Target</strong><small>Approach saved slot depth</small></div>
+          <div class="flow-node" id="flow-verify"><span>10</span><strong>Verify Position</strong><small>Confirm target and safety state</small></div>
+          <div class="flow-node" id="flow-dispense"><span>11</span><strong>Dispense</strong><small>Release only at verified slot</small></div>
+          <div class="flow-node" id="flow-complete"><span>12</span><strong>Complete / Publish Result</strong><small>Return result to HMI and backend</small></div>
+        </div>
+        <div class="flow-legend"><span><i class="flow-light complete"></i>Complete</span><span><i class="flow-light active"></i>Executing</span><span><i class="flow-light blocked"></i>Interlocked</span><span><i class="flow-light pending"></i>Pending</span></div>
+        <div class="flow-detail-layout"><section class="panel page-panel"><div class="panel-head"><div><p class="panel-label">Selected Step</p><h2 class="panel-title">Read-only Step Detail</h2></div></div><div id="flow-step-detail" class="flow-step-detail">Select a flow step to inspect preconditions and live state. No machine command is sent.</div></section><section class="panel page-panel"><div class="panel-head"><div><p class="panel-label">Recent Operations</p><h2 class="panel-title">Latest 10</h2></div></div><ol id="flow-operation-history" class="flow-operation-history"></ol></section></div>
+      </section>
+
+      <section class="workspace-view sequence-monitor-page" data-view-page="sequence-monitor">
+        <div class="page-heading"><div><p class="panel-label">Controller Read-only Monitor</p><h2>Slot Sequence Process</h2></div><span class="page-status-chip" id="sequence-monitor-state">NOT RUNNING</span></div>
+        <div class="sequence-monitor-summary" aria-live="polite">
+          <div><span>Active command</span><strong id="sequence-monitor-command">NO DATA</strong></div>
+          <div><span>Current phase</span><strong id="sequence-monitor-phase">NO DATA</strong></div>
+          <div><span>Active axis</span><strong id="sequence-monitor-axis">NO DATA</strong></div>
+          <div><span>Selected slot</span><strong id="sequence-monitor-slot">NO DATA</strong></div>
+          <div><span>Elapsed</span><strong id="sequence-monitor-elapsed">NO DATA</strong></div>
+        </div>
+        <section class="panel page-panel sequence-monitor-message" aria-live="polite">
+          <div class="panel-head"><div><p class="panel-label">Live Controller Message</p><h2 class="panel-title" id="sequence-monitor-message">Waiting for a Slot Sequence</h2></div><span class="page-note">Read-only · no motion command is sent from this page</span></div>
+          <p id="sequence-monitor-reason">Sequence phases are reported by the Controller. If no sequence is active, this monitor does not infer a running step.</p>
+        </section>
+        <section class="panel page-panel">
+          <div class="panel-head"><div><p class="panel-label">Execution Order</p><h2 class="panel-title">X → Y → Z → Hold → Home Z → Y → X</h2></div><span class="page-note">Controller-owned workflow</span></div>
+          <ol class="sequence-step-list" id="sequence-step-list" aria-live="polite"></ol>
+        </section>
+        <div class="sequence-monitor-details">
+          <section class="panel page-panel"><div class="panel-head"><div><p class="panel-label">Live Position</p><h2 class="panel-title">Current / Target / Delta</h2></div></div><div class="sequence-position-grid" id="sequence-monitor-position"></div></section>
+          <section class="panel page-panel"><div class="panel-head"><div><p class="panel-label">Safety During Sequence</p><h2 class="panel-title">Controller Guards</h2></div></div><ul class="sequence-guard-list"><li>E-Stop, software stop, alarm and readiness are checked before the sequence begins.</li><li>Each axis move remains guarded by AxisController for E-Stop, stop latch, limits and travel boundary.</li><li>The three-second hold polls E-Stop and software stop; any failed stage stops later stages.</li></ul></section>
+        </div>
+      </section>
+    </main>
+
+    <!-- ── RIGHT PANEL (STATUS + JOG CONTROLS + LIVE LOG) ──────── -->
+    <aside class="right-panel">
+      <!-- Zone 1: Axis Coordinates & Live Status -->
+      <div class="rpz rpz-status">
+        <div class="rpz-head">
+          <span class="rpz-title">Global Axis Coordinates</span>
+          <span class="safety-ind-sub" id="active-command">Command: None</span>
+        </div>
+        <div class="rp-axis-list">
+          <!-- X Axis Card -->
+          <div class="axis-card" id="axis-card-x">
+            <div class="axis-card-head">
+              <span class="axis-name">X Axis</span>
+              <span class="axis-state-badge not-homed" id="axis-badge-x">NOT HOMED</span>
+            </div>
+            <div class="axis-position" id="axis-pos-x">
+              <span class="monospace">0.000</span><span class="unit">mm</span>
+            </div>
+            <div class="axis-track">
+              <div class="axis-track-fill" id="axis-fill-x" style="width: 0%;"></div>
+            </div>
+            <div class="axis-meta">
+              <div class="axis-kv"><span>Tgt:</span><strong id="axis-tgt-x">0.000</strong></div>
+              <div class="axis-kv"><span>Steps:</span><strong id="axis-steps-x">0</strong></div>
+              <div class="axis-kv"><span>Delta:</span><strong id="axis-delta-x">0.000</strong></div>
+              <div class="axis-kv"><span>Direction:</span><strong id="axis-direction-x">IDLE</strong></div>
+              <div class="axis-kv"><span>Cmd / Eff:</span><strong id="axis-speed-x">-- / --</strong></div>
+              <div class="axis-kv axis-realtime"><span>Realtime (CALC):</span><strong id="axis-realtime-x">0.000 mm/s</strong></div>
+              <div class="axis-kv"><span>Drive / Error:</span><strong id="axis-drive-x">NO DATA</strong></div>
+              <div class="axis-kv"><span>Min Limit:</span><strong id="axis-lim-min-x" class="ok">CLEAR</strong></div>
+              <div class="axis-kv"><span>Max Limit:</span><strong id="axis-lim-max-x" class="ok">CLEAR</strong></div>
+            </div>
+          </div>
+
+          <!-- Y Axis Card -->
+          <div class="axis-card" id="axis-card-y">
+            <div class="axis-card-head">
+              <span class="axis-name">Y Axis</span>
+              <span class="axis-state-badge not-homed" id="axis-badge-y">NOT HOMED</span>
+            </div>
+            <div class="axis-position" id="axis-pos-y">
+              <span class="monospace">0.000</span><span class="unit">mm</span>
+            </div>
+            <div class="axis-track">
+              <div class="axis-track-fill" id="axis-fill-y" style="width: 0%;"></div>
+            </div>
+            <div class="axis-meta">
+              <div class="axis-kv"><span>Tgt:</span><strong id="axis-tgt-y">0.000</strong></div>
+              <div class="axis-kv"><span>Steps:</span><strong id="axis-steps-y">0</strong></div>
+              <div class="axis-kv"><span>Delta:</span><strong id="axis-delta-y">0.000</strong></div>
+              <div class="axis-kv"><span>Direction:</span><strong id="axis-direction-y">IDLE</strong></div>
+              <div class="axis-kv"><span>Cmd / Eff:</span><strong id="axis-speed-y">-- / --</strong></div>
+              <div class="axis-kv axis-realtime"><span>Realtime (CALC):</span><strong id="axis-realtime-y">0.000 mm/s</strong></div>
+              <div class="axis-kv"><span>Drive / Error:</span><strong id="axis-drive-y">NO DATA</strong></div>
+              <div class="axis-kv"><span>Min Limit:</span><strong id="axis-lim-min-y" class="ok">CLEAR</strong></div>
+              <div class="axis-kv"><span>Max Limit:</span><strong id="axis-lim-max-y" class="ok">CLEAR</strong></div>
+            </div>
+          </div>
+
+          <!-- Z Axis Card -->
+          <div class="axis-card" id="axis-card-z">
+            <div class="axis-card-head">
+              <span class="axis-name">Z Axis</span>
+              <span class="axis-state-badge not-homed" id="axis-badge-z">NOT HOMED</span>
+            </div>
+            <div class="axis-position" id="axis-pos-z">
+              <span class="monospace">0.000</span><span class="unit">mm</span>
+            </div>
+            <div class="axis-track">
+              <div class="axis-track-fill" id="axis-fill-z" style="width: 0%;"></div>
+            </div>
+            <div class="axis-meta">
+              <div class="axis-kv"><span>Tgt:</span><strong id="axis-tgt-z">0.000</strong></div>
+              <div class="axis-kv"><span>Steps:</span><strong id="axis-steps-z">0</strong></div>
+              <div class="axis-kv"><span>Delta:</span><strong id="axis-delta-z">0.000</strong></div>
+              <div class="axis-kv"><span>Direction:</span><strong id="axis-direction-z">IDLE</strong></div>
+              <div class="axis-kv"><span>Cmd / Eff:</span><strong id="axis-speed-z">-- / --</strong></div>
+              <div class="axis-kv axis-realtime"><span>Realtime (CALC):</span><strong id="axis-realtime-z">0.000 mm/s</strong></div>
+              <div class="axis-kv"><span>Drive / Error:</span><strong id="axis-drive-z">NO DATA</strong></div>
+              <div class="axis-kv"><span>Min Limit:</span><strong id="axis-lim-min-z" class="ok">CLEAR</strong></div>
+              <div class="axis-kv"><span>Max Limit:</span><strong id="axis-lim-max-z" class="ok">CLEAR</strong></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Zone 2: Ergonomic Jog Control -->
+      <div class="rpz rpz-jog">
+        <div class="rpz-head">
+          <span class="rpz-title">Manual Jog Control</span>
+          <span class="safety-ind-sub" id="jog-status-text">HOME REQUIRED</span>
+        </div>
+
+        <div class="jog-inhibit-banner" id="jog-inhibit-banner">
+          ⚠️ <span id="jog-inhibit-text">Motion Inhibited</span>
+        </div>
+
+        <!-- Hidden inputs for jog-step, jog-time, move-speed to keep app.js sync -->
+        <input type="hidden" id="jog-step" value="1.0">
+        <input type="hidden" id="jog-time" value="">
+        <input type="hidden" id="move-speed" value="15.0">
+
+        <div class="rp-jog-control-layout">
+          <div class="rp-jog-main-column">
+            <div class="rp-jog-pad-area">
+              <div class="rp-xy-pad">
+                <button class="rp-jog-btn jog-y-pos" data-jog="y:1" title="Jog Y+ (Up)">Y+</button>
+                <button class="rp-jog-btn jog-x-neg" data-jog="x:-1" title="Jog X- (Left)">X-</button>
+                <div class="rp-jog-center">XY PAD</div>
+                <button class="rp-jog-btn jog-x-pos" data-jog="x:1" title="Jog X+ (Right)">X+</button>
+                <button class="rp-jog-btn jog-y-neg" data-jog="y:-1" title="Jog Y- (Down)">Y-</button>
+              </div>
+
+              <div class="rp-z-pad">
+                <span class="rp-z-label">Z Axis</span>
+                <button class="rp-jog-btn" data-jog="z:1" title="Jog Z+ (Up)">Z+</button>
+                <button class="rp-jog-btn" data-jog="z:-1" title="Jog Z- (Down)">Z-</button>
+              </div>
+            </div>
+
+            <div class="rp-step-control">
+              <div class="rp-param-label">
+                <span>Step Increment</span>
+                <span class="val"><strong id="jog-step-display">1.0</strong> mm</span>
+              </div>
+              <div class="rp-preset-row">
+                <button class="rp-preset-btn step-btn" data-step="0.1">0.1 mm</button>
+                <button class="rp-preset-btn step-btn active" data-step="1">1.0 mm</button>
+                <button class="rp-preset-btn step-btn" data-step="5">5.0 mm</button>
+                <button class="rp-preset-btn step-btn" data-step="10">10.0 mm</button>
+              </div>
+            </div>
+          </div>
+
+          <aside class="rp-jog-speed-rail">
+            <div class="rp-param-label">
+              <span>Jog Speed</span>
+              <span class="val"><strong id="jog-speed-display">10.0</strong> mm/s</span>
+            </div>
+            <div class="rp-preset-row speed-preset-row">
+              <button class="rp-preset-btn speed-preset" data-speed="5"><b>SLOW</b><small>5 mm/s</small></button>
+              <button class="rp-preset-btn speed-preset active" data-speed="15"><b>MED</b><small>15 mm/s</small></button>
+              <button class="rp-preset-btn speed-preset" data-speed="30"><b>FAST</b><small>30 mm/s</small></button>
+            </div>
+            <label class="jog-keyboard-switch">
+              <input id="jog-keyboard-enable" type="checkbox">
+              <span>Keyboard Jog</span>
+            </label>
+            <small class="jog-keyboard-help">Arrow keys: X/Y · Page Up/Down: Z · disabled while typing</small>
+          </aside>
+        </div>
+      </div>
+
+      <!-- Zone 3: Selected Slot Direct Controls -->
+      <div class="rpz rpz-slot-editor">
+        <div class="rpz-head">
+          <span class="rpz-title">Selected Slot</span>
+          <span class="slot-badge empty" id="selected-slot-status">EMPTY</span>
+        </div>
+        <div class="slot-sequence-mini" id="motion-selected-sequence" aria-live="polite">SEQUENCE: IDLE</div>
+
+        <div class="selected-slot-picker">
+          <label for="selected-slot-code">Slot</label>
+          <select id="selected-slot-code" class="hmi-input"></select>
+        </div>
+
+        <div class="selected-slot-fields">
+          <label class="selected-slot-field">
+            <span>X Coordinate</span>
+            <div class="field-input-wrap">
+              <input id="selected-slot-x" class="hmi-input" type="number" min="0" step="0.1">
+              <span class="unit-tag">mm</span>
+            </div>
+          </label>
+          <label class="selected-slot-field">
+            <span>Y Coordinate</span>
+            <div class="field-input-wrap">
+              <input id="selected-slot-y" class="hmi-input" type="number" min="0" step="0.1">
+              <span class="unit-tag">mm</span>
+            </div>
+          </label>
+          <label class="selected-slot-field">
+            <span>Z Coordinate</span>
+            <div class="field-input-wrap">
+              <input id="selected-slot-z" class="hmi-input" type="number" min="0" step="0.1">
+              <span class="unit-tag">mm</span>
+            </div>
+          </label>
+        </div>
+
+        <div class="selected-slot-current" id="selected-slot-current">Current: X -- · Y -- · Z -- mm</div>
+        <div class="slot-sequence-mode" aria-describedby="slot-sequence-description">
+          <div>
+            <strong>SEQUENCE MODE</strong>
+            <span id="slot-sequence-description">OFF — GO TO uses the standard Controller motion.</span>
+          </div>
+          <label class="sequence-switch" for="slot-sequence-toggle">
+            <input id="slot-sequence-toggle" type="checkbox" role="switch" aria-label="Enable slot sequence mode">
+            <span class="sequence-switch-track" aria-hidden="true"></span>
+            <b id="slot-sequence-state">OFF</b>
+          </label>
+        </div>
+        <p class="slot-sequence-summary" id="slot-sequence-summary">Sequence ON: X target → Y target → Z target → hold 3 s → Home Z → Home Y → Home X.</p>
+        <div class="selected-slot-actions">
+          <button class="btn-secondary" id="selected-slot-load-target" hidden>LOAD TARGET</button>
+          <button class="btn-secondary" id="selected-slot-validate" hidden>VALIDATE SLOT</button>
+          <button class="btn-slot-goto" id="selected-slot-goto" disabled>GO TO SLOT</button>
+        </div>
+      </div>
+
+      <!-- Live Event Log / Diagnostics Stream (moved to Diagnostics page) -->
+      <div class="rpz rpz-log">
+        <div class="rpz-head">
+          <span class="rpz-title">Live Diagnostics Stream</span>
+          <div class="event-log-filter">
+            <button class="evt-filter-btn active" data-filter="all">ALL</button>
+            <button class="evt-filter-btn" data-filter="error">ERRORS</button>
+            <button class="evt-filter-btn" data-filter="motion">MOTION</button>
+          </div>
+        </div>
+
+        <div class="alarm-summary clear" id="alarm-summary">
+          <div class="alarm-summary-title">NO ACTIVE ALARMS</div>
+          <div class="alarm-detail">Machine operation normal.</div>
+        </div>
+
+        <ol class="event-log" id="event-log">
+          <!-- Dynamic 1s log stream rendered by app.js -->
+        </ol>
+      </div>
+    </aside>
+
+    <!-- ── FOOTER STATUS BAR ────────────────────────────────────── -->
+    <footer class="status-bar">
+      <div class="status-pills">
+        <span class="status-pill offline" id="footer-connection">
+          <span class="status-dot"></span> OFFLINE
+        </span>
+        <span class="status-pill not-ready" id="footer-ready">NOT READY</span>
+        <span class="status-pill clear" id="footer-estop">E-STOP CLEAR</span>
+        <span class="status-pill not-homed" id="footer-homed">NOT HOMED</span>
+      </div>
+      <div class="status-center-bar" id="footer-status-text">
+        Command: None  |  Motion: Idle  |  Controller ready
+      </div>
+      <div class="status-time" id="footer-status-time">--:--:--</div>
+    </footer>
+  </div>
+
+  <!-- Toast notification -->
+  <div class="toast" id="toast" role="status"></div>
+
+  <script src="{{ url_for('static', filename='app.js') }}?v=20260814_device_names_v3"></script>
+</body>
+</html>

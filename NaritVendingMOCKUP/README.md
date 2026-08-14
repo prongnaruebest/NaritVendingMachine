@@ -6,12 +6,14 @@ Deployment profile for the original Raspberry Pi mockup.
 - Web: `http://naritvendingmachine/`
 - SSH host: `narit-pi`
 - Remote application: `/home/admin/NaritVendingMOCKUP`
-- Machine config source: `../machine_config.json`
-- Hardware config source: `../hardware_config.json`
+- Machine config: `machine_config.json`
+- Hardware config: `hardware_config.json`
+- Application source: `narit_vending/`
+- Tests: `tests/`
 
-The Python application remains in the shared `narit_vending/` source folder.
-This prevents fixes from diverging between MOCKUP and V1 while configuration,
-deployment path, and system services remain independent.
+This folder contains its own deployable copy of the Python application. Run
+`..\scripts\sync_profile_code.ps1` from the repository root when a shared fix
+must be copied into both independent profiles.
 
 Deploy from the repository root:
 
