@@ -1,0 +1,11 @@
+{
+  "name": "V1",
+  "kind": "iriv_pi_iriv_io",
+  "ssh_host": "pi@iriv.local",
+  "web_url": "http://iriv.local/",
+  "remote_dir": "/home/admin/NaritVendingV1",
+  "machine_config": "machine_config.iriv.json",
+  "hardware_config": "hardware_config.iriv.json",
+  "controller_service": "narit-vending-controller-iriv.service",
+  "web_service": "narit-vending-web-iriv.service"
+}

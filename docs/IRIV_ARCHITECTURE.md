@@ -15,7 +15,7 @@ IRIV PiControl CM4 และ IRIV IO Controller อัปเดตล่าส�
 | Management network | `eth0 = 192.168.70.80/24`, HMI ที่ `http://iriv.local/` |
 | OT network | `eth1 = 10.0.0.2/24` |
 | Remote I/O | IRIV IO Controller, `10.0.0.10:502`, Modbus TCP Unit ID `255` |
-| Application path | `/home/admin/NaritVending` |
+| Application path | `/home/admin/NaritVendingV1` |
 | Controller service | `narit-vending-controller-iriv.service` |
 | Web service | `narit-vending-web-iriv.service` |
 | IPC | Unix socket `/run/narit-vending/ctrl.sock` |
@@ -87,6 +87,8 @@ flowchart TD
 - `machine_config.iriv.json`: IRIV-only motion/slot configuration
 - `hardware_config.iriv.json`: IRIV Pi, Modbus TCP DI0-DI10 and DO0-DO3 mapping
 - `scripts/deploy_to_iriv.ps1`: SSH deployment to `pi@iriv.local`
+- `NaritVendingV1/`: V1 deployment profile and entry-point script
+- `NaritVendingMOCKUP/`: original Pi mockup deployment profile
 - The legacy `machine_config.json`, `hardware_config.json`, and
   `scripts/deploy_to_pi.ps1` remain the deployment set for the original Pi.
 

@@ -4,6 +4,9 @@ Motion control base for a Raspberry Pi vending machine with `X/Y/Z` axes, head/t
 
 ## Files
 
+- `NaritVendingMOCKUP/`: deployment profile for the original Pi mockup
+- `NaritVendingV1/`: deployment profile for the IRIV V1 machine
+
 - `narit_vending/motion.py`: motor, homing, limit, travel, and slot-position logic
 - `narit_vending/cli.py`: CLI for `status`, `home`, `jog`, `move`, and `goto-slot`
 - `narit_vending/webapp.py`: Flask web server and JSON API
@@ -41,7 +44,7 @@ Motion control base for a Raspberry Pi vending machine with `X/Y/Z` axes, head/t
 ## Install On Raspberry Pi
 
 ```bash
-cd /home/admin/NaritVending
+cd /home/admin/NaritVendingMOCKUP
 chmod +x scripts/setup_pi.sh
 ./scripts/setup_pi.sh
 ```
@@ -59,10 +62,13 @@ python3 main.py goto-slot 1
 ## Deploy From Windows Through SSH
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\deploy_to_pi.ps1
+.\NaritVendingMOCKUP\deploy.ps1
 ```
 
-The deploy script copies the project to `/home/admin/NaritVending` on host `narit-pi`, then runs the Pi setup script remotely.
+The MOCKUP deploy script copies the shared application to
+`/home/admin/NaritVendingMOCKUP` on host `narit-pi`. Deploy V1 separately with
+`.\NaritVendingV1\deploy.ps1`, which targets `/home/admin/NaritVendingV1` on
+`pi@iriv.local`.
 
 ## Web UI
 

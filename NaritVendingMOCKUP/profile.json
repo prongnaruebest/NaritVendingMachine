@@ -1,0 +1,11 @@
+{
+  "name": "MOCKUP",
+  "kind": "legacy_raspberry_pi_mockup",
+  "ssh_host": "narit-pi",
+  "web_url": "http://naritvendingmachine/",
+  "remote_dir": "/home/admin/NaritVendingMOCKUP",
+  "machine_config": "machine_config.json",
+  "hardware_config": "hardware_config.json",
+  "controller_service": "narit-vending-controller.service",
+  "web_service": "narit-vending-web.service"
+}

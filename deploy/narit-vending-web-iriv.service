@@ -6,9 +6,9 @@ Requires=narit-vending-controller-iriv.service
 
 [Service]
 Type=simple
-WorkingDirectory=/home/admin/NaritVending
+WorkingDirectory=/home/admin/NaritVendingV1
 EnvironmentFile=-/etc/narit-vending.env
-ExecStart=/home/admin/NaritVending/.venv/bin/python3 -m narit_vending.web --host 0.0.0.0 --port 80 --hw-config /home/admin/NaritVending/hardware_config.iriv.json
+ExecStart=/home/admin/NaritVendingV1/.venv/bin/python3 -m narit_vending.web --host 0.0.0.0 --port 80 --hw-config /home/admin/NaritVendingV1/hardware_config.iriv.json
 Restart=always
 RestartSec=1
 User=root

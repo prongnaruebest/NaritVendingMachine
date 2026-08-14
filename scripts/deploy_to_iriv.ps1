@@ -1,6 +1,6 @@
 param(
     [string]$HostName = "pi@iriv.local",
-    [string]$RemoteDir = "/home/admin/NaritVending",
+    [string]$RemoteDir = "/home/admin/NaritVendingV1",
     [switch]$NoPull,
     [switch]$WebOnly
 )
