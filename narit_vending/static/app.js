@@ -1286,6 +1286,28 @@
     const op      = getOperation();
     const now     = new Date().toLocaleTimeString();
 
+    // Device identity is derived from the active controller configuration:
+    // legacy Pi has no IRIV IO backend, while the new controller does.
+    const deviceNode = el("hdr-device");
+    const sidebarDeviceNode = el("sidebar-device-label");
+    const hasIdentity = Boolean(MS.payload?.io);
+    const isIriv = MS.payload?.io?.enabled === true;
+    const deviceShort = !hasIdentity ? "IDENTIFYING" : (isIriv ? "NEW · IRIV" : "OLD · MOCKUP");
+    const deviceLabel = !hasIdentity
+      ? "กำลังตรวจสอบอุปกรณ์..."
+      : (isIriv ? "อุปกรณ์ใหม่ · IRIV (เตรียมใช้งานจริง)" : "อุปกรณ์เก่า · Raspberry Pi Mockup");
+    const deviceClass = !hasIdentity ? "device-identifying" : (isIriv ? "device-new" : "device-legacy");
+    if (deviceNode) {
+      deviceNode.textContent = deviceShort;
+      deviceNode.className = deviceClass;
+      deviceNode.title = deviceLabel;
+    }
+    if (sidebarDeviceNode) {
+      sidebarDeviceNode.textContent = deviceLabel;
+      sidebarDeviceNode.className = deviceClass;
+    }
+    if (hasIdentity) document.title = `NARIT VENDING — ${deviceLabel}`;
+
     // Connection
     const connNode = el("hdr-connection");
     if (connNode) {
@@ -1312,8 +1334,6 @@
       msNode.textContent = txt;
     }
 
-    // Mode
-    setText("hdr-mode", MS.payload?.busy ? "MANUAL ACTIVE" : "MANUAL");
     // Time
     setText("hdr-time", now);
     // Footer time

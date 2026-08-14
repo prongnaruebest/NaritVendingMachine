@@ -8,7 +8,7 @@
   <link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='favicon-transparent-large.png') }}?v=20260721_v12">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=20260727_sequence_v1">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=20260814_device_identity_v1">
 </head>
 <body>
   <div class="hmi-shell">
@@ -18,7 +18,7 @@
         <div class="brand-mark">NV</div>
         <div class="sidebar-brand-text">
           NARIT VENDING
-          <span>Industrial Gantry HMI</span>
+          <span id="sidebar-device-label">กำลังตรวจสอบอุปกรณ์...</span>
         </div>
       </div>
 
@@ -143,7 +143,7 @@
             <div class="header-meta">
               <div class="header-chip"><span>Controller</span><strong id="hdr-connection" class="offline">OFFLINE</strong></div>
               <div class="header-chip"><span>State</span><strong id="hdr-machine-state" class="state-notready">NOT READY</strong></div>
-              <div class="header-chip"><span>Mode</span><strong id="hdr-mode" class="monospace">MANUAL</strong></div>
+              <div class="header-chip device-identity-chip"><span>Device</span><strong id="hdr-device" class="device-identifying">IDENTIFYING</strong></div>
               <div class="header-chip"><span>System Time</span><strong id="hdr-time" class="monospace">--:--:--</strong></div>
             </div>
             <div class="safety-indicators">
@@ -1135,6 +1135,6 @@
   <!-- Toast notification -->
   <div class="toast" id="toast" role="status"></div>
 
-  <script src="{{ url_for('static', filename='app.js') }}?v=20260727_sequence_v1"></script>
+  <script src="{{ url_for('static', filename='app.js') }}?v=20260814_device_identity_v1"></script>
 </body>
 </html>

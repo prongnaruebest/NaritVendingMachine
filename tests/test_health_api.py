@@ -83,8 +83,16 @@ class HealthApiTests(unittest.TestCase):
         for element_id in (
             "event-total-count", "event-fault-count", "event-warn-count",
             "event-search", "event-category-filter", "event-detail-content",
+            "sidebar-device-label", "hdr-device",
         ):
             self.assertIn(f'id="{element_id}"', html)
+
+    def test_hmi_labels_legacy_mockup_and_new_iriv_devices(self) -> None:
+        app_js = (Path(__file__).resolve().parents[1] / "narit_vending" / "static" / "app.js").read_text(encoding="utf-8")
+
+        self.assertIn("อุปกรณ์เก่า · Raspberry Pi Mockup", app_js)
+        self.assertIn("อุปกรณ์ใหม่ · IRIV (เตรียมใช้งานจริง)", app_js)
+        self.assertIn('isIriv ? "NEW · IRIV" : "OLD · MOCKUP"', app_js)
 
     def test_mqtt_monitor_endpoint_returns_connection_telemetry(self) -> None:
         response = self.client.get("/api/mqtt/status")
