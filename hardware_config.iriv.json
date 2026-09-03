@@ -38,7 +38,7 @@
       "product_drop_parking":{"channel":7,"active_state":true,"fail_safe":false,"label":"Product Drop Parking"},
       "product_drop_sensor":{"channel":8,"active_state":true,"fail_safe":false,"label":"Product Drop Sensor"},
       "product_pickup_sensor":{"channel":9,"active_state":true,"fail_safe":false,"label":"Product Pickup Sensor"},
-      "estop":{"channel":10,"active_state":true,"polarity_verified":false,"fail_safe":true,"label":"E-Stop feedback; polarity awaiting pressed/released commissioning"}
+      "estop":{"channel":10,"active_state":true,"polarity_verified":true,"fail_safe":true,"label":"E-Stop feedback; active HIGH verified by pressed/released commissioning on 2026-09-03"}
     },
     "outputs": {
       "ready":{"channel":0,"active_high":true,"initial_value":false,"label":"Green ready light"},
