@@ -62,6 +62,7 @@ done
 curl --fail --silent --show-error --max-time 5 http://127.0.0.1/health/live >/dev/null
 curl --fail --silent --show-error --max-time 5 http://127.0.0.1/health/ready >/dev/null
 "@
+$remoteInstall = $remoteInstall -replace "`r`n", "`n"
 ssh $HostName $remoteInstall
 if ($LASTEXITCODE -ne 0) { throw "IRIV service installation or readiness check failed" }
 

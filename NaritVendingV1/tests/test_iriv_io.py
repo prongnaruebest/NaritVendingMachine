@@ -89,6 +89,16 @@ class IRIVIOBackendTests(unittest.TestCase):
         self.assertFalse(backend.communication_ok)
         self.assertTrue(backend.input_active("estop"))
 
+    def test_unverified_safety_polarity_remains_fail_safe_active(self) -> None:
+        client = FakeModbusClient()
+        config = _config()
+        config["inputs"]["estop"]["polarity_verified"] = False
+        client.inputs[0] = True
+        backend = IRIVIOBackend(config, client=client)
+        backend._poll_once()
+        self.assertTrue(backend.communication_ok)
+        self.assertTrue(backend.input_active("estop"))
+
 
 if __name__ == "__main__":
     unittest.main()

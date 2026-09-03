@@ -336,7 +336,7 @@ def _validate_iriv_io(payload: object, issues: list[ConfigIssue]) -> None:
 
     required_inputs = {
         "estop", "x_head_limit", "x_tail_limit", "y_head_limit", "y_tail_limit",
-        "z_head_limit", "z_tail_limit", "x_alarm", "y_alarm", "z_alarm", "door",
+        "z_head_limit", "z_tail_limit",
     }
     inputs = payload.get("inputs")
     outputs = payload.get("outputs")
@@ -348,6 +348,16 @@ def _validate_iriv_io(payload: object, issues: list[ConfigIssue]) -> None:
         outputs = {}
     for name in sorted(required_inputs - set(inputs)):
         issues.append(ConfigIssue("error", "IRIV_INPUT_MISSING", f"hardware.iriv_io.inputs.{name}", "required mapping is missing"))
+    estop = inputs.get("estop")
+    if isinstance(estop, dict) and estop.get("polarity_verified") is False:
+        issues.append(
+            ConfigIssue(
+                "warning",
+                "SAFETY_POLARITY_UNVERIFIED",
+                "hardware.iriv_io.inputs.estop",
+                "E-Stop feedback remains fail-safe active until polarity is commissioned",
+            )
+        )
     for name in sorted({"ready", "moving", "alarm", "dispense"} - set(outputs)):
         issues.append(ConfigIssue("error", "IRIV_OUTPUT_MISSING", f"hardware.iriv_io.outputs.{name}", "required mapping is missing"))
 
