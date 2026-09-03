@@ -6,4 +6,8 @@ output/
 scratch/
 tmp/
 backups/
+.pytest_cache/
+.ruff_cache/
+.vscode/
+.agents/
 

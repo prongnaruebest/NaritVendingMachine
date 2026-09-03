@@ -61,6 +61,34 @@ class ConfigFoundationTests(unittest.TestCase):
         collisions = [issue for issue in report.issues if issue.code == "GPIO_PIN_COLLISION"]
         self.assertEqual(collisions, [])
 
+    def test_iriv_nucleo_serial_configuration_is_valid(self) -> None:
+        machine = json.loads((ROOT / "machine_config.iriv.json").read_text(encoding="utf-8"))
+        hardware = json.loads((ROOT / "hardware_config.iriv.json").read_text(encoding="utf-8"))
+
+        report = validate_configuration_payloads(machine, hardware)
+
+        self.assertTrue(report.valid)
+
+    def test_enabled_nucleo_requires_supported_identity_and_transport(self) -> None:
+        hardware = copy.deepcopy(self.hardware)
+        hardware["nucleo"] = {
+            "enabled": True,
+            "transport": "ethernet",
+            "port": "",
+            "baudrate": 0,
+            "expected_device": "UNKNOWN",
+            "protocol_version": 0,
+        }
+
+        report = validate_configuration_payloads(self.machine, hardware)
+        codes = {issue.code for issue in report.issues}
+
+        self.assertFalse(report.valid)
+        self.assertTrue(
+            {"NUCLEO_TRANSPORT_INVALID", "NUCLEO_PORT_MISSING", "NUCLEO_IDENTITY_INVALID", "NUCLEO_VALUE_RANGE"}
+            <= codes
+        )
+
     def test_backup_contains_manifest_and_original_bytes(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)

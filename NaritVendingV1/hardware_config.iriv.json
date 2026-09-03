@@ -28,17 +28,17 @@
     "poll_interval_s": 0.1,
     "stale_after_s": 0.35,
     "inputs": {
-      "estop":{"channel":0,"active_state":false,"fail_safe":true,"label":"Safety relay / E-Stop unsafe"},
-      "x_head_limit":{"channel":1,"active_state":true,"fail_safe":false,"label":"X head/home limit"},
-      "x_tail_limit":{"channel":2,"active_state":true,"fail_safe":false,"label":"X tail limit"},
-      "y_head_limit":{"channel":3,"active_state":true,"fail_safe":false,"label":"Y head/home limit"},
-      "y_tail_limit":{"channel":4,"active_state":true,"fail_safe":false,"label":"Y tail limit"},
-      "z_head_limit":{"channel":5,"active_state":true,"fail_safe":false,"label":"Z head/home limit"},
-      "z_tail_limit":{"channel":6,"active_state":true,"fail_safe":false,"label":"Z tail limit"},
-      "x_alarm":{"channel":7,"active_state":true,"fail_safe":true,"label":"X drive alarm"},
-      "y_alarm":{"channel":8,"active_state":true,"fail_safe":true,"label":"Y drive alarm"},
-      "z_alarm":{"channel":9,"active_state":true,"fail_safe":true,"label":"Z drive alarm"},
-      "door":{"channel":10,"active_state":false,"fail_safe":true,"label":"Door interlock unsafe"}
+      "x_head_limit":{"channel":0,"active_state":true,"fail_safe":false,"label":"X Min"},
+      "x_tail_limit":{"channel":1,"active_state":true,"fail_safe":false,"label":"X Max"},
+      "y_head_limit":{"channel":2,"active_state":true,"fail_safe":false,"label":"Y Min"},
+      "y_tail_limit":{"channel":3,"active_state":true,"fail_safe":false,"label":"Y Max"},
+      "z_head_limit":{"channel":4,"active_state":true,"fail_safe":false,"label":"Z Min"},
+      "z_tail_limit":{"channel":5,"active_state":true,"fail_safe":false,"label":"Z Max"},
+      "z_home":{"channel":6,"active_state":true,"fail_safe":false,"label":"Z Home"},
+      "product_drop_parking":{"channel":7,"active_state":true,"fail_safe":false,"label":"Product Drop Parking"},
+      "product_drop_sensor":{"channel":8,"active_state":true,"fail_safe":false,"label":"Product Drop Sensor"},
+      "product_pickup_sensor":{"channel":9,"active_state":true,"fail_safe":false,"label":"Product Pickup Sensor"},
+      "estop":{"channel":10,"active_state":true,"polarity_verified":false,"fail_safe":true,"label":"E-Stop feedback; polarity awaiting pressed/released commissioning"}
     },
     "outputs": {
       "ready":{"channel":0,"active_high":true,"initial_value":false,"label":"Green ready light"},
@@ -47,6 +47,17 @@
       "dispense":{"channel":3,"active_high":true,"initial_value":false,"label":"Dispense interposing relay"}
     },
     "dispense": {"pulse_ms":500}
+  },
+  "nucleo": {
+    "enabled": true,
+    "transport": "usb_serial",
+    "port": "/dev/serial/by-id/usb-STMicroelectronics_STM32_STLink_0666FF485753667187113533-if02",
+    "baudrate": 115200,
+    "timeout_s": 0.5,
+    "poll_interval_s": 0.5,
+    "stale_after_s": 1.5,
+    "expected_device": "NUCLEO-F439ZI",
+    "protocol_version": 1
   },
   "machine_parameters": {
     "home_order":["z","y","x"],"safe_z_mm":10.0,

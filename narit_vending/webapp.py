@@ -34,6 +34,7 @@ from .motion import (
 )
 from .mqtt_service import MQTTService
 from .iriv_io import IRIVIOBackend, IRIVIOError
+from .nucleo import NucleoLink
 
 
 _logger = logging.getLogger(__name__)
@@ -131,6 +132,12 @@ class MotionService:
             self.io_backend = IRIVIOBackend(iriv_config)
             self.io_backend.start()
 
+        nucleo_config = hw_config.get("nucleo", {})
+        self.nucleo_link: NucleoLink | None = None
+        if isinstance(nucleo_config, dict) and nucleo_config.get("enabled"):
+            self.nucleo_link = NucleoLink(nucleo_config)
+            self.nucleo_link.start()
+
         self.controller = build_controller(
             config,
             hw_config_path=str(self.hw_config_path),
@@ -146,11 +153,14 @@ class MotionService:
         with self.lock:
             controller_status = self.controller.status()
             io_status = self.io_backend.status_payload() if self.io_backend else {"enabled": False, "communication_ok": True}
+            nucleo_status = self.nucleo_link.status_payload() if self.nucleo_link else {"enabled": False, "communication_ok": True}
             alarm_channels = self.io_backend.alarm_channels() if self.io_backend else []
-            io_fault = any(channel["active"] and channel["level"] == "fault" for channel in alarm_channels)
-            if io_fault and controller_status["state"] not in ("moving", "alarm"):
+            if self.nucleo_link is not None:
+                alarm_channels.append(self.nucleo_link.alarm_channel())
+            hardware_fault = any(channel["active"] and channel["level"] == "fault" for channel in alarm_channels)
+            if hardware_fault and controller_status["state"] not in ("moving", "alarm"):
                 controller_status["state"] = "alarm"
-            self._sync_iriv_outputs(controller_status, io_fault)
+            self._sync_iriv_outputs(controller_status, hardware_fault)
             motor_test = self._motor_test_status(controller_status)
             for axis_name, axis_status in ((name, controller_status[name]) for name in ("x", "y", "z")):
                 if axis_status["is_homed"] and self.homing[axis_name] == "not_homed":
@@ -174,6 +184,7 @@ class MotionService:
                 "machine_state": controller_status["state"],
                 "alarm_channels": alarm_channels,
                 "io": io_status,
+                "nucleo": nucleo_status,
                 "operation": {
                     "phase": self.operation_phase,
                     "message": self.operation_message,
@@ -778,26 +789,29 @@ class MotionService:
         with self.lock:
             controller_status = self.controller.status()
             io_ready = self.io_backend is None or self.io_backend.communication_ok
+            nucleo_ready = self.nucleo_link is None or self.nucleo_link.communication_ok
             io_alarms = self.io_backend.alarm_channels() if self.io_backend else []
             io_safe = not any(channel["active"] and channel["level"] == "fault" for channel in io_alarms)
             axes_homed = all(bool(controller_status[axis].get("is_homed")) for axis in ("x", "y", "z"))
             machine_ready = (
                 axes_homed
                 and io_ready
+                and nucleo_ready
                 and io_safe
                 and not bool(controller_status.get("estop"))
                 and controller_status.get("state") not in ("alarm", "moving")
                 and not self.configuration_restart_required
             )
             return {
-                "status": "UP" if self.config_report.valid and io_ready else "DOWN",
-                "service_ready": self.config_report.valid and io_ready,
+                "status": "UP" if self.config_report.valid and io_ready and nucleo_ready else "DOWN",
+                "service_ready": self.config_report.valid and io_ready and nucleo_ready,
                 "machine_ready": machine_ready,
                 "machine_state": controller_status.get("state", "unknown"),
                 "axes_homed": axes_homed,
                 "config_revision": self.config_report.revision,
                 "config_valid": self.config_report.valid,
                 "iriv_io_ready": io_ready,
+                "nucleo_ready": nucleo_ready,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
@@ -805,6 +819,8 @@ class MotionService:
         self.mqtt_service.stop()
         if self.io_backend is not None:
             self.io_backend.close()
+        if self.nucleo_link is not None:
+            self.nucleo_link.close()
 
     def save_configuration(self, payload: dict[str, object]) -> dict[str, object]:
         if self.busy:

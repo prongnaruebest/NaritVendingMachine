@@ -90,6 +90,7 @@ def _status_from_snapshot(snap) -> dict:
         },
         "alarm_channels": snap.alarm_channels,
         "io": snap.io_status,
+        "nucleo": snap.nucleo_status,
         "slots": snap.slots,
     }
 

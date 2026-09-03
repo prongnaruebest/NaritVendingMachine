@@ -224,6 +224,10 @@ class IRIVIOBackend:
 
     def input_active(self, name: str) -> bool:
         info = self.inputs[name]
+        # A safety input with unknown polarity must block operation until its
+        # active state has been observed and commissioned at the cabinet.
+        if (info.get("polarity_verified") is False) and bool(info.get("fail_safe", False)):
+            return True
         if not self.communication_ok:
             return bool(info.get("fail_safe", False))
         channel = int(info["channel"])

@@ -1,4 +1,9 @@
-# NARIT Vending — System Architecture
+# NARIT Vending — Legacy Architecture Reference
+
+> **เอกสารนี้ไม่ใช่ architecture ที่กำลัง commission** เนื้อหาบางส่วนด้านล่างยังอ้าง
+> Galil DMC-4143 และ mapping รุ่นก่อนหน้า ให้ใช้
+> [ARCHITECTURE_TH.md](ARCHITECTURE_TH.md) เป็นแหล่งอ้างอิงหลัก และใช้
+> [HANDOFF_CURRENT_TH.md](HANDOFF_CURRENT_TH.md) สำหรับส่งต่องาน
 
 เอกสารฉบับนี้เป็นแหล่งอ้างอิงหลักของสถาปัตยกรรมระบบ NARIT Vending บน
 IRIV PiControl CM4 และ IRIV IO Controller อัปเดตล่าสุดวันที่ 13 สิงหาคม 2026
@@ -15,6 +20,7 @@ IRIV PiControl CM4 และ IRIV IO Controller อัปเดตล่าส�
 | Management network | `eth0 = 192.168.70.80/24`, HMI ที่ `http://iriv.local/` |
 | OT network | `eth1 = 10.0.0.2/24` |
 | Remote I/O | IRIV IO Controller, `10.0.0.10:502`, Modbus TCP Unit ID `255` |
+| Motion controller design | Galil DMC-4143-CARD, `10.0.0.20`, TCP command interface via gclib; not commissioned |
 | Application path | `/home/admin/NaritVendingV1` |
 | Controller service | `narit-vending-controller-iriv.service` |
 | Web service | `narit-vending-web-iriv.service` |
@@ -33,7 +39,7 @@ flowchart LR
     Cloud["MQTT Broker / Cabinet Service"] <-->|"MQTT"| Controller["Controller Process"]
     Web <-->|"JSON-RPC over Unix socket"| Controller
     Controller <-->|"Modbus TCP over OT LAN"| IOC["IRIV IO Controller"]
-    Controller -.->|"Target-position command\nfuture interface"| Motion["Hardware-timed Motion Controller"]
+    Controller -.->|"Target/speed/heartbeat\nGalil gclib over TCP"| Motion["Galil DMC-4143-CARD\n10.0.0.20"]
     IOC --> Sensors["E-Stop feedback, limits, alarms, door"]
     IOC --> Aux["Stack light, buzzer, dispense relay"]
     Motion --> Drivers["X/Y/Z Stepper Drivers"]
@@ -185,12 +191,15 @@ stateDiagram-v2
 | Management/IT | IRIV Pi `eth0` | `192.168.70.80/24` | SSH, HMI, deployment, MQTT |
 | OT | IRIV Pi `eth1` | `10.0.0.2/24` | Modbus TCP to IRIV IO |
 | OT | IRIV IO | `10.0.0.10/24` | Digital/analog I/O |
+| OT | Galil DMC-4143-CARD | `10.0.0.20/24` | Hardware-timed X/Y/Z STEP/DIR; TCP command channel |
 
 - ไม่ตั้ง default gateway บน OT network
 - ห้ามใช้ IP `.2` และ `.10` ซ้ำ
 - จำกัด Modbus TCP port 502 ให้อยู่เฉพาะ OT interface
+- ต่อทั้งสามอุปกรณ์ผ่าน Moxa EDS-205A; OT ไม่มี default gateway
 - การสูญเสีย Modbus communication ต้องทำให้ motion command ถูก reject และ auxiliary
   outputs กลับสู่ safe state
+- การขาด Galil heartbeat 500 ms ต้องทำให้ DMC motor-off/latch host-loss และห้าม auto-resume
 
 ## 8. Hardware boundary
 
@@ -203,8 +212,10 @@ STEP/DIR/ENABLE รวม 9 สัญญาณและต้องการ pul
 - IRIV IO รับ limit, alarm, door และ E-Stop feedback
 - IRIV IO ขับ stack light, buzzer และ dispense interposing relay
 - Safety relay ตัด enable/power ของ driver แบบ hardwired
-- Motion controller เฉพาะทางสร้าง STEP/DIR/ENABLE ให้ X/Y/Z
-- IRIV Pi ส่ง target ระดับตำแหน่งไป motion controller และตรวจ feedback ก่อนอัปเดต state
+- Galil DMC-4143-CARD สร้าง STEP/DIR ให้ X/Y/Z จาก hardware motion engine; W เป็น spare
+- JA1/JB1/JC1 ออกผ่าน ICS-48026-M และ driver enable ใช้ external 5 V HAEN sourcing
+- Safety relay ตัด +5V-SAFE ที่ ENBL+ แบบ hardwired; Ethernet watchdog เป็นเพียงชั้น operational stop
+- IRIV Pi ส่ง target ระดับตำแหน่งและ heartbeat ผ่าน gclib/TCP แล้วตรวจ feedback ก่อนอัปเดต state
 
 ## 9. Health and deployment
 

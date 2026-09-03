@@ -119,6 +119,7 @@ def _build_snapshot(service: Any) -> MachineSnapshot:
         speed_override=getattr(service.controller, "speed_override", None),
         slots={str(code): dict(slot) for code, slot in dict(status.get("slots", {})).items()},
         io_status=dict(status.get("io", {})),
+        nucleo_status=dict(status.get("nucleo", {})),
     )
 
 

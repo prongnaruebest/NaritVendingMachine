@@ -204,6 +204,7 @@ def validate_configuration_payloads(
     _validate_signal_polarity(inputs, issues)
     _validate_pin_assignments(motors, inputs, outputs, issues)
     _validate_iriv_io(hardware.get("iriv_io"), issues)
+    _validate_nucleo(hardware.get("nucleo"), issues)
 
     revision = _canonical_hash(machine, hardware)
     return ConfigReport(
@@ -335,7 +336,7 @@ def _validate_iriv_io(payload: object, issues: list[ConfigIssue]) -> None:
 
     required_inputs = {
         "estop", "x_head_limit", "x_tail_limit", "y_head_limit", "y_tail_limit",
-        "z_head_limit", "z_tail_limit", "x_alarm", "y_alarm", "z_alarm", "door",
+        "z_head_limit", "z_tail_limit",
     }
     inputs = payload.get("inputs")
     outputs = payload.get("outputs")
@@ -347,6 +348,16 @@ def _validate_iriv_io(payload: object, issues: list[ConfigIssue]) -> None:
         outputs = {}
     for name in sorted(required_inputs - set(inputs)):
         issues.append(ConfigIssue("error", "IRIV_INPUT_MISSING", f"hardware.iriv_io.inputs.{name}", "required mapping is missing"))
+    estop = inputs.get("estop")
+    if isinstance(estop, dict) and estop.get("polarity_verified") is False:
+        issues.append(
+            ConfigIssue(
+                "warning",
+                "SAFETY_POLARITY_UNVERIFIED",
+                "hardware.iriv_io.inputs.estop",
+                "E-Stop feedback remains fail-safe active until polarity is commissioned",
+            )
+        )
     for name in sorted({"ready", "moving", "alarm", "dispense"} - set(outputs)):
         issues.append(ConfigIssue("error", "IRIV_OUTPUT_MISSING", f"hardware.iriv_io.outputs.{name}", "required mapping is missing"))
 
@@ -369,6 +380,46 @@ def _validate_iriv_io(payload: object, issues: list[ConfigIssue]) -> None:
 
     validate_channels(inputs, "inputs", 10)
     validate_channels(outputs, "outputs", 3)
+
+
+def _validate_nucleo(payload: object, issues: list[ConfigIssue]) -> None:
+    if payload is None:
+        return
+    if not isinstance(payload, dict):
+        issues.append(ConfigIssue("error", "NUCLEO_INVALID", "hardware.nucleo", "nucleo must be an object"))
+        return
+    if not payload.get("enabled"):
+        return
+    if payload.get("transport") != "usb_serial":
+        issues.append(
+            ConfigIssue("error", "NUCLEO_TRANSPORT_INVALID", "hardware.nucleo.transport", "must be usb_serial")
+        )
+    if not str(payload.get("port", "")).strip():
+        issues.append(ConfigIssue("error", "NUCLEO_PORT_MISSING", "hardware.nucleo.port", "port is required"))
+    if str(payload.get("expected_device", "")) != "NUCLEO-F439ZI":
+        issues.append(
+            ConfigIssue(
+                "error",
+                "NUCLEO_IDENTITY_INVALID",
+                "hardware.nucleo.expected_device",
+                "must be NUCLEO-F439ZI",
+            )
+        )
+    for field, minimum, maximum in (("baudrate", 1200, 3_000_000), ("protocol_version", 1, 255)):
+        try:
+            value = int(payload[field])
+        except (KeyError, TypeError, ValueError):
+            issues.append(ConfigIssue("error", "NUCLEO_VALUE_INVALID", f"hardware.nucleo.{field}", "integer is required"))
+            continue
+        if not minimum <= value <= maximum:
+            issues.append(
+                ConfigIssue(
+                    "error",
+                    "NUCLEO_VALUE_RANGE",
+                    f"hardware.nucleo.{field}",
+                    f"must be {minimum}-{maximum}",
+                )
+            )
 
 
 def _is_allowed_home_alias(paths: list[str]) -> bool:

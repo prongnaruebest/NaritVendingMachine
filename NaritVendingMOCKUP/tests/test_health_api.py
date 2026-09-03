@@ -94,6 +94,7 @@ class HealthApiTests(unittest.TestCase):
         self.assertIn("const hasIdentity = Boolean(MS.lastStatusAt);", app_js)
         self.assertNotIn("OLD · MOCKUP", app_js)
         self.assertNotIn("NEW · IRIV", app_js)
+        self.assertIn('["Nucleo Link",', app_js)
 
     def test_mqtt_monitor_endpoint_returns_connection_telemetry(self) -> None:
         response = self.client.get("/api/mqtt/status")

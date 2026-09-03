@@ -2634,6 +2634,7 @@
       const diagnosticItems = [
         ["Controller Link", MS.online ? "ONLINE" : "OFFLINE", MS.online ? "API polling every 1 second" : "No response from controller", MS.online ? "ok" : "fault"],
         ["IRIV IO Link", MS.payload?.io?.communication_ok === false ? "OFFLINE" : (MS.payload?.io?.enabled ? "ONLINE" : "DISABLED"), MS.payload?.io?.enabled ? `${MS.payload.io.host}:${MS.payload.io.port} Modbus TCP` : "Legacy GPIO configuration", MS.payload?.io?.communication_ok === false ? "fault" : "ok"],
+        ["Nucleo Link", MS.payload?.nucleo?.communication_ok === false ? "OFFLINE" : (MS.payload?.nucleo?.enabled ? "ONLINE" : "DISABLED"), MS.payload?.nucleo?.enabled ? `${MS.payload.nucleo.device} · ${MS.payload.nucleo.port} · ${MS.payload.nucleo.baudrate} baud` : "Nucleo health link is disabled", MS.payload?.nucleo?.communication_ok === false ? "fault" : "ok"],
         ["Emergency Stop", status.estop ? "ACTIVE" : "CLEAR", "Hardware safety input", status.estop ? "fault" : "ok"],
         ["Homing", homed ? "COMPLETE" : "REQUIRED", AXES.map((a) => `${a.toUpperCase()}:${getAxis(a).is_homed ? "OK" : "--"}`).join("  "), homed ? "ok" : "warn"],
         ["Motion Queue", MS.payload?.busy ? "BUSY" : "IDLE", MS.payload?.active_command || "No pending command", MS.payload?.busy ? "warn" : "ok"],

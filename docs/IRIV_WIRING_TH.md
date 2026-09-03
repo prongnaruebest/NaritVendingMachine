@@ -1,63 +1,75 @@
-# ผังการต่อ IRIV PiControl CM4 และ IRIV IO Controller
+# ผังต่อ IRIV PiControl, IRIV IO และ NUCLEO-F439ZI ล่าสุด
 
-เอกสารนี้กำหนดผังสายสำหรับเครื่อง NARIT Vending ชุดใหม่ ตรวจสอบกับเครื่องจริงเมื่อ
-13 สิงหาคม 2026:
+สถานะ ณ 3 กันยายน 2026: ใช้ Nucleo เป็น motion pulse generator และใช้ IRIV IO
+เป็น remote digital I/O เท่านั้น เอกสาร Galil/FX5U รุ่นก่อนหน้าไม่ใช่ wiring ที่กำลัง commission
 
-- IRIV PiControl CM4: `eth0=192.168.70.80/24`, `eth1=10.0.0.2/24`
-- IRIV IO Controller: Modbus TCP `10.0.0.10:502`, Unit ID `255`
+## เครือข่ายและ USB
 
-## เครือข่าย
+| อุปกรณ์ | เส้นทาง | ค่าใช้งาน |
+|---|---|---|
+| IRIV PiControl | LAN หลัก `eth0` | `192.168.70.80/24` |
+| NUCLEO-F439ZI | LAN | `192.168.70.81/24`; ใช้ link/diagnostic |
+| NUCLEO-F439ZI | ST-LINK USB VCP | `/dev/serial/by-id/usb-STMicroelectronics_STM32_STLink_0666FF485753667187113533-if02`, 115200 8-N-1; ใช้ control/heartbeat |
+| IRIV PiControl | OT LAN `eth1` | `10.0.0.2/24` |
+| IRIV IO | Modbus TCP | `10.0.0.10:502`, Unit ID `255` |
 
-ต่อพอร์ต Ethernet OT ของ IRIV PiControl (`eth1`) เข้ากับ IRIV IO Controller โดยตรง
-หรือผ่าน industrial switch ในวง `10.0.0.0/24` ห้ามตั้งอุปกรณ์อื่นซ้ำกับ `.2` หรือ `.10`
+USB serial เป็นเส้นทางควบคุมหลัก เพราะตรวจ device identity ได้แน่นอน ส่วน LAN ของ Nucleo
+คงไว้สำหรับตรวจ link/diagnostic ห้ามเปิด HTTP LED demo เนื่องจาก LED1 ใช้ขา `PB0` เดียวกับ X-DIR
 
 ## IRIV IO digital inputs
 
-อินพุตเป็น active-high การต่อแบบ dry contact ให้ใช้แหล่งจ่าย isolated ที่ขั้วของ IRIV IO
-ตามสัญลักษณ์ S/S และ DCOM บนตัวเครื่อง ห้ามนำ 24 V เข้าขา GPIO ของ Raspberry Pi โดยตรง
-
-| ช่อง | หน้าที่ | สถานะปกติที่แนะนำ |
+| ช่อง | ชื่อใน software | Field signal |
 |---|---|---|
-| DI0 | E-Stop feedback จาก safety relay auxiliary contact | ON เมื่อวงจรปลอดภัย |
-| DI1 | X home/head limit | OFF |
-| DI2 | X tail limit | OFF |
-| DI3 | Y home/head limit | OFF |
-| DI4 | Y tail limit | OFF |
-| DI5 | Z home/head limit | OFF |
-| DI6 | Z tail limit | OFF |
-| DI7 | Alarm feedback จาก driver X | OFF |
-| DI8 | Alarm feedback จาก driver Y | OFF |
-| DI9 | Alarm feedback จาก driver Z | OFF |
-| DI10 | Door/interlock feedback | ON เมื่อประตูปิดและปลอดภัย |
+| DI0 | `x_head_limit` | X Min |
+| DI1 | `x_tail_limit` | X Max |
+| DI2 | `y_head_limit` | Y Min |
+| DI3 | `y_tail_limit` | Y Max |
+| DI4 | `z_head_limit` | Z Min |
+| DI5 | `z_tail_limit` | Z Max |
+| DI6 | `z_home` | Z Home |
+| DI7 | `product_drop_parking` | Product Drop Parking |
+| DI8 | `product_drop_sensor` | Product Drop Sensor |
+| DI9 | `product_pickup_sensor` | Product Pickup Sensor |
+| DI10 | `estop` | E-stop / safety relay feedback |
 
-DI1/DI3/DI5 รองรับ counter แต่ต้องปิด counter mode เพื่อใช้เป็น limit input ปกติ
+DI10 ตั้ง `polarity_verified=false` และ `fail_safe=true` ใน config จึงรายงาน E-STOP และ
+block motion เสมอจนกว่าจะอ่านค่า raw ขณะ E-stop ปล่อยและกดครบสองสถานะแล้วบันทึก polarity
+ห้ามเดาจากค่า DI10 ค่าเดียว
 
 ## IRIV IO digital outputs
 
-เอาต์พุตเป็น dry-contact solid-state relay, active-high, สูงสุด 50 V 500 mA ใช้สำหรับ
-อุปกรณ์ auxiliary เท่านั้น ห้ามใช้สร้าง STEP/DIR pulse ของมอเตอร์
-
 | ช่อง | หน้าที่ |
 |---|---|
-| DO0 | ไฟสถานะ Machine Ready สีเขียว |
-| DO1 | ไฟสถานะ Moving สีเหลือง |
-| DO2 | Alarm beacon/buzzer ผ่านวงจร 24 V |
-| DO3 | Dispense actuator ผ่าน interposing relay และ fuse |
+| DO0 | Machine Ready |
+| DO1 | Moving |
+| DO2 | Alarm light/buzzer |
+| DO3 | Dispense ผ่าน interposing relay |
 
-## วงจร E-Stop และมอเตอร์
+เอาต์พุตเป็น SSR auxiliary output ไม่ใช้สร้าง STEP/DIR
 
-E-Stop ต้องต่อแบบ hardwired ผ่าน safety relay เพื่อปลด ENABLE/contactor ของ driver X/Y/Z
-โดยไม่พึ่ง Raspberry Pi, Ethernet, Modbus หรือซอฟต์แวร์ DI0 ใช้ตรวจ feedback เท่านั้น
+## Nucleo STEP/DIR ผ่าน NMOS
 
-IRIV PiControl และ IRIV IO แต่ละตัวมีเพียง 4 isolated DO และเป็น SSR output จึงไม่มี
-STEP/DIR/ENABLE ครบ 9 สัญญาณสำหรับสามแกน และไม่เหมาะกับ pulse 2,000 Hz ให้ต่อ
-STEP/DIR ของ X/Y/Z ผ่าน motion controller ที่มี hardware-timed pulse output โดยเฉพาะ
-แล้วให้ IRIV PiControl ส่งคำสั่งระดับตำแหน่งไปยัง motion controller
+| แกน | Pulse | Direction | Driver |
+|---|---|---|---|
+| X | `PA8 / TIM1_CH1` -> QX-PUL -> `PUL-` | `PB0` -> QX-DIR -> `DIR-` | HBS860H X |
+| Y | `PA9 / TIM1_CH2` -> QY-PUL -> `PUL-` | `PB1` -> QY-DIR -> `DIR-` | HBS860H Y |
+| Z | `PA5 / TIM2_CH1` -> QZ-PUL -> `PUL-` | `PB2` -> QZ-DIR -> `DIR-` | DM542 Z |
 
-## สถานะการติดตั้งซอฟต์แวร์
+`PUL+`/`DIR+` ต่อ Field +24 V ตาม wiring ที่ผู้ใช้ยืนยัน แต่ต้องตรวจ input rating ของ driver
+ตัวจริงก่อน pulse test; Source ของ NMOS และ Nucleo GND ต้องมี signal reference ร่วมกัน
 
-แอปติดตั้งที่ `/home/admin/NaritVending` และเปิดที่ `http://iriv.local/` ปัจจุบันกำหนด
-`GPIOZERO_PIN_FACTORY=mock` ใน `/etc/narit-vending.env` เพื่อป้องกันการขับมอเตอร์จาก
-pin map ของ Raspberry Pi 4 เดิม ห้ามถอด safe-mode จนกว่าจะติดตั้ง motion controller,
-ทำ I/O backend สำหรับ IRIV IO, ตรวจ polarity ทีละช่อง และผ่าน E-Stop acceptance test
+เฟิร์มแวร์ motion candidate เริ่มแบบ disarmed, STEP/DIR LOW, จำกัด 10–1000 Hz และ
+ไม่เกิน 10000 steps ต่อคำสั่ง ต้องรับ `ARM SAFE` และ `HEARTBEAT SAFE` ต่อเนื่อง;
+ขาด heartbeat เกิน 500 ms จะหยุดและ disarm ไม่มีการเริ่มเคลื่อนเองหลัง boot/reset
 
+## Safety hold points
+
+- E-stop ต้องตัดกำลัง/enable ผ่าน safety relay แบบ hardwired ไม่พึ่ง Pi, Modbus, USB หรือ firmware
+- Wiring ปัจจุบันระบุ KM1 ตัด 60 V ของ X/Y แต่ไฟ 24 V ของ Z/DM542 ยังไม่ผ่าน KM1:
+  จุดนี้เป็น safety gap และยังไม่พร้อม production
+- ก่อน flash motion firmware ต้องยืนยัน DI10 polarity, ตรวจว่า E-stop หยุด X/Y/Z จริง และ
+  scope STEP/DIR โดยถอด driver หรือใช้ dummy load ก่อน
+- ห้ามสั่ง HOME/JOG/MOVE ระหว่างการตรวจ communication และ pin mapping
+
+รายละเอียดขา connector และวงจร NMOS ดู
+[STM32_NMOS_CURRENT_WIRING_TH.md](STM32_NMOS_CURRENT_WIRING_TH.md)

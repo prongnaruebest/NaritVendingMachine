@@ -17,9 +17,11 @@ Motion control base for a Raspberry Pi vending machine with `X/Y/Z` axes, head/t
 - `scripts/deploy_to_pi.ps1`: deploy this project from Windows to Raspberry Pi over SSH
 - `scripts/setup_pi.sh`: install runtime dependencies on the Pi
 - `docs/`: architecture specifications, proposals, and API documentation
-- `docs/IRIV_ARCHITECTURE.md`: IRIV-specific system/software architecture and production enablement gate
-- `docs/IRIV_WIRING.md`: IRIV-specific wiring schedule, terminal allocation, and commissioning checklist
-- `docs/IRIV_WIRING_TH.md`: earlier concise IRIV wiring allocation reference
+- `docs/ARCHITECTURE_TH.md`: architecture และ production enablement gate ของตู้ IRIV + NUCLEO ปัจจุบัน
+- `docs/HANDOFF_CURRENT_TH.md`: จุดเริ่มต้นสำหรับส่งต่องานทั้งหมด
+- `docs/IRIV_WIRING_TH.md`: network, IRIV IO และ STM32 wiring ล่าสุด
+- `docs/STM32_NMOS_CURRENT_WIRING_TH.md`: connector และ NMOS wiring details
+- `docs/IRIV_ARCHITECTURE.md` / `docs/IRIV_WIRING.md`: legacy references; ห้ามใช้เป็นแบบตู้ปัจจุบัน
 
 ## Features
 
