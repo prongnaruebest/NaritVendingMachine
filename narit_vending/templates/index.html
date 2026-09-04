@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -1052,6 +1052,32 @@
                 <button type="button" data-motor-test-jog="z:reverse" disabled>▼ Z− (Down)</button>
                 <button type="button" data-motor-test-jog="z:forward" disabled>Z+ (Up) ▲</button>
               </div>
+            </section>
+
+            <!-- Goto Limit Panel -->
+            <section class="panel page-panel motor-test-goto-panel" aria-labelledby="motor-test-goto-title">
+              <div class="motor-test-jog-head">
+                <div>
+                  <span>Absolute Limit Travel</span>
+                  <strong id="motor-test-goto-title">GOTO LIMIT — RUN TO END STOP</strong>
+                </div>
+                <small id="motor-test-goto-profile">Uses selected frequency · Full-stroke</small>
+              </div>
+              <p class="jog-guide-text">Send axis to min (−) or max (+) end stop at configured frequency. Motor runs full-stroke until stopped or aborted.</p>
+              <div class="motor-test-goto-grid">
+                <span class="goto-axis-label">X</span>
+                <button type="button" class="btn-goto-min" data-goto-axis="x" data-goto-limit="min" disabled>&#10218; X MIN</button>
+                <button type="button" class="btn-goto-max" data-goto-axis="x" data-goto-limit="max" disabled>X MAX &#10219;</button>
+
+                <span class="goto-axis-label">Y</span>
+                <button type="button" class="btn-goto-min" data-goto-axis="y" data-goto-limit="min" disabled>&#10218; Y MIN</button>
+                <button type="button" class="btn-goto-max" data-goto-axis="y" data-goto-limit="max" disabled>Y MAX &#10219;</button>
+
+                <span class="goto-axis-label">Z</span>
+                <button type="button" class="btn-goto-min" data-goto-axis="z" data-goto-limit="min" disabled>&#10218; Z MIN</button>
+                <button type="button" class="btn-goto-max" data-goto-axis="z" data-goto-limit="max" disabled>Z MAX &#10219;</button>
+              </div>
+              <div id="motor-test-goto-status" class="motor-test-goto-status" style="display:none;"></div>
             </section>
 
             <!-- STM32 Motion Telemetry Panel -->

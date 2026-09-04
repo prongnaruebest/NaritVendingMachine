@@ -6766,3 +6766,100 @@ select.slot-filter {
 .safety-ind-sub.warn {
   color: var(--amber);
 }
+
+/* ── Motor Test: Goto Limit Panel ───────────────────────────────────────── */
+.motor-test-goto-panel {
+  padding: 1.25rem 1.5rem 1.5rem;
+}
+
+.motor-test-goto-grid {
+  display: grid;
+  grid-template-columns: 1.2rem 1fr 1fr;
+  gap: 0.4rem 0.5rem;
+  align-items: center;
+  margin-top: 0.75rem;
+}
+
+.goto-axis-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--clr-text-muted, #6c757d);
+  text-align: center;
+}
+
+.btn-goto-min,
+.btn-goto-max {
+  display: block;
+  width: 100%;
+  padding: 0.45rem 0.5rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  border: 1.5px solid transparent;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, opacity 0.15s, box-shadow 0.15s;
+  user-select: none;
+  touch-action: manipulation;
+}
+
+.btn-goto-min {
+  background: rgba(59, 130, 246, 0.12);
+  border-color: rgba(59, 130, 246, 0.35);
+  color: #93c5fd;
+}
+.btn-goto-min:not(:disabled):hover {
+  background: rgba(59, 130, 246, 0.22);
+  border-color: #60a5fa;
+  color: #dbeafe;
+}
+
+.btn-goto-max {
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.35);
+  color: #fbbf24;
+}
+.btn-goto-max:not(:disabled):hover {
+  background: rgba(245, 158, 11, 0.22);
+  border-color: #f59e0b;
+  color: #fef3c7;
+}
+
+.btn-goto-min.running,
+.btn-goto-max.running {
+  background: rgba(239, 68, 68, 0.18);
+  border-color: #ef4444;
+  color: #fca5a5;
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.4);
+  animation: goto-pulse 0.7s infinite alternate;
+}
+@keyframes goto-pulse {
+  from { opacity: 0.8; }
+  to   { opacity: 1;   }
+}
+
+.btn-goto-min:disabled,
+.btn-goto-max:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.motor-test-goto-status {
+  margin-top: 0.75rem;
+  padding: 0.45rem 0.75rem;
+  border-radius: 5px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+.motor-test-goto-status.active {
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  color: #6ee7b7;
+}
+.motor-test-goto-status.done {
+  background: rgba(100, 116, 139, 0.15);
+  border: 1px solid rgba(100, 116, 139, 0.3);
+  color: #94a3b8;
+}

@@ -2480,6 +2480,30 @@
     $$("[data-motor-test-jog]").forEach((button) => {
       button.disabled = !jogValid || (MS.motorTestJog.active ? button !== MS.motorTestJog.button : !ready);
     });
+    // Enable/disable Goto Limit buttons
+    $$("[data-goto-axis]").forEach((button) => {
+      const axis  = button.dataset.gotoAxis?.toUpperCase();
+      const limit = button.dataset.gotoLimit;
+      if (motorTestGoto.active) {
+        if (button === motorTestGoto.button) {
+          button.disabled = false;
+          button.textContent = "\u25A0 ABORT GOTO";
+        } else {
+          button.disabled = true;
+        }
+      } else {
+        button.disabled = !ready || MS.motorTestJog.active;
+        if (axis && limit) {
+          button.textContent = limit === "min" ? "\u27EA " + axis + " MIN" : axis + " MAX \u27EB";
+        }
+      }
+    });
+    const gotoProfileEl = el("motor-test-goto-profile");
+    if (gotoProfileEl) {
+      gotoProfileEl.textContent = ready
+        ? fmt(parameters.frequency, 0) + " Hz \xB7 Full-stroke"
+        : (armed ? "WAITING \u2014 system busy" : "ARM first to enable");
+    }
     setText(
       "motor-test-jog-profile",
       jogValid ? `HOLD TO RUN · ${fmt(parameters.frequency, 0)} Hz (STM32)` : "INVALID PROFILE",
@@ -2563,6 +2587,101 @@
       if (MS.motorTestJog.token === token) stopMotorTestJog();
       refresh().catch(() => {});
     }
+  }
+
+  // ── Goto Limit (Motor Test) ──────────────────────────────────────────────
+  // State for goto limit operation
+  const motorTestGoto = { active: false, token: 0, button: null };
+
+  function stopMotorTestGoto(message) {
+    if (!motorTestGoto.active) return;
+    motorTestGoto.active = false;
+    motorTestGoto.token += 1;
+    if (motorTestGoto.button) {
+      motorTestGoto.button.classList.remove("running");
+      motorTestGoto.button.disabled = false;
+    }
+    motorTestGoto.button = null;
+    const statusEl = el("motor-test-goto-status");
+    if (statusEl) {
+      statusEl.textContent = message || "GOTO COMPLETE";
+      statusEl.style.display = "";
+      statusEl.className = "motor-test-goto-status done";
+    }
+    updateMotorTestCalculations();
+  }
+
+  async function runGotoLimit(axis, limit, button) {
+    if (motorTestGoto.active || MS.motorTestJog.active || button.disabled) return;
+    const state = motorTestState();
+    if (!state.armed) {
+      toast("ARM TEST MODE first before using Goto Limit.", "warn");
+      return;
+    }
+    const ignoreLimits = Boolean(el("motor-test-bypass-limits")?.checked ?? true);
+    const frequency = Math.min(1000, Math.max(10, Number(el("motor-test-frequency")?.value || 400)));
+    // Full-stroke: calculate pulses from config max_travel_mm
+    const axisCfg = MS.config?.axes?.[axis] || {};
+    const stepsPerRev = Number(axisCfg.motor_steps_per_rev || 200);
+    const microsteps  = Number(axisCfg.driver_microsteps || 2);
+    const pitch       = Number(axisCfg.lead_screw_pitch_mm || 5);
+    const maxTravel   = Number(axisCfg.max_travel_mm || 100);
+    const ppm = (stepsPerRev * microsteps) / pitch;              // pulses per mm
+    const totalPulses = Math.ceil(maxTravel * ppm * 1.05);       // +5% safety margin
+    // direction: min → reverse, max → forward
+    const direction = (limit === "min") ? "reverse" : "forward";
+
+    const token = ++motorTestGoto.token;
+    motorTestGoto.active = true;
+    motorTestGoto.button = button;
+    button.classList.add("running");
+    button.disabled = true;
+
+    const statusEl = el("motor-test-goto-status");
+    if (statusEl) {
+      statusEl.style.display = "";
+      statusEl.className = "motor-test-goto-status active";
+      statusEl.textContent = `GOTO ${axis.toUpperCase()} ${limit.toUpperCase()} — Running ${fmt(maxTravel, 1)} mm stroke at ${fmt(frequency, 0)} Hz ...`;
+    }
+    updateMotorTestCalculations();
+
+    // Send in chunks of 200ms worth of pulses (same as hold-jog), cycling until done
+    const chunkPulses = Math.max(1, Math.min(1000, Math.round(frequency * 0.2)));
+    let pulsesRemaining = totalPulses;
+    try {
+      while (motorTestGoto.active && motorTestGoto.token === token && pulsesRemaining > 0) {
+        const sendPulses = Math.min(chunkPulses, pulsesRemaining);
+        const resp = await apiCall(
+          "/api/maintenance/motor-test",
+          "POST",
+          {
+            action: "pulse",
+            axis,
+            direction,
+            pulse_count: sendPulses,
+            pulse_frequency_hz: frequency,
+            ignore_limits: ignoreLimits,
+          },
+          3000,
+        );
+        // Stop if limit switch hit (backend returns ok:false when limit tripped)
+        if (resp && resp.ok === false) {
+          stopMotorTestGoto(`LIMIT REACHED — ${axis.toUpperCase()} ${limit.toUpperCase()} end stop.`);
+          return;
+        }
+        pulsesRemaining -= sendPulses;
+      }
+    } catch (err) {
+      if (motorTestGoto.token === token) {
+        stopMotorTestGoto(`GOTO STOPPED — ${humanizeError(err.message)}`);
+        toast(humanizeError(err.message), "error");
+      }
+      return;
+    }
+    if (motorTestGoto.token === token) {
+      stopMotorTestGoto(`GOTO ${axis.toUpperCase()} ${limit.toUpperCase()} — Full stroke complete.`);
+    }
+    refresh().catch(() => {});
   }
 
   function renderMotorTest() {
@@ -3990,9 +4109,25 @@
       });
       button.addEventListener("contextmenu", (event) => event.preventDefault());
     });
-    window.addEventListener("blur", () => stopMotorTestJog("WINDOW LOST FOCUS — pulse output stopped."));
+    // Goto Limit buttons — single click, runs full stroke
+    $("[data-goto-axis]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const axis  = button.dataset.gotoAxis;
+        const limit = button.dataset.gotoLimit;
+        if (!axis || !limit) return;
+        if (motorTestGoto.active) {
+          stopMotorTestGoto("GOTO ABORTED by user.");
+        } else {
+          runGotoLimit(axis, limit, button);
+        }
+      });
+    });
+    window.addEventListener("blur", () => {
+      stopMotorTestJog("WINDOW LOST FOCUS — pulse output stopped.");
+      stopMotorTestGoto("WINDOW LOST FOCUS — goto stopped.");
+    });
     document.addEventListener("visibilitychange", () => {
-      if (document.hidden) stopMotorTestJog("PAGE HIDDEN — pulse output stopped.");
+      if (document.hidden) { stopMotorTestJog("PAGE HIDDEN — pulse output stopped."); stopMotorTestGoto("PAGE HIDDEN — goto stopped."); }
     });
     el("motor-test-open-config").addEventListener("click", () => switchWorkspace("configuration"));
     el("motor-test-axis").addEventListener("change", () => {
