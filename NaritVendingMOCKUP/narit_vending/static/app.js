@@ -1497,9 +1497,10 @@
 
   /* ── MASTER RENDER ──────────────────────────────────────────── */
   const VALID_VIEWS = new Set([
-    "dashboard", "motion", "visualization", "diagnostics", "configuration",
+    "dashboard", "motion", "visualization", "diagnostics", "io-status", "configuration",
     "motor-test", "mqtt", "slots", "alarms", "events", "flow", "sequence-monitor",
   ]);
+
 
   function switchWorkspace(view, updateHash = true) {
     const nextView = VALID_VIEWS.has(view) ? view : "motion";
@@ -2533,29 +2534,79 @@
     const test = motorTestState();
     const armed = Boolean(test.armed);
     const status = getStatus();
-    const pageStatus = el("motor-test-page-status");
-    pageStatus.textContent = armed ? "ARMED" : "DISARMED";
-    pageStatus.className = `page-status-chip ${armed ? "fault" : ""}`;
-    el("motor-test-safety").classList.toggle("armed", armed);
-    setText("motor-test-countdown", armed ? "ACTIVE UNTIL CANCEL / E-STOP" : "PRESS ARM TO ENABLE");
-    el("motor-test-arm").disabled = armed || !MS.online || MS.pending || Boolean(MS.payload?.busy)
-      || Boolean(status.estop) || Boolean(MS.payload?.safety?.stop_requested);
-    el("motor-test-cancel").disabled = !armed || !MS.online || MS.pending;
+    const isStopReq = Boolean(MS.payload?.safety?.stop_requested);
+    const isAlarm = MS.payload?.machine_state === "ALARM";
 
-    const hardwareMotors = MS.config?.hardware?.motors || {};
-    const axisGrid = el("motor-test-axis-grid");
-    if (axisGrid) axisGrid.innerHTML = AXES.map((axis) => {
-      const data = getAxis(axis);
-      const motor = hardwareMotors[axis] || {};
-      const selected = axis === (el("motor-test-axis")?.value || "z");
-      const limit = data.head_limit ? "MIN ACTIVE" : data.tail_limit ? "MAX ACTIVE" : "CLEAR";
-      return `<article class="motor-test-axis-card ${selected ? "selected" : ""} ${data.head_limit || data.tail_limit ? "fault" : ""}">
-        <div><strong>${axis.toUpperCase()} AXIS</strong><span>${data.is_homed ? "HOMED" : "NOT HOMED"}</span></div>
-        <dl><dt>STEP / DIR / EN</dt><dd>${esc(motor.step_pin ?? "--")} / ${esc(motor.dir_pin ?? "--")} / ${esc(motor.enable_pin ?? "--")}</dd><dt>Limits</dt><dd>${esc(limit)}</dd><dt>STEP / DIR</dt><dd>${motor.active_high === false ? "ACTIVE LOW" : "ACTIVE HIGH"}</dd><dt>ENABLE</dt><dd>${(motor.enable_active_high ?? motor.active_high) === false ? "ACTIVE LOW" : "ACTIVE HIGH"}</dd></dl>
-      </article>`;
-    }).join("");
+    const pageStatus = el("motor-test-page-status");
+    if (pageStatus) {
+      pageStatus.textContent = armed ? "⚡ ARMED (TEST MODE)" : (isAlarm ? "ALARM TRIPPED" : "DISARMED");
+      pageStatus.className = `page-status-chip ${armed ? "warn" : (isAlarm ? "fault" : "")}`;
+    }
+
+    const safetyPanel = el("motor-test-safety");
+    if (safetyPanel) safetyPanel.classList.toggle("armed", armed);
+
+    if (armed) {
+      setText("motor-test-countdown", "⚡ TEST MODE ACTIVE (ARMED) — READY TO PULSE / JOG");
+    } else if (isAlarm || isStopReq) {
+      setText("motor-test-countdown", "⚠️ ALARM TRIPPED — CLICK RESET ALARMS TO UNLOCK");
+    } else {
+      setText("motor-test-countdown", "PRESS ARM TO ENABLE PULSE OUTPUT");
+    }
+
+    const armBtn = el("motor-test-arm");
+    if (armBtn) {
+      armBtn.disabled = armed || !MS.online || MS.pending || Boolean(MS.payload?.busy)
+        || Boolean(status.estop) || isStopReq;
+    }
+    const cancelBtn = el("motor-test-cancel");
+    if (cancelBtn) cancelBtn.disabled = !armed || !MS.online || MS.pending;
+
+    const startBtn = el("motor-test-start");
+    if (startBtn) startBtn.disabled = !armed || !MS.online || MS.pending;
+
+    // Enable / disable hold-to-run jog buttons
+    $$("[data-motor-test-jog]").forEach((btn) => {
+      btn.disabled = !armed || !MS.online || MS.pending;
+    });
+
+    // Update Telemetry Panel
+    const nucChip = el("test-nucleo-chip");
+    const nucComm = MS.payload?.nucleo?.communication_ok;
+    if (nucChip) {
+      nucChip.textContent = nucComm ? (armed ? "ARMED (V2)" : "ONLINE (V2)") : "OFFLINE";
+      nucChip.className = `page-status-chip ${nucComm ? (armed ? "warn" : "ok") : "fault"}`;
+    }
+
+    const telLink = el("test-tel-link");
+    if (telLink) {
+      const port = MS.payload?.nucleo?.port ? MS.payload.nucleo.port.split("/").pop() : "ttyACM0";
+      telLink.textContent = nucComm ? `${MS.payload?.nucleo?.device || "NUCLEO"} · ${port} @ 115200` : "DISCONNECTED";
+    }
+
+    const telMoving = el("test-tel-moving");
+    if (telMoving) {
+      const m = MS.payload?.nucleo?.moving || {};
+      const isMoving = Boolean(m.x || m.y || m.z);
+      telMoving.textContent = isMoving ? `PULSING (X:${m.x} Y:${m.y} Z:${m.z})` : "IDLE (0 steps/s)";
+      telMoving.style.color = isMoving ? "var(--ok, #25d389)" : "";
+    }
+
+    const telWatchdog = el("test-tel-watchdog");
+    if (telWatchdog) {
+      telWatchdog.textContent = MS.payload?.nucleo?.watchdog ? "ACTIVE (500ms hardware timer)" : "INACTIVE";
+    }
+
+    const telPower = el("test-tel-power");
+    if (telPower) {
+      const estop = Boolean(status.estop || MS.payload?.io?.inputs?.estop);
+      telPower.textContent = estop ? "🛑 E-STOP TRIPPED (60V CUT)" : "KM1 RELAY CLOSED (60V LIVE)";
+      telPower.style.color = estop ? "var(--red-bright, #ff4d4d)" : "var(--ok, #25d389)";
+    }
+
     updateMotorTestCalculations();
   }
+
 
   function renderMqttMonitor() {
     if (!document.getElementById("mqtt-page-status")) return;
@@ -3803,9 +3854,25 @@
       renderMotorTest();
     });
     ["motor-test-direction", "motor-test-frequency", "motor-test-pulses", "motor-test-steps-rev", "motor-test-microsteps", "motor-test-pitch"].forEach((id) => {
-      el(id).addEventListener("input", updateMotorTestCalculations);
-      el(id).addEventListener("change", updateMotorTestCalculations);
+      el(id)?.addEventListener("input", updateMotorTestCalculations);
+      el(id)?.addEventListener("change", updateMotorTestCalculations);
     });
+    el("motor-test-reset-alarm")?.addEventListener("click", () => {
+      command("Reset alarms", "/api/clear-alarm", undefined, { isStop: true, noCheck: true });
+    });
+    $$(".quick-preset-chips button").forEach((chip) => {
+      chip.addEventListener("click", () => {
+        const parent = chip.closest(".quick-preset-chips");
+        const targetId = parent?.dataset.targetInput;
+        const targetInput = el(targetId);
+        if (targetInput) {
+          targetInput.value = chip.dataset.val;
+          parent.querySelectorAll(".chip-btn").forEach((c) => c.classList.toggle("active", c === chip));
+          updateMotorTestCalculations();
+        }
+      });
+    });
+
 
     const configurationPage = document.querySelector('[data-view-page="configuration"]');
     const markConfigurationDirty = (event) => {

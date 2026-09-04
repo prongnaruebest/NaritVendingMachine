@@ -5153,80 +5153,334 @@ select.slot-filter {
   .visualization-v32 .visual-slot-editor { grid-template-columns: 1fr; }
 }
 
-/* v41 dedicated motor test workspace */
-.motor-test-page { min-height: 0; overflow: auto; }
+/* v42 Dedicated Motor Test Workspace - Industrial Layout */
+.motor-test-page { min-height: 0; overflow: auto; padding-bottom: 20px; }
+.motor-test-header-chips { display: flex; align-items: center; gap: 8px; }
 .motor-test-safety {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 10px;
-  padding: 12px 14px;
-  border-color: var(--amber-brd);
-  background: linear-gradient(90deg, var(--amber-dim), var(--surf-1) 48%);
+  gap: 20px;
+  margin-bottom: 12px;
+  padding: 14px 18px;
+  border-radius: 8px;
+  border: 1px solid var(--amber-brd, #e5a50a);
+  background: linear-gradient(135deg, rgba(229, 165, 10, 0.12) 0%, rgba(14, 25, 40, 0.85) 100%);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
 }
-.motor-test-safety.armed { border-color: var(--red-bright); background: linear-gradient(90deg, var(--red-dim), var(--surf-1) 48%); }
-.motor-test-safety > div:first-child { display: grid; gap: 4px; }
-.motor-test-safety strong { color: var(--amber); font-size: 14px; letter-spacing: .04em; }
-.motor-test-safety.armed strong { color: var(--red-bright); }
-.motor-test-safety span { color: var(--text-2); font-size: 11px; }
-.motor-test-arm-actions { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
-.motor-test-arm-actions > span { color: var(--amber); font: 700 11px var(--font-mono); }
-.motor-test-arm-actions button { min-height: 38px; padding: 8px 14px; }
+.motor-test-safety.armed {
+  border-color: #ff3b30;
+  background: linear-gradient(135deg, rgba(255, 59, 48, 0.16) 0%, rgba(20, 10, 15, 0.9) 100%);
+  box-shadow: 0 0 20px rgba(255, 59, 48, 0.2);
+}
+.motor-test-safety-info { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
+.motor-test-safety-badge {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 2px 8px;
+  background: rgba(229, 165, 10, 0.25);
+  color: var(--amber, #f5a623);
+  font: 800 10px var(--font-mono, monospace);
+  letter-spacing: 0.08em;
+  border-radius: 4px;
+  margin-bottom: 2px;
+}
+.motor-test-safety.armed .motor-test-safety-badge {
+  background: rgba(255, 59, 48, 0.3);
+  color: #ff4d4d;
+}
+.motor-test-safety-info strong {
+  color: var(--text-0, #fff);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.motor-test-safety-info > span {
+  color: var(--text-2, #a0aec0);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.motor-test-bypass-box {
+  margin-top: 6px;
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+}
+.bypass-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--text-0, #fff);
+  font-size: 13px;
+}
+.bypass-label input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent-cyan, #00d2ff);
+  cursor: pointer;
+}
+.bypass-note {
+  display: block;
+  margin-top: 4px;
+  padding-left: 28px;
+  color: var(--text-3, #718096);
+  font-size: 11px;
+}
+.motor-test-arm-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  white-space: nowrap;
+}
+.motor-test-arm-actions > span {
+  color: var(--amber, #f5a623);
+  font: 700 11px var(--font-mono, monospace);
+  letter-spacing: 0.04em;
+}
+.motor-test-safety.armed .motor-test-arm-actions > span {
+  color: #ff4d4d;
+}
+.motor-test-arm-actions button {
+  min-height: 42px;
+  padding: 8px 18px;
+  font-weight: 700;
+  border-radius: 6px;
+}
 
-.motor-test-layout { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(340px, .8fr); gap: 10px; min-height: 0; }
+.motor-test-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(360px, 1fr);
+  gap: 14px;
+  min-height: 0;
+}
 .motor-test-controls-panel { min-width: 0; }
-.motor-test-form { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
+.motor-test-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
 .motor-test-form > label { min-width: 0; }
-.motor-test-form > label > span { display: block; margin-bottom: 5px; color: var(--text-3); font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
-.motor-test-form .hmi-input { width: 100%; min-height: 42px; color: var(--accent-cyan); font: 700 13px var(--font-mono); }
-.motor-test-form input[readonly] { color: var(--text-2); }
-.motor-test-jog-panel { margin-top: 12px; padding: 11px; border: 1px solid var(--border-med); border-radius: 6px; background: rgba(5, 17, 29, .52); }
-.motor-test-jog-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.motor-test-jog-head > div { display: grid; gap: 3px; }
-.motor-test-jog-head span { color: var(--text-3); font-size: 9px; letter-spacing: .1em; text-transform: uppercase; }
-.motor-test-jog-head strong { color: var(--text-0); font-size: 13px; }
-.motor-test-jog-head small { color: var(--accent-cyan); font: 700 11px var(--font-mono); }
-.motor-test-jog-grid { display: grid; grid-template-columns: minmax(70px, .55fr) repeat(2, minmax(90px, 1fr)); gap: 7px; margin-top: 9px; }
-.motor-test-jog-grid > span { display: grid; place-items: center start; padding-left: 9px; border: 1px solid var(--border); border-radius: 5px; color: var(--text-2); font-size: 11px; font-weight: 800; }
-.motor-test-jog-grid button { min-height: 42px; border: 1px solid #2f6e9e; border-radius: 5px; background: #142b43; color: var(--accent-cyan); box-shadow: inset 0 0 12px rgba(0, 183, 255, .06); font: 800 15px var(--font-mono); cursor: pointer; touch-action: none; user-select: none; }
-.motor-test-jog-grid button:hover:not(:disabled) { border-color: var(--accent-cyan); background: rgba(0, 183, 255, .16); }
-.motor-test-jog-grid button.running { border-color: var(--ok); background: rgba(37, 211, 137, .2); color: var(--ok); box-shadow: 0 0 0 2px rgba(37, 211, 137, .12), inset 0 0 16px rgba(37, 211, 137, .12); }
-.motor-test-jog-grid button:disabled { opacity: .3; cursor: not-allowed; }
-.motor-test-jog-panel > p { margin: 8px 0 0; color: var(--text-3); font-size: 9px; line-height: 1.4; }
-.motor-test-derived { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
-.motor-test-derived > div { padding: 10px; border: 1px solid var(--border); border-radius: 5px; background: var(--surf-2); }
-.motor-test-derived span { display: block; color: var(--text-3); font-size: 9px; letter-spacing: .07em; text-transform: uppercase; }
-.motor-test-derived strong { display: block; margin-top: 5px; color: var(--accent-cyan); font: 700 14px var(--font-mono); }
-.motor-test-confirm { display: flex; align-items: center; gap: 10px; margin-top: 14px; padding: 11px; border: 1px solid var(--amber-brd); border-radius: 5px; background: var(--amber-dim); color: var(--text-1); font-size: 12px; }
-.motor-test-confirm input { width: 18px; height: 18px; accent-color: var(--amber); }
-.motor-test-command-row { display: grid; grid-template-columns: 1.2fr 1fr; gap: 8px; margin-top: 10px; }
-.motor-test-command-row button { min-height: 46px; }
-.motor-test-controls-panel .configuration-validation { margin-top: 10px; }
-
-.motor-test-side-stack { display: grid; align-content: start; gap: 10px; min-width: 0; }
-.motor-test-axis-grid { display: grid; gap: 7px; margin-top: 10px; }
-.motor-test-axis-card { padding: 9px 10px; border: 1px solid var(--border); border-radius: 5px; background: var(--surf-2); }
-.motor-test-axis-card.selected { border-color: var(--accent-cyan); box-shadow: inset 3px 0 0 var(--accent-cyan); }
-.motor-test-axis-card.fault { border-color: var(--red-brd); }
-.motor-test-axis-card > div { display: flex; justify-content: space-between; gap: 10px; }
-.motor-test-axis-card > div strong { color: var(--text-0); font-size: 13px; }
-.motor-test-axis-card > div span { color: var(--amber); font: 700 9px var(--font-mono); }
-.motor-test-axis-card dl { display: grid; grid-template-columns: 1fr auto; gap: 5px 10px; margin: 8px 0 0; font-size: 10px; }
-.motor-test-axis-card dt { color: var(--text-3); }
-.motor-test-axis-card dd { margin: 0; color: var(--text-1); font-family: var(--font-mono); }
-.motor-test-checklist ol { display: grid; gap: 7px; margin: 10px 0 0; padding-left: 22px; color: var(--text-2); font-size: 11px; line-height: 1.45; }
-.motor-test-checklist li::marker { color: var(--amber); font-family: var(--font-mono); font-weight: 700; }
-
-@media (max-width: 1450px) {
-  .motor-test-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .motor-test-derived { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.motor-test-form > label > span {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--text-2, #a0aec0);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.motor-test-form .hmi-input {
+  width: 100%;
+  min-height: 42px;
+  color: var(--accent-cyan, #00d2ff);
+  font: 700 14px var(--font-mono, monospace);
 }
 
-@media (max-width: 1100px) {
-  .motor-test-safety { align-items: stretch; flex-direction: column; }
-  .motor-test-arm-actions { flex-wrap: wrap; }
+.quick-preset-chips {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+.chip-btn {
+  flex: 1;
+  min-height: 28px;
+  padding: 2px 6px;
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.1));
+  border-radius: 4px;
+  background: var(--surf-2, #16222f);
+  color: var(--text-2, #a0aec0);
+  font: 700 11px var(--font-mono, monospace);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.chip-btn:hover {
+  border-color: var(--accent-cyan, #00d2ff);
+  color: var(--text-0, #fff);
+}
+.chip-btn.active {
+  border-color: var(--accent-cyan, #00d2ff);
+  background: rgba(0, 210, 255, 0.18);
+  color: var(--accent-cyan, #00d2ff);
+}
+
+.motor-test-derived {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 14px;
+}
+.motor-test-derived > div {
+  padding: 10px 12px;
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+  border-radius: 6px;
+  background: var(--surf-2, #141f2d);
+}
+.motor-test-derived span {
+  display: block;
+  color: var(--text-3, #718096);
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.motor-test-derived strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--accent-cyan, #00d2ff);
+  font: 700 15px var(--font-mono, monospace);
+}
+
+.motor-test-command-row {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 10px;
+  margin-top: 14px;
+}
+.motor-test-command-row button {
+  min-height: 48px;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.motor-test-side-stack {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  min-width: 0;
+}
+
+.motor-test-jog-panel {
+  padding: 14px;
+  border: 1px solid var(--border-med, rgba(0, 210, 255, 0.2));
+  border-radius: 8px;
+  background: rgba(8, 20, 34, 0.7);
+}
+.motor-test-jog-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.motor-test-jog-head > div { display: grid; gap: 3px; }
+.motor-test-jog-head span {
+  color: var(--text-3, #718096);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.motor-test-jog-head strong {
+  color: var(--text-0, #fff);
+  font-size: 14px;
+  font-weight: 700;
+}
+.jog-guide-text {
+  margin: 8px 0 10px;
+  color: var(--text-2, #a0aec0);
+  font-size: 11px;
+  line-height: 1.4;
+}
+.motor-test-jog-grid {
+  display: grid;
+  grid-template-columns: 75px repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  align-items: center;
+}
+.motor-test-jog-grid > span {
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  height: 48px;
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.1));
+  border-radius: 6px;
+  background: var(--surf-2, #141f2d);
+  color: var(--accent-cyan, #00d2ff);
+  font: 800 12px var(--font-mono, monospace);
+}
+.motor-test-jog-grid button {
+  min-height: 48px;
+  border: 1px solid #1f5077;
+  border-radius: 6px;
+  background: #11283d;
+  color: #fff;
+  font: 800 13px var(--font-mono, monospace);
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+  transition: all 0.12s ease;
+}
+.motor-test-jog-grid button:hover:not(:disabled) {
+  border-color: var(--accent-cyan, #00d2ff);
+  background: rgba(0, 210, 255, 0.2);
+  color: #fff;
+  transform: translateY(-1px);
+}
+.motor-test-jog-grid button.running {
+  border-color: #25d389;
+  background: rgba(37, 211, 137, 0.25);
+  color: #25d389;
+  box-shadow: 0 0 16px rgba(37, 211, 137, 0.35);
+}
+.motor-test-jog-grid button:disabled {
+  opacity: 0.28;
+  cursor: not-allowed;
+  border-color: rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.motor-test-telemetry-panel {
+  padding: 14px;
+}
+.test-telemetry-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+.test-tel-item {
+  padding: 8px 10px;
+  background: var(--surf-2, #131c28);
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.06));
+  border-radius: 5px;
+}
+.test-tel-item span {
+  display: block;
+  font-size: 10px;
+  color: var(--text-3, #718096);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.test-tel-item strong {
+  display: block;
+  margin-top: 3px;
+  font: 700 11px var(--font-mono, monospace);
+  color: var(--text-0, #fff);
+}
+
+.motor-test-checklist ol {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0 0;
+  padding-left: 20px;
+  color: var(--text-2, #a0aec0);
+  font-size: 11px;
+  line-height: 1.45;
+}
+.motor-test-checklist li::marker {
+  color: var(--amber, #f5a623);
+  font-weight: 700;
+  font-family: var(--font-mono, monospace);
+}
+
+@media (max-width: 1200px) {
   .motor-test-layout { grid-template-columns: 1fr; }
+  .motor-test-safety { flex-direction: column; align-items: stretch; }
+  .motor-test-arm-actions { align-items: stretch; }
 }
 /* =============================================================
    MQTT MONITOR WORKSPACE

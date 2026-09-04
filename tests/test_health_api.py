@@ -174,16 +174,28 @@ class WebAppNewProcessTests(unittest.TestCase):
         mock_ctrl.mqtt_control.assert_called_once_with(False)
 
     def test_io_status_page_and_endpoint(self) -> None:
-        response = self.client.get("/io")
+        from unittest.mock import MagicMock
+        from narit_vending.web.app import create_web_app
+        from narit_vending.shared.snapshot import MachineSnapshot
+
+        mock_ctrl = MagicMock()
+        mock_ctrl.snapshot.return_value = MachineSnapshot.offline()
+        app = create_web_app(mock_ctrl)
+        app.testing = True
+        client = app.test_client()
+
+        response = client.get("/io")
         self.assertIn(response.status_code, (301, 302))
         self.assertEqual(response.location, "/#io-status")
 
-        response = self.client.get("/api/io/status")
+        response = client.get("/api/io/status")
         self.assertEqual(response.status_code, 200)
         data = response.get_json()
         self.assertTrue(data["ok"])
         self.assertIn("io", data)
         self.assertIn("safety", data)
+
+
 
 
 if __name__ == "__main__":

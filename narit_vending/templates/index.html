@@ -588,7 +588,10 @@
       <section class="workspace-view" data-view-page="diagnostics">
         <div class="page-heading">
           <div><p class="panel-label">Diagnostics &amp; Commissioning</p><h2>Hardware Subsystems &amp; Field I/O Health</h2></div>
-          <span class="page-status-chip" id="diag-health">CHECKING</span>
+          <div class="page-heading-actions" style="display:flex; align-items:center; gap:8px;">
+            <button class="btn-primary btn-sm" type="button" onclick="location.hash='#io-status'">🔍 I/O Status Monitor →</button>
+            <span class="page-status-chip" id="diag-health">CHECKING</span>
+          </div>
         </div>
         <div class="diagnostic-grid" id="diagnostic-grid"></div>
 
@@ -894,65 +897,205 @@
 
       <section class="workspace-view motor-test-page" data-view-page="motor-test">
         <div class="page-heading">
-          <div><p class="panel-label">Maintenance Engineering</p><h2>Motor Test Mode</h2></div>
-          <span class="page-status-chip" id="motor-test-page-status">DISARMED</span>
+          <div>
+            <p class="panel-label">On-Site Commissioning &amp; Motor Engineering</p>
+            <h2>Motor Test Mode — โหมดทดสอบหมุนมอเตอร์หน้างาน</h2>
+          </div>
+          <div class="motor-test-header-chips">
+            <span class="page-status-chip" id="motor-test-page-status">DISARMED</span>
+            <button class="btn-reset-alarm btn-sm" id="motor-test-reset-alarm" type="button" title="Reset any active alarms or locks">🔄 Reset Alarms</button>
+          </div>
         </div>
+
+        <!-- ── SAFETY ARMING & BYPASS BANNER ───────────────────── -->
         <div class="motor-test-safety panel" id="motor-test-safety">
-          <div><strong>RAW PULSE OUTPUT — ON-SITE COMMISSIONING MODE</strong><span>Arm once, then press and hold Test Jog or Run Burst. Software limits and interlocks are bypassed for manual testing; physical E-Stop cuts driver power.</span></div>
+          <div class="motor-test-safety-info">
+            <div class="motor-test-safety-badge">⚡ MANUAL MOTOR COMMISSIONING</div>
+            <strong>ARM TEST MODE เพื่อเริ่มทดสอบส่งพัลส์หมุนมอเตอร์จริง</strong>
+            <span>กดปุ่ม ARM ด้านขวาเพื่อเปิดระบบส่งพัลส์ (สามารถ Jog หมุนต่อเนื่อง หรือส่งพัลส์ตามจำนวนได้ทันทีโดยไม่ต้องรอ Homing)</span>
+            <div class="motor-test-bypass-box">
+              <label class="bypass-label">
+                <input type="checkbox" id="motor-test-bypass-limits" checked>
+                <span>🔓 ปลด Software Safety / Bypass Software Limit Switches &amp; IO Fault Locks (โหมดช่างทดสอบหน้างาน)</span>
+              </label>
+              <small class="bypass-note">หมายเหตุ: สวิตช์ฉุกเฉิน E-Stop สีแดงหน้าตู้ (KM1) ยังคงตัดไฟ 60V ของมอเตอร์ทางฮาร์ดแวร์เพื่อความปลอดภัยสูงสุด</small>
+            </div>
+          </div>
           <div class="motor-test-arm-actions">
             <span id="motor-test-countdown">PRESS ARM TO ENABLE</span>
             <button class="btn-arm" id="motor-test-arm" type="button">ARM TEST MODE</button>
             <button class="btn-abort" id="motor-test-cancel" type="button" disabled>CANCEL TEST MODE</button>
           </div>
         </div>
+
+        <!-- ── MOTOR TEST 2-COLUMN WORKSPACE ───────────────────── -->
         <div class="motor-test-layout">
+          <!-- LEFT COLUMN: PULSE BURST GENERATOR -->
           <div class="panel page-panel motor-test-controls-panel">
-            <div class="panel-head"><div><p class="panel-label">Pulse Generator</p><h2 class="panel-title">Single-Axis Motor Test</h2></div><span class="page-note">10–1,000 Hz · STM32 Protocol v2 · hold-to-run jog</span></div>
+            <div class="panel-head">
+              <div>
+                <p class="panel-label">Single-Burst Pulse Output</p>
+                <h2 class="panel-title">Pulse Generator — สั่งส่งพัลส์ตามจำนวน</h2>
+              </div>
+              <span class="page-note">STM32 NUCLEO-F439ZI · Protocol v2 (10–1,000 Hz)</span>
+            </div>
+
+            <!-- Parameters Form -->
             <div class="motor-test-form">
-              <label><span>Axis</span><select class="hmi-input" id="motor-test-axis"><option value="x" selected>X Axis</option><option value="y">Y Axis</option><option value="z">Z Axis</option></select></label>
-              <label><span>Direction</span><select class="hmi-input" id="motor-test-direction"><option value="forward">FORWARD (+)</option><option value="reverse">REVERSE (−)</option></select></label>
-              <label><span>Pulse Frequency</span><div class="field-input-wrap"><input class="hmi-input" id="motor-test-frequency" type="number" min="10" max="1000" step="10" value="400"><span class="unit-tag">Hz</span></div></label>
-              <label><span>Pulse Count</span><div class="field-input-wrap"><input class="hmi-input" id="motor-test-pulses" type="number" min="1" max="6000" step="1" value="200"><span class="unit-tag">pulse</span></div></label>
-              <label><span>Motor Full Steps / Rev</span><input class="hmi-input" id="motor-test-steps-rev" type="number" min="1" max="10000" step="1" value="200"></label>
-              <label><span>Driver Microstep</span><input class="hmi-input" id="motor-test-microsteps" type="number" min="1" max="256" step="1" value="2"></label>
-              <label><span>Lead Screw Pitch</span><div class="field-input-wrap"><input class="hmi-input" id="motor-test-pitch" type="number" min="0.01" max="100" step="0.01" value="5"><span class="unit-tag">mm</span></div></label>
-              <label><span>Calculated Duration</span><div class="field-input-wrap"><input class="hmi-input" id="motor-test-duration" type="text" value="0.500" readonly><span class="unit-tag">sec</span></div></label>
-              <div class="motor-test-bypass-box" style="grid-column: 1 / -1; padding: 8px 12px; background: rgba(255, 170, 0, 0.12); border: 1px solid rgba(255, 170, 0, 0.35); border-radius: 6px; display: flex; align-items: center; gap: 10px; margin: 4px 0;">
-                <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-weight:600; color:var(--text-bright, #fff); font-size:13px;">
-                  <input type="checkbox" id="motor-test-bypass-limits" checked style="width:16px; height:16px; cursor:pointer;">
-                  <span>ปลด Safety / Bypass Software Limit Switches &amp; IO Fault Locks (Manual Mode)</span>
-                </label>
-              </div>
+              <label>
+                <span>Axis (เลือกแกน)</span>
+                <select class="hmi-input" id="motor-test-axis">
+                  <option value="x" selected>X Axis (แกน X แนวนอน)</option>
+                  <option value="y">Y Axis (แกน Y แนวลึก)</option>
+                  <option value="z">Z Axis (แกน Z แนวนิ่ง/ยก)</option>
+                </select>
+              </label>
+
+              <label>
+                <span>Direction (ทิศทางการหมุน)</span>
+                <select class="hmi-input" id="motor-test-direction">
+                  <option value="forward" selected>FORWARD (+) ขวา / ลึก / ขึ้น</option>
+                  <option value="reverse">REVERSE (−) ซ้าย / หน้า / ลง</option>
+                </select>
+              </label>
+
+              <label>
+                <span>Pulse Frequency (ความถี่พัลส์)</span>
+                <div class="field-input-wrap">
+                  <input class="hmi-input" id="motor-test-frequency" type="number" min="10" max="1000" step="10" value="400">
+                  <span class="unit-tag">Hz</span>
+                </div>
+                <div class="quick-preset-chips" data-target-input="motor-test-frequency">
+                  <button type="button" class="chip-btn" data-val="100">100</button>
+                  <button type="button" class="chip-btn" data-val="200">200</button>
+                  <button type="button" class="chip-btn active" data-val="400">400</button>
+                  <button type="button" class="chip-btn" data-val="600">600</button>
+                  <button type="button" class="chip-btn" data-val="800">800</button>
+                </div>
+              </label>
+
+              <label>
+                <span>Pulse Count (จำนวนพัลส์)</span>
+                <div class="field-input-wrap">
+                  <input class="hmi-input" id="motor-test-pulses" type="number" min="1" max="6000" step="1" value="200">
+                  <span class="unit-tag">pulse</span>
+                </div>
+                <div class="quick-preset-chips" data-target-input="motor-test-pulses">
+                  <button type="button" class="chip-btn" data-val="50">50</button>
+                  <button type="button" class="chip-btn" data-val="100">100</button>
+                  <button type="button" class="chip-btn active" data-val="200">200</button>
+                  <button type="button" class="chip-btn" data-val="500">500</button>
+                  <button type="button" class="chip-btn" data-val="1000">1000</button>
+                </div>
+              </label>
+
+              <label>
+                <span>Calculated Duration</span>
+                <div class="field-input-wrap">
+                  <input class="hmi-input" id="motor-test-duration" type="text" value="0.500" readonly>
+                  <span class="unit-tag">sec</span>
+                </div>
+              </label>
+
+              <!-- Mechanical ratios for math calculations -->
+              <input type="hidden" id="motor-test-steps-rev" value="200">
+              <input type="hidden" id="motor-test-microsteps" value="2">
+              <input type="hidden" id="motor-test-pitch" value="5">
             </div>
-            <section class="motor-test-jog-panel" aria-labelledby="motor-test-jog-title">
-              <div class="motor-test-jog-head"><div><span>Pulse Jog Control</span><strong id="motor-test-jog-title">TEST EACH AXIS DIRECTION</strong></div><small id="motor-test-jog-profile">300 pulse · 100 Hz</small></div>
-              <div class="motor-test-jog-grid">
-                <span>X Axis</span><button type="button" data-motor-test-jog="x:reverse" disabled>X−</button><button type="button" data-motor-test-jog="x:forward" disabled>X+</button>
-                <span>Y Axis</span><button type="button" data-motor-test-jog="y:reverse" disabled>Y−</button><button type="button" data-motor-test-jog="y:forward" disabled>Y+</button>
-                <span>Z Axis</span><button type="button" data-motor-test-jog="z:reverse" disabled>Z−</button><button type="button" data-motor-test-jog="z:forward" disabled>Z+</button>
-              </div>
-              <p>Press and hold to rotate continuously at the Pulse Frequency above. Release the button to stop. Position feedback is not used.</p>
-            </section>
+
+            <!-- Derived Calculation Summary -->
             <div class="motor-test-derived">
-              <div><span>Pulses / Revolution</span><strong id="motor-test-ppr">2,000</strong></div>
-              <div><span>Calculated Pulses / mm</span><strong id="motor-test-ppm">400.000</strong></div>
               <div><span>Theoretical Travel</span><strong id="motor-test-distance">0.750 mm</strong></div>
-              <div><span>Motor Speed</span><strong id="motor-test-rpm">3.00 rpm</strong></div>
+              <div><span>Estimated Speed</span><strong id="motor-test-rpm">3.00 rpm</strong></div>
+              <div><span>Resolution</span><strong id="motor-test-ppm">400 pulse/mm</strong></div>
+              <div><span>Pulses / Rev</span><strong id="motor-test-ppr">2,000</strong></div>
             </div>
+
+            <!-- Pulse Burst Trigger Button -->
             <div class="motor-test-command-row">
-              <button class="btn-execute" id="motor-test-start" type="button" disabled>RUN ONE PULSE BURST</button>
-              <button class="btn-secondary" id="motor-test-open-config" type="button">OPEN MOTOR &amp; PIN CONFIGURATION</button>
+              <button class="btn-execute" id="motor-test-start" type="button" disabled>
+                ▶ RUN ONE PULSE BURST (ส่งพัลส์ 1 ชุด)
+              </button>
+              <button class="btn-secondary" id="motor-test-open-config" type="button">
+                ⚙ OPEN CONFIGURATION
+              </button>
             </div>
-            <div class="configuration-validation" id="motor-test-result">Arm Motor Test Mode before sending pulses.</div>
+
+            <!-- Result Feedback Box -->
+            <div class="configuration-validation" id="motor-test-result">
+              Arm Motor Test Mode before sending pulses.
+            </div>
           </div>
+
+          <!-- RIGHT COLUMN: CONTINUOUS JOG & TELEMETRY -->
           <aside class="motor-test-side-stack">
-            <div class="panel page-panel">
-              <div class="panel-head"><div><p class="panel-label">Live I/O</p><h2 class="panel-title">Axis &amp; Driver Status</h2></div><span class="page-note">Updates every 1 second</span></div>
-              <div class="motor-test-axis-grid" id="motor-test-axis-grid"></div>
+            <!-- Hold-to-run jog panel -->
+            <section class="panel page-panel motor-test-jog-panel" aria-labelledby="motor-test-jog-title">
+              <div class="motor-test-jog-head">
+                <div>
+                  <span>Continuous Hold-to-Run</span>
+                  <strong id="motor-test-jog-title">TEST JOG STATION — กดค้างเพื่อหมุน</strong>
+                </div>
+                <small id="motor-test-jog-profile">300 pulse · 100 Hz</small>
+              </div>
+              <p class="jog-guide-text">กดปุ่มแกนค้างไว้เพื่อหมุนต่อเนื่องตามความถี่ Pulse Frequency ด้านซ้าย และปล่อยปุ่มเพื่อหยุดหมุนทันที</p>
+              <div class="motor-test-jog-grid">
+                <span>X Axis</span>
+                <button type="button" data-motor-test-jog="x:reverse" disabled>◀ X− (ซ้าย)</button>
+                <button type="button" data-motor-test-jog="x:forward" disabled>X+ (ขวา) ▶</button>
+                <span>Y Axis</span>
+                <button type="button" data-motor-test-jog="y:reverse" disabled>▼ Y− (หน้า)</button>
+                <button type="button" data-motor-test-jog="y:forward" disabled>Y+ (หลัง) ▲</button>
+                <span>Z Axis</span>
+                <button type="button" data-motor-test-jog="z:reverse" disabled>▼ Z− (ลง)</button>
+                <button type="button" data-motor-test-jog="z:forward" disabled>Z+ (ขึ้น) ▲</button>
+              </div>
+            </section>
+
+            <!-- STM32 Motion Telemetry Panel -->
+            <div class="panel page-panel motor-test-telemetry-panel">
+              <div class="panel-head">
+                <div>
+                  <p class="panel-label">Motion Controller Link</p>
+                  <h2 class="panel-title">STM32 NUCLEO-F439ZI Status</h2>
+                </div>
+                <span class="page-status-chip ok" id="test-nucleo-chip">ONLINE</span>
+              </div>
+              <div class="test-telemetry-grid">
+                <div class="test-tel-item">
+                  <span>Hardware Link</span>
+                  <strong id="test-tel-link">USB VCP 115200 baud</strong>
+                </div>
+                <div class="test-tel-item">
+                  <span>Active Motion</span>
+                  <strong id="test-tel-moving">IDLE (X:0 Y:0 Z:0)</strong>
+                </div>
+                <div class="test-tel-item">
+                  <span>Watchdog</span>
+                  <strong id="test-tel-watchdog">ACTIVE (150ms)</strong>
+                </div>
+                <div class="test-tel-item">
+                  <span>Power Stage</span>
+                  <strong id="test-tel-power">KM1 60V ENERGIZED</strong>
+                </div>
+              </div>
             </div>
+
+            <!-- Operating Instructions Checklist -->
             <div class="panel page-panel motor-test-checklist">
-              <div class="panel-head"><div><p class="panel-label">Operating Notes</p><h2 class="panel-title">Hold-to-Run Test Jog</h2></div></div>
-              <ol><li>Press ARM TEST MODE once before using Test Jog.</li><li>Press and hold X±, Y± or Z± to rotate continuously.</li><li>Release the Jog button to stop normal test motion.</li><li>Use the physical E-Stop immediately for an unsafe response.</li><li>Cancel Test Mode before returning to normal motion.</li></ol>
+              <div class="panel-head">
+                <div>
+                  <p class="panel-label">Operating Notes</p>
+                  <h2 class="panel-title">ข้อควรระวังในการทดสอบหน้างาน</h2>
+                </div>
+              </div>
+              <ol>
+                <li>กดปุ่ม <strong>ARM TEST MODE</strong> ด้านบนเพื่อเปิดระบบส่งพัลส์</li>
+                <li>กดปุ่มแกน <strong>X±, Y± หรือ Z± ค้างไว้</strong> เพื่อทดสอบการหมุนของมอเตอร์</li>
+                <li>ปล่อยปุ่ม Jog เพื่อหยุดพัลส์มอเตอร์ทันที</li>
+                <li>หากเกิดเหตุฉุกเฉิน ให้กดปุ่ม <strong>EMERGENCY STOP (สีแดง)</strong> หน้าตู้ทันที</li>
+                <li>เมื่อเสร็จสิ้นการทดสอบ ให้กด <strong>CANCEL TEST MODE</strong></li>
+              </ol>
             </div>
           </aside>
         </div>

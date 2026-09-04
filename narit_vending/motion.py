@@ -51,6 +51,11 @@ class ControlledStopError(MotionError):
     pass
 
 
+class NucleoError(MotionError):
+    pass
+
+
+
 @dataclass(frozen=True)
 class AxisConfig:
     name: str

@@ -9,17 +9,13 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Callable
 
-from narit_vending.motion import MotionError
+from narit_vending.motion import MotionError, NucleoError
 
 _log = logging.getLogger(__name__)
 
 NUCLEO_MOTION_MIN_SPEED_HZ = 10.0
 NUCLEO_MOTION_MAX_SPEED_HZ = 1000.0
 NUCLEO_MOTION_MAX_STEPS = 10000
-
-
-class NucleoError(MotionError):
-    """Raised when the Nucleo link or motion command cannot complete a request."""
 
 
 class NucleoLink:
