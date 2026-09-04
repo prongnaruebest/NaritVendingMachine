@@ -70,8 +70,9 @@ class HealthApiTests(unittest.TestCase):
         html = response.get_data(as_text=True)
 
         self.assertEqual(response.status_code, 200)
-        for workspace in ("dashboard", "motion", "visualization", "slots", "diagnostics", "configuration", "mqtt", "alarms", "events", "flow"):
+        for workspace in ("dashboard", "motion", "visualization", "slots", "diagnostics", "io-status", "configuration", "mqtt", "alarms", "events", "flow"):
             self.assertIn(f'data-view-target="{workspace}"', html)
+        self.assertIn('data-view-page="io-status"', html)
         self.assertIn('id="visual-home-all"', html)
         for element_id in (
             "slot-summary-total", "slot-summary-ready", "slot-summary-empty",
@@ -171,6 +172,18 @@ class WebAppNewProcessTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.get_json()["ok"])
         mock_ctrl.mqtt_control.assert_called_once_with(False)
+
+    def test_io_status_page_and_endpoint(self) -> None:
+        response = self.client.get("/io")
+        self.assertIn(response.status_code, (301, 302))
+        self.assertEqual(response.location, "/#io-status")
+
+        response = self.client.get("/api/io/status")
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertTrue(data["ok"])
+        self.assertIn("io", data)
+        self.assertIn("safety", data)
 
 
 if __name__ == "__main__":

@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, redirect, render_template, request
 
 _log = logging.getLogger(__name__)
 
@@ -87,6 +87,11 @@ def create_web_app(ctrl_client=None) -> Flask:
     @app.get("/")
     def index():
         return render_template("index.html")
+
+    @app.get("/io")
+    @app.get("/io-status")
+    def page_io_status():
+        return redirect("/#io-status")
 
     @app.get("/api/ping")
     def api_ping():

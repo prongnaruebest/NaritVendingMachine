@@ -56,6 +56,13 @@
             </svg>
             <span>Diagnostics</span>
           </button>
+          <button class="nav-item" id="nav-io-status" data-view-target="io-status">
+            <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+              <rect x="2" y="2" width="12" height="12" rx="2"/>
+              <path d="M5 2v3M8 2v3M11 2v3M5 11v3M8 11v3M11 11v3M2 8h12"/>
+            </svg>
+            <span>I/O Status</span>
+          </button>
         </div>
 
         <div class="nav-section">
@@ -666,6 +673,202 @@
         </div>
       </section>
 
+      <section class="workspace-view io-status-page" data-view-page="io-status">
+        <div class="page-heading">
+          <div>
+            <p class="panel-label">Hardware Signal &amp; Field Bus Monitor</p>
+            <h2>I/O Status — ตรวจเช็คสถานะ Digital I/O</h2>
+          </div>
+          <div class="io-header-actions">
+            <span class="page-status-chip ok" id="io-page-health">CHECKING</span>
+            <button class="btn-secondary btn-sm" id="btn-io-refresh" title="Refresh I/O Status">🔄 Refresh</button>
+          </div>
+        </div>
+
+        <!-- ── I/O SUMMARY METRIC STRIP ────────────────────────── -->
+        <div class="io-summary-strip">
+          <div class="io-summary-card">
+            <div class="io-summary-icon">🔌</div>
+            <div class="io-summary-data">
+              <span class="io-summary-title">IRIV IO Field Bus</span>
+              <strong class="io-summary-value" id="io-summary-bus-state">--</strong>
+              <small class="io-summary-sub" id="io-summary-bus-sub">10.0.0.10:502 Modbus TCP</small>
+            </div>
+          </div>
+          <div class="io-summary-card">
+            <div class="io-summary-icon">📥</div>
+            <div class="io-summary-data">
+              <span class="io-summary-title">Digital Inputs</span>
+              <strong class="io-summary-value" id="io-summary-di-count">0 / 11 Active</strong>
+              <small class="io-summary-sub">DI0–DI10 Discrete Inputs</small>
+            </div>
+          </div>
+          <div class="io-summary-card">
+            <div class="io-summary-icon">📤</div>
+            <div class="io-summary-data">
+              <span class="io-summary-title">Digital Outputs</span>
+              <strong class="io-summary-value" id="io-summary-do-count">0 / 4 Active</strong>
+              <small class="io-summary-sub">DO0–DO3 SSR Aux Outputs</small>
+            </div>
+          </div>
+          <div class="io-summary-card">
+            <div class="io-summary-icon">🛑</div>
+            <div class="io-summary-data">
+              <span class="io-summary-title">E-Stop Safety Circuit</span>
+              <strong class="io-summary-value" id="io-summary-estop-state">CLEAR</strong>
+              <small class="io-summary-sub" id="io-summary-estop-sub">DI10 NC Contact Verified</small>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── FILTER & SEARCH CONTROLS ───────────────────────── -->
+        <div class="io-controls-bar panel">
+          <div class="io-filter-group" role="tablist" aria-label="I/O Channel Filters">
+            <button class="io-filter-btn active" data-io-filter="all">All Signals (<span id="io-filter-cnt-all">15</span>)</button>
+            <button class="io-filter-btn" data-io-filter="inputs">Inputs (<span id="io-filter-cnt-inputs">11</span>)</button>
+            <button class="io-filter-btn" data-io-filter="outputs">Outputs (<span id="io-filter-cnt-outputs">4</span>)</button>
+            <button class="io-filter-btn" data-io-filter="limits">Limit Switches (<span id="io-filter-cnt-limits">7</span>)</button>
+            <button class="io-filter-btn" data-io-filter="sensors">Product Sensors (<span id="io-filter-cnt-sensors">3</span>)</button>
+            <button class="io-filter-btn" data-io-filter="active-only">⚡ Active Only (<span id="io-filter-cnt-active">0</span>)</button>
+          </div>
+          <div class="io-search-box">
+            <span class="io-search-icon">🔍</span>
+            <input type="text" id="io-search-input" class="hmi-input" placeholder="ค้นหาสัญญาณ (เช่น DI0, X Min, E-Stop, DO1)...">
+          </div>
+        </div>
+
+        <!-- ── DIGITAL INPUTS DETAILED GRID ───────────────────── -->
+        <div class="panel page-panel io-section-panel" id="io-section-inputs">
+          <div class="panel-head">
+            <div>
+              <p class="panel-label">Field Bus Inputs · Modbus Register 0x0002</p>
+              <h2 class="panel-title">Digital Inputs (DI0–DI10) · สถานะสัญญาณขาเข้า</h2>
+            </div>
+            <div class="io-matrix-legend">
+              <span class="io-leg-item"><i class="io-dot active"></i> Active (1)</span>
+              <span class="io-leg-item"><i class="io-dot inactive"></i> Inactive (0)</span>
+              <span class="io-leg-item"><i class="io-dot safe"></i> Safe / Verified</span>
+              <span class="io-leg-item"><i class="io-dot fault"></i> Safety Fault</span>
+            </div>
+          </div>
+          <div class="io-cards-list io-grid-enhanced" id="io-page-di-cards">
+            <!-- Populated dynamically by app.js -->
+          </div>
+        </div>
+
+        <!-- ── DIGITAL OUTPUTS DETAILED GRID ──────────────────── -->
+        <div class="panel page-panel io-section-panel" id="io-section-outputs">
+          <div class="panel-head">
+            <div>
+              <p class="panel-label">Field Bus Coils · Modbus Register 0x0100</p>
+              <h2 class="panel-title">Digital Outputs (DO0–DO3) · สถานะสัญญาณขาออก</h2>
+            </div>
+            <div class="io-matrix-legend">
+              <span class="io-leg-item"><i class="io-dot safe"></i> Energized (ON)</span>
+              <span class="io-leg-item"><i class="io-dot inactive"></i> De-energized (OFF)</span>
+            </div>
+          </div>
+          <div class="io-cards-list io-grid-enhanced" id="io-page-do-cards">
+            <!-- Populated dynamically by app.js -->
+          </div>
+        </div>
+
+        <!-- ── MOTION AXES LIMIT & SENSOR MATRIX ──────────────── -->
+        <div class="panel page-panel io-section-panel" id="io-section-axes-limits">
+          <div class="panel-head">
+            <div>
+              <p class="panel-label">Motion Axis Sensor Cross-Reference</p>
+              <h2 class="panel-title">ผังตรวจเช็คเซนเซอร์และลิมิตสวิตช์แกน X / Y / Z</h2>
+            </div>
+          </div>
+          <div class="io-axes-overview-table-wrap">
+            <table class="io-axes-table">
+              <thead>
+                <tr>
+                  <th>Axis / Subsystem</th>
+                  <th>Min Limit Switch (Head)</th>
+                  <th>Max Limit Switch (Tail)</th>
+                  <th>Homing / Extra Sensor</th>
+                  <th>Motion Driver &amp; Controller</th>
+                  <th>Safety Action When Triggered</th>
+                </tr>
+              </thead>
+              <tbody id="io-axes-table-body">
+                <!-- Populated dynamically by app.js -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- ── SAFETY & COMMISSIONING GATE ────────────────────── -->
+        <div class="panel page-panel commissioning-panel">
+          <div class="panel-head">
+            <div>
+              <p class="panel-label">Hardware Safety Interlock Gate</p>
+              <h2 class="panel-title">DI10 E-Stop Contact &amp; KM1 Power Relay Diagnostic</h2>
+            </div>
+            <span class="page-status-chip" id="io-di10-gate-badge">VERIFYING</span>
+          </div>
+          <div class="commissioning-body">
+            <div class="commissioning-cards-row">
+              <div class="comm-card">
+                <span>DI10 Physical Bit</span>
+                <strong id="io-comm-raw-di10">--</strong>
+                <small id="io-comm-raw-desc">High (1) = Released / Closed Loop, Low (0) = Pressed / Open</small>
+              </div>
+              <div class="comm-card">
+                <span>Logical E-Stop State</span>
+                <strong id="io-comm-logical-estop">--</strong>
+                <small id="io-comm-logical-desc">Must be CLEAR before motion can arm</small>
+              </div>
+              <div class="comm-card">
+                <span>Contact Polarity</span>
+                <strong id="io-comm-polarity">--</strong>
+                <small id="io-comm-polarity-desc">NC contact verified via two-state operator test</small>
+              </div>
+              <div class="comm-card">
+                <span>KM1 Contactor Relay</span>
+                <strong id="io-comm-km1">--</strong>
+                <small id="io-comm-km1-desc">Main 60V power circuit contactor</small>
+              </div>
+            </div>
+            <div class="commissioning-notes">
+              <strong>คู่มือตรวจเช็คหน้างาน (Site Check Procedure):</strong>
+              <ol>
+                <li><strong>สภาวะปกติ (Ready):</strong> ปุ่ม E-Stop เด้งออก, หน้าสัมผัส NC ต่อถึงกัน, ไฟ 24V เข้า DI10, ค่า Raw DI10 อ่านได้ <code>1 (High)</code>, Logical E-Stop = <code>CLEAR</code></li>
+                <li><strong>สภาวะกด E-Stop (Tripped):</strong> เมื่อกดปุ่ม E-Stop วงจรขาด, ค่า Raw DI10 เปลี่ยนเป็น <code>0 (Low)</code>, Relay KM1 ตัดไฟมอเตอร์, ระบบเข้าสู่สภาวะ <code>ALARM / E_STOP</code> ทันที</li>
+                <li><strong>การทดสอบลิมิต (Limit Test):</strong> ใช้มือดันสวิตช์ลิมิตของแต่ละแกน แล้วตรวจดูว่าการ์ด DI0–DI5 เปลี่ยนสถานะเป็น <code>TRIGGERED</code> ตรงแกนหรือไม่</li>
+              </ol>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── RAW MODBUS REGISTER INSPECTOR ──────────────────── -->
+        <div class="panel page-panel io-section-panel">
+          <div class="panel-head">
+            <div>
+              <p class="panel-label">Modbus TCP Protocol Inspector</p>
+              <h2 class="panel-title">Raw Register &amp; Bitstream View (10.0.0.10:502 · Unit ID 255)</h2>
+            </div>
+            <span class="page-status-chip ok" id="io-raw-modbus-chip">POLLING OK</span>
+          </div>
+          <div class="io-raw-registers-grid">
+            <div class="io-raw-reg-box">
+              <span class="io-raw-reg-title">Discrete Inputs (Reg 0x0002)</span>
+              <div class="io-bit-stream" id="io-raw-di-bitstream">
+                <!-- Bit pills rendered here -->
+              </div>
+            </div>
+            <div class="io-raw-reg-box">
+              <span class="io-raw-reg-title">Coils Output (Reg 0x0100)</span>
+              <div class="io-bit-stream" id="io-raw-do-bitstream">
+                <!-- Bit pills rendered here -->
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section class="workspace-view" data-view-page="configuration">
         <div class="page-heading"><div><p class="panel-label">Controller Configuration</p><h2>Motor Pulse, GPIO &amp; Sensors</h2></div><span class="page-status-chip" id="configuration-save-status">LOADED</span></div>
         <div class="configuration-toolbar panel">
@@ -695,7 +898,7 @@
           <span class="page-status-chip" id="motor-test-page-status">DISARMED</span>
         </div>
         <div class="motor-test-safety panel" id="motor-test-safety">
-          <div><strong>RAW PULSE OUTPUT — POSITION IS UNKNOWN</strong><span>Arm once, then press and hold Test Jog to rotate. Release stops the pulse stream; E-Stop and directional limits remain active.</span></div>
+          <div><strong>RAW PULSE OUTPUT — ON-SITE COMMISSIONING MODE</strong><span>Arm once, then press and hold Test Jog or Run Burst. Software limits and interlocks are bypassed for manual testing; physical E-Stop cuts driver power.</span></div>
           <div class="motor-test-arm-actions">
             <span id="motor-test-countdown">PRESS ARM TO ENABLE</span>
             <button class="btn-arm" id="motor-test-arm" type="button">ARM TEST MODE</button>
@@ -704,16 +907,22 @@
         </div>
         <div class="motor-test-layout">
           <div class="panel page-panel motor-test-controls-panel">
-            <div class="panel-head"><div><p class="panel-label">Pulse Generator</p><h2 class="panel-title">Single-Axis Motor Test</h2></div><span class="page-note">10 Hz minimum · hold-to-run jog</span></div>
+            <div class="panel-head"><div><p class="panel-label">Pulse Generator</p><h2 class="panel-title">Single-Axis Motor Test</h2></div><span class="page-note">10–1,000 Hz · STM32 Protocol v2 · hold-to-run jog</span></div>
             <div class="motor-test-form">
-              <label><span>Axis</span><select class="hmi-input" id="motor-test-axis"><option value="x">X Axis</option><option value="y">Y Axis</option><option value="z" selected>Z Axis</option></select></label>
+              <label><span>Axis</span><select class="hmi-input" id="motor-test-axis"><option value="x" selected>X Axis</option><option value="y">Y Axis</option><option value="z">Z Axis</option></select></label>
               <label><span>Direction</span><select class="hmi-input" id="motor-test-direction"><option value="forward">FORWARD (+)</option><option value="reverse">REVERSE (−)</option></select></label>
-              <label><span>Pulse Frequency</span><div class="field-input-wrap"><input class="hmi-input" id="motor-test-frequency" type="number" min="10" step="10" value="2000"><span class="unit-tag">Hz</span></div></label>
-              <label><span>Pulse Count</span><div class="field-input-wrap"><input class="hmi-input" id="motor-test-pulses" type="number" min="1" max="6000" step="1" value="300"><span class="unit-tag">pulse</span></div></label>
+              <label><span>Pulse Frequency</span><div class="field-input-wrap"><input class="hmi-input" id="motor-test-frequency" type="number" min="10" max="1000" step="10" value="400"><span class="unit-tag">Hz</span></div></label>
+              <label><span>Pulse Count</span><div class="field-input-wrap"><input class="hmi-input" id="motor-test-pulses" type="number" min="1" max="6000" step="1" value="200"><span class="unit-tag">pulse</span></div></label>
               <label><span>Motor Full Steps / Rev</span><input class="hmi-input" id="motor-test-steps-rev" type="number" min="1" max="10000" step="1" value="200"></label>
-              <label><span>Driver Microstep</span><input class="hmi-input" id="motor-test-microsteps" type="number" min="1" max="256" step="1" value="10"></label>
+              <label><span>Driver Microstep</span><input class="hmi-input" id="motor-test-microsteps" type="number" min="1" max="256" step="1" value="2"></label>
               <label><span>Lead Screw Pitch</span><div class="field-input-wrap"><input class="hmi-input" id="motor-test-pitch" type="number" min="0.01" max="100" step="0.01" value="5"><span class="unit-tag">mm</span></div></label>
-              <label><span>Calculated Duration</span><div class="field-input-wrap"><input class="hmi-input" id="motor-test-duration" type="text" value="3.000" readonly><span class="unit-tag">sec</span></div></label>
+              <label><span>Calculated Duration</span><div class="field-input-wrap"><input class="hmi-input" id="motor-test-duration" type="text" value="0.500" readonly><span class="unit-tag">sec</span></div></label>
+              <div class="motor-test-bypass-box" style="grid-column: 1 / -1; padding: 8px 12px; background: rgba(255, 170, 0, 0.12); border: 1px solid rgba(255, 170, 0, 0.35); border-radius: 6px; display: flex; align-items: center; gap: 10px; margin: 4px 0;">
+                <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-weight:600; color:var(--text-bright, #fff); font-size:13px;">
+                  <input type="checkbox" id="motor-test-bypass-limits" checked style="width:16px; height:16px; cursor:pointer;">
+                  <span>ปลด Safety / Bypass Software Limit Switches &amp; IO Fault Locks (Manual Mode)</span>
+                </label>
+              </div>
             </div>
             <section class="motor-test-jog-panel" aria-labelledby="motor-test-jog-title">
               <div class="motor-test-jog-head"><div><span>Pulse Jog Control</span><strong id="motor-test-jog-title">TEST EACH AXIS DIRECTION</strong></div><small id="motor-test-jog-profile">300 pulse · 100 Hz</small></div>

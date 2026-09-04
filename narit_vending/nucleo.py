@@ -9,6 +9,8 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Callable
 
+from narit_vending.motion import MotionError
+
 _log = logging.getLogger(__name__)
 
 NUCLEO_MOTION_MIN_SPEED_HZ = 10.0
@@ -16,7 +18,7 @@ NUCLEO_MOTION_MAX_SPEED_HZ = 1000.0
 NUCLEO_MOTION_MAX_STEPS = 10000
 
 
-class NucleoError(RuntimeError):
+class NucleoError(MotionError):
     """Raised when the Nucleo link or motion command cannot complete a request."""
 
 
@@ -122,6 +124,7 @@ class NucleoLink:
             raw = serial_port.readline()
             if not raw:
                 continue
+            _log.debug("Nucleo RX raw: %r", raw)
             try:
                 line_str = raw.decode("ascii", errors="replace").strip()
                 if not line_str or not line_str.startswith("{"):
@@ -267,11 +270,13 @@ class NucleoLink:
 
             serial_port = self._open_serial()
             cmd = f"MOVE {axis_char} {dir_val} {steps_val} {int(round(speed_val))}\n"
+            _log.info("Nucleo TX: %s", cmd.strip())
             serial_port.write(cmd.encode("ascii"))
             serial_port.flush()
 
-            deadline = time.monotonic() + self.timeout_s
+            deadline = time.monotonic() + max(1.0, self.timeout_s)
             ack = self._read_json_response(serial_port, deadline)
+            _log.info("Nucleo ACK: %r", ack)
             if not ack or ack.get("type") != "ack" or ack.get("status") != "moving":
                 err = (ack or {}).get("error", "no ack")
                 raise NucleoError(f"Move command rejected by Nucleo: {err}")

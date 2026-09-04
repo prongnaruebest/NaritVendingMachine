@@ -43,6 +43,8 @@
     visualTargetSlot: "",
     slotEditorDirty: false,
     visualEditorDirty: false,
+    ioFilter: "all",
+    ioSearch: "",
     visualEditMode: false,
     visualPreview: null,
     visualOriginalSlot: null,
@@ -2385,24 +2387,30 @@
   }
 
   function motorTestParameters() {
+    const freqVal = Number(el("motor-test-frequency")?.value || 400);
     return {
-      axis: el("motor-test-axis")?.value || "z",
+      axis: el("motor-test-axis")?.value || "x",
       direction: el("motor-test-direction")?.value || "forward",
-      frequency: Number(el("motor-test-frequency")?.value),
-      pulses: Number(el("motor-test-pulses")?.value),
-      stepsPerRev: Number(el("motor-test-steps-rev")?.value),
-      microsteps: Number(el("motor-test-microsteps")?.value),
-      pitch: Number(el("motor-test-pitch")?.value),
+      frequency: Math.max(10, Math.min(1000, Number.isFinite(freqVal) ? freqVal : 400)),
+      pulses: Number(el("motor-test-pulses")?.value || 200),
+      stepsPerRev: Number(el("motor-test-steps-rev")?.value || 200),
+      microsteps: Number(el("motor-test-microsteps")?.value || 2),
+      pitch: Number(el("motor-test-pitch")?.value || 5),
+      ignoreLimits: el("motor-test-bypass-limits") ? el("motor-test-bypass-limits").checked : true,
     };
   }
 
   function loadMotorTestAxisConfig() {
-    const axis = el("motor-test-axis")?.value || "z";
+    const axis = el("motor-test-axis")?.value || "x";
     const config = MS.config?.axes?.[axis];
     if (!config) return;
     el("motor-test-steps-rev").value = Number(config.motor_steps_per_rev || 200);
-    el("motor-test-microsteps").value = Number(config.driver_microsteps || 1);
+    el("motor-test-microsteps").value = Number(config.driver_microsteps || 2);
     el("motor-test-pitch").value = Number(config.lead_screw_pitch_mm || 5);
+    const freqEl = el("motor-test-frequency");
+    if (freqEl && (!freqEl.value || Number(freqEl.value) > 1000 || Number(freqEl.value) < 10)) {
+      freqEl.value = "400";
+    }
     updateMotorTestCalculations();
   }
 
@@ -2414,7 +2422,8 @@
     const duration = parameters.pulses / parameters.frequency;
     const distance = parameters.pulses / ppm;
     const rpm = parameters.frequency * 60 / ppr;
-    const jogValid = Number.isFinite(parameters.frequency) && parameters.frequency >= 10
+    const rawFreq = Number(el("motor-test-frequency")?.value);
+    const jogValid = Number.isFinite(parameters.frequency) && parameters.frequency >= 10 && parameters.frequency <= 1000
       && Number.isFinite(parameters.stepsPerRev) && parameters.stepsPerRev > 0
       && Number.isFinite(parameters.microsteps) && parameters.microsteps > 0
       && Number.isFinite(parameters.pitch) && parameters.pitch > 0;
@@ -2429,16 +2438,20 @@
     setText("motor-test-rpm", Number.isFinite(rpm) ? `${fmt(rpm, 2)} rpm` : "INVALID");
     const armed = Boolean(motorTestState().armed);
     const ready = armed && MS.online && !MS.pending
-      && !Boolean(MS.payload?.busy) && !Boolean(getStatus().estop) && !Boolean(MS.payload?.safety?.stop_requested);
+      && !Boolean(MS.payload?.busy) && !Boolean(getStatus().estop);
     el("motor-test-start").disabled = !valid || !ready || MS.motorTestJog.active;
     $$("[data-motor-test-jog]").forEach((button) => {
       button.disabled = !jogValid || (MS.motorTestJog.active ? button !== MS.motorTestJog.button : !ready);
     });
     setText(
       "motor-test-jog-profile",
-      jogValid ? `HOLD TO RUN · ${fmt(parameters.frequency, 0)} Hz` : "INVALID PROFILE",
+      jogValid ? `HOLD TO RUN · ${fmt(parameters.frequency, 0)} Hz (STM32)` : "INVALID PROFILE",
     );
-    if (!valid) setText("motor-test-result", "INVALID PROFILE — frequency must be at least 10 Hz; one-shot duration maximum 3 seconds.");
+    if (Number.isFinite(rawFreq) && rawFreq > 1000) {
+      setText("motor-test-result", "STM32 Protocol v2 frequency limit is 1,000 Hz. Capped to 1,000 Hz.");
+    } else if (!valid) {
+      setText("motor-test-result", "INVALID PROFILE — frequency must be 10–1,000 Hz; one-shot duration maximum 3 seconds.");
+    }
   }
 
   async function runMotorTestPulse(axis, direction) {
@@ -2447,7 +2460,7 @@
     loadMotorTestAxisConfig();
     renderMotorTest();
     const parameters = motorTestParameters();
-    setText("motor-test-result", "Pulse test running — use E-Stop if the motor responds unexpectedly.");
+    setText("motor-test-result", "Pulse test running via STM32 Nucleo — use physical E-Stop if needed.");
     const result = await command(
       `Motor test ${axis.toUpperCase()} ${direction}`,
       "/api/maintenance/motor-test",
@@ -2457,12 +2470,13 @@
         direction,
         pulse_count: parameters.pulses,
         pulse_frequency_hz: parameters.frequency,
+        ignore_limits: parameters.ignoreLimits,
       },
       { noCheck: true, timeoutMs: 7000 },
     );
     if (result) {
       const completed = result.result || {};
-      setText("motor-test-result", `TEST COMPLETE — ${completed.pulse_count || parameters.pulses} pulses at ${fmt(completed.pulse_frequency_hz || parameters.frequency, 0)} Hz. Axis ${axis.toUpperCase()} now requires homing.`);
+      setText("motor-test-result", `TEST COMPLETE — ${completed.pulse_count || parameters.pulses} pulses at ${fmt(completed.pulse_frequency_hz || parameters.frequency, 0)} Hz. Safety bypass: ${parameters.ignoreLimits ? "ON" : "OFF"}.`);
     }
   }
 
@@ -2487,8 +2501,8 @@
     setText("motor-test-result", `HOLD JOG ACTIVE — Axis ${axis.toUpperCase()} ${direction.toUpperCase()}. Release the button to stop.`);
     try {
       while (MS.motorTestJog.active && MS.motorTestJog.token === token) {
-        const frequency = Number(el("motor-test-frequency")?.value);
-        const pulseCount = Math.max(1, Math.min(6000, Math.round(frequency * 0.2)));
+        const frequency = Math.min(1000, Math.max(10, Number(el("motor-test-frequency")?.value || 400)));
+        const pulseCount = Math.max(1, Math.min(1000, Math.round(frequency * 0.2)));
         await apiCall(
           "/api/maintenance/motor-test",
           "POST",
@@ -2498,6 +2512,7 @@
             direction,
             pulse_count: pulseCount,
             pulse_frequency_hz: frequency,
+            ignore_limits: Boolean(el("motor-test-bypass-limits")?.checked ?? true),
           },
           3000,
         );
@@ -2835,6 +2850,374 @@
     }
   }
 
+  /* ── RENDER: DEDICATED I/O STATUS PAGE ─────────────────────── */
+  const IO_PAGE_DI_CHANNELS = [
+    { channel: 0, key: "x_head_limit", label: "X Min Limit", role: "Head Limit", category: "limits", axis: "x", terminal: "DI0 / TB-1", desc: "X Axis minimum travel limit switch" },
+    { channel: 1, key: "x_tail_limit", label: "X Max Limit", role: "Tail Limit", category: "limits", axis: "x", terminal: "DI1 / TB-2", desc: "X Axis maximum travel limit switch" },
+    { channel: 2, key: "y_head_limit", label: "Y Min Limit", role: "Head Limit", category: "limits", axis: "y", terminal: "DI2 / TB-3", desc: "Y Axis minimum travel limit switch" },
+    { channel: 3, key: "y_tail_limit", label: "Y Max Limit", role: "Tail Limit", category: "limits", axis: "y", terminal: "DI3 / TB-4", desc: "Y Axis maximum travel limit switch" },
+    { channel: 4, key: "z_head_limit", label: "Z Min Limit", role: "Head Limit", category: "limits", axis: "z", terminal: "DI4 / TB-5", desc: "Z Axis minimum travel limit switch" },
+    { channel: 5, key: "z_tail_limit", label: "Z Max Limit", role: "Tail Limit", category: "limits", axis: "z", terminal: "DI5 / TB-6", desc: "Z Axis maximum travel limit switch" },
+    { channel: 6, key: "z_home", label: "Z Home Switch", role: "Homing Sensor", category: "limits", axis: "z", terminal: "DI6 / TB-7", desc: "Z Axis optical home position switch", highlight: true },
+    { channel: 7, key: "product_drop_parking", label: "Drop Parking", role: "Elevator Floor", category: "sensors", terminal: "DI7 / TB-8", desc: "Product elevator delivery base position" },
+    { channel: 8, key: "product_drop_sensor", label: "Drop Sensor", role: "Drop Chute Beam", category: "sensors", terminal: "DI8 / TB-9", desc: "Through-beam sensor verifying item has fallen" },
+    { channel: 9, key: "product_pickup_sensor", label: "Pickup Sensor", role: "Box Retrieval Beam", category: "sensors", terminal: "DI9 / TB-10", desc: "Optical sensor detecting customer retrieval" },
+    { channel: 10, key: "estop", label: "E-Stop / KM1", role: "Safety Interlock", category: "safety", terminal: "DI10 / TB-11", desc: "Hardware emergency stop & safety relay contact", isSafety: true },
+  ];
+
+  const IO_PAGE_DO_CHANNELS = [
+    { channel: 0, key: "ready", label: "Machine Ready Lamp", role: "Green Indicator", coil: "0x0100", terminal: "DO0 / TB-21", desc: "Indicates machine idle and ready for motion" },
+    { channel: 1, key: "moving", label: "Moving Lamp", role: "Yellow Indicator", coil: "0x0101", terminal: "DO1 / TB-22", desc: "Indicates gantry motion currently in progress" },
+    { channel: 2, key: "alarm", label: "Alarm / Buzzer", role: "Red Alarm Output", coil: "0x0102", terminal: "DO2 / TB-23", desc: "Active during fault, E-stop, or limit trip", isAlarm: true },
+    { channel: 3, key: "dispense", label: "Dispense Relay", role: "Interposing Relay", coil: "0x0103", terminal: "DO3 / TB-24", desc: "Trigger pulse for item drop mechanism" },
+  ];
+
+  function renderIOStatusPage() {
+    const rawInputs = MS.payload?.io?.raw_inputs || {};
+    const logicalInputs = MS.payload?.io?.inputs || {};
+    const outputs = MS.payload?.io?.outputs || {};
+    const inputDetails = MS.payload?.io?.input_details || {};
+    const outputDetails = MS.payload?.io?.output_details || {};
+    const polarityVerified = Boolean(MS.payload?.io?.polarity_verified);
+    const ioEnabled = Boolean(MS.payload?.io?.enabled);
+    const ioCommOk = MS.payload?.io?.communication_ok;
+
+    // Summary Strip
+    const busState = el("io-summary-bus-state");
+    const busSub = el("io-summary-bus-sub");
+    if (busState) {
+      if (!ioEnabled) {
+        busState.textContent = "LEGACY GPIO";
+        busState.className = "io-summary-value ok";
+        if (busSub) busSub.textContent = "Pi Native GPIO Mode";
+      } else if (ioCommOk === false) {
+        busState.textContent = "OFFLINE";
+        busState.className = "io-summary-value fault";
+        if (busSub) busSub.textContent = `${MS.payload?.io?.host || "10.0.0.10"}:${MS.payload?.io?.port || 502} (Disconnected)`;
+      } else {
+        busState.textContent = "ONLINE (OK)";
+        busState.className = "io-summary-value ok";
+        if (busSub) busSub.textContent = `${MS.payload?.io?.host || "10.0.0.10"}:${MS.payload?.io?.port || 502} Modbus TCP`;
+      }
+    }
+
+    let activeDiCount = 0;
+    IO_PAGE_DI_CHANNELS.forEach((def) => {
+      if (logicalInputs[def.key]) activeDiCount++;
+    });
+    let activeDoCount = 0;
+    IO_PAGE_DO_CHANNELS.forEach((def) => {
+      if (outputs[def.key]) activeDoCount++;
+    });
+
+    const diCountNode = el("io-summary-di-count");
+    if (diCountNode) diCountNode.textContent = `${activeDiCount} / 11 Active`;
+
+    const doCountNode = el("io-summary-do-count");
+    if (doCountNode) doCountNode.textContent = `${activeDoCount} / 4 Active`;
+
+    const estopState = el("io-summary-estop-state");
+    const estopSub = el("io-summary-estop-sub");
+    const isEstopActive = Boolean(logicalInputs.estop || getStatus().estop);
+    if (estopState) {
+      estopState.textContent = isEstopActive ? "🛑 TRIPPED" : "CLEAR";
+      estopState.className = `io-summary-value ${isEstopActive ? "fault" : "ok"}`;
+    }
+    if (estopSub) {
+      const rawDi10 = rawInputs.DI10;
+      estopSub.textContent = `DI10: ${rawDi10 ? "1 (Closed/NC)" : "0 (Open)"} · ${polarityVerified ? "Verified" : "Unverified"}`;
+    }
+
+    let limitsCount = 0;
+    let sensorsCount = 0;
+    IO_PAGE_DI_CHANNELS.forEach((def) => {
+      if (def.category === "limits") limitsCount++;
+      if (def.category === "sensors") sensorsCount++;
+    });
+    setText("io-filter-cnt-all", String(IO_PAGE_DI_CHANNELS.length + IO_PAGE_DO_CHANNELS.length));
+    setText("io-filter-cnt-inputs", String(IO_PAGE_DI_CHANNELS.length));
+    setText("io-filter-cnt-outputs", String(IO_PAGE_DO_CHANNELS.length));
+    setText("io-filter-cnt-limits", String(limitsCount));
+    setText("io-filter-cnt-sensors", String(sensorsCount));
+    setText("io-filter-cnt-active", String(activeDiCount + activeDoCount));
+
+    const pageHealth = el("io-page-health");
+    if (pageHealth) {
+      if (isEstopActive || activeAlarmCount() > 0 || ioCommOk === false) {
+        pageHealth.textContent = isEstopActive ? "E-STOP ACTIVE" : "FAULT DETECTED";
+        pageHealth.className = "page-status-chip fault";
+      } else {
+        pageHealth.textContent = "ALL SIGNALS HEALTHY";
+        pageHealth.className = "page-status-chip ok";
+      }
+    }
+
+    const currentFilter = MS.ioFilter || "all";
+    const searchQuery = (MS.ioSearch || "").toLowerCase();
+
+    function matchFilter(item, isOutput = false) {
+      if (currentFilter === "inputs" && isOutput) return false;
+      if (currentFilter === "outputs" && !isOutput) return false;
+      if (currentFilter === "limits" && (isOutput || item.category !== "limits")) return false;
+      if (currentFilter === "sensors" && (isOutput || item.category !== "sensors")) return false;
+      if (currentFilter === "active-only") {
+        const active = isOutput ? Boolean(outputs[item.key]) : Boolean(logicalInputs[item.key]);
+        if (!active) return false;
+      }
+      if (searchQuery) {
+        const text = `${item.channel} ${item.key} ${item.label} ${item.role} ${item.desc || ""} ${item.terminal || ""}`.toLowerCase();
+        if (!text.includes(searchQuery)) return false;
+      }
+      return true;
+    }
+
+    const inputsSec = el("io-section-inputs");
+    if (inputsSec) {
+      const showInputs = currentFilter === "all" || currentFilter === "inputs" || currentFilter === "limits" || currentFilter === "sensors" || currentFilter === "active-only";
+      inputsSec.style.display = showInputs ? "" : "none";
+    }
+    const outputsSec = el("io-section-outputs");
+    if (outputsSec) {
+      const showOutputs = currentFilter === "all" || currentFilter === "outputs" || currentFilter === "active-only";
+      outputsSec.style.display = showOutputs ? "" : "none";
+    }
+
+    const diContainer = el("io-page-di-cards");
+    if (diContainer) {
+      const visibleDis = IO_PAGE_DI_CHANNELS.filter((def) => matchFilter(def, false));
+      if (visibleDis.length === 0) {
+        diContainer.innerHTML = `<div class="io-empty-hint">ไม่มีสัญญาณ Input ที่ตรงกับเงื่อนไขการค้นหา</div>`;
+      } else {
+        diContainer.innerHTML = visibleDis.map((def) => {
+          const detail = inputDetails[def.key] || {};
+          const rawBit = rawInputs[`DI${def.channel}`] ?? false;
+          const isActive = logicalInputs[def.key] ?? false;
+          const label = detail.label || def.label;
+
+          let statusClass = "inactive";
+          let stateText = "INACTIVE (0)";
+          let badgeClass = "";
+          let badgeText = "NORMAL";
+
+          if (def.isSafety) {
+            if (isActive) {
+              statusClass = "fault";
+              stateText = "TRIPPED";
+              badgeClass = "fault";
+              badgeText = "E-STOP";
+            } else {
+              statusClass = "safe";
+              stateText = "CLEAR";
+              badgeClass = "ok";
+              badgeText = polarityVerified ? "VERIFIED" : "UNVERIFIED";
+            }
+          } else if (isActive) {
+            statusClass = def.highlight ? "safe" : "active";
+            stateText = "TRIGGERED (1)";
+            badgeClass = def.highlight ? "ok" : "warn";
+            badgeText = def.highlight ? "HOME" : "LIMIT";
+          }
+
+          return `
+            <div class="io-card io-card-enhanced ${statusClass} ${def.highlight ? "highlight" : ""}">
+              <div class="io-card-head">
+                <div class="io-head-left">
+                  <span class="io-channel-tag">DI${def.channel}</span>
+                  <span class="io-wire-tag">${esc(def.terminal)}</span>
+                </div>
+                <span class="io-channel-badge ${badgeClass}">${badgeText}</span>
+              </div>
+              <div class="io-signal-name">${esc(label)}</div>
+              <div class="io-signal-role">${esc(def.role)}</div>
+              <div class="io-signal-desc">${esc(def.desc)}</div>
+              <div class="io-card-footer">
+                <span class="io-card-raw">RAW: <b>${rawBit ? "1 (24V)" : "0 (0V)"}</b></span>
+                <span class="io-card-state ${statusClass}">
+                  <i class="io-dot ${statusClass}"></i> ${stateText}
+                </span>
+              </div>
+            </div>
+          `;
+        }).join("");
+      }
+    }
+
+    const doContainer = el("io-page-do-cards");
+    if (doContainer) {
+      const visibleDos = IO_PAGE_DO_CHANNELS.filter((def) => matchFilter(def, true));
+      if (visibleDos.length === 0) {
+        doContainer.innerHTML = `<div class="io-empty-hint">ไม่มีสัญญาณ Output ที่ตรงกับเงื่อนไขการค้นหา</div>`;
+      } else {
+        doContainer.innerHTML = visibleDos.map((def) => {
+          const detail = outputDetails[def.key] || {};
+          const isOn = Boolean(outputs[def.key]);
+          const label = detail.label || def.label;
+          const statusClass = isOn ? (def.key === "alarm" ? "fault" : "active") : "inactive";
+
+          return `
+            <div class="io-card io-card-enhanced ${statusClass}">
+              <div class="io-card-head">
+                <div class="io-head-left">
+                  <span class="io-channel-tag">DO${def.channel}</span>
+                  <span class="io-wire-tag">${esc(def.coil)}</span>
+                </div>
+                <span class="io-channel-badge ${isOn ? (def.key === "alarm" ? "fault" : "warn") : ""}">${isOn ? "ENERGIZED" : "OFF"}</span>
+              </div>
+              <div class="io-signal-name">${esc(label)}</div>
+              <div class="io-signal-role">${esc(def.role)}</div>
+              <div class="io-signal-desc">${esc(def.desc)}</div>
+              <div class="io-card-footer">
+                <span class="io-card-raw">COIL: <b>${esc(def.coil)}</b></span>
+                <span class="io-card-state ${statusClass}">
+                  <i class="io-dot ${statusClass}"></i> ${isOn ? "ON (ENERGIZED)" : "OFF"}
+                </span>
+              </div>
+            </div>
+          `;
+        }).join("");
+      }
+    }
+
+    const tableBody = el("io-axes-table-body");
+    if (tableBody) {
+      const status = getStatus();
+      const xStatus = status.x || {};
+      const yStatus = status.y || {};
+      const zStatus = status.z || {};
+
+      const xMinActive = Boolean(logicalInputs.x_head_limit || xStatus.head_limit);
+      const xMaxActive = Boolean(logicalInputs.x_tail_limit || xStatus.tail_limit);
+      const yMinActive = Boolean(logicalInputs.y_head_limit || yStatus.head_limit);
+      const yMaxActive = Boolean(logicalInputs.y_tail_limit || yStatus.tail_limit);
+      const zMinActive = Boolean(logicalInputs.z_head_limit || zStatus.head_limit);
+      const zMaxActive = Boolean(logicalInputs.z_tail_limit || zStatus.tail_limit);
+      const zHomeActive = Boolean(logicalInputs.z_home);
+
+      const dropParkActive = Boolean(logicalInputs.product_drop_parking);
+      const dropSensActive = Boolean(logicalInputs.product_drop_sensor);
+      const pickupSensActive = Boolean(logicalInputs.product_pickup_sensor);
+      const dispenseActive = Boolean(outputs.dispense);
+
+      tableBody.innerHTML = `
+        <tr>
+          <td><strong class="axis-badge">X Axis</strong><div class="axis-sub">Horizontal Gantry</div></td>
+          <td><span class="limit-status-pill ${xMinActive ? "triggered" : "normal"}">DI0: X Min ${xMinActive ? "🛑 ACTIVE" : "✓ Normal"}</span></td>
+          <td><span class="limit-status-pill ${xMaxActive ? "triggered" : "normal"}">DI1: X Max ${xMaxActive ? "🛑 ACTIVE" : "✓ Normal"}</span></td>
+          <td><span class="limit-status-pill normal">--</span></td>
+          <td><code>PA8 (PUL) / PB0 (DIR)</code><br><small>Driver: HBS860H X</small></td>
+          <td>Stop X gantry instantly; inhibit negative / positive jogging accordingly.</td>
+        </tr>
+        <tr>
+          <td><strong class="axis-badge">Y Axis</strong><div class="axis-sub">Depth Gantry</div></td>
+          <td><span class="limit-status-pill ${yMinActive ? "triggered" : "normal"}">DI2: Y Min ${yMinActive ? "🛑 ACTIVE" : "✓ Normal"}</span></td>
+          <td><span class="limit-status-pill ${yMaxActive ? "triggered" : "normal"}">DI3: Y Max ${yMaxActive ? "🛑 ACTIVE" : "✓ Normal"}</span></td>
+          <td><span class="limit-status-pill normal">--</span></td>
+          <td><code>PA9 (PUL) / PB1 (DIR)</code><br><small>Driver: HBS860H Y</small></td>
+          <td>Stop Y gantry instantly; inhibit negative / positive jogging accordingly.</td>
+        </tr>
+        <tr>
+          <td><strong class="axis-badge">Z Axis</strong><div class="axis-sub">Vertical Elevator</div></td>
+          <td><span class="limit-status-pill ${zMinActive ? "triggered" : "normal"}">DI4: Z Min ${zMinActive ? "🛑 ACTIVE" : "✓ Normal"}</span></td>
+          <td><span class="limit-status-pill ${zMaxActive ? "triggered" : "normal"}">DI5: Z Max ${zMaxActive ? "🛑 ACTIVE" : "✓ Normal"}</span></td>
+          <td><span class="limit-status-pill ${zHomeActive ? "home-active" : "normal"}">DI6: Z Home ${zHomeActive ? "⚡ HOMED" : "Clear"}</span></td>
+          <td><code>PA5 (PUL) / PB2 (DIR)</code><br><small>Driver: DM542 Z</small></td>
+          <td>Stop Z carriage; Z Home registers gantry zero reference position.</td>
+        </tr>
+        <tr class="product-row">
+          <td><strong class="axis-badge product">Product Delivery</strong><div class="axis-sub">Chute &amp; Dispenser</div></td>
+          <td><span class="limit-status-pill ${dropParkActive ? "triggered" : "normal"}">DI7: Drop Parking ${dropParkActive ? "⚡ PARKED" : "Clear"}</span></td>
+          <td><span class="limit-status-pill ${dropSensActive ? "triggered" : "normal"}">DI8: Drop Sensor ${dropSensActive ? "📦 DETECTED" : "Clear"}</span></td>
+          <td><span class="limit-status-pill ${pickupSensActive ? "triggered" : "normal"}">DI9: Pickup Sensor ${pickupSensActive ? "🖐️ RETRIEVED" : "Clear"}</span></td>
+          <td><span class="limit-status-pill ${dispenseActive ? "triggered" : "normal"}">DO3: Dispense Relay ${dispenseActive ? "⚡ PULSED" : "OFF"}</span></td>
+          <td>Interlocked dispensing sequence; optical confirmation before slot release.</td>
+        </tr>
+      `;
+    }
+
+    const rawDi10 = rawInputs.DI10;
+    const estopLogic = logicalInputs.estop;
+    const rawBitEl = el("io-comm-raw-di10");
+    const rawDescEl = el("io-comm-raw-desc");
+    if (rawBitEl) {
+      if (rawDi10 === undefined) {
+        rawBitEl.textContent = "--";
+        rawBitEl.className = "";
+      } else {
+        rawBitEl.textContent = rawDi10 ? "1 (HIGH / 24V)" : "0 (LOW / 0V)";
+        rawBitEl.className = rawDi10 ? "ok" : "fault";
+      }
+    }
+    if (rawDescEl) {
+      rawDescEl.textContent = rawDi10
+        ? "Closed NC circuit healthy (24V present across safety loop)"
+        : "Circuit broken (E-Stop pressed or safety wire disconnected)";
+    }
+
+    const logEstopEl = el("io-comm-logical-estop");
+    const logDescEl = el("io-comm-logical-desc");
+    if (logEstopEl) {
+      logEstopEl.textContent = estopLogic ? "🛑 E-STOP TRIPPED (UNSAFE)" : "✓ CLEAR (SAFE)";
+      logEstopEl.className = estopLogic ? "fault" : "ok";
+    }
+    if (logDescEl) {
+      logDescEl.textContent = estopLogic
+        ? "Motion prohibited by controller safety interlock"
+        : "Safety circuit verified closed; motion arming permitted";
+    }
+
+    const polEl = el("io-comm-polarity");
+    const polBadge = el("io-di10-gate-badge");
+    if (polEl) {
+      polEl.textContent = polarityVerified ? "COMMISSIONED (NC CONTACT)" : "UNVERIFIED (SAFETY BLOCKED)";
+      polEl.className = polarityVerified ? "ok" : "warn";
+    }
+    if (polBadge) {
+      polBadge.textContent = polarityVerified ? "COMMISSIONED" : "UNVERIFIED";
+      polBadge.className = `page-status-chip ${polarityVerified ? "ok" : "warn"}`;
+    }
+
+    const km1El = el("io-comm-km1");
+    if (km1El) {
+      km1El.textContent = estopLogic ? "TRIPPED / DE-ENERGIZED" : "ENERGIZED / CLOSED";
+      km1El.className = estopLogic ? "fault" : "ok";
+    }
+
+    const diStream = el("io-raw-di-bitstream");
+    if (diStream) {
+      diStream.innerHTML = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((ch) => {
+        const val = rawInputs[`DI${ch}`];
+        const bitVal = val ? "1" : "0";
+        const cls = val ? "bit-on" : "bit-off";
+        return `<span class="io-bit-pill ${cls}" title="DI${ch} (Bit ${ch})"><b>DI${ch}</b><code>${bitVal}</code></span>`;
+      }).join("");
+    }
+
+    const doStream = el("io-raw-do-bitstream");
+    if (doStream) {
+      doStream.innerHTML = [0, 1, 2, 3].map((ch) => {
+        const key = ["ready", "moving", "alarm", "dispense"][ch];
+        const val = Boolean(outputs[key]);
+        const bitVal = val ? "1" : "0";
+        const cls = val ? "bit-on" : "bit-off";
+        return `<span class="io-bit-pill ${cls}" title="DO${ch} (Coil 0x010${ch})"><b>DO${ch}</b><code>${bitVal}</code></span>`;
+      }).join("");
+    }
+
+    const modbusChip = el("io-raw-modbus-chip");
+    if (modbusChip) {
+      if (!ioEnabled) {
+        modbusChip.textContent = "NATIVE GPIO";
+        modbusChip.className = "page-status-chip ok";
+      } else if (ioCommOk === false) {
+        modbusChip.textContent = "COMM TIMEOUT";
+        modbusChip.className = "page-status-chip fault";
+      } else {
+        modbusChip.textContent = "POLLING OK (0.1s)";
+        modbusChip.className = "page-status-chip ok";
+      }
+    }
+  }
+
   function renderDashboardIOSummary() {
     const summaryGrid = el("dashboard-io-summary");
     if (!summaryGrid) return;
@@ -2933,6 +3316,7 @@
 
     renderIOMatrix();
     renderDI10Commissioning();
+    renderIOStatusPage();
     renderConfigurationEditor();
     renderMotorTest();
     renderMqttMonitor();
@@ -3464,6 +3848,23 @@
 
     /* --- Target speed input change — update feed override display --- */
     el("target-speed").addEventListener("input", updateFeedOverride);
+
+    /* --- I/O Status Page event listeners --- */
+    $$(".io-filter-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        MS.ioFilter = btn.dataset.ioFilter || "all";
+        $$(".io-filter-btn").forEach((b) => b.classList.toggle("active", b === btn));
+        renderIOStatusPage();
+      });
+    });
+    el("io-search-input")?.addEventListener("input", (event) => {
+      MS.ioSearch = (event.target.value || "").toLowerCase().trim();
+      renderIOStatusPage();
+    });
+    el("btn-io-refresh")?.addEventListener("click", () => {
+      refresh();
+      toast("I/O Status refreshed", "ok");
+    });
 
   }
 

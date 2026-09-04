@@ -1,4 +1,4 @@
-﻿"""Unit tests for Nucleo Protocol v2 motion and pulse generation."""
+"""Unit tests for Nucleo Protocol v2 motion and pulse generation."""
 
 from __future__ import annotations
 
@@ -159,6 +159,10 @@ class NucleoMotionTests(unittest.TestCase):
         self.assertIn("aborted", str(ctx.exception).lower())
         commands = [w.decode("ascii", errors="replace").strip() for w in mock_serial.writes]
         self.assertIn("STOP", commands)
+
+    def test_nucleo_error_is_motion_error(self):
+        from narit_vending.motion import MotionError
+        self.assertTrue(issubclass(NucleoError, MotionError))
 
 
 if __name__ == "__main__":

@@ -88,7 +88,8 @@ class SafetyInterlock:
             actions.append("Release physical E-Stop button")
 
         # ── 2. Stop latch ──────────────────────────────────────────────────────
-        if snapshot.stop_requested:
+        is_motor_test_cmd = cmd in _MOTOR_TEST_COMMANDS or cmd in ("ARM_MOTOR_TEST", "DISARM_MOTOR_TEST")
+        if snapshot.stop_requested and not is_motor_test_cmd:
             reasons.append("STOP_LATCH_ACTIVE")
             actions.append("Clear alarms before issuing motion commands")
 
@@ -110,17 +111,20 @@ class SafetyInterlock:
         # ── 6. State-specific checks ───────────────────────────────────────────
         state = snapshot.state
         if cmd in _MOTION_COMMANDS:
-            # Require READY state for motion
+            allow_unhomed = bool(envelope.parameters.get("allow_unhomed", False))
+            # Require READY state for motion (unless unhomed jog allowed)
             if state != MachineState.READY.value:
                 if state == MachineState.E_STOP.value:
                     reasons.append("STATE_ESTOP")
                 elif state == MachineState.ALARM.value:
                     reasons.append("STATE_ALARM")
                 elif state in (MachineState.NOT_READY.value, MachineState.HOMING.value):
-                    reasons.append("AXES_NOT_HOMED")
-                    actions.append("Home all axes before motion")
+                    if not (cmd == "JOG" and allow_unhomed):
+                        reasons.append("AXES_NOT_HOMED")
+                        actions.append("Home all axes before motion")
                 else:
-                    reasons.append(f"STATE_NOT_READY:{state}")
+                    if not (cmd == "JOG" and allow_unhomed):
+                        reasons.append(f"STATE_NOT_READY:{state}")
 
             # Check individual axis limits
             for axis_name in ("x", "y", "z"):

@@ -13,7 +13,7 @@ from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, redirect, render_template, request
 
 from .config_foundation import (
     create_config_backup,
@@ -263,6 +263,9 @@ class MotionService:
     def set_motor_test_mode(self, armed: bool) -> dict[str, object]:
         with self.lock:
             if armed:
+                self.controller.clear_stop()
+                self.controller.set_state("idle")
+                self.last_error = ""
                 errors = self._motion_safety_errors(require_homed=False)
                 if errors:
                     return {"ok": False, "error": "; ".join(errors)}
@@ -284,22 +287,27 @@ class MotionService:
         direction: str,
         pulse_count: int,
         pulse_frequency_hz: float,
+        ignore_limits: bool = True,
     ) -> dict[str, object]:
         with self.lock:
             motor_test = self._motor_test_status()
         if not motor_test["armed"]:
             return {"ok": False, "error": "Motor Test Mode is not armed"}
-        duration_s = pulse_count / pulse_frequency_hz
+        if self.nucleo_link is not None and getattr(self.nucleo_link, "expected_protocol", 1) >= 2:
+            effective_freq = min(max(float(pulse_frequency_hz), 10.0), 1000.0)
+        else:
+            effective_freq = float(pulse_frequency_hz)
+        duration_s = pulse_count / effective_freq
         if pulse_count > MOTOR_TEST_MAX_PULSES:
             return {"ok": False, "error": f"pulse_count is limited to {MOTOR_TEST_MAX_PULSES}"}
-        if pulse_frequency_hz > MOTOR_TEST_MAX_FREQUENCY_HZ:
+        if effective_freq > MOTOR_TEST_MAX_FREQUENCY_HZ:
             return {"ok": False, "error": f"pulse_frequency_hz is limited to {MOTOR_TEST_MAX_FREQUENCY_HZ:g} Hz"}
         if duration_s > MOTOR_TEST_MAX_DURATION_S:
             return {"ok": False, "error": f"Motor test duration is limited to {MOTOR_TEST_MAX_DURATION_S:g} seconds"}
         axis = self.controller.axes()[axis_name]
         return self._run(
             f"motor_test_{axis_name}",
-            lambda: axis.test_pulses(pulse_count, pulse_frequency_hz, direction),
+            lambda: axis.test_pulses(pulse_count, effective_freq, direction, ignore_limits=ignore_limits),
             estimated_duration_s=duration_s,
         )
 
@@ -312,18 +320,19 @@ class MotionService:
         command_id: str | None = None,
         estimated_duration_s: float | None = None,
     ):
-        if motion_command and self.io_backend is not None:
+        is_motor_test = command_name.startswith("motor_test_")
+        if motion_command and not is_motor_test and self.io_backend is not None:
             active_io_faults = [
                 channel["label"] for channel in self.io_backend.alarm_channels()
                 if channel["active"] and channel["level"] == "fault"
             ]
             if active_io_faults:
                 return {"ok": False, "error": "MOTION LOCKED - " + "; ".join(active_io_faults)}
-        if motion_command and not command_name.startswith("motor_test_") and self._motor_test_status()["armed"]:
+        if motion_command and not is_motor_test and self._motor_test_status()["armed"]:
             return {"ok": False, "error": "Motor Test Mode is armed; cancel it before normal motion"}
         if motion_command and self.configuration_restart_required:
             return {"ok": False, "error": "Configuration changed; apply and restart the controller before motion"}
-        if motion_command and self.controller.stop_requested():
+        if motion_command and not is_motor_test and self.controller.stop_requested():
             return {"ok": False, "error": "Motion is stopped; reset alarms before issuing another command"}
         if not self.command_lock.acquire(blocking=False):
             return {"ok": False, "error": "Machine is busy with another command"}
@@ -681,10 +690,17 @@ class MotionService:
             elif phase == "passed":
                 self.operation_message = f"Axis {axis_name.upper()} homed successfully"
 
-    def jog(self, axis_name: str, distance_mm: float, speed_mm_s: float | None = None, time_s: float | None = None) -> dict[str, object]:
+    def jog(
+        self,
+        axis_name: str,
+        distance_mm: float,
+        speed_mm_s: float | None = None,
+        time_s: float | None = None,
+        allow_unhomed: bool = False,
+    ) -> dict[str, object]:
         axis = self.controller.axes()[axis_name]
-        if not axis.is_homed:
-            return {"ok": False, "error": f"{axis_name.upper()} axis is not homed; use Motor Test Mode for raw pulse testing"}
+        if not axis.is_homed and not allow_unhomed:
+            return {"ok": False, "error": f"{axis_name.upper()} axis is not homed; use Motor Test Mode or bypass safety for raw testing"}
         return self._run(
             f"jog_{axis_name}",
             lambda: axis.move_mm(distance_mm, speed_mm_s=speed_mm_s, time_s=time_s),
@@ -1185,6 +1201,24 @@ def create_app(config_path: str = "machine_config.json", hw_config_path: str = "
         health = service.health_payload()
         return jsonify(health), 200 if health["service_ready"] else 503
 
+    @app.get("/io")
+    @app.get("/io-status")
+    def page_io_status():
+        return redirect("/#io-status")
+
+    @app.get("/api/io/status")
+    def api_io_status():
+        payload = service.status_payload()
+        return jsonify({
+            "ok": True,
+            "io": payload.get("io", {}),
+            "safety": {
+                "estop": payload.get("status", {}).get("estop", False),
+                "stop_requested": payload.get("safety", {}).get("stop_requested", False),
+            },
+            "timestamp": payload.get("timestamp"),
+        }), 200
+
     @app.get("/api/status")
     def api_status():
         return jsonify(service.status_payload())
@@ -1330,11 +1364,13 @@ def create_app(config_path: str = "machine_config.json", hw_config_path: str = "
             )
         except (APIInputError, KeyError, TypeError, ValueError) as exc:
             return jsonify({"ok": False, "error": str(exc) or "Invalid motor test parameters"}), 400
+        ignore_limits = bool(payload.get("ignore_limits", True))
         result = service.run_motor_test(
             axis,
             direction,
             pulse_count,
             pulse_frequency_hz,
+            ignore_limits=ignore_limits,
         )
         status_code = 200 if result["ok"] else 400
         return jsonify(result | service.status_payload()), status_code
@@ -1352,7 +1388,8 @@ def create_app(config_path: str = "machine_config.json", hw_config_path: str = "
             speed_mm_s, time_s = service._effective_motion(payload)
         except (TypeError, ValueError):
             return jsonify({"ok": False, "error": "distance_mm, speed_mm_s, and time_s must be numbers"}), 400
-        result = service.jog(axis, distance_mm, speed_mm_s=speed_mm_s, time_s=time_s)
+        allow_unhomed = bool(payload.get("allow_unhomed", False))
+        result = service.jog(axis, distance_mm, speed_mm_s=speed_mm_s, time_s=time_s, allow_unhomed=allow_unhomed)
         status_code = 200 if result["ok"] else 400
         return jsonify(result | service.status_payload()), status_code
 

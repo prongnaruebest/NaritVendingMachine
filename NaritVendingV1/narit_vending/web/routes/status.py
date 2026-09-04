@@ -103,6 +103,20 @@ def make_status_bp(ctrl: "ControllerClient") -> Blueprint:
         snap = ctrl.snapshot()
         return jsonify(_status_from_snapshot(snap))
 
+    @bp.get("/api/io/status")
+    def api_io_status():
+        snap = ctrl.snapshot()
+        status = _status_from_snapshot(snap)
+        return jsonify({
+            "ok": True,
+            "io": status.get("io", {}),
+            "safety": {
+                "estop": status.get("status", {}).get("estop", False),
+                "stop_requested": snap.stop_requested,
+            },
+            "timestamp": status.get("timestamp"),
+        }), 200
+
     @bp.get("/api/mqtt/status")
     def api_mqtt_status():
         return jsonify(ctrl.mqtt_status()), 200

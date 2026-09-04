@@ -324,7 +324,13 @@ class AxisController:
         plan = self.plan_absolute_move(target_mm, speed_mm_s=speed_mm_s, time_s=time_s)
         return self._execute_plan(plan)
 
-    def test_pulses(self, pulse_count: int, pulse_frequency_hz: float, direction_name: str) -> dict[str, object]:
+    def test_pulses(
+        self,
+        pulse_count: int,
+        pulse_frequency_hz: float,
+        direction_name: str,
+        ignore_limits: bool = True,
+    ) -> dict[str, object]:
         if pulse_count < 1:
             raise MotionError(f"{self.config.name}: pulse_count must be greater than 0")
         if not math.isfinite(pulse_frequency_hz) or pulse_frequency_hz <= 0:
@@ -334,7 +340,8 @@ class AxisController:
 
         direction = self.config.forward_direction if direction_name == "forward" else self.config.home_direction
         delta_steps = pulse_count if direction == self.config.forward_direction else -pulse_count
-        self._guard_before_move(direction, delta_steps)
+        if not ignore_limits:
+            self._guard_before_move(direction, delta_steps)
         self.direction.value = bool(direction)
 
         if self.motion_backend is not None and getattr(self.motion_backend, "expected_protocol", 1) >= 2:
@@ -346,10 +353,11 @@ class AxisController:
                         return True
                     if self.controlled_stop_requested():
                         return True
-                    if direction == self.config.home_direction and self.head_limit.value:
-                        return True
-                    if direction != self.config.home_direction and self.tail_limit.value:
-                        return True
+                    if not ignore_limits:
+                        if direction == self.config.home_direction and self.head_limit.value:
+                            return True
+                        if direction != self.config.home_direction and self.tail_limit.value:
+                            return True
                     return False
 
                 nucleo_res = self.motion_backend.move(
@@ -371,13 +379,14 @@ class AxisController:
                 "pulse_frequency_hz": pulse_frequency_hz,
                 "duration_s": moved / pulse_frequency_hz,
                 "backend": "nucleo",
+                "limits_ignored": ignore_limits,
             }
 
         half_period_s = 0.5 / pulse_frequency_hz
         moved = 0
         try:
             for index in range(pulse_count):
-                if index % 5 == 0:
+                if not ignore_limits and index % 5 == 0:
                     self._guard_during_move(direction)
                 self._pulse_once(half_period_s)
                 moved += 1
@@ -392,6 +401,7 @@ class AxisController:
             "pulse_count": moved,
             "pulse_frequency_hz": pulse_frequency_hz,
             "duration_s": moved / pulse_frequency_hz,
+            "limits_ignored": ignore_limits,
         }
 
     def home(
@@ -412,6 +422,68 @@ class AxisController:
 
         homing_speed = min(8.0, self.config.max_speed_mm_s)
         duration_s = max_steps / max(homing_speed * self.config.steps_per_mm, 1.0)
+        self.direction.value = bool(self.config.home_direction)
+        moved = 0
+        limit_active = self.head_limit.value
+        if progress is not None:
+            progress("searching")
+
+        if self.motion_backend is not None and getattr(self.motion_backend, "expected_protocol", 1) >= 2:
+            speed_hz = max(10.0, min(1000.0, homing_speed * self.config.steps_per_mm))
+            chunk_steps = min(100, max(20, int(speed_hz * 0.1)))
+            while not limit_active:
+                if moved >= max_steps:
+                    raise LimitTriggeredError(f"{self.config.name}: home not reached within {max_steps} steps")
+                if self.estop.value:
+                    raise EmergencyStopError(f"{self.config.name}: emergency stop triggered during homing")
+                if self.stop_requested():
+                    raise StopRequestedError(f"{self.config.name}: stop requested during homing")
+                res = self.motion_backend.move(
+                    axis=self.config.name,
+                    direction=self.config.home_direction,
+                    steps=chunk_steps,
+                    speed_hz=speed_hz,
+                    stop_requested=lambda: bool(self.estop.value or self.stop_requested() or self.head_limit.value),
+                )
+                chunk_moved = int(res.get("steps", chunk_steps))
+                moved += chunk_moved
+                limit_active = self.head_limit.value
+                if limit_active or chunk_moved < chunk_steps:
+                    break
+
+            sleep(self.config.settle_delay)
+            if effective_backoff > 0:
+                if progress is not None:
+                    progress("backoff")
+                release_direction = 1 - self.config.home_direction
+                released = 0
+                while self.head_limit.value and released < effective_backoff:
+                    if self.estop.value:
+                        raise EmergencyStopError(f"{self.config.name}: emergency stop triggered during homing backoff")
+                    res = self.motion_backend.move(
+                        axis=self.config.name,
+                        direction=release_direction,
+                        steps=min(chunk_steps, effective_backoff - released),
+                        speed_hz=speed_hz,
+                        stop_requested=lambda: bool(self.estop.value or self.stop_requested() or not self.head_limit.value),
+                    )
+                    chunk_released = int(res.get("steps", chunk_steps))
+                    released += chunk_released
+                    if not self.head_limit.value:
+                        break
+                sleep(self.config.settle_delay)
+                if self.head_limit.value:
+                    raise LimitTriggeredError(
+                        f"{self.config.name}: home sensor did not release after {effective_backoff} backoff steps"
+                    )
+
+            self.position_steps = 0
+            self.is_homed = True
+            if progress is not None:
+                progress("completed")
+            _logger.info("Home %s: complete (%d steps via nucleo)", self.config.name, moved)
+            return moved
+
         half_periods = _build_half_periods(max_steps, duration_s, ramp_ratio=0.8)
         self.direction.value = bool(self.config.home_direction)
         moved = 0
