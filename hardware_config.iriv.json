@@ -2,7 +2,7 @@
   "board_profile": "IRIV_PiControl_CM4",
   "communication": {"ip_address":"0.0.0.0","port":80,"baudrate":115200,"protocol_settings":"HTTP/1.1 REST + Modbus TCP"},
   "mqtt": {"enabled":false,"broker":"broker.emqx.io","port":1883,"client_id":"vending_machine_iriv_01","username":"","password":"","topic_prefix":"vending/machine_iriv_01","keepalive_s":60},
-  "motion_backend": {"type":"mock_gpio","production_enabled":false,"note":"IRIV IO SSR outputs are not step/direction pulse outputs"},
+  "motion_backend": {"type":"nucleo","production_enabled":true,"note":"STM32 NUCLEO-F439ZI NMOS pulse generator"},
   "motors": {
     "x":{"step_pin":16,"dir_pin":23,"enable_pin":12,"active_high":true,"enable_active_high":false},
     "y":{"step_pin":26,"dir_pin":24,"enable_pin":13,"active_high":true,"enable_active_high":false},
@@ -57,7 +57,7 @@
     "poll_interval_s": 0.5,
     "stale_after_s": 1.5,
     "expected_device": "NUCLEO-F439ZI",
-    "protocol_version": 1
+    "protocol_version": 2
   },
   "machine_parameters": {
     "home_order":["z","y","x"],"safe_z_mm":10.0,

@@ -240,6 +240,7 @@ class AxisController:
         stop_requested: Callable[[], bool],
         controlled_stop_requested: Callable[[], bool],
         enable: OutputDevice | None = None,
+        motion_backend: Any | None = None,
     ) -> None:
         self.config = config
         self.pulse = pulse
@@ -250,6 +251,7 @@ class AxisController:
         self.stop_requested = stop_requested
         self.controlled_stop_requested = controlled_stop_requested
         self.enable = enable
+        self.motion_backend = motion_backend
         self.position_steps = 0
         self.is_homed = False
         if self.enable is not None:
@@ -334,6 +336,43 @@ class AxisController:
         delta_steps = pulse_count if direction == self.config.forward_direction else -pulse_count
         self._guard_before_move(direction, delta_steps)
         self.direction.value = bool(direction)
+
+        if self.motion_backend is not None and getattr(self.motion_backend, "expected_protocol", 1) >= 2:
+            try:
+                def _stop_cond():
+                    if self.estop.value:
+                        return True
+                    if self.stop_requested():
+                        return True
+                    if self.controlled_stop_requested():
+                        return True
+                    if direction == self.config.home_direction and self.head_limit.value:
+                        return True
+                    if direction != self.config.home_direction and self.tail_limit.value:
+                        return True
+                    return False
+
+                nucleo_res = self.motion_backend.move(
+                    axis=self.config.name,
+                    direction=direction,
+                    steps=pulse_count,
+                    speed_hz=pulse_frequency_hz,
+                    stop_requested=_stop_cond,
+                )
+                moved = int(nucleo_res.get("steps", pulse_count))
+            finally:
+                self.is_homed = False
+            sleep(self.config.settle_delay)
+            return {
+                "axis": self.config.name,
+                "direction": direction_name,
+                "direction_level": direction,
+                "pulse_count": moved,
+                "pulse_frequency_hz": pulse_frequency_hz,
+                "duration_s": moved / pulse_frequency_hz,
+                "backend": "nucleo",
+            }
+
         half_period_s = 0.5 / pulse_frequency_hz
         moved = 0
         try:
@@ -463,6 +502,37 @@ class AxisController:
             return 0
 
         self.direction.value = bool(plan.direction)
+
+        if self.motion_backend is not None and getattr(self.motion_backend, "expected_protocol", 1) >= 2:
+            speed_hz = plan.steps / plan.duration_s if plan.duration_s > 0 else (self.config.steps_per_mm * self.config.default_speed_mm_s)
+            speed_hz = max(10.0, min(1000.0, speed_hz))
+
+            def _stop_cond():
+                if self.estop.value:
+                    return True
+                if self.stop_requested():
+                    return True
+                if self.controlled_stop_requested():
+                    return True
+                if plan.direction == self.config.home_direction and self.head_limit.value:
+                    return True
+                if plan.direction != self.config.home_direction and self.tail_limit.value:
+                    return True
+                return False
+
+            res = self.motion_backend.move(
+                axis=self.config.name,
+                direction=plan.direction,
+                steps=plan.steps,
+                speed_hz=speed_hz,
+                timeout_s=plan.duration_s + 4.0,
+                stop_requested=_stop_cond,
+            )
+            moved = int(res.get("steps", plan.steps))
+            self.position_steps += moved if plan.direction == self.config.forward_direction else -moved
+            sleep(self.config.settle_delay)
+            return moved
+
         half_periods = _build_half_periods(plan.steps, plan.duration_s, ramp_ratio=1.6)
         moved = 0
         controlled_remaining: int | None = None
@@ -1084,6 +1154,7 @@ def build_controller(
     config: MachineConfig,
     hw_config_path: str = "hardware_config.json",
     io_backend: object | None = None,
+    motion_backend: object | None = None,
 ) -> MotionController:
     hw_config = load_hardware_config(hw_config_path)
     di_config = hw_config.get("digital_inputs", {})
@@ -1177,6 +1248,7 @@ def build_controller(
             stop_requested=stop_requested,
             controlled_stop_requested=controlled_stop_requested,
             enable=enable_dev,
+            motion_backend=motion_backend,
         )
 
     x_axis = make_axis(config.x)

@@ -135,13 +135,26 @@ class MotionService:
         nucleo_config = hw_config.get("nucleo", {})
         self.nucleo_link: NucleoLink | None = None
         if isinstance(nucleo_config, dict) and nucleo_config.get("enabled"):
-            self.nucleo_link = NucleoLink(nucleo_config)
+            safety_perm = lambda: self.io_backend is None or not any(
+                c["active"] and c["level"] == "fault" for c in self.io_backend.alarm_channels()
+            )
+            self.nucleo_link = NucleoLink(nucleo_config, safety_permissive_fn=safety_perm)
             self.nucleo_link.start()
+
+        motion_backend_cfg = hw_config.get("motion_backend", {})
+        nucleo_motion = None
+        if (
+            isinstance(motion_backend_cfg, dict)
+            and motion_backend_cfg.get("type") == "nucleo"
+            and motion_backend_cfg.get("production_enabled", False)
+        ):
+            nucleo_motion = self.nucleo_link
 
         self.controller = build_controller(
             config,
             hw_config_path=str(self.hw_config_path),
             io_backend=self.io_backend,
+            motion_backend=nucleo_motion,
         )
         from .controller.sequence_service import SequenceService
         self.sequence_service = SequenceService(self)
@@ -256,9 +269,13 @@ class MotionService:
                 self.armed_move = None
                 self.motor_test_armed = True
                 self.operation_message = "Motor Test Mode armed; raw pulse test permitted"
+                if self.nucleo_link is not None and getattr(self.nucleo_link, "expected_protocol", 1) >= 2:
+                    self.nucleo_link.arm(safety_permissive=True)
             else:
                 self.motor_test_armed = False
                 self.operation_message = "Motor Test Mode cancelled"
+                if self.nucleo_link is not None and getattr(self.nucleo_link, "expected_protocol", 1) >= 2:
+                    self.nucleo_link.disarm()
             return {"ok": True, "motor_test": self._motor_test_status()}
 
     def run_motor_test(
@@ -536,6 +553,11 @@ class MotionService:
 
     def stop(self) -> dict[str, object]:
         self.controller.request_stop()
+        if self.nucleo_link is not None:
+            try:
+                self.nucleo_link.stop()
+            except Exception:
+                pass
         with self.lock:
             self.controller.set_state("alarm")
             self.last_error = "Stop requested"
