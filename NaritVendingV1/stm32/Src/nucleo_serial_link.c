@@ -90,24 +90,56 @@ static const char *move_error(NucleoMotionResult result)
 
 static void process_move(const char *line)
 {
+  const char *p = line + 5;
   char axis_char = '\0';
-  char extra = '\0';
   unsigned int direction = 0U;
   unsigned long steps = 0U;
   unsigned long speed = 0U;
   uint8_t axis = 0xffU;
   NucleoMotionResult result;
 
-  if (sscanf(line, "MOVE %c %u %lu %lu %c", &axis_char, &direction,
-             &steps, &speed, &extra) != 4) {
+  while (*p == ' ') p++;
+  if (*p == '\0') {
     transmit_text("{\"type\":\"error\",\"error\":\"INVALID_FORMAT\"}\r\n");
     return;
   }
+  axis_char = *p++;
   if ((axis_char == 'X') || (axis_char == 'x')) axis = AXIS_X;
   else if ((axis_char == 'Y') || (axis_char == 'y')) axis = AXIS_Y;
   else if ((axis_char == 'Z') || (axis_char == 'z')) axis = AXIS_Z;
-  if (axis == 0xffU) {
+  else {
     transmit_text("{\"type\":\"error\",\"error\":\"INVALID_AXIS\"}\r\n");
+    return;
+  }
+
+  while (*p == ' ') p++;
+  if ((*p != '0') && (*p != '1')) {
+    transmit_text("{\"type\":\"error\",\"error\":\"INVALID_FORMAT\"}\r\n");
+    return;
+  }
+  direction = (unsigned int)(*p++ - '0');
+
+  while (*p == ' ') p++;
+  if ((*p < '0') || (*p > '9')) {
+    transmit_text("{\"type\":\"error\",\"error\":\"INVALID_FORMAT\"}\r\n");
+    return;
+  }
+  while ((*p >= '0') && (*p <= '9')) {
+    steps = steps * 10U + (unsigned long)(*p++ - '0');
+  }
+
+  while (*p == ' ') p++;
+  if ((*p < '0') || (*p > '9')) {
+    transmit_text("{\"type\":\"error\",\"error\":\"INVALID_FORMAT\"}\r\n");
+    return;
+  }
+  while ((*p >= '0') && (*p <= '9')) {
+    speed = speed * 10U + (unsigned long)(*p++ - '0');
+  }
+
+  while (*p == ' ') p++;
+  if (*p != '\0') {
+    transmit_text("{\"type\":\"error\",\"error\":\"INVALID_FORMAT\"}\r\n");
     return;
   }
 
@@ -183,6 +215,7 @@ static void SerialLinkTask(void const *argument)
 void NucleoSerialLink_Start(void)
 {
   uart3_init();
-  osThreadDef(NucleoLink, SerialLinkTask, osPriorityBelowNormal, 0, 256U);
+  osThreadDef(NucleoLink, SerialLinkTask, osPriorityBelowNormal, 0, configMINIMAL_STACK_SIZE * 4);
   (void)osThreadCreate(osThread(NucleoLink), NULL);
 }
+

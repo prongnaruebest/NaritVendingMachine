@@ -164,6 +164,27 @@ class NucleoMotionTests(unittest.TestCase):
         from narit_vending.motion import MotionError
         self.assertTrue(issubclass(NucleoError, MotionError))
 
+    def test_serial_sync_ignores_stale_boot_and_pong_during_arm_and_move(self):
+        mock_serial = MockSerialProtocolV2([
+            {"type": "boot", "device": "NUCLEO-F439ZI", "protocol": 2, "safe": True, "armed": False},
+            {"type": "pong", "device": "NUCLEO-F439ZI", "protocol": 2, "safe": True, "armed": False, "watchdog": False, "uptime_ms": 100},
+        ])
+        link = NucleoLink(self.config(), serial_factory=lambda **kwargs: mock_serial)
+        link._poll_once()
+        self.assertTrue(link.communication_ok)
+
+        mock_serial.script.append({
+            "type": "pong",
+            "device": "NUCLEO-F439ZI",
+            "protocol": 2,
+            "safe": True,
+            "armed": False,
+            "watchdog": False,
+            "uptime_ms": 200,
+        })
+        self.assertTrue(link.arm(safety_permissive=True))
+        self.assertTrue(link.is_armed)
+
 
 if __name__ == "__main__":
     unittest.main()

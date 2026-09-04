@@ -438,15 +438,20 @@ class AxisController:
                     raise EmergencyStopError(f"{self.config.name}: emergency stop triggered during homing")
                 if self.stop_requested():
                     raise StopRequestedError(f"{self.config.name}: stop requested during homing")
-                res = self.motion_backend.move(
-                    axis=self.config.name,
-                    direction=self.config.home_direction,
-                    steps=chunk_steps,
-                    speed_hz=speed_hz,
-                    stop_requested=lambda: bool(self.estop.value or self.stop_requested() or self.head_limit.value),
-                )
-                chunk_moved = int(res.get("steps", chunk_steps))
-                moved += chunk_moved
+                try:
+                    res = self.motion_backend.move(
+                        axis=self.config.name,
+                        direction=self.config.home_direction,
+                        steps=chunk_steps,
+                        speed_hz=speed_hz,
+                        stop_requested=lambda: bool(self.estop.value or self.stop_requested() or self.head_limit.value),
+                    )
+                    chunk_moved = int(res.get("steps", chunk_steps))
+                    moved += chunk_moved
+                except NucleoError:
+                    if self.head_limit.value:
+                        break
+                    raise
                 limit_active = self.head_limit.value
                 if limit_active or chunk_moved < chunk_steps:
                     break
@@ -460,15 +465,20 @@ class AxisController:
                 while self.head_limit.value and released < effective_backoff:
                     if self.estop.value:
                         raise EmergencyStopError(f"{self.config.name}: emergency stop triggered during homing backoff")
-                    res = self.motion_backend.move(
-                        axis=self.config.name,
-                        direction=release_direction,
-                        steps=min(chunk_steps, effective_backoff - released),
-                        speed_hz=speed_hz,
-                        stop_requested=lambda: bool(self.estop.value or self.stop_requested() or not self.head_limit.value),
-                    )
-                    chunk_released = int(res.get("steps", chunk_steps))
-                    released += chunk_released
+                    try:
+                        res = self.motion_backend.move(
+                            axis=self.config.name,
+                            direction=release_direction,
+                            steps=min(chunk_steps, effective_backoff - released),
+                            speed_hz=speed_hz,
+                            stop_requested=lambda: bool(self.estop.value or self.stop_requested() or not self.head_limit.value),
+                        )
+                        chunk_released = int(res.get("steps", chunk_steps))
+                        released += chunk_released
+                    except NucleoError:
+                        if not self.head_limit.value:
+                            break
+                        raise
                     if not self.head_limit.value:
                         break
                 sleep(self.config.settle_delay)

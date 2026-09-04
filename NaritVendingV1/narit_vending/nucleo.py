@@ -116,10 +116,21 @@ class NucleoLink:
                 pass
 
     def _poll_loop(self) -> None:
-        while not self._stop.wait(self.poll_interval_s):
+        while not self._stop.is_set():
+            interval = 0.15 if self._armed else self.poll_interval_s
+            if self._stop.wait(interval):
+                break
             self._poll_once()
 
-    def _read_json_response(self, serial_port: Any, deadline: float) -> dict[str, Any] | None:
+    def _read_json_response(
+        self,
+        serial_port: Any,
+        deadline: float,
+        expected_types: set[str] | str | None = None,
+    ) -> dict[str, Any] | None:
+        if isinstance(expected_types, str):
+            expected_types = {expected_types}
+
         while time.monotonic() < deadline:
             raw = serial_port.readline()
             if not raw:
@@ -130,8 +141,44 @@ class NucleoLink:
                 if not line_str or not line_str.startswith("{"):
                     continue
                 candidate = json.loads(line_str)
-                if isinstance(candidate, dict) and "type" in candidate:
+                if not isinstance(candidate, dict) or "type" not in candidate:
+                    continue
+
+                msg_type = candidate.get("type")
+
+                # If Nucleo sent a boot announcement, track it but keep waiting for command response
+                if msg_type == "boot":
+                    _log.info("Nucleo booted: %r", candidate)
+                    self._armed = False
+                    self._moving_axes = {"x": 0, "y": 0, "z": 0}
+                    continue
+
+                # Update internal telemetry from any valid status message received
+                if "device" in candidate:
+                    self._last_payload = dict(candidate)
+                    self._last_success_monotonic = time.monotonic()
+                    self._last_success_at = datetime.now(timezone.utc).isoformat()
+                    self._last_error = ""
+                    self._connected = True
+                if "armed" in candidate:
+                    self._armed = bool(candidate["armed"])
+                if "moving" in candidate and isinstance(candidate["moving"], dict):
+                    self._moving_axes = {
+                        k: int(candidate["moving"].get(k, 0)) for k in ("x", "y", "z")
+                    }
+
+                # Errors are always returned immediately
+                if msg_type == "error":
                     return candidate
+
+                # If specific types are expected, only return when matched
+                if expected_types is not None:
+                    if msg_type in expected_types:
+                        return candidate
+                    _log.debug("Skipping response type %r while expecting %r", msg_type, expected_types)
+                    continue
+
+                return candidate
             except (UnicodeDecodeError, json.JSONDecodeError):
                 continue
         return None
@@ -144,14 +191,33 @@ class NucleoLink:
                     permissive = True
                     if self._safety_permissive_fn is not None:
                         permissive = bool(self._safety_permissive_fn())
-                    cmd = b"HEARTBEAT SAFE\n" if permissive else b"HEARTBEAT UNSAFE\n"
+                    if not permissive:
+                        # If safety interlock opened, disarm immediately
+                        self._armed = False
+                        try:
+                            serial_port.reset_input_buffer()
+                        except Exception:
+                            pass
+                        serial_port.write(b"DISARM\n")
+                        serial_port.flush()
+                        self._read_json_response(serial_port, time.monotonic() + self.timeout_s, expected_types={"ack"})
+                        cmd = b"PING\n"
+                        expected_types = {"pong"}
+                    else:
+                        cmd = b"HEARTBEAT SAFE\n"
+                        expected_types = {"heartbeat"}
                 else:
                     cmd = b"PING\n"
+                    expected_types = {"pong"}
 
+                try:
+                    serial_port.reset_input_buffer()
+                except Exception:
+                    pass
                 serial_port.write(cmd)
                 serial_port.flush()
                 deadline = time.monotonic() + self.timeout_s
-                payload = self._read_json_response(serial_port, deadline)
+                payload = self._read_json_response(serial_port, deadline, expected_types=expected_types)
 
                 if payload is None:
                     raise NucleoError("Nucleo heartbeat timed out")
@@ -195,10 +261,14 @@ class NucleoLink:
         with self._lock:
             try:
                 serial_port = self._open_serial()
+                try:
+                    serial_port.reset_input_buffer()
+                except Exception:
+                    pass
                 serial_port.write(b"ARM SAFE\n")
                 serial_port.flush()
                 deadline = time.monotonic() + self.timeout_s
-                resp = self._read_json_response(serial_port, deadline)
+                resp = self._read_json_response(serial_port, deadline, expected_types={"ack"})
                 if resp and resp.get("type") == "ack" and resp.get("status") == "armed":
                     self._armed = True
                     self._last_success_monotonic = time.monotonic()
@@ -215,10 +285,14 @@ class NucleoLink:
             self._armed = False
             try:
                 serial_port = self._open_serial()
+                try:
+                    serial_port.reset_input_buffer()
+                except Exception:
+                    pass
                 serial_port.write(b"DISARM\n")
                 serial_port.flush()
                 deadline = time.monotonic() + self.timeout_s
-                self._read_json_response(serial_port, deadline)
+                self._read_json_response(serial_port, deadline, expected_types={"ack"})
                 return True
             except Exception:
                 return False
@@ -229,10 +303,14 @@ class NucleoLink:
             self._armed = False
             try:
                 serial_port = self._open_serial()
+                try:
+                    serial_port.reset_input_buffer()
+                except Exception:
+                    pass
                 serial_port.write(b"STOP\n")
                 serial_port.flush()
                 deadline = time.monotonic() + self.timeout_s
-                self._read_json_response(serial_port, deadline)
+                self._read_json_response(serial_port, deadline, expected_types={"ack"})
                 return True
             except Exception:
                 return False
@@ -264,18 +342,21 @@ class NucleoLink:
             if not self.communication_ok:
                 raise NucleoError("Nucleo communication link is not online")
 
-            if not self._armed:
-                if not self.arm(safety_permissive=True):
-                    raise NucleoError("Failed to arm Nucleo motion controller")
+            if not self.arm(safety_permissive=True):
+                raise NucleoError("Failed to arm Nucleo motion controller")
 
             serial_port = self._open_serial()
+            try:
+                serial_port.reset_input_buffer()
+            except Exception:
+                pass
             cmd = f"MOVE {axis_char} {dir_val} {steps_val} {int(round(speed_val))}\n"
             _log.info("Nucleo TX: %s", cmd.strip())
             serial_port.write(cmd.encode("ascii"))
             serial_port.flush()
 
             deadline = time.monotonic() + max(1.0, self.timeout_s)
-            ack = self._read_json_response(serial_port, deadline)
+            ack = self._read_json_response(serial_port, deadline, expected_types={"ack"})
             _log.info("Nucleo ACK: %r", ack)
             if not ack or ack.get("type") != "ack" or ack.get("status") != "moving":
                 err = (ack or {}).get("error", "no ack")
@@ -298,7 +379,7 @@ class NucleoLink:
                     serial_port.write(b"HEARTBEAT SAFE\n")
                     serial_port.flush()
 
-                    hb = self._read_json_response(serial_port, time.monotonic() + 0.2)
+                    hb = self._read_json_response(serial_port, time.monotonic() + 0.2, expected_types={"heartbeat"})
                     if hb:
                         self._last_success_monotonic = time.monotonic()
                         self._last_payload = dict(hb)
