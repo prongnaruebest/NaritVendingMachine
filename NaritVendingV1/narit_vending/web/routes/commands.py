@@ -88,7 +88,18 @@ def make_commands_bp(ctrl: "ControllerClient") -> Blueprint:
             time_s = _parse_opt_float(payload, "time_s")
         except (TypeError, ValueError):
             return jsonify({"ok": False, "error": "distance_mm, speed_mm_s, and time_s must be numbers"}), 400
-        r = _submit(ctrl, "JOG", {"axis": axis, "distance_mm": distance_mm, "speed_mm_s": speed_mm_s, "time_s": time_s})
+        allow_unhomed = bool(payload.get("allow_unhomed", False))
+        r = _submit(
+            ctrl,
+            "JOG",
+            {
+                "axis": axis,
+                "distance_mm": distance_mm,
+                "speed_mm_s": speed_mm_s,
+                "time_s": time_s,
+                "allow_unhomed": allow_unhomed,
+            },
+        )
         snap = ctrl.snapshot()
         return jsonify(r | _snap_status(snap)), 200 if r.get("accepted") else 400
 

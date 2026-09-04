@@ -6746,4 +6746,23 @@ select.slot-filter {
   color: #000;
 }
 
+/* --- Hold-to-run continuous jog styling --- */
+.rp-jog-btn {
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+  transition: background 0.1s ease, border-color 0.1s ease, transform 0.08s ease;
+}
 
+.rp-jog-btn.running,
+.rp-jog-btn:active:not(:disabled) {
+  background: linear-gradient(180deg, rgba(0, 229, 255, 0.35), rgba(0, 160, 200, 0.45)) !important;
+  border-color: var(--accent-cyan) !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 14px rgba(0, 229, 255, 0.6) !important;
+  transform: scale(0.96);
+}
+
+.safety-ind-sub.warn {
+  color: var(--amber);
+}

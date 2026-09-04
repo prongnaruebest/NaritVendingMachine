@@ -116,6 +116,21 @@ class TestControllerSafety(unittest.TestCase):
         self.assertFalse(x_and_y.allowed)
         self.assertIn("AXIS_Y_NOT_HOMED", x_and_y.reason_codes)
 
+    def test_unhomed_jog_allowed_when_allow_unhomed_is_true(self):
+        axes = {
+            "x": AxisSnapshot("x", 0.0, 0, False, False, False),
+            "y": AxisSnapshot("y", 0.0, 0, False, False, False),
+            "z": AxisSnapshot("z", 0.0, 0, False, False, False),
+        }
+        snap = _make_snapshot(state="NOT_READY", axes=axes)
+        env = CommandEnvelope(
+            command_type="JOG",
+            source="http",
+            parameters={"axis": "x", "distance_mm": 5, "allow_unhomed": True},
+        )
+        dec = self.safety.evaluate(env, snap)
+        self.assertTrue(dec.allowed)
+
     def test_busy_blocks_new_motion(self):
         snap = _make_snapshot(busy=True)
         env = CommandEnvelope(command_type="JOG", source="http", parameters={"axis": "x", "distance_mm": 5})

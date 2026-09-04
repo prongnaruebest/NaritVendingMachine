@@ -17,6 +17,7 @@
     online: false,
     pending: false,
     motorTestJog: { active: false, token: 0, button: null },
+    manualJog: { active: false, token: 0, button: null, isHolding: false, holdTimer: null },
 
     // From /api/status payload
     payload: null,
@@ -233,6 +234,7 @@
 
   function canJogAxis(axis) {
     if (motionInhibitReason(false) !== "") return false;
+    if (el("jog-allow-unhomed")?.checked) return true;
     return Boolean(getAxis(axis).is_homed);
   }
   function motionInhibitReasonForAxes(axes) {
@@ -251,12 +253,15 @@
   }
   function canHomeAxis() { return motionInhibitReason(false) === ""; }
   function motionAllowed(requireHome = true) { return motionInhibitReason(requireHome) === ""; }
-  function buildJogPayload(axis, dir) {
-    const step = Number(MS.selectedJogStep || 1.0);
+  function buildJogPayload(axis, dir, continuous = false) {
+    const speed_mm_s = Number(MS.selectedJogSpeed || 15.0);
+    const step = continuous
+      ? Math.max(0.2, Math.min(5.0, Number((speed_mm_s * 0.15).toFixed(2))))
+      : Number(MS.selectedJogStep || 1.0);
     const direction = Number(dir);
     const distance_mm = step * direction;
-    const speed_mm_s = Number(MS.selectedJogSpeed || 15.0);
-    return { axis, distance_mm, speed_mm_s };
+    const allow_unhomed = Boolean(el("jog-allow-unhomed")?.checked || !getAxis(axis).is_homed);
+    return { axis, distance_mm, speed_mm_s, allow_unhomed };
   }
   function targetSpeedPayload() {
     return { speed_mm_s: Number(MS.selectedJogSpeed || 15.0) };
@@ -1458,7 +1463,15 @@
       btn.disabled = !canJogAxis(axis);
     });
 
-    setText("jog-status-text", allAxesHomed() ? "READY" : "HOME REQUIRED");
+    if (!MS.manualJog.active) {
+      const bypassHome = Boolean(el("jog-allow-unhomed")?.checked);
+      const homed = allAxesHomed();
+      setText("jog-status-text", homed ? "READY" : (bypassHome ? "UNHOMED JOG PERMITTED" : "HOME REQUIRED"));
+      const jogStatus = el("jog-status-text");
+      if (jogStatus) {
+        jogStatus.className = `safety-ind-sub ${homed ? "ok" : (bypassHome ? "warn" : "")}`;
+      }
+    }
 
     const selectedCode = selectedSlotCode();
     const selectedSlot = MS.slots[selectedCode] || {};
@@ -3646,13 +3659,109 @@
       command("Reset alarms", "/api/clear-alarm", undefined, { isStop: true, noCheck: true });
     });
 
+    /* --- Hold-to-Run Manual Jog Engine --- */
+    function stopManualJog() {
+      if (MS.manualJog.holdTimer) {
+        clearTimeout(MS.manualJog.holdTimer);
+        MS.manualJog.holdTimer = null;
+      }
+      if (!MS.manualJog.active && !MS.manualJog.isHolding) return;
+      MS.manualJog.active = false;
+      MS.manualJog.isHolding = false;
+      MS.manualJog.token += 1;
+      if (MS.manualJog.button) {
+        MS.manualJog.button.classList.remove("running");
+        MS.manualJog.button = null;
+      }
+      const bypassHome = Boolean(el("jog-allow-unhomed")?.checked);
+      setText("jog-status-text", allAxesHomed() ? "READY" : (bypassHome ? "UNHOMED JOG PERMITTED" : "HOME REQUIRED"));
+    }
+
+    function beginManualJog(axis, dir, btn, event) {
+      if (btn && btn.disabled) return;
+      if (!canJogAxis(axis)) {
+        toast(`${axis.toUpperCase()} cannot jog: not homed or motion inhibited`, "warn");
+        return;
+      }
+
+      if (event && event.pointerId != null && btn) {
+        try { btn.setPointerCapture(event.pointerId); } catch (_) {}
+      }
+
+      stopManualJog();
+      const token = ++MS.manualJog.token;
+      MS.manualJog.active = true;
+      MS.manualJog.button = btn;
+      MS.manualJog.isHolding = false;
+      if (btn) btn.classList.add("running");
+
+      const HOLD_DELAY_MS = 200;
+      MS.manualJog.holdTimer = setTimeout(async () => {
+        MS.manualJog.holdTimer = null;
+        if (!MS.manualJog.active || MS.manualJog.token !== token) return;
+        MS.manualJog.isHolding = true;
+        setText("jog-status-text", `JOGGING ${axis.toUpperCase()} ${dir === "1" ? "+" : "−"}...`);
+        try {
+          while (MS.manualJog.active && MS.manualJog.token === token) {
+            if (!canJogAxis(axis)) break;
+            const payload = buildJogPayload(axis, dir, true);
+            const res = await apiCall("/api/jog", "POST", payload, 2500);
+            if (!res || !res.ok) {
+              if (res && res.error) toast(humanizeError(res.error), "error");
+              break;
+            }
+          }
+        } catch (err) {
+          if (MS.manualJog.token === token) {
+            toast(humanizeError(err.message), "error");
+          }
+        } finally {
+          if (MS.manualJog.token === token) {
+            stopManualJog();
+            refresh().catch(() => {});
+          }
+        }
+      }, HOLD_DELAY_MS);
+    }
+
+    function endManualJog(axis, dir, btn) {
+      if (!MS.manualJog.active) return;
+      if (MS.manualJog.holdTimer) {
+        // Released before hold threshold -> single step move
+        clearTimeout(MS.manualJog.holdTimer);
+        MS.manualJog.holdTimer = null;
+        stopManualJog();
+        command(`Jog ${axis.toUpperCase()} ${dir === "1" ? "+" : "−"}${MS.selectedJogStep} mm`,
+          "/api/jog", buildJogPayload(axis, dir, false), { silent: true });
+      } else {
+        // Was in hold continuous mode -> stop
+        stopManualJog();
+      }
+    }
+
     /* --- Jog directional buttons --- */
     $$("[data-jog]").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const [axis, dir] = btn.dataset.jog.split(":");
-        command(`Jog ${axis.toUpperCase()} ${dir === "1" ? "+" : "-"}${MS.selectedJogStep} mm`,
-          "/api/jog", buildJogPayload(axis, dir), { silent: true });
+      const [axis, dir] = btn.dataset.jog.split(":");
+      btn.addEventListener("pointerdown", (event) => {
+        event.preventDefault();
+        beginManualJog(axis, dir, btn, event);
       });
+      btn.addEventListener("pointerup", (event) => {
+        event.preventDefault();
+        endManualJog(axis, dir, btn);
+      });
+      btn.addEventListener("pointercancel", () => stopManualJog());
+      btn.addEventListener("lostpointercapture", () => stopManualJog());
+      btn.addEventListener("contextmenu", (event) => event.preventDefault());
+      btn.addEventListener("click", (event) => event.preventDefault());
+    });
+    window.addEventListener("blur", () => stopManualJog());
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) stopManualJog();
+    });
+
+    el("jog-allow-unhomed")?.addEventListener("change", () => {
+      updateButtonStates();
     });
 
     /* --- Jog step presets --- */
@@ -3689,16 +3798,30 @@
       const tagName = document.activeElement?.tagName?.toLowerCase();
       if (["input", "select", "textarea", "button"].includes(tagName) || document.activeElement?.isContentEditable) return;
       const keyMap = {
-        ArrowLeft: ["x", -1], ArrowRight: ["x", 1],
-        ArrowDown: ["y", -1], ArrowUp: ["y", 1],
-        PageDown: ["z", -1], PageUp: ["z", 1],
+        ArrowLeft: ["x", "-1"], ArrowRight: ["x", "1"],
+        ArrowDown: ["y", "-1"], ArrowUp: ["y", "1"],
+        PageDown: ["z", "-1"], PageUp: ["z", "1"],
       };
       const move = keyMap[event.key];
       if (!move) return;
       event.preventDefault();
-      const [axis, direction] = move;
-      command(`Keyboard jog ${axis.toUpperCase()} ${direction > 0 ? "+" : "−"}`,
-        "/api/jog", buildJogPayload(axis, direction), { silent: true });
+      const [axis, dir] = move;
+      const btn = document.querySelector(`[data-jog="${axis}:${dir}"]`);
+      beginManualJog(axis, dir, btn);
+    });
+
+    document.addEventListener("keyup", (event) => {
+      if (!MS.keyboardJogEnabled || MS.currentView !== "motion") return;
+      const keyMap = {
+        ArrowLeft: ["x", "-1"], ArrowRight: ["x", "1"],
+        ArrowDown: ["y", "-1"], ArrowUp: ["y", "1"],
+        PageDown: ["z", "-1"], PageUp: ["z", "1"],
+      };
+      const move = keyMap[event.key];
+      if (!move) return;
+      const [axis, dir] = move;
+      const btn = document.querySelector(`[data-jog="${axis}:${dir}"]`);
+      endManualJog(axis, dir, btn);
     });
 
     /* --- Feed override presets --- */
