@@ -24,7 +24,9 @@ def _slot_sort_key(item: tuple[str, object]) -> tuple[int, int | str]:
 
 
 def _home_backoff_limit_steps(steps_per_mm: float) -> int:
-    return max(400, int(round(10.0 * steps_per_mm)))
+    """Keep the axis on the asserted home switch after homing."""
+    del steps_per_mm
+    return 0
 
 
 class MotionError(RuntimeError):
@@ -435,7 +437,10 @@ class AxisController:
 
         if self.motion_backend is not None and getattr(self.motion_backend, "expected_protocol", 1) >= 2:
             speed_hz = max(10.0, min(1000.0, homing_speed * self.config.steps_per_mm))
-            chunk_steps = min(100, max(20, int(speed_hz * 0.1)))
+            # Protocol v2 monitors E-stop, software stop, and the home input every
+            # 80 ms while a MOVE is active. Use the firmware's full move window
+            # instead of flooding its serial task with 10 MOVE commands/second.
+            chunk_steps = 10_000
             while not limit_active:
                 if moved >= max_steps:
                     raise LimitTriggeredError(f"{self.config.name}: home not reached within {max_steps} steps")
@@ -447,7 +452,7 @@ class AxisController:
                     res = self.motion_backend.move(
                         axis=self.config.name,
                         direction=self.config.home_direction,
-                        steps=chunk_steps,
+                        steps=min(chunk_steps, max_steps - moved),
                         speed_hz=speed_hz,
                         stop_requested=lambda: bool(self.estop.value or self.stop_requested() or self.head_limit.value),
                     )

@@ -289,6 +289,7 @@ class NucleoLink:
                 serial_port.flush()
                 deadline = time.monotonic() + self.timeout_s
                 self._read_json_response(serial_port, deadline, expected_types={"ack"})
+                self._armed = False
                 return True
             except Exception:
                 return False
@@ -307,6 +308,7 @@ class NucleoLink:
                 serial_port.flush()
                 deadline = time.monotonic() + self.timeout_s
                 self._read_json_response(serial_port, deadline, expected_types={"ack"})
+                self._armed = False
                 return True
             except Exception:
                 return False
@@ -390,6 +392,13 @@ class NucleoLink:
             except Exception:
                 self.stop()
                 raise
+
+            # A completed one-shot move must not leave Protocol v2 armed.
+            # Returning to the disarmed PING state prevents a later heartbeat
+            # timeout from turning an otherwise successful move into a machine
+            # communication alarm.
+            if not self.disarm():
+                raise NucleoError("Move completed but Nucleo failed to disarm")
 
         return {
             "ok": True,

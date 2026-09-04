@@ -235,7 +235,20 @@
     if (motionInhibitReason(false) !== "") return false;
     return Boolean(getAxis(axis).is_homed);
   }
-  function canExecuteMove() { return MS.validation.valid && MS.validation.stage === "armed" && motionInhibitReason(true) === ""; }
+  function motionInhibitReasonForAxes(axes) {
+    const generalReason = motionInhibitReason(false);
+    if (generalReason) return generalReason;
+    const first = axes.find((axis) => !getAxis(axis).is_homed);
+    return first ? `${first.toUpperCase()} not homed — home that axis first` : "";
+  }
+  function plannedMoveAxes() {
+    return Object.keys(MS.validation.plan?.axes || {}).filter((axis) => AXES.includes(axis));
+  }
+  function canExecuteMove() {
+    return MS.validation.valid
+      && MS.validation.stage === "armed"
+      && motionInhibitReasonForAxes(plannedMoveAxes()) === "";
+  }
   function canHomeAxis() { return motionInhibitReason(false) === ""; }
   function motionAllowed(requireHome = true) { return motionInhibitReason(requireHome) === ""; }
   function buildJogPayload(axis, dir) {
@@ -468,8 +481,10 @@
 
   /* ── COMMAND EXECUTOR ───────────────────────────────────────── */
   async function command(label, path, body, opts = {}) {
-    if (!opts.noCheck && !motionAllowed(opts.requireHome)) {
-      const reason = motionInhibitReason(opts.requireHome ?? false);
+    const reason = opts.requiredAxes
+      ? motionInhibitReasonForAxes(opts.requiredAxes)
+      : motionInhibitReason(opts.requireHome ?? false);
+    if (!opts.noCheck && reason) {
       if (!opts.silent) toast(reason, "error");
       log(`${label} blocked: ${reason}`, "error", "INTERLOCK");
       return null;
@@ -671,7 +686,7 @@
     const result = await command(label, "/api/motion/execute", {
       arm_token: MS.validation.armToken,
       request_id: requestId,
-    }, { requireHome: true, timeoutMs: Math.max(15000, (timeoutSeconds + 10) * 1000) });
+    }, { requiredAxes: plannedMoveAxes(), timeoutMs: Math.max(15000, (timeoutSeconds + 10) * 1000) });
     if (result) invalidateMotionWorkflow("Move completed — target must be validated again.");
     return result;
   }
@@ -1304,7 +1319,7 @@
     const isIriv = MS.payload?.io?.enabled === true;
     const deviceShort = !hasIdentity ? "IDENTIFYING" : (isIriv ? "V1" : "MOCKUP");
     const deviceLabel = !hasIdentity
-      ? "กำลังตรวจสอบอุปกรณ์..."
+      ? "Checking device..."
       : (isIriv ? "V1" : "MOCKUP");
     const deviceClass = !hasIdentity ? "device-identifying" : (isIriv ? "device-new" : "device-legacy");
     if (deviceNode) {
@@ -2035,7 +2050,12 @@
         axes[axis][input.dataset.configField] = Number(input.value);
       });
     });
-    const hardware = { motors: {}, digital_inputs: {}, digital_outputs: {} };
+    // IRIV owns physical I/O, so its GPIO editor is intentionally not rendered.
+    // Preserve the installed hardware config and overlay only browser-editable fields.
+    const hardware = JSON.parse(JSON.stringify(MS.config?.hardware || {}));
+    hardware.motors ||= {};
+    hardware.digital_inputs ||= {};
+    hardware.digital_outputs ||= {};
     document.querySelectorAll("[data-pin-group]").forEach((input) => {
       const group = input.dataset.pinGroup;
       const name = input.dataset.pinName;
@@ -2077,17 +2097,20 @@
     try {
       await apiCall("/api/config/apply", "POST", {}, 5000);
       toast("Controller restarting — please wait.", "ok");
-      let reconnected = false;
+      let activeConfig = null;
       for (let attempt = 0; attempt < 30; attempt += 1) {
         await new Promise((resolve) => setTimeout(resolve, 1000));
         try {
-          await apiCall("/api/ping", "GET", undefined, 1500);
-          if (attempt > 1) { reconnected = true; break; }
+          const config = await apiCall("/api/config", "GET", undefined, 1500);
+          if (config.axes && config.hardware && config.restart_required === false) {
+            activeConfig = config;
+            break;
+          }
         } catch { /* Controller is restarting. */ }
       }
-      if (!reconnected) throw new Error("Controller did not reconnect within 30 seconds");
+      if (!activeConfig) throw new Error("Controller did not reload the saved configuration within 30 seconds");
+      MS.config = activeConfig;
       MS.configSaving = false;
-      await loadConfig();
       await refresh();
       renderConfigurationEditor(true);
       toast("Configuration applied — home all axes before motion.", "ok");
@@ -2429,8 +2452,8 @@
       && Number.isFinite(parameters.microsteps) && parameters.microsteps > 0
       && Number.isFinite(parameters.pitch) && parameters.pitch > 0;
     const valid = jogValid
-      && Number.isInteger(parameters.pulses) && parameters.pulses >= 1 && parameters.pulses <= 6000
-      && Number.isFinite(duration) && duration <= 3;
+      && Number.isInteger(parameters.pulses) && parameters.pulses >= 1 && parameters.pulses <= 10000
+      && Number.isFinite(duration) && duration <= 10;
     setText("motor-test-ppr", Number.isFinite(ppr) ? Math.round(ppr).toLocaleString() : "INVALID");
     setText("motor-test-ppm", Number.isFinite(ppm) ? fmt(ppm, 3) : "INVALID");
     const durationField = el("motor-test-duration");
@@ -2451,7 +2474,7 @@
     if (Number.isFinite(rawFreq) && rawFreq > 1000) {
       setText("motor-test-result", "STM32 Protocol v2 frequency limit is 1,000 Hz. Capped to 1,000 Hz.");
     } else if (!valid) {
-      setText("motor-test-result", "INVALID PROFILE — frequency must be 10–1,000 Hz; one-shot duration maximum 3 seconds.");
+      setText("motor-test-result", "INVALID PROFILE — frequency must be 10–1,000 Hz; one-shot duration maximum 10 seconds and 10,000 pulses.");
     }
   }
 
@@ -2473,7 +2496,7 @@
         pulse_frequency_hz: parameters.frequency,
         ignore_limits: parameters.ignoreLimits,
       },
-      { noCheck: true, timeoutMs: 7000 },
+      { noCheck: true, timeoutMs: 15000 },
     );
     if (result) {
       const completed = result.result || {};
@@ -3037,7 +3060,7 @@
     if (diContainer) {
       const visibleDis = IO_PAGE_DI_CHANNELS.filter((def) => matchFilter(def, false));
       if (visibleDis.length === 0) {
-        diContainer.innerHTML = `<div class="io-empty-hint">ไม่มีสัญญาณ Input ที่ตรงกับเงื่อนไขการค้นหา</div>`;
+        diContainer.innerHTML = `<div class="io-empty-hint">No input signals match the current filters.</div>`;
       } else {
         diContainer.innerHTML = visibleDis.map((def) => {
           const detail = inputDetails[def.key] || {};
@@ -3097,7 +3120,7 @@
     if (doContainer) {
       const visibleDos = IO_PAGE_DO_CHANNELS.filter((def) => matchFilter(def, true));
       if (visibleDos.length === 0) {
-        doContainer.innerHTML = `<div class="io-empty-hint">ไม่มีสัญญาณ Output ที่ตรงกับเงื่อนไขการค้นหา</div>`;
+        doContainer.innerHTML = `<div class="io-empty-hint">No output signals match the current filters.</div>`;
       } else {
         doContainer.innerHTML = visibleDos.map((def) => {
           const detail = outputDetails[def.key] || {};

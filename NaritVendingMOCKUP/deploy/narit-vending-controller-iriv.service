@@ -10,7 +10,7 @@ EnvironmentFile=-/etc/narit-vending.env
 ExecStart=/home/admin/NaritVendingV1/.venv/bin/python3 -m narit_vending.controller --config /home/admin/NaritVendingV1/machine_config.iriv.json --hw-config /home/admin/NaritVendingV1/hardware_config.iriv.json
 RuntimeDirectory=narit-vending
 RuntimeDirectoryMode=0755
-Restart=on-failure
+Restart=always
 RestartSec=1
 User=root
 

@@ -18,7 +18,7 @@
         <div class="brand-mark">NV</div>
         <div class="sidebar-brand-text">
           NARIT VENDING
-          <span id="sidebar-device-label">กำลังตรวจสอบอุปกรณ์...</span>
+          <span id="sidebar-device-label">Checking device...</span>
         </div>
       </div>
 
@@ -680,7 +680,7 @@
         <div class="page-heading">
           <div>
             <p class="panel-label">Hardware Signal &amp; Field Bus Monitor</p>
-            <h2>I/O Status — ตรวจเช็คสถานะ Digital I/O</h2>
+            <h2>I/O Status — Digital Signal Monitor</h2>
           </div>
           <div class="io-header-actions">
             <span class="page-status-chip ok" id="io-page-health">CHECKING</span>
@@ -736,7 +736,7 @@
           </div>
           <div class="io-search-box">
             <span class="io-search-icon">🔍</span>
-            <input type="text" id="io-search-input" class="hmi-input" placeholder="ค้นหาสัญญาณ (เช่น DI0, X Min, E-Stop, DO1)...">
+            <input type="text" id="io-search-input" class="hmi-input" placeholder="Search signals (for example: DI0, X Min, E-Stop, DO1)...">
           </div>
         </div>
 
@@ -745,7 +745,7 @@
           <div class="panel-head">
             <div>
               <p class="panel-label">Field Bus Inputs · Modbus Register 0x0002</p>
-              <h2 class="panel-title">Digital Inputs (DI0–DI10) · สถานะสัญญาณขาเข้า</h2>
+              <h2 class="panel-title">Digital Inputs (DI0–DI10) · Input Signal Status</h2>
             </div>
             <div class="io-matrix-legend">
               <span class="io-leg-item"><i class="io-dot active"></i> Active (1)</span>
@@ -764,7 +764,7 @@
           <div class="panel-head">
             <div>
               <p class="panel-label">Field Bus Coils · Modbus Register 0x0100</p>
-              <h2 class="panel-title">Digital Outputs (DO0–DO3) · สถานะสัญญาณขาออก</h2>
+              <h2 class="panel-title">Digital Outputs (DO0–DO3) · Output Signal Status</h2>
             </div>
             <div class="io-matrix-legend">
               <span class="io-leg-item"><i class="io-dot safe"></i> Energized (ON)</span>
@@ -781,7 +781,7 @@
           <div class="panel-head">
             <div>
               <p class="panel-label">Motion Axis Sensor Cross-Reference</p>
-              <h2 class="panel-title">ผังตรวจเช็คเซนเซอร์และลิมิตสวิตช์แกน X / Y / Z</h2>
+              <h2 class="panel-title">X / Y / Z Sensor and Limit-Switch Matrix</h2>
             </div>
           </div>
           <div class="io-axes-overview-table-wrap">
@@ -836,11 +836,11 @@
               </div>
             </div>
             <div class="commissioning-notes">
-              <strong>คู่มือตรวจเช็คหน้างาน (Site Check Procedure):</strong>
+              <strong>On-Site Check Procedure:</strong>
               <ol>
-                <li><strong>สภาวะปกติ (Ready):</strong> ปุ่ม E-Stop เด้งออก, หน้าสัมผัส NC ต่อถึงกัน, ไฟ 24V เข้า DI10, ค่า Raw DI10 อ่านได้ <code>1 (High)</code>, Logical E-Stop = <code>CLEAR</code></li>
-                <li><strong>สภาวะกด E-Stop (Tripped):</strong> เมื่อกดปุ่ม E-Stop วงจรขาด, ค่า Raw DI10 เปลี่ยนเป็น <code>0 (Low)</code>, Relay KM1 ตัดไฟมอเตอร์, ระบบเข้าสู่สภาวะ <code>ALARM / E_STOP</code> ทันที</li>
-                <li><strong>การทดสอบลิมิต (Limit Test):</strong> ใช้มือดันสวิตช์ลิมิตของแต่ละแกน แล้วตรวจดูว่าการ์ด DI0–DI5 เปลี่ยนสถานะเป็น <code>TRIGGERED</code> ตรงแกนหรือไม่</li>
+                <li><strong>Ready state:</strong> Release the E-Stop, verify the NC contact is closed, 24 V reaches DI10, raw DI10 reads <code>1 (High)</code>, and Logical E-Stop is <code>CLEAR</code>.</li>
+                <li><strong>Tripped state:</strong> Press the E-Stop and verify the circuit opens, raw DI10 changes to <code>0 (Low)</code>, KM1 removes motor power, and the machine immediately enters <code>ALARM / E_STOP</code>.</li>
+                <li><strong>Limit test:</strong> Manually actuate each axis limit switch and verify that the matching DI0–DI5 card changes to <code>TRIGGERED</code>.</li>
               </ol>
             </div>
           </div>
@@ -899,7 +899,7 @@
         <div class="page-heading">
           <div>
             <p class="panel-label">On-Site Commissioning &amp; Motor Engineering</p>
-            <h2>Motor Test Mode — โหมดทดสอบหมุนมอเตอร์หน้างาน</h2>
+            <h2>Motor Test Mode — On-Site Motor Commissioning</h2>
           </div>
           <div class="motor-test-header-chips">
             <span class="page-status-chip" id="motor-test-page-status">DISARMED</span>
@@ -911,14 +911,14 @@
         <div class="motor-test-safety panel" id="motor-test-safety">
           <div class="motor-test-safety-info">
             <div class="motor-test-safety-badge">⚡ MANUAL MOTOR COMMISSIONING</div>
-            <strong>ARM TEST MODE เพื่อเริ่มทดสอบส่งพัลส์หมุนมอเตอร์จริง</strong>
-            <span>กดปุ่ม ARM ด้านขวาเพื่อเปิดระบบส่งพัลส์ (สามารถ Jog หมุนต่อเนื่อง หรือส่งพัลส์ตามจำนวนได้ทันทีโดยไม่ต้องรอ Homing)</span>
+            <strong>ARM TEST MODE to enable physical motor pulse output</strong>
+            <span>Select ARM to enable pulse output. You can hold a Jog control for continuous motion or send a fixed pulse burst without homing first.</span>
             <div class="motor-test-bypass-box">
               <label class="bypass-label">
                 <input type="checkbox" id="motor-test-bypass-limits" checked>
-                <span>🔓 ปลด Software Safety / Bypass Software Limit Switches &amp; IO Fault Locks (โหมดช่างทดสอบหน้างาน)</span>
+                <span>🔓 Bypass Software Limits and I/O Fault Locks (commissioning technicians only)</span>
               </label>
-              <small class="bypass-note">หมายเหตุ: สวิตช์ฉุกเฉิน E-Stop สีแดงหน้าตู้ (KM1) ยังคงตัดไฟ 60V ของมอเตอร์ทางฮาร์ดแวร์เพื่อความปลอดภัยสูงสุด</small>
+              <small class="bypass-note">The cabinet E-Stop and KM1 contactor still remove the 60 V motor supply through the hardwired safety circuit.</small>
             </div>
           </div>
           <div class="motor-test-arm-actions">
@@ -935,7 +935,7 @@
             <div class="panel-head">
               <div>
                 <p class="panel-label">Single-Burst Pulse Output</p>
-                <h2 class="panel-title">Pulse Generator — สั่งส่งพัลส์ตามจำนวน</h2>
+                <h2 class="panel-title">Pulse Generator — Fixed Pulse Burst</h2>
               </div>
               <span class="page-note">STM32 NUCLEO-F439ZI · Protocol v2 (10–1,000 Hz)</span>
             </div>
@@ -943,24 +943,24 @@
             <!-- Parameters Form -->
             <div class="motor-test-form">
               <label>
-                <span>Axis (เลือกแกน)</span>
+                <span>Axis</span>
                 <select class="hmi-input" id="motor-test-axis">
-                  <option value="x" selected>X Axis (แกน X แนวนอน)</option>
-                  <option value="y">Y Axis (แกน Y แนวลึก)</option>
-                  <option value="z">Z Axis (แกน Z แนวนิ่ง/ยก)</option>
+                  <option value="x" selected>X Axis (Horizontal)</option>
+                  <option value="y">Y Axis (Depth)</option>
+                  <option value="z">Z Axis (Vertical Lift)</option>
                 </select>
               </label>
 
               <label>
-                <span>Direction (ทิศทางการหมุน)</span>
+                <span>Direction</span>
                 <select class="hmi-input" id="motor-test-direction">
-                  <option value="forward" selected>FORWARD (+) ขวา / ลึก / ขึ้น</option>
-                  <option value="reverse">REVERSE (−) ซ้าย / หน้า / ลง</option>
+                  <option value="forward" selected>FORWARD (+) Right / Inward / Up</option>
+                  <option value="reverse">REVERSE (−) Left / Outward / Down</option>
                 </select>
               </label>
 
               <label>
-                <span>Pulse Frequency (ความถี่พัลส์)</span>
+                <span>Pulse Frequency</span>
                 <div class="field-input-wrap">
                   <input class="hmi-input" id="motor-test-frequency" type="number" min="10" max="1000" step="10" value="400">
                   <span class="unit-tag">Hz</span>
@@ -975,9 +975,9 @@
               </label>
 
               <label>
-                <span>Pulse Count (จำนวนพัลส์)</span>
+                <span>Pulse Count</span>
                 <div class="field-input-wrap">
-                  <input class="hmi-input" id="motor-test-pulses" type="number" min="1" max="6000" step="1" value="200">
+                  <input class="hmi-input" id="motor-test-pulses" type="number" min="1" max="10000" step="1" value="200">
                   <span class="unit-tag">pulse</span>
                 </div>
                 <div class="quick-preset-chips" data-target-input="motor-test-pulses">
@@ -986,6 +986,8 @@
                   <button type="button" class="chip-btn active" data-val="200">200</button>
                   <button type="button" class="chip-btn" data-val="500">500</button>
                   <button type="button" class="chip-btn" data-val="1000">1000</button>
+                  <button type="button" class="chip-btn" data-val="5000">5000</button>
+                  <button type="button" class="chip-btn" data-val="10000">10000</button>
                 </div>
               </label>
 
@@ -1014,7 +1016,7 @@
             <!-- Pulse Burst Trigger Button -->
             <div class="motor-test-command-row">
               <button class="btn-execute" id="motor-test-start" type="button" disabled>
-                ▶ RUN ONE PULSE BURST (ส่งพัลส์ 1 ชุด)
+                ▶ RUN ONE PULSE BURST
               </button>
               <button class="btn-secondary" id="motor-test-open-config" type="button">
                 ⚙ OPEN CONFIGURATION
@@ -1034,21 +1036,21 @@
               <div class="motor-test-jog-head">
                 <div>
                   <span>Continuous Hold-to-Run</span>
-                  <strong id="motor-test-jog-title">TEST JOG STATION — กดค้างเพื่อหมุน</strong>
+                  <strong id="motor-test-jog-title">TEST JOG STATION — HOLD TO RUN</strong>
                 </div>
                 <small id="motor-test-jog-profile">300 pulse · 100 Hz</small>
               </div>
-              <p class="jog-guide-text">กดปุ่มแกนค้างไว้เพื่อหมุนต่อเนื่องตามความถี่ Pulse Frequency ด้านซ้าย และปล่อยปุ่มเพื่อหยุดหมุนทันที</p>
+              <p class="jog-guide-text">Hold an axis button to run continuously at the selected pulse frequency. Release the button to stop immediately.</p>
               <div class="motor-test-jog-grid">
                 <span>X Axis</span>
-                <button type="button" data-motor-test-jog="x:reverse" disabled>◀ X− (ซ้าย)</button>
-                <button type="button" data-motor-test-jog="x:forward" disabled>X+ (ขวา) ▶</button>
+                <button type="button" data-motor-test-jog="x:reverse" disabled>◀ X− (Left)</button>
+                <button type="button" data-motor-test-jog="x:forward" disabled>X+ (Right) ▶</button>
                 <span>Y Axis</span>
-                <button type="button" data-motor-test-jog="y:reverse" disabled>▼ Y− (หน้า)</button>
-                <button type="button" data-motor-test-jog="y:forward" disabled>Y+ (หลัง) ▲</button>
+                <button type="button" data-motor-test-jog="y:reverse" disabled>▼ Y− (Outward)</button>
+                <button type="button" data-motor-test-jog="y:forward" disabled>Y+ (Inward) ▲</button>
                 <span>Z Axis</span>
-                <button type="button" data-motor-test-jog="z:reverse" disabled>▼ Z− (ลง)</button>
-                <button type="button" data-motor-test-jog="z:forward" disabled>Z+ (ขึ้น) ▲</button>
+                <button type="button" data-motor-test-jog="z:reverse" disabled>▼ Z− (Down)</button>
+                <button type="button" data-motor-test-jog="z:forward" disabled>Z+ (Up) ▲</button>
               </div>
             </section>
 
@@ -1086,15 +1088,15 @@
               <div class="panel-head">
                 <div>
                   <p class="panel-label">Operating Notes</p>
-                  <h2 class="panel-title">ข้อควรระวังในการทดสอบหน้างาน</h2>
+                  <h2 class="panel-title">On-Site Test Safety Notes</h2>
                 </div>
               </div>
               <ol>
-                <li>กดปุ่ม <strong>ARM TEST MODE</strong> ด้านบนเพื่อเปิดระบบส่งพัลส์</li>
-                <li>กดปุ่มแกน <strong>X±, Y± หรือ Z± ค้างไว้</strong> เพื่อทดสอบการหมุนของมอเตอร์</li>
-                <li>ปล่อยปุ่ม Jog เพื่อหยุดพัลส์มอเตอร์ทันที</li>
-                <li>หากเกิดเหตุฉุกเฉิน ให้กดปุ่ม <strong>EMERGENCY STOP (สีแดง)</strong> หน้าตู้ทันที</li>
-                <li>เมื่อเสร็จสิ้นการทดสอบ ให้กด <strong>CANCEL TEST MODE</strong></li>
+                <li>Select <strong>ARM TEST MODE</strong> to enable pulse output.</li>
+                <li>Hold <strong>X±, Y±, or Z±</strong> to test motor rotation.</li>
+                <li>Release the Jog button to stop motor pulses immediately.</li>
+                <li>In an emergency, press the cabinet <strong>EMERGENCY STOP</strong> immediately.</li>
+                <li>When testing is complete, select <strong>CANCEL TEST MODE</strong>.</li>
               </ol>
             </div>
           </aside>
@@ -1151,81 +1153,81 @@
           <div><p class="panel-label">System Design Reference</p><h2>NARIT Vending Architecture</h2></div>
           <span class="page-status-chip ok">2 PROCESS / 1 MQTT CLIENT</span>
         </div>
-        <p class="architecture-intro">ระบบแบ่งหน้าที่ชัดเจน: Web HMI แสดงผลและส่งคำขอ, Controller เป็นผู้ตัดสินใจด้านความปลอดภัยและควบคุม GPIO, ส่วน MQTT ทำงานเพียงหนึ่ง client ภายใน Controller เพื่อป้องกัน client ID ซ้ำและการเชื่อมต่อกระพริบ</p>
+        <p class="architecture-intro">Responsibilities are strictly separated: the Web HMI presents state and sends requests, the Controller owns safety decisions and GPIO control, and a single MQTT client runs inside the Controller to prevent duplicate client IDs and connection instability.</p>
 
         <section class="architecture-flow" aria-label="System architecture data flow">
-          <article class="architecture-node hmi"><span class="architecture-step">01</span><h3>Operator HMI</h3><p>Browser ของผู้ปฏิบัติงาน เปิดหน้า Dashboard, Motion, Slots, Alarms และ MQTT Monitor</p><small>HTTP polling: <code>GET /api/state</code> ทุก 1.5 วินาที</small></article>
+          <article class="architecture-node hmi"><span class="architecture-step">01</span><h3>Operator HMI</h3><p>The operator browser provides Dashboard, Motion, Slots, Alarms, and MQTT Monitor workspaces.</p><small>HTTP polling: <code>GET /api/state</code> every 1.5 seconds</small></article>
           <div class="architecture-arrow"><span>HTTP / JSON</span>→</div>
-          <article class="architecture-node web"><span class="architecture-step">02</span><h3>Web Process</h3><p>Flask บน port 80 รับหน้า HTML/CSS/JS และ API เท่านั้น ไม่เปิด GPIO และไม่สร้าง MQTT client</p><small>Controller unavailable → command API ตอบ 503</small></article>
+          <article class="architecture-node web"><span class="architecture-step">02</span><h3>Web Process</h3><p>Flask on port 80 serves HTML/CSS/JavaScript and API requests only. It never opens GPIO or creates an MQTT client.</p><small>Controller unavailable → command API returns 503</small></article>
           <div class="architecture-arrow"><span>Unix IPC</span>→</div>
-          <article class="architecture-node controller"><span class="architecture-step">03</span><h3>Controller Process</h3><p>เจ้าของ machine state, command bus, interlock, MotionService, GPIO และ MQTT client เพียงตัวเดียว</p><small><code>/run/narit-vending/ctrl.sock</code></small></article>
+          <article class="architecture-node controller"><span class="architecture-step">03</span><h3>Controller Process</h3><p>Owns machine state, the command bus, interlocks, MotionService, GPIO, and the single MQTT client.</p><small><code>/run/narit-vending/ctrl.sock</code></small></article>
           <div class="architecture-arrow split"><span>GPIO</span>↘<br><span>MQTT</span>↗</div>
-          <article class="architecture-node hardware"><span class="architecture-step">04</span><h3>Machine / Broker</h3><p>สั่ง Step/Dir/Enable ของแกน X/Y/Z, อ่าน limit/E-Stop และแลกเปลี่ยนคำสั่งกับ MQTT broker</p><small>Hardware safety remains local</small></article>
+          <article class="architecture-node hardware"><span class="architecture-step">04</span><h3>Machine / Broker</h3><p>Drives X/Y/Z Step, Direction, and Enable signals; reads limits and E-Stop; and exchanges commands with the MQTT broker.</p><small>Hardware safety remains local</small></article>
         </section>
 
         <div class="architecture-grid">
           <article class="panel page-panel architecture-card">
             <div class="panel-head"><div><p class="panel-label">A. Web HMI</p><h2 class="panel-title">Presentation &amp; Request Layer</h2></div></div>
             <ul>
-              <li>HTML/CSS/JavaScript แสดงตำแหน่ง XYZ, สถานะ homing, alarm, slot และ log จากข้อมูล Controller</li>
-              <li>ผู้ใช้กด Home, Jog, GO TO SLOT, Dispense หรือ Reset Alarm ผ่าน REST API; หน้าเว็บไม่ควบคุม motor โดยตรง</li>
-              <li>Web ใช้ <strong>ControllerClient</strong> ส่งต่อ request ผ่าน IPC จึงแยก web crash/restart ออกจากการเคลื่อนที่ของเครื่อง</li>
-              <li>MQTT Monitor อ่าน telemetry ผ่าน IPC; จึงไม่มี MQTT client ซ้ำใน Web process</li>
+              <li>HTML/CSS/JavaScript displays XYZ position, homing state, alarms, slots, and Controller logs.</li>
+              <li>Home, Jog, GO TO SLOT, Dispense, and Reset Alarm use the REST API; the page never controls motors directly.</li>
+              <li>The Web process uses <strong>ControllerClient</strong> over IPC, isolating web crashes or restarts from machine motion.</li>
+              <li>MQTT Monitor reads telemetry through IPC, so the Web process never creates a duplicate MQTT client.</li>
             </ul>
           </article>
           <article class="panel page-panel architecture-card controller-card">
             <div class="panel-head"><div><p class="panel-label">B. Controller</p><h2 class="panel-title">Safety &amp; Motion Authority</h2></div></div>
             <ul>
-              <li>เริ่ม MotionService แล้วสร้าง StateMachine, CommandBus และ IPC Server ก่อนรับคำสั่ง</li>
-              <li>Command handlers ครอบคลุม Stop, Clear Alarm, Home, Jog, Move, Go To Slot, Dispense, Validate/Arm และ Motor Test</li>
-              <li>ทุกคำสั่งตรวจ interlock ก่อนสั่ง GPIO: Controller online, E-Stop clear, software stop clear, ไม่มี alarm ที่บล็อก, homing และพิกัด/ขอบเขตถูกต้อง</li>
-              <li>คำสั่ง move แบบมีเป้าหมายใช้ Validate → Arm → Execute เพื่อไม่ให้พิกัดหรือความเร็วที่เปลี่ยนหลังตรวจถูกนำไปวิ่งทันที</li>
+              <li>Starts MotionService, then creates the StateMachine, CommandBus, and IPC Server before accepting commands.</li>
+              <li>Command handlers cover Stop, Clear Alarm, Home, Jog, Move, Go To Slot, Dispense, Validate/Arm, and Motor Test.</li>
+              <li>Every command checks interlocks before GPIO output: Controller online, E-Stop clear, software stop clear, no blocking alarms, homing complete, and coordinates within limits.</li>
+              <li>Targeted moves follow Validate → Arm → Execute so changed coordinates or speed cannot run without a fresh validation.</li>
             </ul>
           </article>
           <article class="panel page-panel architecture-card safety-card">
             <div class="panel-head"><div><p class="panel-label">C. Hardware Safety</p><h2 class="panel-title">Local, Immediate Interlocks</h2></div></div>
             <ul>
-              <li>GPIO ขับสัญญาณ Step/Direction/Enable สำหรับ X, Y และ Z; MotionService เป็นผู้เดียวที่เข้าถึงอุปกรณ์เหล่านี้</li>
-              <li>อ่าน limit switch ต่ำสุด/สูงสุดของทุกแกน และ physical E-Stop เพื่อหยุดหรือปฏิเสธการเคลื่อนที่ที่ไม่ปลอดภัย</li>
-              <li>Homing สร้างจุดอ้างอิงก่อนอนุญาต absolute move หรือ slot positioning; การ restart ทำให้ต้องตรวจ homing ใหม่ตามสถานะจริง</li>
-              <li>GO TO SLOT ใช้ Safe Z ก่อนเคลื่อน X/Y และ Dispense ใช้ได้เมื่อหัว gantry อยู่พิกัด slot ที่ยืนยันแล้วเท่านั้น</li>
+              <li>GPIO drives Step, Direction, and Enable for X, Y, and Z; only MotionService can access these devices.</li>
+              <li>Minimum/maximum limit switches and the physical E-Stop stop or reject unsafe movement.</li>
+              <li>Homing establishes a reference before absolute moves or slot positioning; a restart requires homing to be verified again.</li>
+              <li>GO TO SLOT uses Safe Z before X/Y motion, and Dispense is allowed only at the verified slot position.</li>
             </ul>
           </article>
           <article class="panel page-panel architecture-card mqtt-card">
             <div class="panel-head"><div><p class="panel-label">D. MQTT Contract</p><h2 class="panel-title">Controller-owned Persistent Session</h2></div></div>
             <ul>
-              <li>Controller เปิด connection เดียวด้วย client ID เฉพาะ cabinet และ <strong>clean session = false</strong>; Web ไม่ connect broker</li>
-              <li>Subscribe: <code>cabinet/{cabinet_id}/command</code>; action ที่รองรับคือ <code>release</code> และต้องมี <code>request_id</code> กับ <code>slot</code></li>
-              <li>Publish: <code>/scan</code>, <code>/status</code>, <code>/presence</code>; presence ใช้ QoS 1 และ retained พร้อม Last Will offline</li>
-              <li>เมื่อ network/broker ขาด ระบบ reconnect ด้วย backoff 4–60 วินาที; telemetry แสดง connect/disconnect count และ error ล่าสุด</li>
+              <li>The Controller owns one connection with a cabinet-specific client ID and <strong>clean session = false</strong>; the Web process never connects to the broker.</li>
+              <li>Subscribe: <code>cabinet/{cabinet_id}/command</code>; the supported action is <code>release</code> and requires <code>request_id</code> and <code>slot</code>.</li>
+              <li>Publish: <code>/scan</code>, <code>/status</code>, and <code>/presence</code>; presence uses QoS 1, retained delivery, and an offline Last Will.</li>
+              <li>Network or broker failures reconnect with a 4–60 second backoff; telemetry reports connection counts and the latest error.</li>
             </ul>
           </article>
           <article class="panel page-panel architecture-card config-card">
             <div class="panel-head"><div><p class="panel-label">E. Configuration &amp; Audit</p><h2 class="panel-title">Validated Machine Definition</h2></div></div>
             <ul>
-              <li><code>machine_config.json</code> เก็บ travel, steps/mm, safe Z, home sequence และ slot XYZ; <code>hardware_config.json</code> เก็บ GPIO และ communication</li>
-              <li>ก่อนบันทึก configuration ระบบตรวจความถูกต้อง สร้าง revision และสำรองไฟล์ไว้ใต้ <code>backups/config/</code></li>
-              <li>Event log, machine snapshot และ MQTT telemetry เป็นข้อมูลสำหรับวิเคราะห์เหตุขัดข้องโดยไม่แสดง password หรือ token</li>
+              <li><code>machine_config.json</code> stores travel, steps/mm, Safe Z, home sequence, and slot XYZ; <code>hardware_config.json</code> stores GPIO and communication settings.</li>
+              <li>Before saving configuration, the system validates it, creates a revision, and stores a backup under <code>backups/config/</code>.</li>
+              <li>Event logs, machine snapshots, and MQTT telemetry support fault analysis without exposing passwords or tokens.</li>
             </ul>
           </article>
           <article class="panel page-panel architecture-card deploy-card">
             <div class="panel-head"><div><p class="panel-label">F. Deployment Rule</p><h2 class="panel-title">Keep MQTT Online During UI Work</h2></div></div>
             <ul>
-              <li>Web-only deployment ส่งเฉพาะ <code>static/</code> และ <code>templates/</code> แล้ว restart Web process เท่านั้น</li>
-              <li>Controller และ MQTT connection จึงทำงานต่อเนื่องระหว่างการปรับ UI</li>
-              <li>Full deployment ใช้เมื่อแก้ controller, GPIO, motion หรือ MQTT; การ restart Controller จะทำให้ presence offline ชั่วคราวตามความจริงของเครื่อง</li>
+              <li>Web-only deployment copies only <code>static/</code> and <code>templates/</code>, then restarts only the Web process.</li>
+              <li>The Controller and MQTT connection therefore remain online during UI work.</li>
+              <li>Use full deployment for Controller, GPIO, motion, or MQTT changes; restarting the Controller briefly publishes the actual offline presence state.</li>
             </ul>
           </article>
         </div>
 
         <section class="panel page-panel architecture-sequence">
-          <div class="panel-head"><div><p class="panel-label">Command Path</p><h2 class="panel-title">ตัวอย่าง: สั่ง Dispense จาก Backend</h2></div></div>
+          <div class="panel-head"><div><p class="panel-label">Command Path</p><h2 class="panel-title">Example: Dispense Command from Backend</h2></div></div>
           <ol>
-            <li>Backend publish <code>release</code> ไปที่ <code>cabinet/{cabinet_id}/command</code> พร้อม request_id, slot และเวลา expiry ถ้ามี</li>
-            <li>MQTTService ใน Controller ตรวจ JSON, action, request_id, slot, expiry และป้องกันการประมวลผล request_id เดิมซ้ำ</li>
-            <li>Controller ตรวจ safety interlocks, homing, slot XYZ และลำดับ Safe Z → X/Y → Z target ก่อนสั่ง motion</li>
-            <li>ผลลัพธ์ถูก publish เป็น received / phase / success หรือ failed พร้อมเหตุผลและ target/home verification</li>
-            <li>HMI ดึง state ผ่าน Web → IPC เพื่อแสดงสถานะเดียวกับที่ Controller ใช้ตัดสินใจ ไม่มี browser หรือ MQTT path ใด bypass safety layer ได้</li>
+            <li>The backend publishes <code>release</code> to <code>cabinet/{cabinet_id}/command</code> with request ID, slot, and optional expiry time.</li>
+            <li>MQTTService validates JSON, action, request ID, slot, and expiry, and prevents duplicate request IDs from running twice.</li>
+            <li>The Controller checks safety interlocks, homing, slot XYZ, and the Safe Z → X/Y → target Z sequence before motion.</li>
+            <li>Results are published as received / phase / success or failed, with the reason and target/home verification.</li>
+            <li>The HMI reads state through Web → IPC and displays the same state used by the Controller; neither browser nor MQTT paths can bypass the safety layer.</li>
           </ol>
         </section>
       </section>

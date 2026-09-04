@@ -47,9 +47,9 @@ class APIInputError(ValueError):
 GPIO_MIN = 0
 GPIO_MAX = 27
 MAX_PULSE_FREQUENCY_HZ = 50_000.0
-MOTOR_TEST_MAX_DURATION_S = 3.0
+MOTOR_TEST_MAX_DURATION_S = 10.0
 MOTOR_TEST_MAX_FREQUENCY_HZ = MAX_PULSE_FREQUENCY_HZ
-MOTOR_TEST_MAX_PULSES = 6_000
+MOTOR_TEST_MAX_PULSES = 10_000
 
 
 def _config_number(payload: dict[str, object], key: str, *, minimum: float, maximum: float) -> float:
@@ -413,7 +413,12 @@ class MotionService:
             "plan": self.armed_move["plan"],
         }
 
-    def _motion_safety_errors(self, *, require_homed: bool = True) -> list[str]:
+    def _motion_safety_errors(
+        self,
+        *,
+        require_homed: bool = True,
+        required_axes: set[str] | None = None,
+    ) -> list[str]:
         status = self.controller.status()
         errors: list[str] = []
         if self.busy:
@@ -426,9 +431,10 @@ class MotionService:
             errors.append("Configuration changed; apply and restart the controller before motion")
         if self._motor_test_status(status)["armed"]:
             errors.append("Motor Test Mode is armed; cancel it before normal motion")
+        axes_to_home = {"x", "y", "z"} if required_axes is None else required_axes
         for axis_name in ("x", "y", "z"):
             axis = status[axis_name]
-            if require_homed and not axis["is_homed"]:
+            if require_homed and axis_name in axes_to_home and not axis["is_homed"]:
                 errors.append(f"{axis_name.upper()} axis is not homed")
             if axis["head_limit"] and axis["tail_limit"]:
                 errors.append(f"{axis_name.upper()} axis has conflicting limit inputs")
@@ -447,7 +453,12 @@ class MotionService:
         deceleration_mm_s2: float | None,
     ) -> dict[str, object]:
         with self.lock:
-            errors = self._motion_safety_errors(require_homed=True)
+            required_axes = {
+                axis_name
+                for axis_name, target in (("x", x_mm), ("y", y_mm), ("z", z_mm))
+                if target is not None
+            }
+            errors = self._motion_safety_errors(require_homed=True, required_axes=required_axes)
             if errors:
                 raise MotionError("; ".join(errors))
             plan = self.controller.plan_move(
@@ -539,6 +550,15 @@ class MotionService:
                 return {"ok": False, "error": "Armed move expired; validate and arm again"}
             payload = dict(armed["payload"])
             plan = dict(armed["plan"])
+            required_axes = {
+                axis_name
+                for axis_name in ("x", "y", "z")
+                if payload.get(f"{axis_name}_mm") not in (None, "")
+            }
+            errors = self._motion_safety_errors(require_homed=True, required_axes=required_axes)
+            if errors:
+                self.armed_move = None
+                return {"ok": False, "error": "; ".join(errors)}
             self.armed_move = None
             self.completed_request_ids[request_id] = {"ok": False, "error": "Command is already executing"}
 

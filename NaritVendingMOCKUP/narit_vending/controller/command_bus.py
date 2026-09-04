@@ -80,7 +80,7 @@ class CommandBus:
             return CommandResult.rejected(envelope.command_id, f"Unknown command type: {cmd}")
 
         # ── Priority commands bypass motion lock ───────────────────────────────
-        is_priority = cmd in {"STOP", "E_STOP", "CLEAR_ALARM", "CONTROLLED_STOP"}
+        is_priority = cmd in {"STOP", "E_STOP", "CLEAR_ALARM", "CONTROLLED_STOP", "SCHEDULE_RESTART"}
         if is_priority:
             return self._dispatch(handler, envelope)
 

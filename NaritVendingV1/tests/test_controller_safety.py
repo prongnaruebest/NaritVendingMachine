@@ -44,10 +44,18 @@ class TestControllerSafety(unittest.TestCase):
 
     def test_priority_commands_always_allowed(self):
         snap = _make_snapshot(estop=True, busy=True, state="ALARM")
-        for cmd in ("STOP", "E_STOP", "CLEAR_ALARM", "CONTROLLED_STOP"):
+        for cmd in ("STOP", "E_STOP", "CLEAR_ALARM", "CONTROLLED_STOP", "SCHEDULE_RESTART"):
             env = CommandEnvelope(command_type=cmd, source="http", parameters={})
             dec = self.safety.evaluate(env, snap)
             self.assertTrue(dec.allowed, f"Priority command {cmd} should be allowed even in E_STOP")
+
+    def test_configuration_restart_command_breaks_restart_required_lock(self):
+        snap = _make_snapshot(configuration_restart_required=True, state="NOT_READY")
+        env = CommandEnvelope(command_type="SCHEDULE_RESTART", source="http", parameters={})
+
+        decision = self.safety.evaluate(env, snap)
+
+        self.assertTrue(decision.allowed)
 
     def test_estop_blocks_motion(self):
         snap = _make_snapshot(estop=True)
@@ -66,7 +74,47 @@ class TestControllerSafety(unittest.TestCase):
         env = CommandEnvelope(command_type="MOVE_TO_SLOT", source="http", parameters={"slot_code": "01"})
         dec = self.safety.evaluate(env, snap)
         self.assertFalse(dec.allowed)
-        self.assertIn("AXES_NOT_HOMED", dec.reason_codes)
+        self.assertIn("AXIS_X_NOT_HOMED", dec.reason_codes)
+
+    def test_homed_axis_can_jog_while_other_axes_are_not_homed(self):
+        axes = {
+            "x": AxisSnapshot("x", 0.0, 0, True, False, False),
+            "y": AxisSnapshot("y", 0.0, 0, False, False, False),
+            "z": AxisSnapshot("z", 0.0, 0, False, False, False),
+        }
+        snap = _make_snapshot(state="NOT_READY", axes=axes)
+
+        allowed = self.safety.evaluate(
+            CommandEnvelope(command_type="JOG", source="http", parameters={"axis": "x", "distance_mm": 5}),
+            snap,
+        )
+        blocked = self.safety.evaluate(
+            CommandEnvelope(command_type="JOG", source="http", parameters={"axis": "y", "distance_mm": 5}),
+            snap,
+        )
+
+        self.assertTrue(allowed.allowed)
+        self.assertFalse(blocked.allowed)
+        self.assertIn("AXIS_Y_NOT_HOMED", blocked.reason_codes)
+
+    def test_move_only_requires_the_axes_present_in_the_command(self):
+        axes = {
+            "x": AxisSnapshot("x", 0.0, 0, True, False, False),
+            "y": AxisSnapshot("y", 0.0, 0, False, False, False),
+            "z": AxisSnapshot("z", 0.0, 0, False, False, False),
+        }
+        snap = _make_snapshot(state="NOT_READY", axes=axes)
+
+        x_only = self.safety.evaluate(
+            CommandEnvelope(command_type="MOVE_TO", source="http", parameters={"x_mm": 10}), snap
+        )
+        x_and_y = self.safety.evaluate(
+            CommandEnvelope(command_type="MOVE_TO", source="http", parameters={"x_mm": 10, "y_mm": 10}), snap
+        )
+
+        self.assertTrue(x_only.allowed)
+        self.assertFalse(x_and_y.allowed)
+        self.assertIn("AXIS_Y_NOT_HOMED", x_and_y.reason_codes)
 
     def test_busy_blocks_new_motion(self):
         snap = _make_snapshot(busy=True)
@@ -90,9 +138,16 @@ class TestControllerSafety(unittest.TestCase):
 
     def test_slot_sequence_is_blocked_until_machine_is_ready(self):
         env = CommandEnvelope(command_type="RUN_SLOT_SEQUENCE", source="http", parameters={"slot_code": "01"})
-        decision = self.safety.evaluate(env, _make_snapshot(state="NOT_READY"))
+        axes = {
+            axis: AxisSnapshot(axis, 0.0, 0, False, False, False)
+            for axis in ("x", "y", "z")
+        }
+        decision = self.safety.evaluate(env, _make_snapshot(state="NOT_READY", axes=axes))
         self.assertFalse(decision.allowed)
-        self.assertIn("AXES_NOT_HOMED", decision.reason_codes)
+        self.assertEqual(
+            {"AXIS_X_NOT_HOMED", "AXIS_Y_NOT_HOMED", "AXIS_Z_NOT_HOMED"},
+            set(decision.reason_codes),
+        )
 
     def test_legacy_success_state_normalizes_to_ready_after_homing(self):
         state = _normalize_machine_state(

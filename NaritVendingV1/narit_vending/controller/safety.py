@@ -25,6 +25,7 @@ _PRIORITY_COMMANDS = frozenset({
     "E_STOP",
     "CLEAR_ALARM",
     "CONTROLLED_STOP",
+    "SCHEDULE_RESTART",
 })
 
 # Commands that require the machine to be READY (homed + no alarm + no estop)
@@ -47,6 +48,24 @@ _HOME_COMMANDS = frozenset({
 _MOTOR_TEST_COMMANDS = frozenset({
     "RUN_MOTOR_TEST",
 })
+
+
+def _required_motion_axes(command_type: str, parameters: dict) -> set[str]:
+    """Return the axes which must be homed for this particular command."""
+    if command_type == "JOG":
+        axis = str(parameters.get("axis", "")).lower()
+        return {axis} if axis in {"x", "y", "z"} else set()
+    if command_type == "MOVE_TO":
+        return {
+            axis
+            for axis in ("x", "y", "z")
+            if parameters.get(f"{axis}_mm") not in (None, "")
+        }
+    if command_type in {"MOVE_TO_SLOT", "RUN_SLOT_SEQUENCE", "DISPENSE"}:
+        return {"x", "y", "z"}
+    # The axes for EXECUTE_ARMED_MOVE are stored with the arm token.  The
+    # motion service rechecks those axes immediately before execution.
+    return set()
 
 
 @dataclass
@@ -94,7 +113,11 @@ class SafetyInterlock:
             actions.append("Clear alarms before issuing motion commands")
 
         # ── 3. Config restart required ─────────────────────────────────────────
-        if snapshot.configuration_restart_required and cmd not in ("ARM_MOTOR_TEST", "DISARM_MOTOR_TEST"):
+        if snapshot.configuration_restart_required and cmd not in (
+            "ARM_MOTOR_TEST",
+            "DISARM_MOTOR_TEST",
+            "SCHEDULE_RESTART",
+        ):
             reasons.append("CONFIG_RESTART_REQUIRED")
             actions.append("Apply configuration changes and restart the controller")
 
@@ -112,16 +135,26 @@ class SafetyInterlock:
         state = snapshot.state
         if cmd in _MOTION_COMMANDS:
             allow_unhomed = bool(envelope.parameters.get("allow_unhomed", False))
-            # Require READY state for motion (unless unhomed jog allowed)
+            required_axes = _required_motion_axes(cmd, envelope.parameters)
+            # READY means every axis is homed.  A NOT_READY machine may still
+            # move an axis that has individually completed homing.
             if state != MachineState.READY.value:
                 if state == MachineState.E_STOP.value:
                     reasons.append("STATE_ESTOP")
                 elif state == MachineState.ALARM.value:
                     reasons.append("STATE_ALARM")
-                elif state in (MachineState.NOT_READY.value, MachineState.HOMING.value):
+                elif state == MachineState.HOMING.value:
+                    reasons.append("STATE_HOMING")
+                    actions.append("Wait for the current homing command to complete")
+                elif state == MachineState.NOT_READY.value:
                     if not (cmd == "JOG" and allow_unhomed):
-                        reasons.append("AXES_NOT_HOMED")
-                        actions.append("Home all axes before motion")
+                        unhomed = [
+                            axis for axis in sorted(required_axes)
+                            if not snapshot.axes.get(axis) or not snapshot.axes[axis].is_homed
+                        ]
+                        for axis in unhomed:
+                            reasons.append(f"AXIS_{axis.upper()}_NOT_HOMED")
+                            actions.append(f"Home {axis.upper()} axis before moving it")
                 else:
                     if not (cmd == "JOG" and allow_unhomed):
                         reasons.append(f"STATE_NOT_READY:{state}")

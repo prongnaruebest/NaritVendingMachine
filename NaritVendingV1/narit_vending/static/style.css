@@ -6381,10 +6381,23 @@ select.slot-filter {
 /* ══════════════════════════════════════════════════════════════════════════════
    DEDICATED I/O STATUS PAGE STYLES
    ══════════════════════════════════════════════════════════════════════════════ */
-.io-status-page {
-  display: flex;
+.workspace-view.io-status-page {
   flex-direction: column;
   gap: 14px;
+}
+
+.workspace-view.io-status-page.active {
+  display: flex;
+  height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-right: 4px;
+  padding-bottom: 18px;
+  scrollbar-gutter: stable;
+}
+
+.workspace-view.io-status-page.active > * {
+  flex: 0 0 auto;
 }
 
 .io-header-actions {

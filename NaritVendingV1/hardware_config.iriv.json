@@ -62,9 +62,9 @@
   "machine_parameters": {
     "home_order":["z","y","x"],"safe_z_mm":10.0,
     "axes": {
-      "x":{"steps_per_mm":80.0,"max_travel_mm":220.0,"max_speed_mm_s":20.0,"default_speed_mm_s":10.0,"acceleration":40.0,"deceleration":40.0,"settle_delay":0.05,"jog_step_mm":1.0,"home_direction":0,"forward_direction":1,"lead_screw_pitch_mm":5.0,"motor_steps_per_rev":200,"driver_microsteps":2},
-      "y":{"steps_per_mm":80.0,"max_travel_mm":260.0,"max_speed_mm_s":15.0,"default_speed_mm_s":8.0,"acceleration":30.0,"deceleration":30.0,"settle_delay":0.05,"jog_step_mm":1.0,"home_direction":0,"forward_direction":1,"lead_screw_pitch_mm":5.0,"motor_steps_per_rev":200,"driver_microsteps":2},
-      "z":{"steps_per_mm":80.0,"max_travel_mm":200.0,"max_speed_mm_s":20.0,"default_speed_mm_s":10.0,"acceleration":80.0,"deceleration":80.0,"settle_delay":0.05,"jog_step_mm":2.0,"home_direction":0,"forward_direction":1,"lead_screw_pitch_mm":5.0,"motor_steps_per_rev":200,"driver_microsteps":2}
+      "x":{"steps_per_mm":200.0,"max_travel_mm":220.0,"max_speed_mm_s":5.0,"default_speed_mm_s":5.0,"acceleration":100.0,"deceleration":100.0,"settle_delay":0.05,"jog_step_mm":1.0,"home_direction":1,"forward_direction":0,"lead_screw_pitch_mm":8.0,"motor_steps_per_rev":200,"driver_microsteps":8},
+      "y":{"steps_per_mm":200.0,"max_travel_mm":260.0,"max_speed_mm_s":5.0,"default_speed_mm_s":5.0,"acceleration":100.0,"deceleration":100.0,"settle_delay":0.05,"jog_step_mm":1.0,"home_direction":1,"forward_direction":0,"lead_screw_pitch_mm":8.0,"motor_steps_per_rev":200,"driver_microsteps":8},
+      "z":{"steps_per_mm":200.0,"max_travel_mm":200.0,"max_speed_mm_s":5.0,"default_speed_mm_s":5.0,"acceleration":100.0,"deceleration":100.0,"settle_delay":0.05,"jog_step_mm":2.0,"home_direction":1,"forward_direction":0,"lead_screw_pitch_mm":8.0,"motor_steps_per_rev":200,"driver_microsteps":8}
     }
   }
 }

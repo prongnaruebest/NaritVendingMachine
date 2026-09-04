@@ -66,3 +66,21 @@ def make_clear_alarm_handler(motion_service: Any):
         )
 
     return handle
+
+
+def make_schedule_restart_handler(motion_service: Any):
+    """Return the controller-restart handler used after a configuration save."""
+    from narit_vending.shared.commands import CommandResult
+
+    def handle(envelope: "CommandEnvelope") -> "CommandResult":
+        result = motion_service.schedule_configuration_restart()
+        return CommandResult(
+            accepted=result.get("ok", False),
+            command_id=envelope.command_id,
+            state="COMPLETED" if result.get("ok") else "FAILED",
+            reason=result.get("error"),
+            result=result,
+            completed_at=_now(),
+        )
+
+    return handle

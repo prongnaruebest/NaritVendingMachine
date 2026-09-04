@@ -66,7 +66,7 @@ class MockSerialProtocolV2:
         pass
 
     def reset_input_buffer(self) -> None:
-        pass
+        self.script.clear()
 
     def readline(self) -> bytes:
         if not self.script:
@@ -147,6 +147,8 @@ class NucleoMotionTests(unittest.TestCase):
         commands = [w.decode("ascii", errors="replace").strip() for w in mock_serial.writes]
         self.assertIn("ARM SAFE", commands)
         self.assertIn("MOVE X 1 200 400", commands)
+        self.assertIn("DISARM", commands)
+        self.assertFalse(link.is_armed)
 
     def test_move_stops_when_condition_triggers(self):
         mock_serial = MockSerialProtocolV2()
@@ -184,6 +186,16 @@ class NucleoMotionTests(unittest.TestCase):
         })
         self.assertTrue(link.arm(safety_permissive=True))
         self.assertTrue(link.is_armed)
+
+    def test_homing_does_not_flood_nucleo_with_short_move_commands(self):
+        motion_source = (
+            __import__("pathlib").Path(__file__).resolve().parents[1]
+            / "narit_vending"
+            / "motion.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("chunk_steps = 10_000", motion_source)
+        self.assertNotIn("chunk_steps = min(100,", motion_source)
 
 
 if __name__ == "__main__":

@@ -148,6 +148,7 @@ def _register_handlers(bus: Any, service: Any) -> None:
     from narit_vending.controller.handlers.stop import (
         make_clear_alarm_handler,
         make_controlled_stop_handler,
+        make_schedule_restart_handler,
         make_stop_handler,
     )
 
@@ -155,6 +156,7 @@ def _register_handlers(bus: Any, service: Any) -> None:
     bus.register("E_STOP", make_stop_handler(service))  # same effect
     bus.register("CONTROLLED_STOP", make_controlled_stop_handler(service))
     bus.register("CLEAR_ALARM", make_clear_alarm_handler(service))
+    bus.register("SCHEDULE_RESTART", make_schedule_restart_handler(service))
     bus.register("HOME_AXIS", make_home_axis_handler(service))
     bus.register("HOME_ALL", make_home_all_handler(service))
     bus.register("JOG", make_jog_handler(service))
