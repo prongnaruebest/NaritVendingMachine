@@ -946,6 +946,19 @@ class MotionService:
                     updated_signal["initial_value"] = _config_boolean(signal_payload, "initial_value")
                 updated_hardware[group_name][signal_name] = updated_signal
 
+        if "iriv_io" in hardware_payload and isinstance(hardware_payload["iriv_io"], dict):
+            iriv_payload = hardware_payload["iriv_io"]
+            updated_hardware.setdefault("iriv_io", {})
+            if "inputs" in iriv_payload and isinstance(iriv_payload["inputs"], dict):
+                updated_hardware["iriv_io"].setdefault("inputs", {})
+                for in_name, in_info in iriv_payload["inputs"].items():
+                    if in_name in updated_hardware["iriv_io"]["inputs"] and isinstance(in_info, dict):
+                        target_in = updated_hardware["iriv_io"]["inputs"][in_name]
+                        if "polarity_verified" in in_info:
+                            target_in["polarity_verified"] = bool(in_info["polarity_verified"])
+                        if "active_state" in in_info:
+                            target_in["active_state"] = bool(in_info["active_state"])
+
         pin_assignments: dict[int, list[str]] = {}
         for axis_name, motor in updated_hardware["motors"].items():
             for key in ("step_pin", "dir_pin", "enable_pin"):

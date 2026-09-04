@@ -1207,9 +1207,15 @@
 
     // E-Stop
     const estopNode = el("strip-estop");
+    const estopDetail = el("strip-estop-detail");
+    const polarityVerified = MS.payload?.io?.polarity_verified;
     if (estopNode) {
-      estopNode.className = `safety-ind-value ${estopActive ? "fault" : "ok"}`;
-      estopNode.textContent = estopActive ? "⚠ ACTIVE" : "CLEAR";
+      estopNode.className = `safety-ind-value ${estopActive ? "fault" : (polarityVerified === false ? "warn" : "ok")}`;
+      estopNode.textContent = estopActive ? "🛑 ACTIVE" : (polarityVerified === false ? "UNVERIFIED" : "CLEAR");
+    }
+    if (estopDetail) {
+      estopDetail.textContent = polarityVerified === false ? "POLARITY PENDING" : "NC VERIFIED";
+      estopDetail.className = `safety-ind-sub ${polarityVerified === false ? "warn" : "ok"}`;
     }
 
     // Homing
@@ -1315,6 +1321,24 @@
     if (connNode) {
       connNode.className = MS.online ? "online" : "offline";
       connNode.textContent = MS.online ? "ONLINE" : "OFFLINE";
+    }
+
+    // IRIV IO Field Bus
+    const ioNode = el("hdr-iriv-io");
+    if (ioNode) {
+      const ioOk = MS.payload?.io?.communication_ok === true;
+      const ioEnabled = MS.payload?.io?.enabled === true;
+      ioNode.textContent = !MS.online ? "--" : (ioEnabled ? (ioOk ? "ONLINE" : "OFFLINE") : "DISABLED");
+      ioNode.className = !MS.online || !ioEnabled ? "offline" : (ioOk ? "online" : "fault");
+    }
+
+    // Nucleo STM32 Motion Controller Link
+    const nucleoNode = el("hdr-nucleo");
+    if (nucleoNode) {
+      const nucOk = MS.payload?.nucleo?.communication_ok === true;
+      const nucEnabled = MS.payload?.nucleo?.enabled === true;
+      nucleoNode.textContent = !MS.online ? "--" : (nucEnabled ? (nucOk ? "SAFE LINK" : "OFFLINE") : "DISABLED");
+      nucleoNode.className = !MS.online || !nucEnabled ? "offline" : (nucOk ? "online" : "fault");
     }
 
     // Machine state
@@ -1899,6 +1923,47 @@
       </article>`;
     }).join("");
 
+    const isIrivBoard = hardware.board_profile === "IRIV_PiControl_CM4" || Boolean(hardware.iriv_io?.enabled) || MS.payload?.io?.enabled === true;
+    if (isIrivBoard) {
+      setText("configuration-board-profile", `Profile: IRIV PiControl CM4 · Modbus TCP 10.0.0.10:502 · NUCLEO-F439ZI Motion Engine`);
+      const pinEditor = el("configuration-pin-editor");
+      if (pinEditor) {
+        pinEditor.innerHTML = `
+          <section class="pin-editor-group iriv-hw-schedule">
+            <div class="pin-editor-title"><strong>Hardware Subsystems Assignment Schedule</strong><span class="schedule-tag ok">HARDWARE LOCKED</span></div>
+            <div class="schedule-summary-box">
+              <p>Physical I/O and motor step/dir pulse generation are decoupled from Raspberry Pi GPIO and owned by dedicated industrial hardware. Axis motion parameters (speeds, travel, acceleration) above can be tuned and saved to the machine safely.</p>
+            </div>
+            <div class="schedule-grid">
+              <div class="schedule-card">
+                <strong>STM32 NUCLEO Motion Controller (PA8, PA9, PA5 via 6-ch NMOS)</strong>
+                <ul>
+                  <li><b>Axis X:</b> Pulse: <code>PA8 (TIM1_CH1)</code> · Direction: <code>PB0</code> → HBS860H</li>
+                  <li><b>Axis Y:</b> Pulse: <code>PA9 (TIM1_CH2)</code> · Direction: <code>PB1</code> → HBS860H</li>
+                  <li><b>Axis Z:</b> Pulse: <code>PA5 (TIM2_CH1)</code> · Direction: <code>PB2</code> → DM542</li>
+                  <li><b>Watchdog Gate:</b> 500 ms serial heartbeat timeout; disarms on comm loss</li>
+                  <li><b>Rate Boundary:</b> 10–1,000 Hz, 1–10,000 pulses single-axis limit</li>
+                </ul>
+              </div>
+              <div class="schedule-card">
+                <strong>IRIV IO Modbus TCP Subsystem (10.0.0.10:502 · Unit 255)</strong>
+                <ul>
+                  <li><b>DI0–DI5:</b> X/Y/Z Min &amp; Max Limit Switches (Active HIGH)</li>
+                  <li><b>DI6:</b> Dedicated Z Home switch (Decoupled from Z Min limit)</li>
+                  <li><b>DI7–DI9:</b> Product Drop Parking, Drop Sensor &amp; Pickup Sensor</li>
+                  <li><b>DI10:</b> E-Stop &amp; KM1 safety relay feedback (NC contact · Active LOW)</li>
+                  <li><b>DO0–DO3:</b> Ready, Moving, Alarm &amp; Dispense Relay Coils</li>
+                </ul>
+              </div>
+            </div>
+          </section>
+        `;
+      }
+      MS.configDirty = false;
+      updateConfigurationState();
+      return;
+    }
+
     setText("configuration-board-profile", `Board: ${hardware.board_profile || "--"} · BCM GPIO 0–27`);
     const pinGroups = [
       ["motors", "Motor Outputs", hardware.motors || {}],
@@ -2315,6 +2380,8 @@
     if (eventList) eventList.innerHTML = MS.events.slice(0, 8).map((event) => `
       <li class="${esc(event.level)}"><time>${event.at.toLocaleTimeString()}</time><b>${esc(event.subsystem)}</b><span>${esc(event.message)}</span></li>
     `).join("") || `<li class="empty"><span>NO EVENTS RECORDED</span></li>`;
+
+    renderDashboardIOSummary();
   }
 
   function motorTestParameters() {
@@ -2608,6 +2675,219 @@
     }).join("");
   }
 
+  /* ── RENDER: INDUSTRIAL I/O MATRIX & COMMISSIONING ────────── */
+  const DI_CHANNEL_DEFS = [
+    { channel: 0, key: "x_head_limit", label: "X Min Limit", role: "Head Limit" },
+    { channel: 1, key: "x_tail_limit", label: "X Max Limit", role: "Tail Limit" },
+    { channel: 2, key: "y_head_limit", label: "Y Min Limit", role: "Head Limit" },
+    { channel: 3, key: "y_tail_limit", label: "Y Max Limit", role: "Tail Limit" },
+    { channel: 4, key: "z_head_limit", label: "Z Min Limit", role: "Head Limit" },
+    { channel: 5, key: "z_tail_limit", label: "Z Max Limit", role: "Tail Limit" },
+    { channel: 6, key: "z_home", label: "Z Home Switch", role: "Homing Sensor", highlight: true },
+    { channel: 7, key: "product_drop_parking", label: "Drop Parking", role: "Product Detection" },
+    { channel: 8, key: "product_drop_sensor", label: "Drop Sensor", role: "Product Detection" },
+    { channel: 9, key: "product_pickup_sensor", label: "Pickup Sensor", role: "Product Detection" },
+    { channel: 10, key: "estop", label: "E-Stop / KM1", role: "Safety Interlock", isSafety: true },
+  ];
+
+  const DO_CHANNEL_DEFS = [
+    { channel: 0, key: "ready", label: "Ready Lamp", role: "Green Indicator" },
+    { channel: 1, key: "moving", label: "Moving Lamp", role: "Yellow Indicator" },
+    { channel: 2, key: "alarm", label: "Alarm / Buzzer", role: "Red Alarm Output" },
+    { channel: 3, key: "dispense", label: "Dispense Relay", role: "Interposing Relay" },
+  ];
+
+  function renderIOMatrix() {
+    const diContainer = el("io-di-cards");
+    const doContainer = el("io-do-cards");
+    if (!diContainer && !doContainer) return;
+
+    const rawInputs = MS.payload?.io?.raw_inputs || {};
+    const logicalInputs = MS.payload?.io?.inputs || {};
+    const outputs = MS.payload?.io?.outputs || {};
+    const inputDetails = MS.payload?.io?.input_details || {};
+    const outputDetails = MS.payload?.io?.output_details || {};
+    const polarityVerified = MS.payload?.io?.polarity_verified;
+
+    if (diContainer) {
+      diContainer.innerHTML = DI_CHANNEL_DEFS.map((def) => {
+        const detail = inputDetails[def.key] || {};
+        const rawBit = rawInputs[`DI${def.channel}`] ?? false;
+        const isActive = logicalInputs[def.key] ?? false;
+        const label = detail.label || def.label;
+
+        let statusClass = "inactive";
+        let stateText = "INACTIVE";
+        let badgeClass = "";
+        let badgeText = "NORMAL";
+
+        if (def.isSafety) {
+          if (isActive) {
+            statusClass = "fault";
+            stateText = "TRIPPED";
+            badgeClass = "fault";
+            badgeText = "E-STOP";
+          } else {
+            statusClass = "safe";
+            stateText = "CLEAR";
+            badgeClass = "ok";
+            badgeText = polarityVerified ? "VERIFIED" : "UNVERIFIED";
+          }
+        } else if (isActive) {
+          statusClass = def.highlight ? "safe" : "active";
+          stateText = "TRIGGERED";
+          badgeClass = def.highlight ? "ok" : "warn";
+          badgeText = def.highlight ? "HOME" : "LIMIT";
+        }
+
+        return `
+          <div class="io-card ${statusClass} ${def.highlight ? "highlight" : ""}">
+            <div class="io-card-head">
+              <span class="io-channel-tag">DI${def.channel}</span>
+              <span class="io-channel-badge ${badgeClass}">${badgeText}</span>
+            </div>
+            <div class="io-signal-name">${esc(label)}</div>
+            <div class="io-signal-role">${esc(def.role)}</div>
+            <div class="io-card-footer">
+              <span class="io-card-raw">RAW: <b>${rawBit ? "1" : "0"}</b></span>
+              <span class="io-card-state ${statusClass}"><i class="io-dot ${statusClass}"></i> ${stateText}</span>
+            </div>
+          </div>
+        `;
+      }).join("");
+    }
+
+    if (doContainer) {
+      doContainer.innerHTML = DO_CHANNEL_DEFS.map((def) => {
+        const detail = outputDetails[def.key] || {};
+        const isOn = Boolean(outputs[def.key]);
+        const label = detail.label || def.label;
+        const statusClass = isOn ? (def.key === "alarm" ? "fault" : "active") : "inactive";
+
+        return `
+          <div class="io-card ${statusClass}">
+            <div class="io-card-head">
+              <span class="io-channel-tag">DO${def.channel}</span>
+              <span class="io-channel-badge ${isOn ? (def.key === "alarm" ? "fault" : "warn") : ""}">${isOn ? "ENERGIZED" : "OFF"}</span>
+            </div>
+            <div class="io-signal-name">${esc(label)}</div>
+            <div class="io-signal-role">${esc(def.role)}</div>
+            <div class="io-card-footer">
+              <span class="io-card-raw">COIL: <b>0x010${def.channel}</b></span>
+              <span class="io-card-state ${statusClass}"><i class="io-dot ${statusClass}"></i> ${isOn ? "ON" : "OFF"}</span>
+            </div>
+          </div>
+        `;
+      }).join("");
+    }
+  }
+
+  function renderDI10Commissioning() {
+    const rawBit = MS.payload?.io?.raw_inputs?.DI10;
+    const logicalEstop = MS.payload?.io?.inputs?.estop;
+    const polarityVerified = MS.payload?.io?.polarity_verified;
+    const status = getStatus();
+
+    const rawNode = el("comm-raw-di10");
+    const rawDesc = el("comm-raw-desc");
+    if (rawNode) {
+      if (rawBit === undefined) {
+        rawNode.textContent = "--";
+        rawNode.className = "";
+      } else {
+        rawNode.textContent = rawBit ? "1 (HIGH / 24V)" : "0 (LOW / 0V)";
+        rawNode.className = rawBit ? "ok" : "fault";
+      }
+    }
+    if (rawDesc) {
+      rawDesc.textContent = rawBit
+        ? "Healthy NC circuit closed (24V present)"
+        : "Circuit open (E-Stop pressed or wiring disconnected)";
+    }
+
+    const logNode = el("comm-logical-estop");
+    if (logNode) {
+      logNode.textContent = logicalEstop ? "🛑 E-STOP ACTIVE (UNSAFE)" : "✓ CLEAR (SAFE)";
+      logNode.className = logicalEstop ? "fault" : "ok";
+    }
+
+    const polNode = el("comm-polarity-verified");
+    const polDesc = el("comm-polarity-desc");
+    const polBadge = el("di10-commissioning-badge");
+    if (polNode) {
+      polNode.textContent = polarityVerified ? "COMMISSIONED (NC CONTACT)" : "UNVERIFIED (SAFETY BLOCKED)";
+      polNode.className = polarityVerified ? "ok" : "warn";
+    }
+    if (polDesc) {
+      polDesc.textContent = polarityVerified
+        ? "Active state = FALSE confirmed by operator test"
+        : "Requires observed press/release states before motion";
+    }
+    if (polBadge) {
+      polBadge.textContent = polarityVerified ? "COMMISSIONED" : "UNVERIFIED";
+      polBadge.className = `page-status-chip ${polarityVerified ? "ok" : "warn"}`;
+    }
+
+    const km1Node = el("comm-km1-contact");
+    if (km1Node) {
+      km1Node.textContent = status.estop ? "TRIPPED / DE-ENERGIZED" : "ENERGIZED / CLOSED";
+      km1Node.className = status.estop ? "fault" : "ok";
+    }
+  }
+
+  function renderDashboardIOSummary() {
+    const summaryGrid = el("dashboard-io-summary");
+    if (!summaryGrid) return;
+
+    const rawInputs = MS.payload?.io?.raw_inputs || {};
+    const logicalInputs = MS.payload?.io?.inputs || {};
+    const outputs = MS.payload?.io?.outputs || {};
+
+    const items = [
+      { tag: "DI0", name: "X Min", active: logicalInputs.x_head_limit, type: "di" },
+      { tag: "DI1", name: "X Max", active: logicalInputs.x_tail_limit, type: "di" },
+      { tag: "DI2", name: "Y Min", active: logicalInputs.y_head_limit, type: "di" },
+      { tag: "DI3", name: "Y Max", active: logicalInputs.y_tail_limit, type: "di" },
+      { tag: "DI4", name: "Z Min", active: logicalInputs.z_head_limit, type: "di" },
+      { tag: "DI5", name: "Z Max", active: logicalInputs.z_tail_limit, type: "di" },
+      { tag: "DI6", name: "Z Home", active: logicalInputs.z_home, type: "di", highlight: true },
+      { tag: "DI7", name: "Drop Park", active: logicalInputs.product_drop_parking, type: "di" },
+      { tag: "DI8", name: "Drop Sens", active: logicalInputs.product_drop_sensor, type: "di" },
+      { tag: "DI9", name: "Pickup Sens", active: logicalInputs.product_pickup_sensor, type: "di" },
+      { tag: "DI10", name: "E-Stop/KM1", active: logicalInputs.estop, type: "di", isSafety: true },
+      { tag: "DO0", name: "Ready", active: outputs.ready, type: "do" },
+      { tag: "DO1", name: "Moving", active: outputs.moving, type: "do" },
+      { tag: "DO2", name: "Alarm", active: outputs.alarm, type: "do", isAlarm: true },
+      { tag: "DO3", name: "Dispense", active: outputs.dispense, type: "do" },
+    ];
+
+    summaryGrid.innerHTML = items.map((item) => {
+      let cls = item.active ? (item.isSafety || item.isAlarm ? "fault" : (item.highlight ? "safe" : "active")) : "inactive";
+      let dotCls = cls;
+      return `<div class="dash-io-pill ${cls}"><i class="io-dot ${dotCls}"></i><b>${item.tag}</b><span>${esc(item.name)}</span></div>`;
+    }).join("");
+
+    const ioComm = el("dashboard-io-comm");
+    if (ioComm) {
+      const ok = MS.payload?.io?.communication_ok;
+      ioComm.textContent = ok ? "10.0.0.10 ONLINE" : "OFFLINE";
+      ioComm.className = ok ? "ok" : "fault";
+    }
+
+    const topoIo = el("dash-topo-io");
+    if (topoIo) {
+      topoIo.textContent = `IRIV IO Modbus TCP (10.0.0.10:502 · ${MS.payload?.io?.communication_ok ? "ONLINE" : "OFFLINE"})`;
+    }
+    const topoNuc = el("dash-topo-nucleo");
+    if (topoNuc) {
+      topoNuc.textContent = `NUCLEO-F439ZI (${MS.payload?.nucleo?.communication_ok ? "SAFE LINK ONLINE" : "OFFLINE"})`;
+    }
+    const topoEstop = el("dash-topo-estop");
+    if (topoEstop) {
+      topoEstop.textContent = `E-Stop & KM1 (DI10: ${rawInputs.DI10 ? "CLOSED/1" : "OPEN/0"} · ${MS.payload?.io?.polarity_verified ? "VERIFIED" : "UNVERIFIED"})`;
+    }
+  }
+
   function renderWorkspacePages() {
     const status = getStatus();
     const operation = getOperation();
@@ -2651,6 +2931,8 @@
       diagHealth.className = `page-status-chip ${alarmCount || !MS.online ? "fault" : "ok"}`;
     }
 
+    renderIOMatrix();
+    renderDI10Commissioning();
     renderConfigurationEditor();
     renderMotorTest();
     renderMqttMonitor();

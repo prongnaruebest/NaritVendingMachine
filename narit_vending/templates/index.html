@@ -144,10 +144,12 @@
               <div class="header-chip"><span>Controller</span><strong id="hdr-connection" class="offline">OFFLINE</strong></div>
               <div class="header-chip"><span>State</span><strong id="hdr-machine-state" class="state-notready">NOT READY</strong></div>
               <div class="header-chip device-identity-chip"><span>Device</span><strong id="hdr-device" class="device-identifying">IDENTIFYING</strong></div>
+              <div class="header-chip"><span>IRIV IO</span><strong id="hdr-iriv-io" class="offline">--</strong></div>
+              <div class="header-chip"><span>Nucleo</span><strong id="hdr-nucleo" class="offline">--</strong></div>
               <div class="header-chip"><span>System Time</span><strong id="hdr-time" class="monospace">--:--:--</strong></div>
             </div>
             <div class="safety-indicators">
-              <div class="safety-ind"><span class="safety-ind-label">E-Stop Pin</span><div class="safety-ind-value ok" id="strip-estop">CLEAR</div></div>
+              <div class="safety-ind"><span class="safety-ind-label">E-Stop / KM1</span><div class="safety-ind-value ok" id="strip-estop">CLEAR</div><span class="safety-ind-sub" id="strip-estop-detail">NC VERIFIED</span></div>
               <div class="safety-ind"><span class="safety-ind-label">Homing Status</span><div class="safety-ind-value warn" id="strip-homing">NOT READY</div><span class="safety-ind-sub" id="strip-homing-detail">X !  Y !  Z !</span></div>
               <div class="safety-ind"><span class="safety-ind-label">Motion Interlock</span><div class="safety-ind-value warn" id="strip-motion">INHIBITED</div></div>
               <div class="safety-ind"><span class="safety-ind-label">Active Alarms</span><div class="safety-ind-value ok" id="strip-alarms">0</div></div>
@@ -428,23 +430,21 @@
             </div>
           </section>
 
-          <section class="dashboard-panel dashboard-cycle">
-            <div class="dashboard-panel-head"><div><span>F</span><strong>Cycle Statistics</strong></div><b>API REQUIRED</b></div>
-            <div class="dashboard-no-data-grid">
-              <div><span>Completed</span><strong>NO DATA</strong></div><div><span>Failed</span><strong>NO DATA</strong></div>
-              <div><span>Success Rate</span><strong>NO DATA</strong></div><div><span>Latest / Average</span><strong>NO DATA</strong></div>
-              <div><span>Operating Time</span><strong>NO DATA</strong></div>
+          <section class="dashboard-panel dashboard-io-overview">
+            <div class="dashboard-panel-head"><div><span>F</span><strong>Field I/O Status (IRIV IO)</strong></div><b id="dashboard-io-comm">MODBUS TCP</b></div>
+            <div class="dashboard-io-summary-grid" id="dashboard-io-summary">
+              <!-- Rendered dynamically by app.js -->
             </div>
           </section>
 
-          <section class="dashboard-panel dashboard-maintenance">
-            <div class="dashboard-panel-head"><div><span>G</span><strong>Maintenance Status</strong></div><b>NO COUNTERS</b></div>
-            <div class="dashboard-maintenance-list">
-              <div><span>Motor Runtime X/Y/Z</span><strong>NO DATA</strong></div>
-              <div><span>Movement Cycles</span><strong>NO DATA</strong></div>
-              <div><span>Lead Screw Inspection</span><strong>NO DATA</strong></div>
-              <div><span>Limit Sensor Inspection</span><strong>NO DATA</strong></div>
-              <div><span>Last / Next Maintenance</span><strong>NO DATA</strong></div>
+          <section class="dashboard-panel dashboard-hardware-links">
+            <div class="dashboard-panel-head"><div><span>G</span><strong>Hardware Baseline Topology</strong></div><b id="dashboard-topo-status">IRIV + NUCLEO</b></div>
+            <div class="dashboard-topology-list">
+              <div><span>Host Compute</span><strong>IRIV PiControl CM4 (192.168.70.80)</strong></div>
+              <div><span>Field Bus I/O</span><strong id="dash-topo-io">IRIV IO Modbus TCP (10.0.0.10:502)</strong></div>
+              <div><span>Pulse Generator</span><strong id="dash-topo-nucleo">NUCLEO-F439ZI (PA8, PA9, PA5 via NMOS)</strong></div>
+              <div><span>Hardwired Safety</span><strong id="dash-topo-estop">E-Stop &amp; KM1 Relay (DI10 Feedback)</strong></div>
+              <div><span>Motor Drivers</span><strong>HBS860H (X/Y) + DM542 (Z)</strong></div>
             </div>
           </section>
 
@@ -579,8 +579,91 @@
       </section>
 
       <section class="workspace-view" data-view-page="diagnostics">
-        <div class="page-heading"><div><p class="panel-label">Diagnostics</p><h2>Controller &amp; I/O Health</h2></div><span class="page-status-chip" id="diag-health">CHECKING</span></div>
+        <div class="page-heading">
+          <div><p class="panel-label">Diagnostics &amp; Commissioning</p><h2>Hardware Subsystems &amp; Field I/O Health</h2></div>
+          <span class="page-status-chip" id="diag-health">CHECKING</span>
+        </div>
         <div class="diagnostic-grid" id="diagnostic-grid"></div>
+
+        <!-- ── REAL-TIME INDUSTRIAL I/O MATRIX ────────────────── -->
+        <div class="panel page-panel io-matrix-panel">
+          <div class="panel-head">
+            <div>
+              <p class="panel-label">Field Bus Subsystem (IRIV IO · 10.0.0.10:502)</p>
+              <h2 class="panel-title">Real-Time Digital I/O Matrix (DI0–DI10 &amp; DO0–DO3)</h2>
+            </div>
+            <div class="io-matrix-legend">
+              <span class="io-leg-item"><i class="io-dot active"></i> Active / ON</span>
+              <span class="io-leg-item"><i class="io-dot inactive"></i> Inactive / OFF</span>
+              <span class="io-leg-item"><i class="io-dot safe"></i> Safety Verified</span>
+            </div>
+          </div>
+
+          <div class="io-matrix-grid-layout">
+            <div class="io-col-panel">
+              <div class="io-col-head">
+                <strong>DIGITAL INPUTS (DI0–DI10)</strong>
+                <span class="io-col-sub">Discrete Inputs · Reg 0x0002 · Fail-Safe Interlocked</span>
+              </div>
+              <div class="io-cards-list" id="io-di-cards">
+                <!-- Rendered dynamically by app.js -->
+              </div>
+            </div>
+
+            <div class="io-col-panel">
+              <div class="io-col-head">
+                <strong>DIGITAL OUTPUTS (DO0–DO3)</strong>
+                <span class="io-col-sub">SSR Aux Outputs · Reg 0x0100 · Controlled by State</span>
+              </div>
+              <div class="io-cards-list" id="io-do-cards">
+                <!-- Rendered dynamically by app.js -->
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── SAFETY COMMISSIONING GATE & DI10 NC VERIFICATION ─ -->
+        <div class="panel page-panel commissioning-panel">
+          <div class="panel-head">
+            <div>
+              <p class="panel-label">Safety Commissioning Gate</p>
+              <h2 class="panel-title">DI10 E-Stop &amp; KM1 Hardwired Relay Two-State Verification</h2>
+            </div>
+            <span class="page-status-chip" id="di10-commissioning-badge">VERIFYING</span>
+          </div>
+          <div class="commissioning-body">
+            <div class="commissioning-cards-row">
+              <div class="comm-card">
+                <span>DI10 Physical Value</span>
+                <strong id="comm-raw-di10">--</strong>
+                <small id="comm-raw-desc">High (1) when released, Low (0) when pressed</small>
+              </div>
+              <div class="comm-card">
+                <span>Logical E-Stop State</span>
+                <strong id="comm-logical-estop">--</strong>
+                <small id="comm-logical-desc">Must be CLEAR before motion can arm</small>
+              </div>
+              <div class="comm-card">
+                <span>Polarity Commissioning</span>
+                <strong id="comm-polarity-verified">--</strong>
+                <small id="comm-polarity-desc">NC contact verified via two-state test</small>
+              </div>
+              <div class="comm-card">
+                <span>KM1 Safety Relay Contact</span>
+                <strong id="comm-km1-contact">HARDWIRED</strong>
+                <small>60V X/Y cut; 24V Z inspection gate</small>
+              </div>
+            </div>
+            <div class="commissioning-notes">
+              <strong>Two-State Commissioning Procedure:</strong>
+              <ol>
+                <li>Release physical E-Stop button at the cabinet: verify raw DI10 reads <code>1 (High)</code> and logical E-Stop is <code>CLEAR</code>.</li>
+                <li>Press physical E-Stop button: verify raw DI10 toggles to <code>0 (Low)</code> and state transitions immediately to <code>E_STOP</code>.</li>
+                <li>If the raw bit does not toggle, inspect cabinet wiring and KM1 safety relay contacts. <em>Never compensate in software without two confirmed states.</em></li>
+              </ol>
+            </div>
+          </div>
+        </div>
       </section>
 
       <section class="workspace-view" data-view-page="configuration">

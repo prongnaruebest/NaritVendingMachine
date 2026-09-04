@@ -503,7 +503,7 @@ def restore_config_backup(backup: str | Path, targets: dict[str, str | Path]) ->
             temporary = target.with_name(f".{target.name}.restore.tmp")
             temporary.write_bytes(source.read_bytes())
             temporary_paths.append(temporary)
-        for (_, target), temporary in zip(verified, temporary_paths, strict=True):
+        for (_, target), temporary in zip(verified, temporary_paths):
             os.replace(temporary, target)
     except Exception:
         for target, content in previous.items():

@@ -301,6 +301,36 @@ class IRIVIOBackend:
             last_error = self._last_error
             last_success_at = self._last_success_at
             outputs = dict(self._output_values)
+
+        input_details = {}
+        for name, info in self.inputs.items():
+            ch = int(info.get("channel", 0))
+            raw_val = raw[ch] if ch < len(raw) else False
+            input_details[name] = {
+                "channel": ch,
+                "raw_channel": f"DI{ch}",
+                "raw_value": raw_val,
+                "active": self.input_active(name),
+                "active_state": info.get("active_state", True),
+                "polarity_verified": info.get("polarity_verified", True),
+                "label": info.get("label", name),
+                "fail_safe": bool(info.get("fail_safe", False)),
+            }
+
+        output_details = {}
+        for name, info in self.outputs.items():
+            ch = int(info.get("channel", 0))
+            output_details[name] = {
+                "channel": ch,
+                "raw_channel": f"DO{ch}",
+                "value": outputs.get(name, False),
+                "label": info.get("label", name),
+                "active_high": bool(info.get("active_high", True)),
+            }
+
+        estop_info = self.inputs.get("estop", {})
+        polarity_verified = bool(estop_info.get("polarity_verified", False))
+
         return {
             "enabled": True,
             "communication_ok": self.communication_ok,
@@ -312,4 +342,7 @@ class IRIVIOBackend:
             "raw_inputs": {f"DI{index}": value for index, value in enumerate(raw)},
             "inputs": {name: self.input_active(name) for name in self.inputs},
             "outputs": outputs,
+            "input_details": input_details,
+            "output_details": output_details,
+            "polarity_verified": polarity_verified,
         }
