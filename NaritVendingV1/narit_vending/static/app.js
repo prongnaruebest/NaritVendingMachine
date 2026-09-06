@@ -37,7 +37,7 @@
     // UI state
     feedOverridePct: 100,   // 0–100, displayed
     selectedJogStep: 1.0,
-    selectedJogSpeed: 15.0,
+    selectedJogSpeed: 5.0,
     keyboardJogEnabled: false,
     selectedSlotCode: "",
     slotSequenceMode: false,
@@ -254,17 +254,16 @@
   function canHomeAxis() { return motionInhibitReason(false) === ""; }
   function motionAllowed(requireHome = true) { return motionInhibitReason(requireHome) === ""; }
   function buildJogPayload(axis, dir, continuous = false) {
-    const speed_mm_s = Number(MS.selectedJogSpeed || 15.0);
+    const speed_mm_s = Number(MS.selectedJogSpeed || 5.0);
     const step = continuous
       ? Math.max(0.2, Math.min(5.0, Number((speed_mm_s * 0.15).toFixed(2))))
       : Number(MS.selectedJogStep || 1.0);
     const direction = Number(dir);
     const distance_mm = step * direction;
-    const allow_unhomed = Boolean(el("jog-allow-unhomed")?.checked || !getAxis(axis).is_homed);
-    return { axis, distance_mm, speed_mm_s, allow_unhomed };
+    return { axis, distance_mm, speed_mm_s, allow_unhomed: false };
   }
   function targetSpeedPayload() {
-    return { speed_mm_s: Number(MS.selectedJogSpeed || 15.0) };
+    return { speed_mm_s: Number(MS.selectedJogSpeed || 5.0) };
   }
 
   /* ── SLOT STATUS ────────────────────────────────────────────── */

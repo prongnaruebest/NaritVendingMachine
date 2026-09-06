@@ -6,7 +6,7 @@ import math
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from time import sleep
+from time import monotonic, sleep
 from typing import Callable
 
 if os.name != "posix" and "GPIOZERO_PIN_FACTORY" not in os.environ:
@@ -24,9 +24,8 @@ def _slot_sort_key(item: tuple[str, object]) -> tuple[int, int | str]:
 
 
 def _home_backoff_limit_steps(steps_per_mm: float) -> int:
-    """Keep the axis on the asserted home switch after homing."""
-    del steps_per_mm
-    return 0
+    """Back off 2 mm before the low-speed precision latch pass."""
+    return max(1, int(round(2.0 * steps_per_mm)))
 
 
 class MotionError(RuntimeError):
@@ -79,6 +78,12 @@ class AxisConfig:
     lead_screw_pitch_mm: float = 5.0
     motor_steps_per_rev: int = 200
     driver_microsteps: int = 10
+    home_position_mm: float = 0.0
+    max_pulse_hz: float = 50_000.0
+    commissioned_max_speed_mm_s: float = 5.0
+    homing_search_speed_mm_s: float = 5.0
+    homing_latch_speed_mm_s: float = 1.0
+    homing_timeout_s: float = 120.0
 
     def __post_init__(self) -> None:
         positive_values = {
@@ -89,6 +94,11 @@ class AxisConfig:
             "lead_screw_pitch_mm": self.lead_screw_pitch_mm,
             "motor_steps_per_rev": self.motor_steps_per_rev,
             "driver_microsteps": self.driver_microsteps,
+            "max_pulse_hz": self.max_pulse_hz,
+            "commissioned_max_speed_mm_s": self.commissioned_max_speed_mm_s,
+            "homing_search_speed_mm_s": self.homing_search_speed_mm_s,
+            "homing_latch_speed_mm_s": self.homing_latch_speed_mm_s,
+            "homing_timeout_s": self.homing_timeout_s,
         }
         for field_name, value in positive_values.items():
             if not math.isfinite(float(value)) or float(value) <= 0:
@@ -99,6 +109,18 @@ class AxisConfig:
             raise MotionError(f"{self.name}: motor directions must be 0 or 1")
         if self.home_direction == self.forward_direction:
             raise MotionError(f"{self.name}: home_direction and forward_direction must be opposite")
+        if not math.isfinite(self.home_position_mm) or not 0 <= self.home_position_mm <= self.max_travel_mm:
+            raise MotionError(f"{self.name}: home_position_mm must be within configured travel")
+        for field_name in ("max_pulse_hz", "commissioned_max_speed_mm_s", "homing_search_speed_mm_s", "homing_latch_speed_mm_s", "homing_timeout_s"):
+            if not math.isfinite(float(getattr(self, field_name))) or float(getattr(self, field_name)) <= 0:
+                raise MotionError(f"{self.name}: {field_name} must be greater than zero")
+        pulse_limited_speed = self.max_pulse_hz / self.steps_per_mm
+        if self.commissioned_max_speed_mm_s > min(self.max_speed_mm_s, pulse_limited_speed):
+            raise MotionError(f"{self.name}: commissioned speed exceeds motor or pulse limit")
+        if self.homing_search_speed_mm_s > self.commissioned_max_speed_mm_s:
+            raise MotionError(f"{self.name}: homing search speed exceeds commissioned speed")
+        if self.homing_latch_speed_mm_s > self.homing_search_speed_mm_s:
+            raise MotionError(f"{self.name}: homing latch speed exceeds search speed")
 
     @property
     def step_pin(self) -> int:
@@ -111,6 +133,15 @@ class AxisConfig:
     @property
     def pulses_per_rev(self) -> int:
         return self.motor_steps_per_rev * self.driver_microsteps
+
+    def pulse_hz_to_rpm(self, pulse_hz: float) -> float:
+        return float(pulse_hz) * 60.0 / self.pulses_per_rev
+
+    def pulse_hz_to_mm_s(self, pulse_hz: float) -> float:
+        return float(pulse_hz) / self.steps_per_mm
+
+    def mm_s_to_pulse_hz(self, speed_mm_s: float) -> float:
+        return float(speed_mm_s) * self.steps_per_mm
 
 
 @dataclass(frozen=True)
@@ -278,7 +309,7 @@ class AxisController:
         requested = self.config.default_speed_mm_s if speed_mm_s is None else float(speed_mm_s)
         if not math.isfinite(requested) or requested <= 0:
             raise MotionError(f"{self.config.name}: speed_mm_s must be a finite number greater than 0")
-        return min(requested, self.config.max_speed_mm_s)
+        return min(requested, self.config.max_speed_mm_s, self.config.commissioned_max_speed_mm_s, self.config.max_pulse_hz / self.config.steps_per_mm)
 
     def plan_relative_move(self, distance_mm: float, speed_mm_s: float | None = None, time_s: float | None = None) -> AxisMovePlan:
         if not math.isfinite(float(distance_mm)):
@@ -336,7 +367,7 @@ class AxisController:
         pulse_count: int,
         pulse_frequency_hz: float,
         direction_name: str,
-        ignore_limits: bool = True,
+        ignore_limits: bool = False,
     ) -> dict[str, object]:
         if pulse_count < 1:
             raise MotionError(f"{self.config.name}: pulse_count must be greater than 0")
@@ -427,8 +458,9 @@ class AxisController:
             else _home_backoff_limit_steps(self.config.steps_per_mm)
         )
 
-        homing_speed = min(8.0, self.config.max_speed_mm_s)
+        homing_speed = min(self.config.homing_search_speed_mm_s, self.config.commissioned_max_speed_mm_s)
         duration_s = max_steps / max(homing_speed * self.config.steps_per_mm, 1.0)
+        search_deadline = monotonic() + self.config.homing_timeout_s
         self.direction.value = bool(self.config.home_direction)
         moved = 0
         limit_active = self.head_limit.value
@@ -436,14 +468,14 @@ class AxisController:
             progress("searching")
 
         if self.motion_backend is not None and getattr(self.motion_backend, "expected_protocol", 1) >= 2:
-            speed_hz = max(10.0, min(1000.0, homing_speed * self.config.steps_per_mm))
+            speed_hz = max(10.0, min(self.config.max_pulse_hz, homing_speed * self.config.steps_per_mm))
             # Protocol v2 monitors E-stop, software stop, and the home input every
             # 80 ms while a MOVE is active. Use the firmware's full move window
             # instead of flooding its serial task with 10 MOVE commands/second.
             chunk_steps = 10_000
             while not limit_active:
-                if moved >= max_steps:
-                    raise LimitTriggeredError(f"{self.config.name}: home not reached within {max_steps} steps")
+                if monotonic() >= search_deadline:
+                    raise LimitTriggeredError(f"{self.config.name}: home sensor not reached within {self.config.homing_timeout_s:g} seconds")
                 if self.estop.value:
                     raise EmergencyStopError(f"{self.config.name}: emergency stop triggered during homing")
                 if self.stop_requested():
@@ -452,7 +484,7 @@ class AxisController:
                     res = self.motion_backend.move(
                         axis=self.config.name,
                         direction=self.config.home_direction,
-                        steps=min(chunk_steps, max_steps - moved),
+                        steps=chunk_steps,
                         speed_hz=speed_hz,
                         stop_requested=lambda: bool(self.estop.value or self.stop_requested() or self.head_limit.value),
                     )
@@ -497,6 +529,24 @@ class AxisController:
                         f"{self.config.name}: home sensor did not release after {effective_backoff} backoff steps"
                     )
 
+                if progress is not None:
+                    progress("latching")
+                latch_speed_hz = max(10.0, min(self.config.max_pulse_hz, self.config.homing_latch_speed_mm_s * self.config.steps_per_mm))
+                latch_window = max(effective_backoff * 2, 1)
+                try:
+                    self.motion_backend.move(
+                        axis=self.config.name,
+                        direction=self.config.home_direction,
+                        steps=min(latch_window, 10_000),
+                        speed_hz=latch_speed_hz,
+                        stop_requested=lambda: bool(self.estop.value or self.stop_requested() or self.head_limit.value),
+                    )
+                except NucleoError:
+                    if not self.head_limit.value:
+                        raise
+                if not self.head_limit.value:
+                    raise LimitTriggeredError(f"{self.config.name}: home sensor not found during precision latch")
+
             self.position_steps = 0
             self.is_homed = True
             if progress is not None:
@@ -504,7 +554,7 @@ class AxisController:
             _logger.info("Home %s: complete (%d steps via nucleo)", self.config.name, moved)
             return moved
 
-        half_periods = _build_half_periods(max_steps, duration_s, ramp_ratio=0.8)
+        half_periods = _build_half_periods(min(max_steps, 10_000), min(duration_s, 10.0), ramp_ratio=0.8)
         self.direction.value = bool(self.config.home_direction)
         moved = 0
         limit_active = self.head_limit.value
@@ -512,8 +562,8 @@ class AxisController:
             progress("searching")
 
         while not limit_active:
-            if moved >= max_steps:
-                raise LimitTriggeredError(f"{self.config.name}: home not reached within {max_steps} steps")
+            if monotonic() >= search_deadline:
+                raise LimitTriggeredError(f"{self.config.name}: home sensor not reached within {self.config.homing_timeout_s:g} seconds")
             if moved % 10 == 0:
                 if self.estop.value:
                     self.stop()
@@ -545,6 +595,18 @@ class AxisController:
                 raise LimitTriggeredError(
                     f"{self.config.name}: home sensor did not release after {effective_backoff} backoff steps"
                 )
+
+            if progress is not None:
+                progress("latching")
+            self.direction.value = bool(self.config.home_direction)
+            latch_half_period = 0.5 / max(10.0, self.config.homing_latch_speed_mm_s * self.config.steps_per_mm)
+            latch_moved = 0
+            while not self.head_limit.value and latch_moved < max(effective_backoff * 2, 1):
+                self._guard_during_move(self.config.home_direction)
+                self._pulse_once(latch_half_period)
+                latch_moved += 1
+            if not self.head_limit.value:
+                raise LimitTriggeredError(f"{self.config.name}: home sensor not found during precision latch")
 
         self.position_steps = 0
         self.is_homed = True
@@ -580,9 +642,10 @@ class AxisController:
             if not math.isfinite(duration_s) or duration_s <= 0:
                 raise MotionError(f"{self.config.name}: time_s must be a finite number greater than 0")
             required_speed = distance_mm / duration_s
-            if required_speed > self.config.max_speed_mm_s:
+            effective_max = min(self.config.max_speed_mm_s, self.config.commissioned_max_speed_mm_s, self.config.max_pulse_hz / self.config.steps_per_mm)
+            if required_speed > effective_max:
                 raise MotionError(
-                    f"{self.config.name}: requested {required_speed:.2f} mm/s exceeds limit {self.config.max_speed_mm_s:.2f} mm/s"
+                    f"{self.config.name}: requested {required_speed:.2f} mm/s exceeds commissioned limit {effective_max:.2f} mm/s"
                 )
             return duration_s
 
@@ -597,7 +660,8 @@ class AxisController:
 
         if self.motion_backend is not None and getattr(self.motion_backend, "expected_protocol", 1) >= 2:
             speed_hz = plan.steps / plan.duration_s if plan.duration_s > 0 else (self.config.steps_per_mm * self.config.default_speed_mm_s)
-            speed_hz = max(10.0, min(1000.0, speed_hz))
+            protocol_cap_hz = 50_000.0 if getattr(self.motion_backend, "expected_protocol", 1) >= 3 else 1_000.0
+            speed_hz = max(10.0, min(protocol_cap_hz, speed_hz))
 
             def _stop_cond():
                 if self.estop.value:
@@ -729,10 +793,51 @@ class MotionController:
     def home_axis(self, axis_name: str, progress: Callable[[str, str], None] | None = None) -> None:
         axis = self.axes()[axis_name.lower()]
         axis.home(progress=(lambda phase: progress(axis.config.name, phase)) if progress is not None else None)
+        if axis.config.home_position_mm > 0:
+            if progress is not None:
+                progress(axis.config.name, "positioning")
+            try:
+                axis.move_to_mm(axis.config.home_position_mm, speed_mm_s=axis.config.commissioned_max_speed_mm_s)
+            except Exception:
+                axis.is_homed = False
+                raise
         if progress is not None:
             progress(axis.config.name, "passed")
 
     def home_all(self, progress: Callable[[str, str], None] | None = None) -> None:
+        backend_protocol = getattr(self.x.motion_backend, "expected_protocol", 1) if self.x.motion_backend is not None else 1
+        if (
+            self.x.motion_backend is not None
+            and isinstance(backend_protocol, (int, float))
+            and backend_protocol >= 3
+            and hasattr(self.x.motion_backend, "home_parallel")
+        ):
+            axes = self.axes()
+            plans = {}
+            for name, axis in axes.items():
+                if progress is not None:
+                    progress(name, "searching")
+                plans[name] = {
+                    "direction": axis.config.home_direction,
+                    "speed_hz": min(axis.config.max_pulse_hz, axis.config.homing_search_speed_mm_s * axis.config.steps_per_mm),
+                    "limit": lambda current=axis: current.head_limit.value,
+                    "abort": lambda current=axis: bool(current.estop.value or current.stop_requested()),
+                    "timeout_s": axis.config.homing_timeout_s,
+                }
+            self.x.motion_backend.home_parallel(plans)
+            for name, axis in axes.items():
+                axis.home(progress=(lambda phase, current=name: progress(current, phase)) if progress is not None else None)
+                if axis.config.home_position_mm > 0:
+                    if progress is not None:
+                        progress(name, "positioning")
+                    try:
+                        axis.move_to_mm(axis.config.home_position_mm, speed_mm_s=axis.config.commissioned_max_speed_mm_s)
+                    except Exception:
+                        axis.is_homed = False
+                        raise
+                if progress is not None:
+                    progress(name, "passed")
+            return
         for axis_name in self.config.home_order:
             self.home_axis(axis_name, progress=progress)
 
@@ -820,9 +925,10 @@ class MotionController:
             distance_mm = distances[axis_name]
             axis = self.axes()[axis_name]
             required_speed = abs(distance_mm) / duration_s if duration_s > 0 else 0.0
-            if required_speed > axis.config.max_speed_mm_s:
+            effective_max = min(axis.config.max_speed_mm_s, axis.config.commissioned_max_speed_mm_s, axis.config.max_pulse_hz / axis.config.steps_per_mm)
+            if required_speed > effective_max:
                 raise MotionError(
-                    f"{axis_name}: requested {required_speed:.2f} mm/s exceeds limit {axis.config.max_speed_mm_s:.2f} mm/s"
+                    f"{axis_name}: requested {required_speed:.2f} mm/s exceeds commissioned limit {effective_max:.2f} mm/s"
                 )
             plans[axis_name] = axis.plan_absolute_move(target_mm, speed_mm_s=required_speed, time_s=duration_s)
 
@@ -1092,6 +1198,12 @@ def _axis_config_to_dict(config: AxisConfig) -> dict[str, int | float | str]:
         "lead_screw_pitch_mm": config.lead_screw_pitch_mm,
         "motor_steps_per_rev": config.motor_steps_per_rev,
         "driver_microsteps": config.driver_microsteps,
+        "home_position_mm": config.home_position_mm,
+        "max_pulse_hz": config.max_pulse_hz,
+        "commissioned_max_speed_mm_s": config.commissioned_max_speed_mm_s,
+        "homing_search_speed_mm_s": config.homing_search_speed_mm_s,
+        "homing_latch_speed_mm_s": config.homing_latch_speed_mm_s,
+        "homing_timeout_s": config.homing_timeout_s,
         "pulses_per_rev": config.pulses_per_rev,
     }
 
@@ -1132,6 +1244,12 @@ def _axis_config_from_dict(name: str, payload: dict[str, object]) -> AxisConfig:
         lead_screw_pitch_mm=lead_screw_pitch_mm,
         motor_steps_per_rev=motor_steps_per_rev,
         driver_microsteps=driver_microsteps,
+        home_position_mm=float(payload.get("home_position_mm", 0.0)),
+        max_pulse_hz=float(payload.get("max_pulse_hz", 50_000.0)),
+        commissioned_max_speed_mm_s=float(payload.get("commissioned_max_speed_mm_s", max_speed)),
+        homing_search_speed_mm_s=float(payload.get("homing_search_speed_mm_s", min(default_speed, max_speed))),
+        homing_latch_speed_mm_s=float(payload.get("homing_latch_speed_mm_s", min(1.0, default_speed, max_speed))),
+        homing_timeout_s=float(payload.get("homing_timeout_s", 120.0)),
     )
 
 

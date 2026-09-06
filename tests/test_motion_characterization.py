@@ -66,8 +66,8 @@ class MotionCharacterizationTests(unittest.TestCase):
         self.assertEqual(len(half_periods), pulse_count)
         self.assertTrue(all(delay > 0 for delay in half_periods))
 
-    def test_home_stops_on_sensor_without_backoff(self) -> None:
-        self.assertEqual(_home_backoff_limit_steps(200.0), 0)
+    def test_home_uses_two_mm_backoff_before_precision_latch(self) -> None:
+        self.assertEqual(_home_backoff_limit_steps(200.0), 400)
 
     def test_axis_rejects_equal_home_and_forward_direction(self) -> None:
         with self.assertRaises(MotionError):

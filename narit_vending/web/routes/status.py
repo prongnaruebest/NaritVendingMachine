@@ -14,7 +14,8 @@ if TYPE_CHECKING:
 _log = logging.getLogger(__name__)
 
 _MOTOR_TEST_MAX_DURATION_S = 10.0
-_MOTOR_TEST_MAX_FREQUENCY_HZ = 1000.0
+_MOTOR_TEST_V2_MAX_FREQUENCY_HZ = 1000.0
+_MOTOR_TEST_V3_MAX_FREQUENCY_HZ = 50_000.0
 _MOTOR_TEST_MAX_PULSES = 10000
 
 
@@ -47,6 +48,10 @@ def _status_from_snapshot(snap) -> dict:
         except Exception:
             pass
 
+    nucleo_protocol = int((snap.nucleo_status or {}).get("protocol", 1) or 1)
+    motor_test_max_frequency_hz = (
+        _MOTOR_TEST_V3_MAX_FREQUENCY_HZ if nucleo_protocol >= 3 else _MOTOR_TEST_V2_MAX_FREQUENCY_HZ
+    )
     return {
         "busy": snap.busy,
         "active_command": snap.active_command or None,
@@ -72,13 +77,14 @@ def _status_from_snapshot(snap) -> dict:
         "safety": {
             "estop_active": snap.estop,
             "stop_requested": snap.stop_requested,
+            "motion_enabled": snap.motion_enabled,
             "controlled_stop_requested": snap.controlled_stop_requested,
             "configuration_restart_required": snap.configuration_restart_required,
             "motor_test": {
                 "armed": snap.motor_test_armed,
                 "expires_in_s": None,
                 "max_duration_s": _MOTOR_TEST_MAX_DURATION_S,
-                "max_frequency_hz": _MOTOR_TEST_MAX_FREQUENCY_HZ,
+                "max_frequency_hz": motor_test_max_frequency_hz,
                 "max_pulses": _MOTOR_TEST_MAX_PULSES,
                 "scope": "motor_test_page_only",
             },
@@ -91,6 +97,7 @@ def _status_from_snapshot(snap) -> dict:
         "alarm_channels": snap.alarm_channels,
         "io": snap.io_status,
         "nucleo": snap.nucleo_status,
+        "demo": snap.demo_status,
         "slots": snap.slots,
     }
 

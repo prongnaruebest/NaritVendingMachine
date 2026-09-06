@@ -1,11 +1,9 @@
 /**
   ******************************************************************************
-  * @file    LwIP/LwIP_HTTP_Server_Netconn_RTOS/Src/main.c 
+  * @file    NARIT NUCLEO-F439ZI USB motion controller
   * @author  MCD Application Team
-  * @brief   This sample code implements a http server application based on 
-  *          Netconn API of LwIP stack and FreeRTOS. This application uses 
-  *          STM32F4xx the ETH HAL API to transmit and receive data. 
-  *          The communication is done with a web browser of a remote PC.
+  * @brief   USB virtual-COM motion controller. Ethernet is intentionally not
+  *          initialized so there is exactly one command and heartbeat path.
   ******************************************************************************
   * @attention
   *
@@ -20,22 +18,15 @@
   */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-#include "ethernetif.h"
-#include "lwip/netif.h"
-#include "lwip/tcpip.h"
-#include "app_ethernet.h"
 #include "nucleo_serial_link.c"
 #include "nucleo_motion.c"
 /* Private define ------------------------------------------------------------*/
 /* Private macro -------------------------------------------------------------*/
 /* Private variables ---------------------------------------------------------*/
-struct netif gnetif; /* network interface structure */
-
 /* Private function prototypes -----------------------------------------------*/
 static void SystemClock_Config(void);
 static void StartThread(void const * argument);
 static void BSP_Config(void);
-static void Netif_Config(void);
 
 /* Private functions ---------------------------------------------------------*/
 
@@ -88,12 +79,6 @@ int main(void)
 static void StartThread(void const * argument)
 {
   (void)argument;
-  /* Create tcp_ip stack thread */
-  tcpip_init(NULL, NULL);
-  
-  /* Initialize the LwIP stack */
-  Netif_Config();
-  
   for( ;; )
   {
     NucleoMotion_Poll();
@@ -128,55 +113,12 @@ static void BSP_Config(void)
   LCD_LOG_SetHeader((uint8_t *)"Webserver Application Netconn API");
   LCD_LOG_SetFooter((uint8_t *)"STM324x9I-EVAL board");
   
-  LCD_UsrLog ((char *)"  State: Ethernet Initialization ...\n");
+  LCD_UsrLog ((char *)"  State: USB serial initialization ...\n");
 
 #else
   /* PB0 is X-DIR. Do not initialize or toggle the Nucleo LEDs here. */
 
 #endif /* USE_LCD */
-}
-
-/**
-  * @brief  Configures the network interface
-  * @param  None
-  * @retval None
-  */
-static void Netif_Config(void)
-{
-  ip_addr_t ipaddr;
-  ip_addr_t netmask;
-  ip_addr_t gw;
-
-#if LWIP_DHCP
-  ip_addr_set_zero_ip4(&ipaddr);
-  ip_addr_set_zero_ip4(&netmask);
-  ip_addr_set_zero_ip4(&gw);
-#else
-  IP_ADDR4(&ipaddr,IP_ADDR0,IP_ADDR1,IP_ADDR2,IP_ADDR3);
-  IP_ADDR4(&netmask,NETMASK_ADDR0,NETMASK_ADDR1,NETMASK_ADDR2,NETMASK_ADDR3);
-  IP_ADDR4(&gw,GW_ADDR0,GW_ADDR1,GW_ADDR2,GW_ADDR3);
-#endif /* LWIP_DHCP */
-
-  /* add the network interface */
-  netif_add(&gnetif, &ipaddr, &netmask, &gw, NULL, &ethernetif_init, &tcpip_input);
-
-  /*  Registers the default network interface. */
-  netif_set_default(&gnetif);
-
-  ethernet_link_status_updated(&gnetif);
-
-#if LWIP_NETIF_LINK_CALLBACK
-  netif_set_link_callback(&gnetif, ethernet_link_status_updated);
-
-  osThreadDef(EthLink, ethernet_link_thread, osPriorityNormal, 0, configMINIMAL_STACK_SIZE *2);
-  osThreadCreate (osThread(EthLink), &gnetif);
-#endif
-
-#if LWIP_DHCP
-  /* Start DHCPClient */
-  osThreadDef(DHCP, DHCP_Thread, osPriorityBelowNormal, 0, configMINIMAL_STACK_SIZE * 2);
-  osThreadCreate (osThread(DHCP), &gnetif);
-#endif
 }
 
 /**

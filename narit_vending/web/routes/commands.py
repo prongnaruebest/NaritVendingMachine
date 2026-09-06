@@ -6,7 +6,7 @@ import logging
 import math
 from typing import TYPE_CHECKING, Any
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, Response, jsonify, request
 
 if TYPE_CHECKING:
     from narit_vending.web.ipc_client import ControllerClient
@@ -250,6 +250,56 @@ def make_commands_bp(ctrl: "ControllerClient") -> Blueprint:
         r = _submit(ctrl, "CLEAR_ALARM", {})
         snap = ctrl.snapshot()
         return jsonify(r | _snap_status(snap)), 200 if r.get("accepted") else 400
+
+    @bp.post("/api/system/motion/disable")
+    def api_disable_motion():
+        r = _submit(ctrl, "DISABLE_MOTION", {})
+        snap = ctrl.snapshot()
+        return jsonify(r | _snap_status(snap)), 200 if r.get("accepted") else 400
+
+    @bp.post("/api/system/motion/enable")
+    def api_enable_motion():
+        r = _submit(ctrl, "ENABLE_MOTION", {})
+        snap = ctrl.snapshot()
+        return jsonify(r | _snap_status(snap)), 200 if r.get("accepted") else 400
+
+    @bp.post("/api/system/nucleo/reset-link")
+    def api_reset_nucleo_link():
+        r = _submit(ctrl, "RESET_NUCLEO_LINK", {})
+        snap = ctrl.snapshot()
+        return jsonify(r | _snap_status(snap)), 200 if r.get("accepted") else 503
+
+    # ── Controller-owned Demo Slot Sampling ────────────────────────────────
+
+    @bp.post("/api/demo/configure")
+    def api_demo_configure():
+        r = _submit(ctrl, "CONFIGURE_DEMO", _json_payload())
+        return jsonify(r), 200 if r.get("accepted") else 400
+
+    @bp.post("/api/demo/<action>")
+    def api_demo_action(action: str):
+        command_types = {
+            "validate": "VALIDATE_DEMO", "arm": "ARM_DEMO", "start": "START_DEMO",
+            "pause": "PAUSE_DEMO", "resume": "RESUME_DEMO", "stop": "STOP_DEMO",
+        }
+        if action not in command_types:
+            return jsonify({"ok": False, "error": "Unknown Demo action"}), 404
+        r = _submit(ctrl, command_types[action], _json_payload())
+        return jsonify(r), 200 if r.get("accepted") else 400
+
+    @bp.get("/api/demo/status")
+    def api_demo_status():
+        snap = ctrl.snapshot()
+        return jsonify({"ok": True, **dict(snap.demo_status)})
+
+    @bp.get("/api/demo/history")
+    def api_demo_history():
+        snap = ctrl.snapshot()
+        return jsonify({"ok": True, "current": dict(snap.demo_status), "sessions": ctrl.demo_history(50)})
+
+    @bp.get("/api/demo/export.csv")
+    def api_demo_export():
+        return Response(ctrl.demo_export_csv(), mimetype="text/csv", headers={"Content-Disposition": "attachment; filename=demo-slot-sampling.csv"})
 
     # ── Speed / Timer ─────────────────────────────────────────────────────────
 

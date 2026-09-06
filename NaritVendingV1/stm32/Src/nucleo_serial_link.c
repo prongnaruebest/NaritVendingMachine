@@ -1,48 +1,22 @@
 #include "nucleo_serial_link.h"
 
 #include "main.h"
-#include "cmsis_os.h"
 #include "nucleo_motion.h"
 
 #include <stdio.h>
 #include <string.h>
 
-#define NUCLEO_PROTOCOL_VERSION 2U
+#define NUCLEO_PROTOCOL_VERSION 3U
 #define SERIAL_LINE_MAX 96U
 
-static UART_HandleTypeDef huart3;
-
-static void SerialLinkTask(void const *argument);
-
-static void uart3_init(void)
-{
-  GPIO_InitTypeDef gpio = {0};
-
-  __HAL_RCC_GPIOD_CLK_ENABLE();
-  __HAL_RCC_USART3_CLK_ENABLE();
-
-  gpio.Pin = GPIO_PIN_8 | GPIO_PIN_9;
-  gpio.Mode = GPIO_MODE_AF_PP;
-  gpio.Pull = GPIO_PULLUP;
-  gpio.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
-  gpio.Alternate = GPIO_AF7_USART3;
-  HAL_GPIO_Init(GPIOD, &gpio);
-
-  huart3.Instance = USART3;
-  huart3.Init.BaudRate = 115200;
-  huart3.Init.WordLength = UART_WORDLENGTH_8B;
-  huart3.Init.StopBits = UART_STOPBITS_1;
-  huart3.Init.Parity = UART_PARITY_NONE;
-  huart3.Init.Mode = UART_MODE_TX_RX;
-  huart3.Init.HwFlowCtl = UART_HWCONTROL_NONE;
-  huart3.Init.OverSampling = UART_OVERSAMPLING_16;
-  (void)HAL_UART_Init(&huart3);
-}
+static UART_HandleTypeDef *serial_uart;
+static char receive_line[SERIAL_LINE_MAX];
+static uint32_t receive_length;
 
 static void transmit_text(const char *text)
 {
   (void)HAL_UART_Transmit(
-      &huart3, (uint8_t *)text, (uint16_t)strlen(text), 100U);
+      serial_uart, (uint8_t *)text, (uint16_t)strlen(text), 100U);
 }
 
 static uint8_t any_axis_moving(void)
@@ -168,6 +142,11 @@ static void process_line(char *line)
   } else if (strcmp(line, "HEARTBEAT SAFE") == 0) {
     NucleoMotion_Heartbeat(1U);
     transmit_status("heartbeat");
+  } else if (strncmp(line, "STOP ", 5U) == 0 && line[6] == '\0') {
+    char axis_char = line[5];
+    uint8_t axis = axis_char == 'X' ? AXIS_X : axis_char == 'Y' ? AXIS_Y : axis_char == 'Z' ? AXIS_Z : 0xffU;
+    if (axis == 0xffU) transmit_text("{\"type\":\"error\",\"error\":\"INVALID_AXIS\"}\r\n");
+    else { NucleoMotion_StopAxis(axis); transmit_text("{\"type\":\"ack\",\"status\":\"axis_stopped\"}\r\n"); }
   } else if ((strcmp(line, "HEARTBEAT UNSAFE") == 0) ||
              (strcmp(line, "STOP") == 0) ||
              (strcmp(line, "DISARM") == 0)) {
@@ -180,42 +159,34 @@ static void process_line(char *line)
   }
 }
 
-static void SerialLinkTask(void const *argument)
+void NucleoSerialLink_Poll(void)
 {
-  char line[SERIAL_LINE_MAX];
-  uint32_t length = 0U;
   uint8_t byte = 0U;
-  (void)argument;
-
-  transmit_text(
-      "{\"type\":\"boot\",\"device\":\"NUCLEO-F439ZI\","
-      "\"protocol\":2,\"safe\":true,\"armed\":false}\r\n");
-
-  for (;;) {
-    NucleoMotion_Poll();
-    if (HAL_UART_Receive(&huart3, &byte, 1U, 50U) != HAL_OK) continue;
-
+  if (serial_uart == NULL) return;
+  while (HAL_UART_Receive(serial_uart, &byte, 1U, 0U) == HAL_OK) {
     if ((byte == '\r') || (byte == '\n')) {
-      if (length > 0U) {
-        line[length] = '\0';
-        process_line(line);
-        length = 0U;
+      if (receive_length > 0U) {
+        receive_line[receive_length] = '\0';
+        process_line(receive_line);
+        receive_length = 0U;
       }
     } else if ((byte >= 0x20U) && (byte <= 0x7eU)) {
-      if (length < (SERIAL_LINE_MAX - 1U)) {
-        line[length++] = (char)byte;
+      if (receive_length < (SERIAL_LINE_MAX - 1U)) {
+        receive_line[receive_length++] = (char)byte;
       } else {
-        length = 0U;
+        receive_length = 0U;
         transmit_text("{\"type\":\"error\",\"error\":\"LINE_TOO_LONG\"}\r\n");
       }
     }
   }
 }
 
-void NucleoSerialLink_Start(void)
+void NucleoSerialLink_Start(UART_HandleTypeDef *uart)
 {
-  uart3_init();
-  osThreadDef(NucleoLink, SerialLinkTask, osPriorityBelowNormal, 0, configMINIMAL_STACK_SIZE * 4);
-  (void)osThreadCreate(osThread(NucleoLink), NULL);
+  serial_uart = uart;
+  receive_length = 0U;
+  transmit_text(
+      "{\"type\":\"boot\",\"device\":\"NUCLEO-F439ZI\","
+      "\"protocol\":3,\"safe\":true,\"armed\":false}\r\n");
 }
 

@@ -22,6 +22,8 @@ from narit_vending.shared.ipc_protocol import (
     METHOD_CONFIG_SAVE,
     METHOD_MQTT_CONTROL,
     METHOD_MQTT_STATUS,
+    METHOD_DEMO_HISTORY,
+    METHOD_DEMO_EXPORT,
     METHOD_PING,
     METHOD_SNAPSHOT,
     METHOD_SUBMIT,
@@ -117,6 +119,12 @@ class ControllerClient:
 
     def mqtt_control(self, enabled: bool) -> dict[str, Any]:
         return self._call(METHOD_MQTT_CONTROL, {"enabled": enabled})
+
+    def demo_history(self, limit: int = 50) -> list[dict[str, Any]]:
+        return list(self._call(METHOD_DEMO_HISTORY, {"limit": limit}))
+
+    def demo_export_csv(self) -> str:
+        return str(self._call(METHOD_DEMO_EXPORT))
 
     # ── Low-level transport ────────────────────────────────────────────────────
 

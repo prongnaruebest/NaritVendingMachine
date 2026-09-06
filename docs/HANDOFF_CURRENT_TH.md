@@ -14,7 +14,7 @@ commission motion อย่างปลอดภัย โดยรักษา 
 - HMI/API บน `http://iriv.local/`
 - Controller/Web systemd services active
 - IRIV IO Modbus TCP online ที่ `10.0.0.10:502`
-- Nucleo USB health link online และ LAN `192.168.70.81` ping ได้
+- Nucleo USB health link online; Nucleo LAN ถูกยกเลิกจากแบบและต้องถอดเมื่อ deploy firmware USB-only
 - IRIV DI mapping ล่าสุด deploy แล้ว
 - E-stop polarity guard deploy แล้ว: polarity ไม่ยืนยันจะ block motion
 - STM32 pin source ปรับเป็น PA8/PB0, PA9/PB1, PA5/PB2 แล้ว
@@ -78,7 +78,7 @@ cd C:\Users\Naruebest\OneDrive\Documents\NaritVending
 ssh pi@iriv.local "systemctl is-active narit-vending-controller-iriv.service narit-vending-web-iriv.service"
 ssh pi@iriv.local "curl -fsS http://127.0.0.1/api/status"
 ssh pi@iriv.local "curl -fsS http://127.0.0.1/health/ready"
-ssh pi@iriv.local "ping -c 2 192.168.70.81"
+ssh pi@iriv.local "readlink -f /dev/serial/by-id/usb-STMicroelectronics_STM32_STLink_0666FF485753667187113533-if02"
 ```
 
 Expected baseline:

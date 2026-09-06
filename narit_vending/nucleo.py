@@ -14,7 +14,7 @@ from narit_vending.motion import MotionError, NucleoError
 _log = logging.getLogger(__name__)
 
 NUCLEO_MOTION_MIN_SPEED_HZ = 10.0
-NUCLEO_MOTION_MAX_SPEED_HZ = 1000.0
+NUCLEO_MOTION_MAX_SPEED_HZ = 50_000.0
 NUCLEO_MOTION_MAX_STEPS = 10000
 
 
@@ -313,6 +313,28 @@ class NucleoLink:
             except Exception:
                 return False
 
+    def reset_connection(self) -> dict[str, Any]:
+        """Fail-safe USB transport reset followed by a fresh protocol handshake.
+
+        This deliberately does not claim to toggle the board's NRST pin.  Pulse
+        output is stopped and disarmed before the serial port is reopened.
+        """
+        with self._lock:
+            self.stop()
+            self.disarm()
+            self._close_serial()
+            self._connected = False
+            self._last_success_monotonic = None
+            self._last_error = "USB link reset requested; waiting for handshake"
+            self._poll_once()
+            return {
+                "ok": self.communication_ok,
+                "reset_type": "usb_reconnect_and_handshake",
+                "physical_nrst": False,
+                "communication_ok": self.communication_ok,
+                "error": self._last_error or None,
+            }
+
     def move(
         self,
         axis: str,
@@ -408,6 +430,55 @@ class NucleoLink:
             "speed_hz": speed_val,
             "duration_s": estimated_duration_s,
         }
+
+    def home_parallel(self, plans: dict[str, dict[str, Any]]) -> dict[str, int]:
+        """Search all requested home sensors concurrently (Protocol v2.1 firmware)."""
+        moved = {axis: 0 for axis in plans}
+        active = set(plans)
+        started = {axis: time.monotonic() for axis in plans}
+        with self._lock:
+            if not self.communication_ok or not self.arm(safety_permissive=True):
+                raise NucleoError("Nucleo is not online or could not be armed")
+            serial_port = self._open_serial()
+            try:
+                while active:
+                    for axis in tuple(active):
+                        plan = plans[axis]
+                        if time.monotonic() - started[axis] >= float(plan.get("timeout_s", 120.0)):
+                            raise NucleoError(f"Parallel home timeout on axis {axis.upper()}")
+                        if bool(plan["limit"]()):
+                            active.remove(axis)
+                            continue
+                        cmd = f"MOVE {axis.upper()} {int(plan['direction'])} {NUCLEO_MOTION_MAX_STEPS} {int(plan['speed_hz'])}\n"
+                        serial_port.write(cmd.encode("ascii")); serial_port.flush()
+                        ack = self._read_json_response(serial_port, time.monotonic() + self.timeout_s, expected_types={"ack"})
+                        if not ack or ack.get("status") != "moving":
+                            raise NucleoError(f"Parallel home start rejected for axis {axis.upper()}")
+
+                    chunk_done: set[str] = set()
+                    while active - chunk_done:
+                        time.sleep(0.05)
+                        if any(bool(plans[a]["abort"]()) for a in active):
+                            self.stop(); raise NucleoError("Parallel homing aborted by safety request")
+                        for axis in tuple(active - chunk_done):
+                            if bool(plans[axis]["limit"]()):
+                                serial_port.write(f"STOP {axis.upper()}\n".encode("ascii")); serial_port.flush()
+                                self._read_json_response(serial_port, time.monotonic() + self.timeout_s, expected_types={"ack"})
+                                active.remove(axis)
+                        serial_port.write(b"HEARTBEAT SAFE\n"); serial_port.flush()
+                        hb = self._read_json_response(serial_port, time.monotonic() + 0.2, expected_types={"heartbeat"})
+                        if hb:
+                            moving = hb.get("moving", {})
+                            for axis in tuple(active):
+                                if not moving.get(axis, 0):
+                                    moved[axis] += NUCLEO_MOTION_MAX_STEPS
+                                    chunk_done.add(axis)
+                if not self.disarm():
+                    raise NucleoError("Parallel home completed but Nucleo failed to disarm")
+                return moved
+            except Exception:
+                self.stop()
+                raise
 
     def alarm_channel(self) -> dict[str, Any]:
         return {

@@ -45,6 +45,16 @@ CommandType = Literal[
     "SAVE_CONFIG",
     "SCHEDULE_RESTART",
     "CONTROLLED_STOP",
+    "DISABLE_MOTION",
+    "ENABLE_MOTION",
+    "RESET_NUCLEO_LINK",
+    "CONFIGURE_DEMO",
+    "VALIDATE_DEMO",
+    "ARM_DEMO",
+    "START_DEMO",
+    "PAUSE_DEMO",
+    "RESUME_DEMO",
+    "STOP_DEMO",
 ]
 
 CommandSource = Literal["http", "mqtt", "system"]

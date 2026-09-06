@@ -84,3 +84,32 @@ def make_schedule_restart_handler(motion_service: Any):
         )
 
     return handle
+
+
+def _service_action_handler(motion_service: Any, method_name: str):
+    from narit_vending.shared.commands import CommandResult
+
+    def handle(envelope: "CommandEnvelope") -> "CommandResult":
+        result = getattr(motion_service, method_name)()
+        return CommandResult(
+            accepted=bool(result.get("ok")),
+            command_id=envelope.command_id,
+            state="COMPLETED" if result.get("ok") else "FAILED",
+            reason=result.get("error"),
+            result=result,
+            completed_at=_now(),
+        )
+
+    return handle
+
+
+def make_disable_motion_handler(motion_service: Any):
+    return _service_action_handler(motion_service, "disable_motion")
+
+
+def make_enable_motion_handler(motion_service: Any):
+    return _service_action_handler(motion_service, "enable_motion")
+
+
+def make_reset_nucleo_link_handler(motion_service: Any):
+    return _service_action_handler(motion_service, "reset_nucleo_link")

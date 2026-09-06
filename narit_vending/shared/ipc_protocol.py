@@ -58,6 +58,8 @@ METHOD_CONFIG_GET = "config.get_effective"
 METHOD_CONFIG_SAVE = "config.save"
 METHOD_MQTT_STATUS = "mqtt.status"
 METHOD_MQTT_CONTROL = "mqtt.control"
+METHOD_DEMO_HISTORY = "demo.history"
+METHOD_DEMO_EXPORT = "demo.export_csv"
 
 
 # ── Encoding / Decoding ───────────────────────────────────────────────────────

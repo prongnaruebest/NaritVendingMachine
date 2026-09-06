@@ -140,10 +140,10 @@
         <section class="safety-strip" aria-label="Machine safety status and controls">
           <div class="estop-zone">
             <button class="btn-estop" id="stop-button" title="Emergency Stop Motion">
-              <span class="estop-icon">🛑</span> EMERGENCY STOP
+              <span class="estop-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M7.8 2h8.4L22 7.8v8.4L16.2 22H7.8L2 16.2V7.8L7.8 2Zm1.1 2.5L4.5 8.9v6.2l4.4 4.4h6.2l4.4-4.4V8.9l-4.4-4.4H8.9ZM11 7h2v7h-2V7Zm0 9h2v2h-2v-2Z"/></svg></span> EMERGENCY STOP
             </button>
             <button class="btn-reset-alarm" id="clear-alarm" title="Reset Alarms & Interlocks">
-              🔄 RESET ALARMS
+              RESET ALARMS
             </button>
           </div>
           <div class="header-unified-status">
@@ -1457,20 +1457,16 @@
           <aside class="rp-jog-speed-rail">
             <div class="rp-param-label">
               <span>Jog Speed</span>
-              <span class="val"><strong id="jog-speed-display">10.0</strong> mm/s</span>
+              <span class="val"><strong id="jog-speed-display">5.0</strong> mm/s</span>
             </div>
             <div class="rp-preset-row speed-preset-row">
-              <button class="rp-preset-btn speed-preset" data-speed="5"><b>SLOW</b><small>5 mm/s</small></button>
-              <button class="rp-preset-btn speed-preset active" data-speed="15"><b>MED</b><small>15 mm/s</small></button>
-              <button class="rp-preset-btn speed-preset" data-speed="30"><b>FAST</b><small>30 mm/s</small></button>
+              <button class="rp-preset-btn speed-preset" data-speed="1"><b>SLOW</b><small>1 mm/s</small></button>
+              <button class="rp-preset-btn speed-preset" data-speed="3"><b>MED</b><small>3 mm/s</small></button>
+              <button class="rp-preset-btn speed-preset active" data-speed="5"><b>FAST</b><small>5 mm/s</small></button>
             </div>
             <label class="jog-keyboard-switch">
               <input id="jog-keyboard-enable" type="checkbox">
               <span>Keyboard Jog</span>
-            </label>
-            <label class="jog-keyboard-switch" style="margin-top: 4px;" title="Permit manual jog when axes are not homed">
-              <input id="jog-allow-unhomed" type="checkbox" checked>
-              <span>Bypass Homing</span>
             </label>
             <small class="jog-keyboard-help">Arrow keys: X/Y · Page Up/Down: Z · disabled while typing</small>
           </aside>

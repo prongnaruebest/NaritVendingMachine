@@ -60,7 +60,10 @@ for _ in 1 2 3 4 5 6 7 8 9 10; do
     sleep 1
 done
 curl --fail --silent --show-error --max-time 5 http://127.0.0.1/health/live >/dev/null
-curl --fail --silent --show-error --max-time 5 http://127.0.0.1/health/ready >/dev/null
+# Machine readiness can legitimately be 503 while axes are unhomed or a
+# hardware interlock is active. Deployment success depends on process liveness;
+# still query readiness so its state is visible in deployment output.
+curl --silent --show-error --max-time 5 http://127.0.0.1/health/ready || true
 "@
 $remoteInstall = $remoteInstall -replace "`r`n", "`n"
 ssh $HostName $remoteInstall

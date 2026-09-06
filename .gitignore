@@ -10,4 +10,5 @@ backups/
 .ruff_cache/
 .vscode/
 .agents/
+.stm32-workspace/
 

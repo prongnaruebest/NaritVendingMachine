@@ -101,6 +101,11 @@ class MotionService:
         self.completed_request_ids: dict[str, dict[str, object]] = {}
         self.configuration_restart_required = False
         self.motor_test_armed = False
+        self.motor_test_armed_until: float | None = None
+        self.motion_enabled = True
+        self._safety_trip_latched = False
+        self._safety_monitor_stop = threading.Event()
+        self._safety_monitor_thread: threading.Thread | None = None
 
         if self.config_path.exists():
             config = load_machine_config(self.config_path)
@@ -156,8 +161,17 @@ class MotionService:
             io_backend=self.io_backend,
             motion_backend=nucleo_motion,
         )
+        if self.io_backend is not None:
+            self._safety_monitor_thread = threading.Thread(
+                target=self._safety_monitor_loop,
+                name="controller-safety-monitor",
+                daemon=True,
+            )
+            self._safety_monitor_thread.start()
         from .controller.sequence_service import SequenceService
         self.sequence_service = SequenceService(self)
+        from .controller.demo_service import DemoSamplingService
+        self.demo_service = DemoSamplingService(self, self.config_path.parent / "demo_results.sqlite3")
         mqtt_config = hw_config.get("mqtt", {})
         self.mqtt_service = MQTTService(self, mqtt_config)
         self.mqtt_service.start()
@@ -221,12 +235,16 @@ class MotionService:
                 "safety": {
                     "estop_active": controller_status["estop"],
                     "stop_requested": self.controller.stop_requested(),
+                    "motion_enabled": self.motion_enabled,
+                    "di10_all_axis_stop_latched": self._safety_trip_latched,
+                    "z_stop_coverage": "software_step_pulse_only",
                     "controlled_stop_requested": self.controller.controlled_stop_requested(),
                     "configuration_restart_required": self.configuration_restart_required,
                     "motor_test": motor_test,
                 },
                 "status": controller_status,
                 "slots": slots,
+                "demo": self.demo_service.status(),
             }
 
     def _sync_iriv_outputs(self, controller_status: dict[str, object], io_fault: bool) -> None:
@@ -249,34 +267,41 @@ class MotionService:
             or self.controller.stop_requested()
             or self.configuration_restart_required
         )
+        if self.motor_test_armed_until is not None and time.monotonic() >= self.motor_test_armed_until:
+            self.motor_test_armed = False
+            self.motor_test_armed_until = None
         if unsafe:
             self.motor_test_armed = False
+            self.motor_test_armed_until = None
+        expires_in = max(0.0, self.motor_test_armed_until - time.monotonic()) if self.motor_test_armed_until else 0.0
         return {
             "armed": self.motor_test_armed,
-            "expires_in_s": None,
+            "expires_in_s": round(expires_in, 1),
             "max_duration_s": MOTOR_TEST_MAX_DURATION_S,
             "max_frequency_hz": MOTOR_TEST_MAX_FREQUENCY_HZ,
             "max_pulses": MOTOR_TEST_MAX_PULSES,
-            "scope": "motor_test_page_only",
+            "scope": "manual_commissioning_only",
         }
 
     def set_motor_test_mode(self, armed: bool) -> dict[str, object]:
         with self.lock:
             if armed:
-                self.controller.clear_stop()
-                self.controller.set_state("idle")
                 self.last_error = ""
                 errors = self._motion_safety_errors(require_homed=False)
                 if errors:
                     return {"ok": False, "error": "; ".join(errors)}
                 self.armed_move = None
                 self.motor_test_armed = True
-                self.operation_message = "Motor Test Mode armed; raw pulse test permitted"
+                self.motor_test_armed_until = time.monotonic() + 30.0
+                self.operation_message = "Manual Commissioning armed for 30 seconds"
+                _logger.warning("AUDIT manual commissioning ARMED")
                 if self.nucleo_link is not None and getattr(self.nucleo_link, "expected_protocol", 1) >= 2:
                     self.nucleo_link.arm(safety_permissive=True)
             else:
                 self.motor_test_armed = False
-                self.operation_message = "Motor Test Mode cancelled"
+                self.motor_test_armed_until = None
+                self.operation_message = "Manual Commissioning cancelled"
+                _logger.warning("AUDIT manual commissioning DISARMED")
                 if self.nucleo_link is not None and getattr(self.nucleo_link, "expected_protocol", 1) >= 2:
                     self.nucleo_link.disarm()
             return {"ok": True, "motor_test": self._motor_test_status()}
@@ -294,7 +319,8 @@ class MotionService:
         if not motor_test["armed"]:
             return {"ok": False, "error": "Motor Test Mode is not armed"}
         if self.nucleo_link is not None and getattr(self.nucleo_link, "expected_protocol", 1) >= 2:
-            effective_freq = min(max(float(pulse_frequency_hz), 10.0), 1000.0)
+            protocol_cap = 50_000.0 if getattr(self.nucleo_link, "expected_protocol", 1) >= 3 else 1_000.0
+            effective_freq = min(max(float(pulse_frequency_hz), 10.0), protocol_cap)
         else:
             effective_freq = float(pulse_frequency_hz)
         duration_s = pulse_count / effective_freq
@@ -305,6 +331,10 @@ class MotionService:
         if duration_s > MOTOR_TEST_MAX_DURATION_S:
             return {"ok": False, "error": f"Motor test duration is limited to {MOTOR_TEST_MAX_DURATION_S:g} seconds"}
         axis = self.controller.axes()[axis_name]
+        _logger.warning(
+            "AUDIT manual commissioning pulse axis=%s direction=%s pulses=%d frequency_hz=%.1f ignore_limits=%s",
+            axis_name, direction, pulse_count, effective_freq, ignore_limits,
+        )
         return self._run(
             f"motor_test_{axis_name}",
             lambda: axis.test_pulses(pulse_count, effective_freq, direction, ignore_limits=ignore_limits),
@@ -321,7 +351,7 @@ class MotionService:
         estimated_duration_s: float | None = None,
     ):
         is_motor_test = command_name.startswith("motor_test_")
-        if motion_command and not is_motor_test and self.io_backend is not None:
+        if motion_command and self.io_backend is not None:
             active_io_faults = [
                 channel["label"] for channel in self.io_backend.alarm_channels()
                 if channel["active"] and channel["level"] == "fault"
@@ -594,6 +624,85 @@ class MotionService:
             self.operation_message = "Stop requested by operator"
         return {"ok": True, "result": "stop requested"}
 
+    def _safety_monitor_loop(self) -> None:
+        """Latch all-axis stop when DI10 opens or IRIV I/O becomes stale.
+
+        The IRIV backend maps a failed/stale fail-safe input to active, so an
+        I/O communications loss takes the same conservative stop path.
+        """
+        interval = min(0.05, max(0.02, float(self.io_backend.poll_interval_s) / 2))
+        while not self._safety_monitor_stop.wait(interval):
+            try:
+                estop_active = self.io_backend.input_active("estop")
+            except Exception:
+                estop_active = True
+            if estop_active and not self._safety_trip_latched:
+                self._latch_emergency_stop()
+
+    def _latch_emergency_stop(self) -> None:
+        self._safety_trip_latched = True
+        self.motion_enabled = False
+        self.controller.request_stop()
+        for axis_name, axis in self.controller.axes().items():
+            axis.is_homed = False
+            self.homing[axis_name] = "not_homed"
+        if self.nucleo_link is not None:
+            try:
+                self.nucleo_link.stop()
+                self.nucleo_link.disarm()
+            except Exception:
+                pass
+        with self.lock:
+            self.armed_move = None
+        self.motor_test_armed = False
+        if hasattr(self, "demo_service"):
+            self.demo_service.stop("DI10 E-Stop or IRIV I/O fail-safe opened", stop_motion=False)
+            self.controller.set_state("alarm")
+            self.last_error = "DI10 E-Stop or IRIV I/O fail-safe opened; all axis pulse output stopped"
+            self.operation_phase = "e_stop"
+            self.operation_message = "All axes stopped; X/Y power removed physically, Z stopped by software pulse inhibit"
+
+    def disable_motion(self) -> dict[str, object]:
+        result = self.stop()
+        self.motion_enabled = False
+        self.operation_message = "Motion disabled by operator; future motion commands are inhibited"
+        return result | {"motion_enabled": False}
+
+    def enable_motion(self) -> dict[str, object]:
+        if self.io_backend is not None:
+            if not self.io_backend.communication_ok:
+                return {"ok": False, "error": "IRIV I/O communication is not healthy"}
+            if self.io_backend.input_active("estop"):
+                return {"ok": False, "error": "Release physical E-Stop on DI10 before enabling motion"}
+            faults = [c["label"] for c in self.io_backend.alarm_channels() if c["active"] and c["level"] == "fault"]
+            if faults:
+                return {"ok": False, "error": "Safety fault active: " + ", ".join(faults)}
+        if self.nucleo_link is not None and not self.nucleo_link.communication_ok:
+            return {"ok": False, "error": "NUCLEO USB handshake is not healthy"}
+        if self.busy:
+            return {"ok": False, "error": "Cannot enable motion while a command is active"}
+        self.controller.clear_stop()
+        self.motion_enabled = True
+        self._safety_trip_latched = False
+        self.controller.set_state("idle")
+        with self.lock:
+            self.last_error = ""
+            self.operation_phase = "ready"
+            self.operation_message = "Motion enabled for future validated commands; NUCLEO remains disarmed while idle"
+        return {"ok": True, "motion_enabled": True, "nucleo_armed": False}
+
+    def reset_nucleo_link(self) -> dict[str, object]:
+        self.disable_motion()
+        if self.nucleo_link is None:
+            return {"ok": False, "error": "NUCLEO USB link is not configured"}
+        result = self.nucleo_link.reset_connection()
+        with self.lock:
+            self.operation_phase = "stopped"
+            self.operation_message = "NUCLEO USB link reset and handshake completed" if result["ok"] else "NUCLEO USB link reset failed"
+            if not result["ok"]:
+                self.last_error = str(result.get("error") or "NUCLEO handshake failed")
+        return result | {"motion_enabled": False}
+
     def controlled_stop(self) -> dict[str, object]:
         if not self.busy:
             return {"ok": True, "result": "machine already idle"}
@@ -610,11 +719,16 @@ class MotionService:
             return {"ok": False, "error": "Machine is busy; stop motion before clearing alarms"}
         try:
             with self.lock:
-                self.controller.clear_stop()
-                self.controller.set_state("idle")
+                if self.motion_enabled:
+                    self.controller.clear_stop()
+                    self.controller.set_state("idle")
                 self.last_error = ""
-                self.operation_phase = "ready"
-                self.operation_message = "Alarm cleared; verify safety before continuing"
+                self.operation_phase = "ready" if self.motion_enabled else "motion_disabled"
+                self.operation_message = (
+                    "Alarm cleared; verify safety before continuing"
+                    if self.motion_enabled
+                    else "Alarm display cleared; motion remains disabled until explicitly enabled"
+                )
             return {"ok": True}
         finally:
             self.command_lock.release()
@@ -707,6 +821,10 @@ class MotionService:
                 self.operation_message = f"Axis {axis_name.upper()} backing off home sensor"
             elif phase == "completed":
                 self.operation_message = f"Axis {axis_name.upper()} home cycle completed"
+            elif phase == "positioning":
+                self.operation_message = f"Axis {axis_name.upper()} moving from Min sensor to configured home position"
+            elif phase == "latching":
+                self.operation_message = f"Axis {axis_name.upper()} approaching Home sensor at precision speed"
             elif phase == "passed":
                 self.operation_message = f"Axis {axis_name.upper()} homed successfully"
 
@@ -853,6 +971,7 @@ class MotionService:
             axes_homed = all(bool(controller_status[axis].get("is_homed")) for axis in ("x", "y", "z"))
             machine_ready = (
                 axes_homed
+                and self.motion_enabled
                 and io_ready
                 and nucleo_ready
                 and io_safe
@@ -870,10 +989,15 @@ class MotionService:
                 "config_valid": self.config_report.valid,
                 "iriv_io_ready": io_ready,
                 "nucleo_ready": nucleo_ready,
+                "motion_enabled": self.motion_enabled,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
     def close(self) -> None:
+        self.demo_service.stop("Controller shutting down", stop_motion=False)
+        self._safety_monitor_stop.set()
+        if self._safety_monitor_thread is not None:
+            self._safety_monitor_thread.join(timeout=1.0)
         self.mqtt_service.stop()
         if self.io_backend is not None:
             self.io_backend.close()
@@ -914,6 +1038,12 @@ class MotionService:
             jog_step = _config_number(axis_payload, "jog_step_mm", minimum=0.001, maximum=1_000.0)
             settle_delay = _config_number(axis_payload, "settle_delay", minimum=0.0, maximum=10.0)
             home_direction = _config_integer(axis_payload, "home_direction", minimum=0, maximum=1)
+            home_position = _config_number(axis_payload, "home_position_mm", minimum=0.0, maximum=max_travel)
+            max_pulse_hz = _config_number(axis_payload, "max_pulse_hz", minimum=10.0, maximum=50_000.0)
+            commissioned_speed = _config_number(axis_payload, "commissioned_max_speed_mm_s", minimum=0.01, maximum=max_speed)
+            homing_search_speed = _config_number(axis_payload, "homing_search_speed_mm_s", minimum=0.01, maximum=commissioned_speed)
+            homing_latch_speed = _config_number(axis_payload, "homing_latch_speed_mm_s", minimum=0.01, maximum=homing_search_speed)
+            homing_timeout = _config_number(axis_payload, "homing_timeout_s", minimum=1.0, maximum=3600.0)
             forward_direction = _config_integer(axis_payload, "forward_direction", minimum=0, maximum=1)
             if home_direction == forward_direction:
                 raise APIInputError(f"{axis_name.upper()}: home and forward directions must be opposite")
@@ -953,6 +1083,12 @@ class MotionService:
                 settle_delay=settle_delay,
                 home_direction=home_direction,
                 forward_direction=forward_direction,
+                home_position_mm=home_position,
+                max_pulse_hz=max_pulse_hz,
+                commissioned_max_speed_mm_s=commissioned_speed,
+                homing_search_speed_mm_s=homing_search_speed,
+                homing_latch_speed_mm_s=homing_latch_speed,
+                homing_timeout_s=homing_timeout,
             )
             updated_axes[axis_name] = updated_axis
             updated_hardware["motors"][axis_name] = {
@@ -973,6 +1109,12 @@ class MotionService:
                 "jog_step_mm": jog_step,
                 "home_direction": home_direction,
                 "forward_direction": forward_direction,
+                "home_position_mm": home_position,
+                "max_pulse_hz": max_pulse_hz,
+                "commissioned_max_speed_mm_s": commissioned_speed,
+                "homing_search_speed_mm_s": homing_search_speed,
+                "homing_latch_speed_mm_s": homing_latch_speed,
+                "homing_timeout_s": homing_timeout,
                 "lead_screw_pitch_mm": lead_pitch,
                 "motor_steps_per_rev": motor_steps,
                 "driver_microsteps": microsteps,
@@ -1384,7 +1526,7 @@ def create_app(config_path: str = "machine_config.json", hw_config_path: str = "
             )
         except (APIInputError, KeyError, TypeError, ValueError) as exc:
             return jsonify({"ok": False, "error": str(exc) or "Invalid motor test parameters"}), 400
-        ignore_limits = bool(payload.get("ignore_limits", True))
+        ignore_limits = bool(payload.get("ignore_limits", False))
         result = service.run_motor_test(
             axis,
             direction,

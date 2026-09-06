@@ -8,13 +8,13 @@
 | อุปกรณ์ | เส้นทาง | ค่าใช้งาน |
 |---|---|---|
 | IRIV PiControl | LAN หลัก `eth0` | `192.168.70.80/24` |
-| NUCLEO-F439ZI | LAN | `192.168.70.81/24`; ใช้ link/diagnostic |
 | NUCLEO-F439ZI | ST-LINK USB VCP | `/dev/serial/by-id/usb-STMicroelectronics_STM32_STLink_0666FF485753667187113533-if02`, 115200 8-N-1; ใช้ control/heartbeat |
 | IRIV PiControl | OT LAN `eth1` | `10.0.0.2/24` |
 | IRIV IO | Modbus TCP | `10.0.0.10:502`, Unit ID `255` |
 
-USB serial เป็นเส้นทางควบคุมหลัก เพราะตรวจ device identity ได้แน่นอน ส่วน LAN ของ Nucleo
-คงไว้สำหรับตรวจ link/diagnostic ห้ามเปิด HTTP LED demo เนื่องจาก LED1 ใช้ขา `PB0` เดียวกับ X-DIR
+NUCLEO ใช้ USB serial เป็นเส้นทางสื่อสารเพียงช่องทางเดียว เพราะตรวจ device identity ได้แน่นอน
+ไม่ต่อสาย LAN และไม่ initialize Ethernet/LwIP/HTTP เพื่อให้มี control owner เพียงหนึ่งเดียว
+ทั้งนี้ LED1 ใช้ขา `PB0` เดียวกับ X-DIR จึงห้ามเปิด LED/HTTP demo เดิม
 
 ## IRIV IO digital inputs
 

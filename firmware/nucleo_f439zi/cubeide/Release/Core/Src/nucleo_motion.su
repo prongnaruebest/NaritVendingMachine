@@ -1,0 +1,16 @@
+../Core/Src/nucleo_motion.c:69:13:timer_init	56	static
+../Core/Src/nucleo_motion.c:42:13:pulse_as_gpio_low	40	static
+../Core/Src/nucleo_motion.c:164:6:NucleoMotion_StopAll	8	static,ignoring_inline_asm
+../Core/Src/nucleo_motion.c:94:6:NucleoMotion_Init	64	static
+../Core/Src/nucleo_motion.c:157:6:NucleoMotion_Disarm	0	static
+../Core/Src/nucleo_motion.c:133:9:NucleoMotion_Arm	8	static
+../Core/Src/nucleo_motion.c:146:6:NucleoMotion_Heartbeat	8	static
+../Core/Src/nucleo_motion.c:180:6:NucleoMotion_Poll	8	static
+../Core/Src/nucleo_motion.c:189:9:NucleoMotion_IsArmed	0	static
+../Core/Src/nucleo_motion.c:194:9:NucleoMotion_WatchdogHealthy	0	static
+../Core/Src/nucleo_motion.c:199:20:Stepper_Move	56	static
+../Core/Src/nucleo_motion.c:234:6:NucleoMotion_StopAxis	16	static
+../Core/Src/nucleo_motion.c:242:9:Stepper_IsMoving	0	static
+../Core/Src/nucleo_motion.c:247:6:HAL_TIM_OC_DelayElapsedCallback	4	static
+../Core/Src/nucleo_motion.c:274:6:TIM1_CC_IRQHandler	0	static
+../Core/Src/nucleo_motion.c:279:6:TIM2_IRQHandler	0	static

@@ -17,7 +17,7 @@
 | Web service | `narit-vending-web-iriv.service` active |
 | IRIV IO | Online, Modbus TCP `10.0.0.10:502`, Unit ID `255` |
 | Nucleo USB | Online ผ่าน ST-LINK VCP 115200 baud |
-| Nucleo LAN | Online, `192.168.70.81`; ping ผ่าน |
+| Nucleo LAN | ยกเลิกจากแบบระบบ; ต้องถอดสายเมื่อ deploy firmware USB-only |
 | Firmware ที่รันบน Nucleo | safe-link protocol v1, communication only, ไม่มี motion command |
 | Motion firmware v2 | Build ผ่านแล้ว เป็น candidate เท่านั้น ยังไม่ flash |
 | Machine state | `E_STOP`, ทุกแกนยังไม่ Home, ไม่มี active command |
@@ -32,7 +32,6 @@ flowchart LR
     MQTT["MQTT Broker"] <-->|"command / telemetry"| CTRL
     CTRL <-->|"Modbus TCP\n10.0.0.10:502"| RIO["IRIV IO"]
     CTRL <-->|"USB VCP\n115200"| NUC["NUCLEO-F439ZI"]
-    CTRL -. "LAN diagnostic" .-> NUC
     RIO --> SENSOR["Limits, Z Home, product sensors, E-stop feedback"]
     RIO --> AUX["Ready / Moving / Alarm / Dispense"]
     NUC -. "candidate STEP/DIR" .-> NMOS["6-channel NMOS sink"]
@@ -48,15 +47,14 @@ flowchart LR
 | Network | Interface/device | Address | หน้าที่ |
 |---|---|---|---|
 | Management | IRIV Pi `eth0` | `192.168.70.80/24` | HMI, SSH, deployment, MQTT |
-| Management | Nucleo LAN | `192.168.70.81/24` | link/diagnostic เท่านั้น |
 | OT | IRIV Pi `eth1` | `10.0.0.2/24` | Modbus TCP |
 | OT | IRIV IO | `10.0.0.10/24` | DI0–DI10, DO0–DO3 |
 | USB | Nucleo ST-LINK VCP | stable `/dev/serial/by-id/...-if02` | identity/status; control ในอนาคต |
 
 หลักการเลือก transport:
 
-- ใช้ USB serial เป็น control/heartbeat หลัก เพราะผูกกับ device identity ได้แน่นอน
-- ใช้ Nucleo LAN สำหรับ diagnostic และ redundancy ในอนาคต ไม่ใช่ control path พร้อมกัน
+- ใช้ USB serial เป็น control/heartbeat และ diagnostic เพียงช่องทางเดียว เพราะผูกกับ device identity ได้แน่นอน
+- เมื่อ deploy รุ่น USB-only ให้ถอด Nucleo LAN; source ใหม่ไม่ initialize Ethernet/LwIP/HTTP
 - ต้องมี control owner เพียงหนึ่งเดียว ห้าม USB และ LAN ส่ง motion command แข่งกัน
 - การขาด IRIV IO หรือ Nucleo heartbeat ต้องทำให้ motion ถูก reject/stop แบบ fail-safe
 
@@ -248,7 +246,7 @@ SHA-256: 8af1dd070799844271c25ea3206333722750606e8c2fbdb984c26e5e26e4aef7
 ssh pi@iriv.local "systemctl is-active narit-vending-controller-iriv.service narit-vending-web-iriv.service"
 ssh pi@iriv.local "curl -fsS http://127.0.0.1/api/status"
 ssh pi@iriv.local "curl -fsS http://127.0.0.1/health/ready"
-ssh pi@iriv.local "ping -c 2 192.168.70.81"
+ssh pi@iriv.local "readlink -f /dev/serial/by-id/usb-STMicroelectronics_STM32_STLink_0666FF485753667187113533-if02"
 ```
 
 local tests ที่ผ่านล่าสุด:

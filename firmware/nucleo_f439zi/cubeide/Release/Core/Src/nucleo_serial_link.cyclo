@@ -1,0 +1,4 @@
+../Core/Src/nucleo_serial_link.c:16:13:transmit_text	1
+../Core/Src/nucleo_serial_link.c:28:13:transmit_status	6
+../Core/Src/nucleo_serial_link.c:162:6:NucleoSerialLink_Poll	42
+../Core/Src/nucleo_serial_link.c:184:6:NucleoSerialLink_Start	1
