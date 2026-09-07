@@ -71,6 +71,13 @@ class FrontendAcceptanceTests(unittest.TestCase):
         self.assertLess(TEMPLATE.index('id="nav-dashboard"'), TEMPLATE.index('id="nav-system-control"'))
         self.assertLess(TEMPLATE.index('id="nav-system-control"'), TEMPLATE.index('id="nav-motion"'))
 
+    def test_speed_change_rechecks_direct_motion_without_reusing_goto_arm(self) -> None:
+        self.assertIn("updateButtonStates();", APP_JS)
+        self.assertIn("Speed is a next-command parameter", APP_JS)
+        self.assertIn("validate, preview and arm the GOTO command again", APP_JS)
+        self.assertIn('button.title = reason ||', APP_JS)
+        self.assertIn("The axis is ready for the next Min/Max or Jog command", APP_JS)
+
 
 if __name__ == "__main__":
     unittest.main()

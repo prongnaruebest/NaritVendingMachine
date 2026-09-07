@@ -1477,7 +1477,10 @@
 
     $$('[data-travel-axis]').forEach((button) => {
       const axis = button.dataset.travelAxis;
-      button.disabled = !axis || Boolean(motionInhibitReasonForAxes([axis]));
+      const reason = axis ? motionInhibitReasonForAxes([axis]) : "Axis is unavailable";
+      button.disabled = Boolean(reason);
+      button.title = reason || `${axis.toUpperCase()} axis is ready for the next command`;
+      button.setAttribute("aria-disabled", String(Boolean(reason)));
     });
     const operatorStop = el("operator-stop");
     if (operatorStop) operatorStop.disabled = !MS.online;
@@ -1637,9 +1640,16 @@
     if (!Number.isFinite(parsed) || parsed <= 0) return;
     MS.axisSpeeds[axis] = Math.min(axisSpeedLimit(axis), Math.max(0.1, parsed));
     try { localStorage.setItem("narit.axisSpeeds", JSON.stringify(MS.axisSpeeds)); } catch (_) {}
-    if (invalidate && MS.validation.stage !== "idle") invalidateMotionWorkflow("Axis speed changed — validate again.");
+    if (invalidate && MS.validation.stage !== "idle") invalidateMotionWorkflow("Axis speed changed — validate, preview and arm the GOTO command again.");
     syncAxisSpeedBanks();
     updateFeedOverride();
+    // Speed is a next-command parameter. Re-evaluate direct Jog and Min/Max
+    // controls immediately; they are not dependent on the GOTO arm token.
+    updateButtonStates();
+    const locked = motionInhibitReasonForAxes([axis]);
+    setText("travel-limit-feedback", locked
+      ? `${axis.toUpperCase()} speed saved for the next command. Motion remains locked: ${locked}`
+      : `${axis.toUpperCase()} speed set to ${axisSpeed(axis).toFixed(1)} mm/s. The axis is ready for the next Min/Max or Jog command.`);
   }
 
   function applySetupTab(tabName = "motor") {
