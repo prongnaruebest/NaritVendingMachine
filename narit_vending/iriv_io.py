@@ -152,6 +152,20 @@ class IRIVIOBackend:
         self._input_candidates = [False] * 11
         self._input_candidate_counts = [0] * 11
         self._inputs_initialized = False
+        self._input_diagnostics = {
+            name: {
+                "raw_transitions": 0,
+                "logical_transitions": 0,
+                "active_events": 0,
+                "filtered_spikes": 0,
+                "last_raw_change_at": None,
+                "last_logical_change_at": None,
+                "active_since_at": None,
+                "last_active_duration_ms": None,
+                "_active_since_monotonic": None,
+            }
+            for name in self.inputs
+        }
         self._output_values = {name: False for name in self.outputs}
         self._connected = False
         self._outputs_initialized = False
@@ -208,7 +222,9 @@ class IRIVIOBackend:
                 self._last_error = str(exc)
             return
         now = time.monotonic()
+        now_iso = datetime.now(timezone.utc).isoformat()
         with self._lock:
+            previous_raw = list(self._raw_inputs)
             self._raw_inputs = values
             if not self._inputs_initialized:
                 self._filtered_inputs = list(values)
@@ -223,6 +239,10 @@ class IRIVIOBackend:
                 for channel, raw in enumerate(values):
                     required = required_by_channel.get(channel, 1)
                     if raw == self._filtered_inputs[channel]:
+                        if self._input_candidate_counts[channel] > 0:
+                            for name, info in self.inputs.items():
+                                if int(info["channel"]) == channel:
+                                    self._input_diagnostics[name]["filtered_spikes"] += 1
                         self._input_candidates[channel] = raw
                         self._input_candidate_counts[channel] = 0
                     else:
@@ -232,8 +252,32 @@ class IRIVIOBackend:
                         else:
                             self._input_candidate_counts[channel] += 1
                         if self._input_candidate_counts[channel] >= required:
+                            previous_filtered = self._filtered_inputs[channel]
                             self._filtered_inputs[channel] = raw
                             self._input_candidate_counts[channel] = 0
+                            for name, info in self.inputs.items():
+                                if int(info["channel"]) != channel:
+                                    continue
+                                diag = self._input_diagnostics[name]
+                                diag["logical_transitions"] += 1
+                                diag["last_logical_change_at"] = now_iso
+                                active_state = bool(info.get("active_state", True))
+                                if raw == active_state:
+                                    diag["active_events"] += 1
+                                    diag["active_since_at"] = now_iso
+                                    diag["_active_since_monotonic"] = now
+                                elif previous_filtered == active_state:
+                                    started = diag.get("_active_since_monotonic")
+                                    if started is not None:
+                                        diag["last_active_duration_ms"] = round((now - float(started)) * 1000.0, 1)
+                                    diag["active_since_at"] = None
+                                    diag["_active_since_monotonic"] = None
+                for name, info in self.inputs.items():
+                    channel = int(info["channel"])
+                    if channel < len(values) and values[channel] != previous_raw[channel]:
+                        diag = self._input_diagnostics[name]
+                        diag["raw_transitions"] += 1
+                        diag["last_raw_change_at"] = now_iso
             self._connected = True
             self._last_success_monotonic = now
             self._last_success_at = datetime.now(timezone.utc).isoformat()
@@ -329,6 +373,7 @@ class IRIVIOBackend:
             last_error = self._last_error
             last_success_at = self._last_success_at
             outputs = dict(self._output_values)
+            diagnostics = {name: dict(values) for name, values in self._input_diagnostics.items()}
 
         input_details = {}
         for name, info in self.inputs.items():
@@ -343,6 +388,8 @@ class IRIVIOBackend:
                 "polarity_verified": info.get("polarity_verified", True),
                 "label": info.get("label", name),
                 "fail_safe": bool(info.get("fail_safe", False)),
+                "debounce_samples": max(1, int(info.get("debounce_samples", 1))),
+                **{key: value for key, value in diagnostics.get(name, {}).items() if not key.startswith("_")},
             }
 
         output_details = {}
@@ -373,4 +420,5 @@ class IRIVIOBackend:
             "input_details": input_details,
             "output_details": output_details,
             "polarity_verified": polarity_verified,
+            "poll_interval_s": self.poll_interval_s,
         }

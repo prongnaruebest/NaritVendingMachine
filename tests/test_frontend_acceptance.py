@@ -153,6 +153,18 @@ class FrontendAcceptanceTests(unittest.TestCase):
         self.assertNotIn("📦", APP_JS)
         self.assertIn("<details", TEMPLATE)
 
+    def test_diagnostics_expose_noise_homing_recovery_and_export(self) -> None:
+        self.assertIn('id="io-summary-noise-count"', TEMPLATE)
+        self.assertIn("detail.filtered_spikes", APP_JS)
+        self.assertIn('class="io-diagnostic-meta"', APP_JS)
+        self.assertIn("LATCH APPROACH", APP_JS)
+        self.assertIn('class="home-seq-detail"', APP_JS)
+        self.assertIn('class="alarm-recovery"', APP_JS)
+        self.assertIn('id="system-action-history"', TEMPLATE)
+        self.assertIn('id="event-export-csv"', TEMPLATE)
+        self.assertIn("function exportFilteredEventsCsv()", APP_JS)
+        self.assertIn("v31: authoritative diagnostics and recovery-detail layer", STYLE)
+
     def test_sequence_monitor_does_not_invent_a_workflow(self) -> None:
         self.assertIn("Array.isArray(operation.steps)", APP_JS)
         self.assertIn("if (!phaseOrder.length && phase) phaseOrder.push(phase)", APP_JS)

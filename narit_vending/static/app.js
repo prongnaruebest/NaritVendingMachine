@@ -402,6 +402,24 @@
     return MS.events.filter(eventMatches).slice().sort((a, b) => eventPriority(a) - eventPriority(b) || eventAt(b) - eventAt(a));
   }
 
+  function exportFilteredEventsCsv() {
+    const quote = (value) => `"${String(value ?? "").replace(/"/g, '""')}"`;
+    const rows = [["timestamp_ict", "severity", "category", "outcome", "message"]];
+    sortedEvents().forEach((event) => rows.push([
+      eventTime(event), eventSeverity(event).toUpperCase(), eventCategory(event),
+      eventOutcome(event), sanitizeEventText(event.message),
+    ]));
+    const blob = new Blob(["\ufeff" + rows.map((row) => row.map(quote).join(",")).join("\r\n")], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `narit-events-${new Date().toISOString().replace(/[:.]/g, "-")}.csv`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  }
+
   function renderEventDetail(event) {
     const detail = el("event-detail-content");
     const state = el("event-detail-state");
@@ -863,16 +881,23 @@
       const statusText =
         effectivePhase === "passed"    ? "HOMED ✓" :
         effectivePhase === "searching" ? "SEARCHING" :
+        effectivePhase === "sensor_found" ? "SENSOR FOUND" :
         effectivePhase === "backoff"   ? "BACKOFF" :
+        effectivePhase === "latching"  ? "LATCH APPROACH" :
+        effectivePhase === "zero_set"  ? "ZERO SET" :
+        effectivePhase === "positioning" ? "OFFSET MOVE" :
         effectivePhase === "completed" ? "COMPLETED" :
         effectivePhase === "failed"    ? "FAILED ✗" :
         effectivePhase === "waiting"   ? "QUEUED" :
         "NOT HOMED";
 
+      const cfg = MS.config?.axes?.[axis] || {};
+      const minActive = Boolean(axisData.head_limit);
+      const detailText = `MIN ${minActive ? "ACTIVE" : "CLEAR"} · Search ${Number(cfg.homing_search_speed_mm_s || 0).toFixed(1)} · Latch ${Number(cfg.homing_latch_speed_mm_s || 0).toFixed(1)} · Home ${Number(cfg.home_position_mm || 0).toFixed(1)} mm`;
       return `
         <div class="home-seq-step ${effectivePhase}" aria-label="${axis.toUpperCase()} axis homing: ${statusText}">
           <div class="home-seq-num">${idx + 1}</div>
-          <div class="home-seq-axis">${axis.toUpperCase()} Axis</div>
+          <div class="home-seq-axis">${axis.toUpperCase()} Axis<small class="home-seq-detail">${esc(detailText)}</small></div>
           <div class="home-seq-status">${statusText}</div>
         </div>
       `;
@@ -3414,6 +3439,9 @@
     setText("io-summary-drive-sub", driveFaults.length ? driveFaults.map((key) => key.startsWith("x") ? "X_DRIVE_ALM" : "Y_DRIVE_ALM").join(" · ") : "X/Y HBS860H feedback clear");
     setText("io-summary-age", snapshotStale ? "STALE" : `${Math.round(snapshotAgeMs)} ms`);
     setText("io-summary-latency", `IRIV ${MS.payload?.io?.poll_latency_ms ?? "--"} ms · PiControl ${piControl.poll_latency_ms ?? "--"} ms`);
+    const filteredNoise = Object.values(inputDetails).reduce((total, detail) => total + Number(detail?.filtered_spikes || 0), 0);
+    setText("io-summary-noise-count", String(filteredNoise));
+    setText("io-summary-noise-sub", filteredNoise ? "Review channels with filtered spikes below" : "No rejected input transitions since Controller start");
 
     let limitsCount = 0;
     let sensorsCount = 0;
@@ -3509,6 +3537,10 @@
           const rawBit = rawInputs[`DI${def.channel}`] ?? false;
           const isActive = logicalInputs[def.key] ?? false;
           const label = def.label;
+          const logicalTransitions = Number(detail.logical_transitions || 0);
+          const rawTransitions = Number(detail.raw_transitions || 0);
+          const filteredSpikes = Number(detail.filtered_spikes || 0);
+          const lastChange = detail.last_logical_change_at || detail.last_raw_change_at;
 
           let statusClass = "inactive";
           let stateText = "INACTIVE (0)";
@@ -3552,6 +3584,14 @@
                   <i class="io-dot ${statusClass}"></i> ${stateText}
                 </span>
               </div>
+              <dl class="io-diagnostic-meta">
+                <div><dt>Polarity</dt><dd>${detail.active_low ? "ACTIVE LOW" : "ACTIVE HIGH"}</dd></div>
+                <div><dt>Debounce</dt><dd>${Number(detail.debounce_samples || 1)} samples</dd></div>
+                <div><dt>Transitions</dt><dd>${logicalTransitions} / ${rawTransitions} logical/raw</dd></div>
+                <div class="${filteredSpikes ? "warn" : ""}"><dt>Filtered noise</dt><dd>${filteredSpikes}</dd></div>
+                <div><dt>Last change</dt><dd>${lastChange ? esc(fmtTimestamp(lastChange)) : "--"}</dd></div>
+                <div><dt>Last active</dt><dd>${detail.active_since_at ? "ACTIVE NOW" : detail.last_active_duration_ms != null ? `${Number(detail.last_active_duration_ms).toFixed(0)} ms` : "--"}</dd></div>
+              </dl>
             </div>
           `;
         }).join("");
@@ -3818,6 +3858,11 @@
     if (disable) disable.disabled = !MS.online || !motionEnabled;
     const reset = el("system-nucleo-reset");
     if (reset) reset.disabled = !MS.online || Boolean(MS.payload?.busy);
+    const history = el("system-action-history");
+    if (history) {
+      const entries = MS.events.filter((event) => ["SYSTEM", "SAFETY", "INTERLOCK", "CONFIG"].includes(eventCategory(event))).slice(0, 8);
+      history.innerHTML = entries.length ? entries.map((event) => `<li><time>${esc(eventTime(event))}</time><b>${esc(eventOutcome(event))}</b><span>${esc(sanitizeEventText(event.message))}</span></li>`).join("") : "<li>No system-control events in this browser session.</li>";
+    }
   }
 
   function renderDemoSampling() {
@@ -3908,10 +3953,19 @@
     const alarmList = document.getElementById("alarm-page-list");
     const alarmPriority = (channel) => channel.active ? (channel.level === "fault" ? 0 : 1) : 2;
     const orderedAlarms = alarmChannels().sort((left, right) => alarmPriority(left) - alarmPriority(right));
+    const alarmRecovery = (channel) => {
+      if (channel.code === "ESTOP") return "Release the physical E-Stop, verify DI10/KM1 feedback, then reset alarms.";
+      if (/DRV-[XY]/.test(channel.code)) return "Inspect the HBS860H fault indication and mechanics; remove the cause before resetting drive power.";
+      if (/-(MIN|MAX)$/.test(channel.code)) return "Move only away from the active limit, then verify that the sensor returns CLEAR.";
+      if (/-HOME$/.test(channel.code)) return `Run Home ${channel.code.charAt(0)} after all safety inputs are clear.`;
+      if (/NUCLEO|USB/.test(channel.code)) return "Check USB power/cable and protocol handshake; use Reset USB Link only while motion is stopped.";
+      if (/IO|CTRL/.test(channel.code)) return "Restore the communication link and review Event Log before enabling motion.";
+      return "Review the source and Event Log, remove the cause, then use Reset Alarms if the condition is clear.";
+    };
     if (alarmList) alarmList.innerHTML = orderedAlarms.map((channel) => `
       <article class="alarm-page-item ${channel.active ? channel.level : "clear"}">
         <i class="alarm-point-light ${channel.active ? channel.level : "clear"}" aria-hidden="true"></i>
-        <div><span>${esc(channel.code)}</span><strong>${esc(channel.label)}</strong><small>${esc(channel.detail)}</small></div>
+        <div><span>${esc(channel.code)}</span><strong>${esc(channel.label)}</strong><small>${esc(channel.detail)}</small><small class="alarm-recovery"><b>RECOVERY</b> ${esc(alarmRecovery(channel))}</small></div>
         <b class="alarm-page-state">${channel.active ? (channel.level === "fault" ? "ALARM" : "WARNING") : "NORMAL"}</b>
       </article>
     `).join("");
@@ -4435,6 +4489,7 @@
     el("abort-motion").addEventListener("click", () => {
       command("Abort motion", "/api/motion/abort", undefined, { isStop: true, noCheck: true });
     });
+    el("event-export-csv")?.addEventListener("click", exportFilteredEventsCsv);
 
     el("operator-stop").addEventListener("click", () => {
       setText("travel-limit-feedback", "STOP requested — waiting for controller status.");

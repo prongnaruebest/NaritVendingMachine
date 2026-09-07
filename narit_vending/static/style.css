@@ -7915,6 +7915,25 @@ body { font-size: 14px; }
 .warning-text { color:var(--yellow); }
 @media(max-width:900px){.system-control-grid,.system-detail-list{grid-template-columns:1fr}.system-action-row button{flex:1 1 180px}}
 
+/* v31: authoritative diagnostics and recovery-detail layer */
+.io-diagnostic-meta { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:4px 8px; margin:8px 0 0; padding-top:8px; border-top:1px solid var(--border); min-width:0; }
+.io-diagnostic-meta>div { display:flex; justify-content:space-between; gap:8px; min-width:0; }
+.io-diagnostic-meta dt { color:var(--text-3); }
+.io-diagnostic-meta dd { margin:0; color:var(--text-1); font-variant-numeric:tabular-nums; text-align:right; overflow-wrap:anywhere; }
+.io-diagnostic-meta .warn dd { color:var(--amber); font-weight:700; }
+.home-seq-axis { min-width:0; }
+.home-seq-detail { display:block; margin-top:2px; color:var(--text-3); font-size:10px; font-weight:500; line-height:1.35; overflow-wrap:anywhere; }
+.alarm-page-item>div { min-width:0; }
+.alarm-recovery { display:block; margin-top:6px; color:var(--text-2); line-height:1.45; overflow-wrap:anywhere; }
+.alarm-recovery b { color:var(--accent-cyan); margin-right:5px; }
+.system-action-history-panel { grid-column:1/-1; }
+.system-action-history { list-style:none; margin:0; padding:0; display:grid; gap:6px; }
+.system-action-history li { display:grid; grid-template-columns:minmax(150px,.28fr) 92px minmax(0,1fr); gap:10px; align-items:center; min-height:40px; padding:7px 10px; border:1px solid var(--border); border-radius:6px; background:var(--surface-2); }
+.system-action-history time,.system-action-history b { font-variant-numeric:tabular-nums; }
+.system-action-history span { min-width:0; overflow-wrap:anywhere; }
+#event-export-csv { min-height:44px; }
+@media(max-width:720px){.io-diagnostic-meta{grid-template-columns:1fr}.system-action-history li{grid-template-columns:1fr;gap:3px}.home-seq-detail{font-size:9px}}
+
 /* Final Manual Jog authority. */
 .motion-jog-panel .rp-jog-control-layout {
   grid-template-columns: minmax(360px, 420px) minmax(0, 1fr);
