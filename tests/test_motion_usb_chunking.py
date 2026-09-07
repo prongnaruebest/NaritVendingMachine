@@ -4,7 +4,12 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-from narit_vending.motion import AxisController, AxisMovePlan, NUCLEO_MOVE_CHUNK_STEPS
+from narit_vending.motion import (
+    AxisController,
+    AxisMovePlan,
+    ControlledStopError,
+    NUCLEO_MOVE_CHUNK_STEPS,
+)
 
 
 class MotionUsbChunkingTests(unittest.TestCase):
@@ -87,6 +92,24 @@ class MotionUsbChunkingTests(unittest.TestCase):
         self.assertEqual(axis._execute_plan(plan), 110_000)
         self.assertEqual(axis.motion_backend.move.call_count, 1)
         self.assertEqual(axis.motion_backend.move.call_args.kwargs["steps"], 110_000)
+
+    def test_hold_release_accounts_completed_steps_and_exits_as_controlled_stop(self):
+        axis = self.make_axis(segment_limit=1_000_000)
+        released = {"value": False}
+        axis.controlled_stop_requested = lambda: released["value"]
+
+        def stopped_move(**kwargs):
+            released["value"] = True
+            return {"steps": 1_234, "stopped": True}
+
+        axis.motion_backend.move.side_effect = stopped_move
+        plan = AxisMovePlan("x", 0.0, 1600.0, 1600.0, 1, 110_000, 30.0, 1600.0 / 30.0)
+
+        with self.assertRaises(ControlledStopError):
+            axis._execute_plan(plan)
+
+        self.assertEqual(axis.motion_backend.move.call_count, 1)
+        self.assertEqual(axis.position_steps, 1_234)
 
 
 if __name__ == "__main__":

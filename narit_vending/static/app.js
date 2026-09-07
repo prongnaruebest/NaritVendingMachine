@@ -578,24 +578,20 @@
     fillManualTarget(slot, `Slot ${code} loaded`);
   }
 
-  const HOLD_JOG_CHUNK_SECONDS = 0.12;
-
   function buildJogPayload(axis, direction, continuous = false) {
     const spd = effectiveMotionSpeed([axis]);
-    // A held jog is issued as short, time-bounded moves.  This keeps release,
-    // blur and page-hidden stopping responsive without latching the machine's
-    // software STOP or losing the controller's position accounting.
-    const distance = continuous
-      ? Math.max(spd * HOLD_JOG_CHUNK_SECONDS, 0.001)
-      : MS.selectedJogStep;
+    const current = Number(getAxis(axis).position_mm);
+    const maximum = Number(MS.config?.axes?.[axis]?.max_travel_mm);
+    // Hold-to-run uses one uninterrupted timer pulse train toward the software
+    // boundary. Releasing the control sends a priority controlled-stop.
+    const remaining = Number(direction) > 0 ? maximum - current : current;
+    const distance = continuous ? Math.max(remaining, 0.001) : MS.selectedJogStep;
     const body = {
       axis,
       distance_mm: distance * Number(direction),
     };
     if (spd > 0) body.speed_mm_s = spd;
-    if (continuous) {
-      body.time_s = HOLD_JOG_CHUNK_SECONDS;
-    } else {
+    if (!continuous) {
       const jogTime = el("jog-time")?.value;
       if (jogTime) body.time_s = Number(jogTime);
     }
@@ -4218,12 +4214,13 @@
     });
 
     /* --- Hold-to-Run Manual Jog Engine --- */
-    function stopManualJog() {
+    function stopManualJog(sendControllerStop = true) {
       if (MS.manualJog.holdTimer) {
         clearTimeout(MS.manualJog.holdTimer);
         MS.manualJog.holdTimer = null;
       }
       if (!MS.manualJog.active && !MS.manualJog.isHolding) return;
+      const wasHolding = MS.manualJog.isHolding;
       MS.manualJog.active = false;
       MS.manualJog.isHolding = false;
       MS.manualJog.token += 1;
@@ -4233,6 +4230,9 @@
       }
       const bypassHome = Boolean($("#jog-allow-unhomed")?.checked);
       setText("jog-status-text", allAxesHomed() ? "READY" : (bypassHome ? "UNHOMED JOG PERMITTED" : "HOME REQUIRED"));
+      if (sendControllerStop && wasHolding) {
+        apiCall("/api/motion/controlled-stop", "POST", {}, 2500).catch(() => {});
+      }
     }
 
     function beginManualJog(axis, dir, btn, event) {
@@ -4260,14 +4260,9 @@
         MS.manualJog.isHolding = true;
         setText("jog-status-text", `JOGGING ${axis.toUpperCase()} ${dir === "1" ? "+" : "−"}...`);
         try {
-          while (MS.manualJog.active && MS.manualJog.token === token) {
-            if (!canJogAxis(axis)) break;
+          if (MS.manualJog.active && MS.manualJog.token === token && canJogAxis(axis)) {
             const payload = buildJogPayload(axis, dir, true);
-            const res = await apiCall("/api/jog", "POST", payload, 2500);
-            if (!res || !res.ok) {
-              if (res && res.error) toast(humanizeError(res.error), "error");
-              break;
-            }
+            await apiCall("/api/jog", "POST", payload, 650000);
           }
         } catch (err) {
           if (MS.manualJog.token === token) {
@@ -4275,7 +4270,7 @@
           }
         } finally {
           if (MS.manualJog.token === token) {
-            stopManualJog();
+            stopManualJog(false);
             refresh().catch(() => {});
           }
         }

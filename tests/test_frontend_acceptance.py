@@ -76,6 +76,12 @@ class FrontendAcceptanceTests(unittest.TestCase):
         self.assertNotIn('jog-keyboard-help', TEMPLATE)
         self.assertNotIn('jog-hold-note', TEMPLATE)
 
+    def test_hold_jog_uses_one_continuous_move_and_priority_release_stop(self) -> None:
+        self.assertNotIn("HOLD_JOG_CHUNK_SECONDS", APP_JS)
+        self.assertIn('apiCall("/api/motion/controlled-stop", "POST", {}, 2500)', APP_JS)
+        self.assertIn('await apiCall("/api/jog", "POST", payload, 650000)', APP_JS)
+        self.assertNotIn("while (MS.manualJog.active && MS.manualJog.token === token)", APP_JS)
+
     def test_no_inline_javascript_navigation(self) -> None:
         self.assertNotIn("onclick=", TEMPLATE)
         self.assertNotIn("javascript:", TEMPLATE.lower())

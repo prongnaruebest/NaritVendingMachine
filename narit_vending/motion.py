@@ -792,6 +792,8 @@ class AxisController:
                 self.position_steps += completed if plan.direction == self.config.forward_direction else -completed
                 moved += completed
                 remaining -= completed
+                if bool(res.get("stopped")) and self.controlled_stop_requested():
+                    raise ControlledStopError(f"{self.config.name}: jog stopped when hold control was released")
                 if completed != chunk_steps:
                     raise MotionError(
                         f"{self.config.name}: incomplete USB move segment ({completed}/{chunk_steps} steps)"

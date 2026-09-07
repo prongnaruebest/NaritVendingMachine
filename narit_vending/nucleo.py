@@ -398,6 +398,7 @@ class NucleoLink:
 
             # Keep watchdog alive with HEARTBEAT SAFE while waiting for completion
             estimated_duration_s = steps_val / speed_val
+            motion_started = time.monotonic()
             overall_timeout_s = timeout_s or (estimated_duration_s + 4.0)
             overall_deadline = time.monotonic() + overall_timeout_s
             axis_key = axis_char.lower()
@@ -408,7 +409,17 @@ class NucleoLink:
 
                     if stop_requested is not None and stop_requested():
                         self.stop()
-                        raise NucleoError("Motion aborted by stop request or limit trigger")
+                        elapsed_s = max(0.0, time.monotonic() - motion_started)
+                        completed_steps = min(steps_val, max(0, int(round(elapsed_s * speed_val))))
+                        return {
+                            "ok": True,
+                            "axis": axis_key,
+                            "direction": dir_val,
+                            "steps": completed_steps,
+                            "speed_hz": speed_val,
+                            "duration_s": elapsed_s,
+                            "stopped": True,
+                        }
 
                     serial_port.write(b"HEARTBEAT SAFE\n")
                     serial_port.flush()

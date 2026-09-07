@@ -157,10 +157,11 @@ class NucleoMotionTests(unittest.TestCase):
         link = NucleoLink(self.config(), serial_factory=lambda **kwargs: mock_serial)
         link._poll_once()
 
-        with self.assertRaises(NucleoError) as ctx:
-            link.move("Y", 0, 500, 200, stop_requested=lambda: True)
+        result = link.move("Y", 0, 500, 200, stop_requested=lambda: True)
 
-        self.assertIn("aborted", str(ctx.exception).lower())
+        self.assertTrue(result["ok"])
+        self.assertTrue(result["stopped"])
+        self.assertLessEqual(result["steps"], 500)
         commands = [w.decode("ascii", errors="replace").strip() for w in mock_serial.writes]
         self.assertIn("STOP", commands)
 
