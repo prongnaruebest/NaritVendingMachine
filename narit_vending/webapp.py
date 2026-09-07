@@ -21,6 +21,7 @@ from .config_foundation import (
     validate_configuration_payloads,
 )
 from .motion import (
+    ActiveLimitError,
     ControlledStopError,
     EmergencyStopError,
     LimitTriggeredError,
@@ -418,7 +419,7 @@ class MotionService:
                 self.operation_message = str(exc)
             _logger.info("Controlled stop: %s", exc)
             return {"ok": False, "controlled_stop": True, "error": str(exc)}
-        except TravelBoundaryError as exc:
+        except (TravelBoundaryError, ActiveLimitError) as exc:
             with self.lock:
                 self.controller.clear_controlled_stop()
                 self.controller.set_state("idle")

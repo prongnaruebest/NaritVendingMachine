@@ -2,6 +2,7 @@ import unittest
 from unittest.mock import MagicMock
 
 from narit_vending.motion import (
+    ActiveLimitError,
     AxisController,
     AxisConfig,
     MachineConfig,
@@ -127,6 +128,22 @@ class MotionCharacterizationTests(unittest.TestCase):
 
         with self.assertRaises(TravelBoundaryError):
             axis.plan_relative_move(1.0, speed_mm_s=2.0)
+
+    def test_active_limit_rejects_only_direction_into_sensor(self) -> None:
+        config = self._axis_config("z", 160.0)
+        axis = AxisController.__new__(AxisController)
+        axis.config = config
+        axis.position_steps = 0
+        axis.is_homed = True
+        axis.estop = MagicMock(value=False)
+        axis.head_limit = MagicMock(value=True)
+        axis.tail_limit = MagicMock(value=False)
+        axis.stop_requested = lambda: False
+
+        with self.assertRaises(ActiveLimitError):
+            axis.plan_relative_move(-1.0, speed_mm_s=2.0)
+        away = axis.plan_relative_move(1.0, speed_mm_s=2.0)
+        self.assertEqual(away.steps, 80)
 
     def test_move_to_slot_uses_safe_z_then_xy_then_target_z(self) -> None:
         controller, axes = self._mock_controller()

@@ -46,6 +46,12 @@ class LimitTriggeredError(MotionError):
     pass
 
 
+class ActiveLimitError(MotionError):
+    """Requested direction is already blocked by an active endpoint sensor."""
+
+    pass
+
+
 class EmergencyStopError(MotionError):
     pass
 
@@ -843,9 +849,9 @@ class AxisController:
         if self.stop_requested():
             raise StopRequestedError(f"{self.config.name}: stop requested")
         if direction == self.config.home_direction and self.head_limit.value:
-            raise LimitTriggeredError(f"{self.config.name}: head limit already active")
+            raise ActiveLimitError(f"{self.config.name}: Min limit is active; jog in the positive direction")
         if direction != self.config.home_direction and self.tail_limit.value:
-            raise LimitTriggeredError(f"{self.config.name}: tail limit already active")
+            raise ActiveLimitError(f"{self.config.name}: Max limit is active; jog in the negative direction")
         if self.is_homed:
             target_steps = self.position_steps + delta_steps
             max_steps = self.mm_to_steps(self.config.max_travel_mm)

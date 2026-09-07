@@ -1465,9 +1465,13 @@
       const state = getAxis(axis);
       const towardMin = Number(direction) < 0;
       const atDirectionalLimit = towardMin ? Boolean(state.head_limit) : Boolean(state.tail_limit);
-      btn.disabled = !canJogAxis(axis) || atDirectionalLimit;
+      // Keep both directions available. The Controller remains authoritative:
+      // a direction into an active limit is rejected without latching STOP,
+      // while the direction away from it moves immediately.
+      btn.disabled = !canJogAxis(axis);
+      btn.dataset.limitActive = atDirectionalLimit ? "true" : "false";
       btn.title = atDirectionalLimit
-        ? `${axis.toUpperCase()} ${towardMin ? "Min" : "Max"} limit is active; jog only away from this limit`
+        ? `${axis.toUpperCase()} ${towardMin ? "Min" : "Max"} limit is active; this direction will be safely rejected`
         : `Hold to jog ${axis.toUpperCase()}${towardMin ? "−" : "+"}; release to stop`;
     });
 
