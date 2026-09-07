@@ -8,6 +8,7 @@ import unittest
 from narit_vending.nucleo import (
     NUCLEO_MOTION_MAX_SPEED_HZ,
     NUCLEO_MOTION_MAX_STEPS,
+    NUCLEO_LEGACY_MAX_STEPS,
     NUCLEO_MOTION_MIN_SPEED_HZ,
     NucleoError,
     NucleoLink,
@@ -101,7 +102,7 @@ class NucleoMotionTests(unittest.TestCase):
         payload = link.status_payload()
         self.assertEqual(payload["protocol"], 2)
         self.assertEqual(payload["device"], "NUCLEO-F439ZI")
-        self.assertEqual(payload["max_move_steps"], NUCLEO_MOTION_MAX_STEPS)
+        self.assertEqual(payload["max_move_steps"], NUCLEO_LEGACY_MAX_STEPS)
         self.assertFalse(payload["armed"])
 
     def test_arm_and_disarm(self):
@@ -126,7 +127,7 @@ class NucleoMotionTests(unittest.TestCase):
         with self.assertRaises(NucleoError):
             link.move("X", 0, 0, 200)
         with self.assertRaises(NucleoError):
-            link.move("X", 0, NUCLEO_MOTION_MAX_STEPS + 1, 200)
+            link.move("X", 0, NUCLEO_LEGACY_MAX_STEPS + 1, 200)
 
         with self.assertRaises(NucleoError):
             link.move("X", 0, 100, NUCLEO_MOTION_MIN_SPEED_HZ - 1)

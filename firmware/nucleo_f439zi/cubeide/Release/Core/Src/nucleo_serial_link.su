@@ -1,4 +1,4 @@
 ../Core/Src/nucleo_serial_link.c:16:13:transmit_text	8	static
-../Core/Src/nucleo_serial_link.c:28:13:transmit_status	304	static
-../Core/Src/nucleo_serial_link.c:162:6:NucleoSerialLink_Poll	120	static
-../Core/Src/nucleo_serial_link.c:184:6:NucleoSerialLink_Start	0	static
+../Core/Src/nucleo_serial_link.c:28:13:transmit_status	312	static
+../Core/Src/nucleo_serial_link.c:163:6:NucleoSerialLink_Poll	120	static
+../Core/Src/nucleo_serial_link.c:185:6:NucleoSerialLink_Start	0	static

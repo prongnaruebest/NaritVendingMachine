@@ -15,7 +15,8 @@ _log = logging.getLogger(__name__)
 
 NUCLEO_MOTION_MIN_SPEED_HZ = 10.0
 NUCLEO_MOTION_MAX_SPEED_HZ = 50_000.0
-NUCLEO_MOTION_MAX_STEPS = 10000
+NUCLEO_MOTION_MAX_STEPS = 1_000_000
+NUCLEO_LEGACY_MAX_STEPS = 10_000
 
 
 class NucleoLink:
@@ -69,9 +70,9 @@ class NucleoLink:
     def max_move_steps(self) -> int:
         """Maximum pulse count accepted by one firmware MOVE frame."""
         try:
-            advertised = int(self._last_payload.get("max_move_steps", NUCLEO_MOTION_MAX_STEPS))
+            advertised = int(self._last_payload.get("max_move_steps", NUCLEO_LEGACY_MAX_STEPS))
         except (TypeError, ValueError):
-            advertised = NUCLEO_MOTION_MAX_STEPS
+            advertised = NUCLEO_LEGACY_MAX_STEPS
         return max(1, advertised)
 
     def start(self) -> None:
@@ -362,8 +363,9 @@ class NucleoLink:
             raise NucleoError(f"Invalid axis '{axis}' — expected X, Y, or Z")
         dir_val = 1 if int(direction) != 0 else 0
         steps_val = int(steps)
-        if steps_val < 1 or steps_val > NUCLEO_MOTION_MAX_STEPS:
-            raise NucleoError(f"steps must be between 1 and {NUCLEO_MOTION_MAX_STEPS} (requested {steps_val})")
+        move_limit = self.max_move_steps
+        if steps_val < 1 or steps_val > move_limit:
+            raise NucleoError(f"steps must be between 1 and {move_limit} (requested {steps_val})")
         speed_val = float(speed_hz)
         if speed_val < NUCLEO_MOTION_MIN_SPEED_HZ or speed_val > NUCLEO_MOTION_MAX_SPEED_HZ:
             raise NucleoError(

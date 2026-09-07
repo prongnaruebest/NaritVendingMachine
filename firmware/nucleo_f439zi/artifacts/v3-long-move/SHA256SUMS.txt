@@ -1,0 +1,2 @@
+165bd332886d0cfe5618e8c5f862bcaf482cd9382116d64cf4131c4bfd55ef74  nucleo_f439zi_v3_long_move.bin
+e6fd9df95fcb10c067b897f79f7ffb357dd6d0d9a30b836d0edb7a3b0ebd5d59  nucleo_f439zi_v3_long_move.elf

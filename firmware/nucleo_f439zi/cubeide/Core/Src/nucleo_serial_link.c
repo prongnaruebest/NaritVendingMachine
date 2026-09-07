@@ -34,7 +34,7 @@ static void transmit_status(const char *type)
       response, sizeof(response),
       "{\"type\":\"%s\",\"device\":\"NUCLEO-F439ZI\","
       "\"protocol\":%lu,\"safe\":%s,\"armed\":%s,"
-      "\"watchdog\":%s,\"uptime_ms\":%lu,"
+      "\"watchdog\":%s,\"uptime_ms\":%lu,\"max_move_steps\":%lu,"
       "\"moving\":{\"x\":%u,\"y\":%u,\"z\":%u}}\r\n",
       type,
       (unsigned long)NUCLEO_PROTOCOL_VERSION,
@@ -42,6 +42,7 @@ static void transmit_status(const char *type)
       armed != 0U ? "true" : "false",
       NucleoMotion_WatchdogHealthy() != 0U ? "true" : "false",
       (unsigned long)HAL_GetTick(),
+      (unsigned long)NUCLEO_MOTION_MAX_STEPS,
       (unsigned int)Stepper_IsMoving(AXIS_X),
       (unsigned int)Stepper_IsMoving(AXIS_Y),
       (unsigned int)Stepper_IsMoving(AXIS_Z));

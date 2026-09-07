@@ -80,6 +80,14 @@ class MotionUsbChunkingTests(unittest.TestCase):
             [25_000, 25_000, 10_000],
         )
 
+    def test_new_firmware_executes_full_axis_stroke_without_segment_pause(self):
+        axis = self.make_axis(segment_limit=1_000_000)
+        plan = AxisMovePlan("x", 0.0, 1600.0, 1600.0, 1, 110_000, 30.0, 1600.0 / 30.0)
+
+        self.assertEqual(axis._execute_plan(plan), 110_000)
+        self.assertEqual(axis.motion_backend.move.call_count, 1)
+        self.assertEqual(axis.motion_backend.move.call_args.kwargs["steps"], 110_000)
+
 
 if __name__ == "__main__":
     unittest.main()
