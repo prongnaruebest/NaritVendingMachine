@@ -8,7 +8,7 @@
   <link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='favicon-transparent-large.png') }}?v=20260721_v12">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=20260907_io_status_v5">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=20260907_home_visible_v7">
 </head>
 <body>
   <div class="hmi-shell">
@@ -37,6 +37,10 @@
               <circle cx="8" cy="8" r="2.5"/><path d="M8 1v2.5M8 12.5V15M1 8h2.5M12.5 8H15"/>
             </svg>
             <span>Motion Control</span>
+          </button>
+          <button class="nav-item nav-homing-shortcut" id="nav-homing-controls" type="button" data-homing-shortcut aria-label="Open Home X, Y, Z and Home All controls">
+            <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2 8 8 2l6 6"/><path d="M4 7v7h8V7M8 14v-4"/></svg>
+            <span>Homing Controls</span>
           </button>
           <button class="nav-item" id="nav-visualization" data-view-target="visualization" hidden>
             <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -1707,6 +1711,6 @@
   <!-- Toast notification -->
   <div class="toast" id="toast" role="status"></div>
 
-  <script src="{{ url_for('static', filename='app.js') }}?v=20260907_io_status_v5"></script>
+  <script src="{{ url_for('static', filename='app.js') }}?v=20260907_home_visible_v7"></script>
 </body>
 </html>

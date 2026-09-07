@@ -7754,6 +7754,45 @@ body { font-size: 14px; }
   border-color: var(--accent-cyan) !important;
   box-shadow: 0 0 0 3px rgba(0, 229, 255, .18), 0 8px 24px rgba(0, 0, 0, .28) !important;
 }
+.nav-homing-shortcut {
+  border-left: 3px solid var(--accent-cyan) !important;
+  background: rgba(0, 211, 255, .08) !important;
+  color: var(--text-1) !important;
+}
+.nav-homing-shortcut:hover,
+.nav-homing-shortcut:focus-visible {
+  background: rgba(0, 211, 255, .16) !important;
+  color: var(--accent-cyan) !important;
+}
+.workspace-view[data-view-page="motion"].active {
+  display: flex !important;
+  flex-direction: column;
+  align-items: stretch;
+  height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  gap: 12px !important;
+  padding-bottom: 20px !important;
+}
+.workspace-view[data-view-page="motion"].active > * {
+  flex: 0 0 auto;
+  width: 100%;
+  position: static;
+}
+.workspace-view[data-view-page="motion"] > .wz-top { order: -20; }
+.workspace-view[data-view-page="motion"] > .motion-axis-panel { order: -10; }
+.workspace-view[data-view-page="motion"] > .travel-limit-panel { order: 10; }
+.workspace-view[data-view-page="motion"] > .target-panel { order: 20; }
+.workspace-view[data-view-page="motion"] > .motion-jog-panel { order: 30; }
+.workspace-view[data-view-page="motion"] > .motion-slot-panel { order: 40; }
+.workspace-view[data-view-page="motion"] .home-panel {
+  border: 2px solid var(--accent-cyan);
+}
+.workspace-view[data-view-page="motion"] .home-panel .panel-title::after {
+  content: " · HOME X / Y / Z / ALL";
+  color: var(--accent-cyan);
+  font-size: .78em;
+}
 @media (max-width: 900px) {
   .io-header-actions { width: 100%; flex-wrap: wrap; }
   .io-header-actions > button { flex: 1 1 180px; }

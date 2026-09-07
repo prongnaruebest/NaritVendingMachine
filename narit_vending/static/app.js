@@ -1566,6 +1566,17 @@
     renderWorkspacePages();
   }
 
+  function openHomingControls() {
+    switchWorkspace("motion");
+    window.requestAnimationFrame(() => {
+      const homingControls = el("homing-controls");
+      homingControls?.scrollIntoView({ behavior: "smooth", block: "start" });
+      homingControls?.focus({ preventScroll: true });
+      homingControls?.classList.add("attention-focus");
+      window.setTimeout(() => homingControls?.classList.remove("attention-focus"), 1600);
+    });
+  }
+
   function axisSpeedLimit(axis) {
     const cfg = MS.config?.axes?.[axis] || {};
     const candidates = [cfg.commissioned_max_speed_mm_s, cfg.max_speed_mm_s, Number(cfg.max_pulse_hz) / Number(cfg.steps_per_mm)]
@@ -4514,16 +4525,8 @@
       refresh();
       toast("I/O Status refreshed", "ok");
     });
-    el("io-open-homing")?.addEventListener("click", () => {
-      switchWorkspace("motion");
-      window.requestAnimationFrame(() => {
-        const homingControls = el("homing-controls");
-        homingControls?.scrollIntoView({ behavior: "smooth", block: "center" });
-        homingControls?.focus({ preventScroll: true });
-        homingControls?.classList.add("attention-focus");
-        window.setTimeout(() => homingControls?.classList.remove("attention-focus"), 1600);
-      });
-    });
+    el("io-open-homing")?.addEventListener("click", openHomingControls);
+    $$('[data-homing-shortcut]').forEach((button) => button.addEventListener("click", openHomingControls));
 
   }
 
