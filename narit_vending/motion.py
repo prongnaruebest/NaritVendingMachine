@@ -62,6 +62,12 @@ class ControlledStopError(MotionError):
     pass
 
 
+class TravelBoundaryError(MotionError):
+    """Command rejected before motion because it exceeds software travel."""
+
+    pass
+
+
 class NucleoError(MotionError):
     pass
 
@@ -377,7 +383,7 @@ class AxisController:
         if not math.isfinite(float(target_mm)):
             raise MotionError(f"{self.config.name}: target must be finite")
         if target_mm < 0 or target_mm > self.config.max_travel_mm:
-            raise MotionError(
+            raise TravelBoundaryError(
                 f"{self.config.name}: target {target_mm:.2f} mm outside 0-{self.config.max_travel_mm:.2f} mm"
             )
         return self.plan_relative_move(target_mm - self.position_mm, speed_mm_s=speed_mm_s, time_s=time_s)
@@ -844,7 +850,7 @@ class AxisController:
             target_steps = self.position_steps + delta_steps
             max_steps = self.mm_to_steps(self.config.max_travel_mm)
             if target_steps < 0 or target_steps > max_steps:
-                raise MotionError(
+                raise TravelBoundaryError(
                     f"{self.config.name}: target exceeds configured travel 0-{self.config.max_travel_mm:.2f} mm"
                 )
 

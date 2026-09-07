@@ -26,6 +26,7 @@ from .motion import (
     LimitTriggeredError,
     MachineConfig,
     MotionError,
+    TravelBoundaryError,
     build_controller,
     build_default_machine_config,
     load_hardware_config,
@@ -417,6 +418,15 @@ class MotionService:
                 self.operation_message = str(exc)
             _logger.info("Controlled stop: %s", exc)
             return {"ok": False, "controlled_stop": True, "error": str(exc)}
+        except TravelBoundaryError as exc:
+            with self.lock:
+                self.controller.clear_controlled_stop()
+                self.controller.set_state("idle")
+                self.last_error = str(exc)
+                self.operation_phase = "rejected"
+                self.operation_message = str(exc)
+            _logger.info("Motion command rejected: %s", exc)
+            return {"ok": False, "rejected": True, "error": str(exc)}
         except (MotionError, EmergencyStopError, LimitTriggeredError, IRIVIOError) as exc:
             with self.lock:
                 self.last_error = str(exc)
@@ -870,11 +880,9 @@ class MotionService:
             # Rebuild endpoint distance from the Controller's exact position.
             # The HMI status is rounded to 0.001 mm and can otherwise request
             # one pulse beyond the configured boundary after a prior jog.
-            distance_mm = (
-                axis.config.max_travel_mm - axis.position_mm
-                if distance_mm > 0
-                else -axis.position_mm
-            )
+            max_steps = axis.mm_to_steps(axis.config.max_travel_mm)
+            remaining_steps = max_steps - axis.position_steps if distance_mm > 0 else axis.position_steps
+            distance_mm = axis.steps_to_mm(max(0, remaining_steps)) * (1 if distance_mm > 0 else -1)
         return self._run(
             f"jog_{axis_name}",
             lambda: axis.move_mm(distance_mm, speed_mm_s=speed_mm_s, time_s=time_s),
