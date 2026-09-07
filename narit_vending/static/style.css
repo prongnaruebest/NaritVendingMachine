@@ -7754,13 +7754,14 @@ body { font-size: 14px; }
   border-color: var(--accent-cyan) !important;
   box-shadow: 0 0 0 3px rgba(0, 229, 255, .18), 0 8px 24px rgba(0, 0, 0, .28) !important;
 }
-.nav-homing-shortcut {
-  border-left: 3px solid var(--accent-cyan) !important;
-}
 .workspace-view[data-view-page="motion"] .home-panel {
   width: 100%;
   min-width: 0;
   border: 2px solid var(--accent-cyan);
+}
+.workspace-view[data-view-page="motion"] > .wz-top {
+  grid-template-columns: minmax(0, 1fr) !important;
+  width: 100%;
 }
 .workspace-view[data-view-page="motion"].active {
   display: flex !important;

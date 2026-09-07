@@ -60,12 +60,14 @@ class FrontendAcceptanceTests(unittest.TestCase):
 
     def test_homing_replaces_feed_override_in_motion_and_system_control_follows_overview(self) -> None:
         self.assertNotIn('data-view-page="homing"', TEMPLATE)
-        self.assertIn('id="nav-homing-controls" type="button" data-homing-shortcut', TEMPLATE)
+        self.assertNotIn('id="nav-homing-controls"', TEMPLATE)
+        self.assertNotIn('data-homing-shortcut', TEMPLATE)
         self.assertIn('data-view-page="motion"', TEMPLATE)
         self.assertEqual(TEMPLATE.count('id="homing-controls"'), 1)
         self.assertEqual(TEMPLATE.count('id="home-all"'), 1)
         self.assertNotIn('class="feed-override-card"', TEMPLATE)
         self.assertNotIn('Feed Rate Override (Next Command)', TEMPLATE)
+        self.assertIn('grid-template-columns: minmax(0, 1fr) !important', STYLE)
         self.assertLess(TEMPLATE.index('id="nav-dashboard"'), TEMPLATE.index('id="nav-system-control"'))
         self.assertLess(TEMPLATE.index('id="nav-system-control"'), TEMPLATE.index('id="nav-motion"'))
 
