@@ -230,7 +230,10 @@
             <h2 class="panel-title" id="travel-limit-title">Move to Configured Min / Max</h2>
             <small class="target-purpose">Normal motion command with homing, software-limit and safety-interlock checks.</small>
           </div>
-          <button type="button" class="btn-operator-stop" id="operator-stop">STOP MOTION</button>
+          <div class="travel-limit-header-actions">
+            <button type="button" class="btn-reset-alarm" id="travel-reset-interlock">RESET STOP / ALARMS</button>
+            <button type="button" class="btn-operator-stop" id="operator-stop">STOP MOTION</button>
+          </div>
         </div>
         <div class="axis-speed-bank section-speed-bank" data-axis-speed-bank aria-label="Linked axis speed settings for minimum and maximum travel"></div>
         <div class="travel-limit-grid">
@@ -253,6 +256,7 @@
             <button type="button" class="btn-limit-max" data-travel-axis="z" data-travel-limit="max">Z MAX</button>
           </div>
         </div>
+        <div class="travel-limit-inhibit" id="travel-limit-inhibit" role="alert">Checking motion interlocks…</div>
         <div class="travel-limit-feedback" id="travel-limit-feedback" role="status" aria-live="polite">Select an axis endpoint. The machine must be homed before this command is enabled.</div>
       </section>
 

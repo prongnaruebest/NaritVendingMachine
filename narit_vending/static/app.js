@@ -1482,6 +1482,18 @@
       button.title = reason || `${axis.toUpperCase()} axis is ready for the next command`;
       button.setAttribute("aria-disabled", String(Boolean(reason)));
     });
+    const travelReason = motionInhibitReasonForAxes(AXES);
+    const travelInhibit = el("travel-limit-inhibit");
+    if (travelInhibit) {
+      travelInhibit.textContent = travelReason
+        ? `LOCKED: ${travelReason}`
+        : "READY: Select one configured endpoint. Only the selected axis will move.";
+      travelInhibit.classList.toggle("is-ready", !travelReason);
+    }
+    const travelReset = el("travel-reset-interlock");
+    if (travelReset) {
+      travelReset.disabled = !MS.online || Boolean(MS.payload?.busy) || (!MS.payload?.safety?.stop_requested && !MS.payload?.last_error);
+    }
     const operatorStop = el("operator-stop");
     if (operatorStop) operatorStop.disabled = !MS.online;
     AXES.forEach((axis) => {
@@ -4297,6 +4309,13 @@
     el("operator-stop").addEventListener("click", () => {
       setText("travel-limit-feedback", "STOP requested — waiting for controller status.");
       command("Stop motion", "/api/stop", undefined, { isStop: true, noCheck: true });
+    });
+    el("travel-reset-interlock").addEventListener("click", async () => {
+      setText("travel-limit-feedback", "Resetting software Stop latch and resettable alarms…");
+      const result = await command("Reset stop and alarms", "/api/clear-alarm", undefined, { isStop: true, noCheck: true });
+      setText("travel-limit-feedback", result
+        ? "Reset accepted. Waiting for Controller readiness before enabling Min / Max."
+        : "Reset was rejected. Review the interlock reason above.");
     });
     $$('[data-travel-axis]').forEach((button) => {
       button.addEventListener("click", () => {

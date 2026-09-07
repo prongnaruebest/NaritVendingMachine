@@ -4805,6 +4805,8 @@ select.slot-filter {
 
 .travel-limit-panel { margin-top: 10px; }
 .travel-limit-panel .panel-head { align-items: center; }
+.travel-limit-header-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.travel-limit-header-actions .btn-reset-alarm { min-height: 44px; }
 .travel-limit-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -4839,11 +4841,24 @@ select.slot-filter {
 }
 .btn-operator-stop:hover:not(:disabled) { background: #861c2c; }
 .btn-operator-stop:disabled { opacity: .45; cursor: not-allowed; }
+.travel-limit-inhibit {
+  margin: 4px 14px 8px;
+  padding: 9px 11px;
+  border: 1px solid var(--amber-brd);
+  border-radius: 5px;
+  background: var(--amber-dim);
+  color: var(--amber);
+  font-size: 11px;
+  font-weight: 800;
+}
+.travel-limit-inhibit.is-ready { border-color: var(--green-brd); background: var(--green-dim); color: var(--green); }
 .travel-limit-feedback { padding: 0 14px 12px; color: var(--text-2); font-size: 11px; line-height: 1.5; }
 
 @media (max-width: 900px) {
   .travel-limit-grid { grid-template-columns: 1fr; }
   .btn-operator-stop { min-width: 132px; }
+  .travel-limit-header-actions { width: 100%; }
+  .travel-limit-header-actions button { flex: 1 1 180px; }
 }
 
 /* Header layout correction: keep safety controls compact and prevent the
