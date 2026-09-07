@@ -7754,20 +7754,10 @@ body { font-size: 14px; }
   border-color: var(--accent-cyan) !important;
   box-shadow: 0 0 0 3px rgba(0, 229, 255, .18), 0 8px 24px rgba(0, 0, 0, .28) !important;
 }
-.workspace-view.homing-page.active {
-  display: grid !important;
-  grid-template-columns: minmax(0, 1fr);
-  align-content: start;
-  gap: 12px;
-  height: 100%;
-  overflow-x: hidden;
-  overflow-y: auto;
-  padding-bottom: 20px;
+.nav-homing-shortcut {
+  border-left: 3px solid var(--accent-cyan) !important;
 }
-.homing-page-heading { min-width: 0; }
-.homing-page-heading h1 { margin: 0; color: var(--text-1); }
-.homing-page-heading p:last-child { margin: 6px 0 0; color: var(--text-muted); }
-.workspace-view.homing-page .home-panel {
+.workspace-view[data-view-page="motion"] .home-panel {
   width: 100%;
   min-width: 0;
   border: 2px solid var(--accent-cyan);

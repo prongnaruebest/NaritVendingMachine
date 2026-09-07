@@ -8,7 +8,7 @@
   <link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='favicon-transparent-large.png') }}?v=20260721_v12">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=20260907_homing_page_v8">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=20260907_motion_home_v9">
 </head>
 <body>
   <div class="hmi-shell">
@@ -42,7 +42,7 @@
             </svg>
             <span>Motion Control</span>
           </button>
-          <button class="nav-item" id="nav-homing-controls" type="button" data-view-target="homing" aria-label="Open Home X, Y, Z and Home All controls">
+          <button class="nav-item nav-homing-shortcut" id="nav-homing-controls" type="button" data-homing-shortcut aria-label="Open homing controls in Motion Control">
             <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2 8 8 2l6 6"/><path d="M4 7v7h8V7M8 14v-4"/></svg>
             <span>Homing Controls</span>
           </button>
@@ -198,15 +198,9 @@
 
     <!-- ── MAIN WORKSPACE (CENTER) ─────────────────────────────── -->
     <main class="hmi-workspace">
-      <section class="workspace-view homing-page" data-view-page="homing">
-        <div class="page-heading homing-page-heading">
-          <div>
-            <p class="panel-label">Machine Reference</p>
-            <h1>Homing Controls</h1>
-            <p>Reference one axis or all axes before normal motion. Each axis reports its own homing phase.</p>
-          </div>
-        </div>
-
+      <section class="workspace-view active" data-view-page="motion">
+      <!-- Top Row: Homing Controls -->
+      <div class="wz-top">
         <div class="panel home-panel" id="homing-controls" tabindex="-1">
           <div class="panel-head">
             <div>
@@ -229,29 +223,6 @@
             </div>
           </div>
         </div>
-      </section>
-
-      <section class="workspace-view active" data-view-page="motion">
-      <!-- Top Row: Feed Override -->
-      <div class="wz-top">
-        <!-- Feed Override -->
-        <div class="feed-override-card">
-          <div class="fo-label">Feed Rate Override (Next Command)</div>
-          <div class="fo-value">
-            <span id="fo-pct-display">100</span><span class="fo-pct">%</span>
-          </div>
-          <div class="fo-presets">
-            <button class="fo-preset-btn" data-fo="25">25%</button>
-            <button class="fo-preset-btn" data-fo="50">50%</button>
-            <button class="fo-preset-btn active" data-fo="100">100%</button>
-          </div>
-          <div class="fo-speeds">
-            <div class="fo-speed-row"><span>Programmed Speed</span><strong id="fo-prog-speed">-- mm/s</strong></div>
-            <div class="fo-speed-row"><span>Effective Speed</span><strong id="fo-eff-speed">-- mm/s</strong></div>
-          </div>
-          <p class="fo-help">Scales the programmed speed without changing target position. The current pulse engine applies this value when planning the next command; it does not retime a move already in progress.</p>
-        </div>
-
       </div>
 
       <!-- Normal-operation travel limit controls -->
@@ -1721,6 +1692,6 @@
   <!-- Toast notification -->
   <div class="toast" id="toast" role="status"></div>
 
-  <script src="{{ url_for('static', filename='app.js') }}?v=20260907_homing_page_v8"></script>
+  <script src="{{ url_for('static', filename='app.js') }}?v=20260907_motion_home_v9"></script>
 </body>
 </html>
