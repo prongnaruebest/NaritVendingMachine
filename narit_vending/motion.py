@@ -17,6 +17,11 @@ from gpiozero import DigitalInputDevice, OutputDevice
 
 _logger = logging.getLogger(__name__)
 
+# The current USB firmware accepts at most 10,000 pulses in one MOVE frame.
+# Longer normal moves are split by the Controller; this is a transport limit,
+# not a machine-travel limit.
+NUCLEO_MOVE_CHUNK_STEPS = 10_000
+
 
 def _slot_sort_key(item: tuple[str, object]) -> tuple[int, int | str]:
     code = str(item[0])
@@ -676,16 +681,37 @@ class AxisController:
                     return True
                 return False
 
-            res = self.motion_backend.move(
-                axis=self.config.name,
-                direction=plan.direction,
-                steps=plan.steps,
-                speed_hz=speed_hz,
-                timeout_s=plan.duration_s + 4.0,
-                stop_requested=_stop_cond,
-            )
-            moved = int(res.get("steps", plan.steps))
-            self.position_steps += moved if plan.direction == self.config.forward_direction else -moved
+            moved = 0
+            remaining = plan.steps
+            while remaining > 0:
+                # Re-check all software and physical stop conditions between
+                # firmware frames as well as while each frame is executing.
+                if _stop_cond():
+                    self._guard_during_move(plan.direction)
+                    raise StopRequestedError(f"{self.config.name}: motion stopped before next USB move segment")
+
+                chunk_steps = min(NUCLEO_MOVE_CHUNK_STEPS, remaining)
+                chunk_duration_s = chunk_steps / speed_hz
+                res = self.motion_backend.move(
+                    axis=self.config.name,
+                    direction=plan.direction,
+                    steps=chunk_steps,
+                    speed_hz=speed_hz,
+                    timeout_s=chunk_duration_s + 4.0,
+                    stop_requested=_stop_cond,
+                )
+                completed = int(res.get("steps", chunk_steps))
+                if completed < 0 or completed > chunk_steps:
+                    raise MotionError(
+                        f"{self.config.name}: invalid completed step count {completed} for {chunk_steps}-step segment"
+                    )
+                self.position_steps += completed if plan.direction == self.config.forward_direction else -completed
+                moved += completed
+                remaining -= completed
+                if completed != chunk_steps:
+                    raise MotionError(
+                        f"{self.config.name}: incomplete USB move segment ({completed}/{chunk_steps} steps)"
+                    )
             sleep(self.config.settle_delay)
             return moved
 
