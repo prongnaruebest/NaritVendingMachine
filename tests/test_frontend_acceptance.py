@@ -38,7 +38,7 @@ class FrontendAcceptanceTests(unittest.TestCase):
         self.assertEqual(sorted(forbidden.intersection(TEMPLATE + APP_JS)), [])
 
     def test_linked_axis_speed_controls_use_shared_state(self) -> None:
-        self.assertGreaterEqual(TEMPLATE.count("data-axis-speed-bank"), 6)
+        self.assertGreaterEqual(TEMPLATE.count("data-axis-speed-bank"), 4)
         self.assertIn("axisSpeeds: { x: 5.0, y: 5.0, z: 5.0 }", APP_JS)
         self.assertIn('localStorage.setItem("narit.axisSpeeds"', APP_JS)
         self.assertIn("effectiveMotionSpeed([axis])", APP_JS)
@@ -66,8 +66,15 @@ class FrontendAcceptanceTests(unittest.TestCase):
         self.assertIn('primaryControls.className = "motion-primary-controls"', APP_JS)
         self.assertIn('primaryControls.append(homeZone)', APP_JS)
         self.assertIn('primaryControls.append(jogPanel)', APP_JS)
-        self.assertIn('grid-template-columns: minmax(280px, .72fr) minmax(560px, 1.55fr)', STYLE)
+        self.assertIn('grid-template-columns: repeat(2, minmax(0, 1fr))', STYLE)
         self.assertIn('@media (max-width: 920px)', STYLE)
+
+    def test_motion_has_one_visible_speed_control_bank(self) -> None:
+        self.assertEqual(TEMPLATE.count('aria-label="Linked axis speed settings for jogging"'), 1)
+        self.assertNotIn('Linked axis speed settings for minimum and maximum travel', TEMPLATE)
+        self.assertNotIn('Linked axis speed settings for XYZ positioning', TEMPLATE)
+        self.assertNotIn('jog-keyboard-help', TEMPLATE)
+        self.assertNotIn('jog-hold-note', TEMPLATE)
 
     def test_no_inline_javascript_navigation(self) -> None:
         self.assertNotIn("onclick=", TEMPLATE)

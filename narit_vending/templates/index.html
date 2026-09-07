@@ -8,7 +8,7 @@
   <link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='favicon-transparent-large.png') }}?v=20260721_v12">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=20260907_motion_controls_v23">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=20260907_motion_speed_v24">
 </head>
 <body>
   <div class="hmi-shell">
@@ -235,7 +235,6 @@
             <button type="button" class="btn-operator-stop" id="operator-stop">STOP MOTION</button>
           </div>
         </div>
-        <div class="axis-speed-bank section-speed-bank" data-axis-speed-bank aria-label="Linked axis speed settings for minimum and maximum travel"></div>
         <div class="travel-limit-grid">
           <div class="travel-limit-axis" data-axis-card="x">
             <strong>X AXIS</strong><span id="travel-limit-x-range">0.0 — -- mm</span>
@@ -273,7 +272,6 @@
           </div>
           <span class="safety-ind-sub" id="operation-message">Controller ready</span>
         </div>
-        <div class="axis-speed-bank section-speed-bank" data-axis-speed-bank aria-label="Linked axis speed settings for XYZ positioning"></div>
         <div class="panel-body motion-target-grid">
           <div class="target-col">
             <div class="field-label">X Coordinate</div>
@@ -1585,10 +1583,8 @@
               <input id="jog-keyboard-enable" type="checkbox">
               <span>Keyboard Jog</span>
             </label>
-            <small class="jog-keyboard-help">Arrow keys: X/Y · Page Up/Down: Z · disabled while typing</small>
           </aside>
         </div>
-        <p class="page-note jog-hold-note">Hold an axis button to move; release it to stop. Jog also stops on pointer cancel, window blur, or when this page is hidden.</p>
       </div>
 
       <!-- Zone 3: Selected Slot Direct Controls -->
@@ -1695,6 +1691,6 @@
   <!-- Toast notification -->
   <div class="toast" id="toast" role="status"></div>
 
-  <script src="{{ url_for('static', filename='app.js') }}?v=20260907_motion_controls_v23"></script>
+  <script src="{{ url_for('static', filename='app.js') }}?v=20260907_motion_speed_v24"></script>
 </body>
 </html>
