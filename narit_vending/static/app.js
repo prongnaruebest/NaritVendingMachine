@@ -3324,7 +3324,7 @@
           const detail = inputDetails[def.key] || {};
           const rawBit = rawInputs[`DI${def.channel}`] ?? false;
           const isActive = logicalInputs[def.key] ?? false;
-          const label = detail.label || def.label;
+          const label = def.label;
 
           let statusClass = "inactive";
           let stateText = "INACTIVE (0)";
@@ -3383,7 +3383,7 @@
         doContainer.innerHTML = visibleDos.map((def) => {
           const detail = outputDetails[def.key] || {};
           const isOn = Boolean(outputs[def.key]);
-          const label = detail.label || def.label;
+          const label = def.label;
           const statusClass = isOn ? (def.key === "alarm" ? "fault" : "active") : "inactive";
 
           return `
@@ -4513,6 +4513,16 @@
     el("btn-io-refresh")?.addEventListener("click", () => {
       refresh();
       toast("I/O Status refreshed", "ok");
+    });
+    el("io-open-homing")?.addEventListener("click", () => {
+      switchWorkspace("motion");
+      window.requestAnimationFrame(() => {
+        const homingControls = el("homing-controls");
+        homingControls?.scrollIntoView({ behavior: "smooth", block: "center" });
+        homingControls?.focus({ preventScroll: true });
+        homingControls?.classList.add("attention-focus");
+        window.setTimeout(() => homingControls?.classList.remove("attention-focus"), 1600);
+      });
     });
 
   }

@@ -8,7 +8,7 @@
   <link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='favicon-transparent-large.png') }}?v=20260721_v12">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=20260907_header_v4">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=20260907_io_status_v5">
 </head>
 <body>
   <div class="hmi-shell">
@@ -216,7 +216,7 @@
         </div>
 
         <!-- Homing Workflow -->
-        <div class="panel home-panel">
+        <div class="panel home-panel" id="homing-controls" tabindex="-1">
           <div class="panel-head">
             <div>
               <p class="panel-label">Homing Workflow</p>
@@ -775,6 +775,7 @@
           </div>
           <div class="io-header-actions">
             <span class="page-status-chip ok" id="io-page-health">CHECKING</span>
+            <button class="btn-primary btn-sm" id="io-open-homing" type="button" aria-label="Open homing controls in Motion Control">OPEN HOMING CONTROLS</button>
             <button class="btn-secondary btn-sm" id="btn-io-refresh" title="Refresh I/O Status">Refresh</button>
           </div>
         </div>
@@ -782,7 +783,7 @@
         <!-- ── I/O SUMMARY METRIC STRIP ────────────────────────── -->
         <div class="io-summary-strip">
           <div class="io-summary-card">
-            <div class="io-summary-icon">🔌</div>
+            <div class="io-summary-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 3v6m8-6v6M6 9h12v2a6 6 0 0 1-5 5.92V21h-2v-4.08A6 6 0 0 1 6 11V9Z"/></svg></div>
             <div class="io-summary-data">
               <span class="io-summary-title">IRIV IO Field Bus</span>
               <strong class="io-summary-value" id="io-summary-bus-state">--</strong>
@@ -790,7 +791,7 @@
             </div>
           </div>
           <div class="io-summary-card">
-            <div class="io-summary-icon">📥</div>
+            <div class="io-summary-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3v11m-4-4 4 4 4-4M5 19h14"/></svg></div>
             <div class="io-summary-data">
               <span class="io-summary-title">Digital Inputs</span>
               <strong class="io-summary-value" id="io-summary-di-count">0 / 11 Active</strong>
@@ -798,7 +799,7 @@
             </div>
           </div>
           <div class="io-summary-card">
-            <div class="io-summary-icon">📤</div>
+            <div class="io-summary-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 21V10m-4 4 4-4 4 4M5 5h14"/></svg></div>
             <div class="io-summary-data">
               <span class="io-summary-title">Digital Outputs</span>
               <strong class="io-summary-value" id="io-summary-do-count">0 / 4 Active</strong>
@@ -1706,6 +1707,6 @@
   <!-- Toast notification -->
   <div class="toast" id="toast" role="status"></div>
 
-  <script src="{{ url_for('static', filename='app.js') }}?v=20260907_header_v4"></script>
+  <script src="{{ url_for('static', filename='app.js') }}?v=20260907_io_status_v5"></script>
 </body>
 </html>
