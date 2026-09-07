@@ -1,41 +1,321 @@
 {
   "axes": {
-    "x": {"name":"x","pulse_pin":16,"direction_pin":23,"head_limit_pin":17,"tail_limit_pin":27,"home_direction":1,"forward_direction":0,"steps_per_mm":68.75,"max_travel_mm":1590.0,"max_speed_mm_s":250.0,"default_speed_mm_s":5.0,"home_position_mm":0.0,"max_pulse_hz":50000.0,"commissioned_max_speed_mm_s":20.0,"homing_search_speed_mm_s":5.0,"homing_latch_speed_mm_s":1.0,"homing_timeout_s":600.0,"settle_delay":0.05,"jog_step_mm":1.0,"acceleration":100.0,"deceleration":100.0,"lead_screw_pitch_mm":23.272727,"motor_steps_per_rev":200,"driver_microsteps":8,"pulses_per_rev":1600,"drive_type":"lead_screw","nominal_travel_mm":1800.0,"measured_travel_mm":1600.0,"travel_safety_margin_mm":10.0},
-    "y": {"name":"y","pulse_pin":26,"direction_pin":24,"head_limit_pin":22,"tail_limit_pin":9,"home_direction":1,"forward_direction":0,"steps_per_mm":68.75,"max_travel_mm":1590.0,"max_speed_mm_s":250.0,"default_speed_mm_s":5.0,"home_position_mm":0.0,"max_pulse_hz":50000.0,"commissioned_max_speed_mm_s":20.0,"homing_search_speed_mm_s":5.0,"homing_latch_speed_mm_s":1.0,"homing_timeout_s":600.0,"settle_delay":0.05,"jog_step_mm":1.0,"acceleration":100.0,"deceleration":100.0,"lead_screw_pitch_mm":23.272727,"motor_steps_per_rev":200,"driver_microsteps":8,"pulses_per_rev":1600,"drive_type":"lead_screw","nominal_travel_mm":1800.0,"measured_travel_mm":1600.0,"travel_safety_margin_mm":10.0},
-    "z": {"name":"z","pulse_pin":18,"direction_pin":25,"head_limit_pin":11,"tail_limit_pin":5,"home_direction":1,"forward_direction":0,"steps_per_mm":200.0,"max_travel_mm":180.0,"max_speed_mm_s":250.0,"default_speed_mm_s":2.0,"home_position_mm":0.0,"max_pulse_hz":50000.0,"commissioned_max_speed_mm_s":10.0,"homing_search_speed_mm_s":2.0,"homing_latch_speed_mm_s":1.0,"homing_timeout_s":180.0,"settle_delay":0.05,"jog_step_mm":2.0,"acceleration":100.0,"deceleration":100.0,"lead_screw_pitch_mm":8.0,"motor_steps_per_rev":200,"driver_microsteps":8,"pulses_per_rev":1600,"drive_type":"timing_belt","nominal_travel_mm":180.0,"measured_travel_mm":null,"travel_safety_margin_mm":3.0,"pulley_pitch_mm":2.0,"pulley_teeth":null}
+    "x": {
+      "name": "x",
+      "pulse_pin": 16,
+      "direction_pin": 23,
+      "head_limit_pin": 17,
+      "tail_limit_pin": 27,
+      "home_direction": 1,
+      "forward_direction": 0,
+      "steps_per_mm": 68.75,
+      "max_travel_mm": 1600.0,
+      "max_speed_mm_s": 250.0,
+      "default_speed_mm_s": 5.0,
+      "settle_delay": 0.05,
+      "jog_step_mm": 1.0,
+      "acceleration": 100.0,
+      "deceleration": 100.0,
+      "lead_screw_pitch_mm": 23.272727,
+      "motor_steps_per_rev": 200,
+      "driver_microsteps": 8,
+      "home_position_mm": 0.0,
+      "max_pulse_hz": 50000.0,
+      "commissioned_max_speed_mm_s": 5.0,
+      "homing_search_speed_mm_s": 5.0,
+      "homing_latch_speed_mm_s": 1.0,
+      "homing_timeout_s": 600.0,
+      "drive_type": "lead_screw",
+      "nominal_travel_mm": 1800.0,
+      "measured_travel_mm": 1600.0,
+      "travel_safety_margin_mm": 10.0,
+      "pulley_pitch_mm": null,
+      "pulley_teeth": null,
+      "pulses_per_rev": 1600
+    },
+    "y": {
+      "name": "y",
+      "pulse_pin": 26,
+      "direction_pin": 24,
+      "head_limit_pin": 22,
+      "tail_limit_pin": 9,
+      "home_direction": 1,
+      "forward_direction": 0,
+      "steps_per_mm": 68.75,
+      "max_travel_mm": 1590.0,
+      "max_speed_mm_s": 250.0,
+      "default_speed_mm_s": 5.0,
+      "settle_delay": 0.05,
+      "jog_step_mm": 1.0,
+      "acceleration": 100.0,
+      "deceleration": 100.0,
+      "lead_screw_pitch_mm": 23.272727,
+      "motor_steps_per_rev": 200,
+      "driver_microsteps": 8,
+      "home_position_mm": 0.0,
+      "max_pulse_hz": 50000.0,
+      "commissioned_max_speed_mm_s": 5.0,
+      "homing_search_speed_mm_s": 5.0,
+      "homing_latch_speed_mm_s": 1.0,
+      "homing_timeout_s": 600.0,
+      "drive_type": "lead_screw",
+      "nominal_travel_mm": 1800.0,
+      "measured_travel_mm": 1600.0,
+      "travel_safety_margin_mm": 10.0,
+      "pulley_pitch_mm": null,
+      "pulley_teeth": null,
+      "pulses_per_rev": 1600
+    },
+    "z": {
+      "name": "z",
+      "pulse_pin": 18,
+      "direction_pin": 25,
+      "head_limit_pin": 11,
+      "tail_limit_pin": 5,
+      "home_direction": 1,
+      "forward_direction": 0,
+      "steps_per_mm": 200.0,
+      "max_travel_mm": 180.0,
+      "max_speed_mm_s": 250.0,
+      "default_speed_mm_s": 2.0,
+      "settle_delay": 0.05,
+      "jog_step_mm": 2.0,
+      "acceleration": 100.0,
+      "deceleration": 100.0,
+      "lead_screw_pitch_mm": 8.0,
+      "motor_steps_per_rev": 200,
+      "driver_microsteps": 8,
+      "home_position_mm": 0.0,
+      "max_pulse_hz": 50000.0,
+      "commissioned_max_speed_mm_s": 5.0,
+      "homing_search_speed_mm_s": 2.0,
+      "homing_latch_speed_mm_s": 1.0,
+      "homing_timeout_s": 180.0,
+      "drive_type": "timing_belt",
+      "nominal_travel_mm": 180.0,
+      "measured_travel_mm": null,
+      "travel_safety_margin_mm": 3.0,
+      "pulley_pitch_mm": 2.0,
+      "pulley_teeth": null,
+      "pulses_per_rev": 1600
+    }
   },
-  "home_order": ["z", "y", "x"],
+  "home_order": [
+    "z",
+    "y",
+    "x"
+  ],
   "safe_z_mm": 10.0,
   "slots": {
-    "1":{"x_mm":21.9,"y_mm":22.0,"z_mm":35.0,"product_name":"","dispense_delay_ms":0},
-    "2":{"x_mm":53.1,"y_mm":19.5,"z_mm":20.0,"product_name":"","dispense_delay_ms":0},
-    "3":{"x_mm":91.0,"y_mm":18.9,"z_mm":35.0,"product_name":"","dispense_delay_ms":0},
-    "4":{"x_mm":126.7,"y_mm":18.1,"z_mm":35.0,"product_name":"","dispense_delay_ms":0},
-    "5":{"x_mm":160.5,"y_mm":21.4,"z_mm":25.0,"product_name":"","dispense_delay_ms":0},
-    "6":{"x_mm":193.8,"y_mm":20.9,"z_mm":25.0,"product_name":"","dispense_delay_ms":0},
-    "7":{"x_mm":20.5,"y_mm":76.6,"z_mm":30.0,"product_name":"","dispense_delay_ms":0},
-    "8":{"x_mm":56.6,"y_mm":75.2,"z_mm":25.0,"product_name":"","dispense_delay_ms":0},
-    "9":{"x_mm":90.5,"y_mm":73.4,"z_mm":45.0,"product_name":"","dispense_delay_ms":0},
-    "10":{"x_mm":125.0,"y_mm":76.1,"z_mm":25.0,"product_name":"","dispense_delay_ms":0},
-    "11":{"x_mm":159.8,"y_mm":77.0,"z_mm":15.0,"product_name":"","dispense_delay_ms":0},
-    "12":{"x_mm":195.8,"y_mm":76.0,"z_mm":25.0,"product_name":"","dispense_delay_ms":0},
-    "13":{"x_mm":20.0,"y_mm":131.0,"z_mm":45.0,"product_name":"","dispense_delay_ms":0},
-    "14":{"x_mm":55.3,"y_mm":131.1,"z_mm":25.0,"product_name":"","dispense_delay_ms":0},
-    "15":{"x_mm":88.9,"y_mm":129.7,"z_mm":35.0,"product_name":"","dispense_delay_ms":0},
-    "16":{"x_mm":125.6,"y_mm":131.5,"z_mm":20.0,"product_name":"","dispense_delay_ms":0},
-    "17":{"x_mm":158.0,"y_mm":129.1,"z_mm":30.0,"product_name":"","dispense_delay_ms":0},
-    "18":{"x_mm":195.4,"y_mm":130.2,"z_mm":15.0,"product_name":"","dispense_delay_ms":0},
-    "19":{"x_mm":20.2,"y_mm":185.7,"z_mm":25.0,"product_name":"","dispense_delay_ms":0},
-    "20":{"x_mm":56.5,"y_mm":183.4,"z_mm":15.0,"product_name":"","dispense_delay_ms":0},
-    "21":{"x_mm":91.2,"y_mm":185.8,"z_mm":35.0,"product_name":"","dispense_delay_ms":0},
-    "22":{"x_mm":126.1,"y_mm":183.2,"z_mm":25.0,"product_name":"","dispense_delay_ms":0},
-    "23":{"x_mm":158.5,"y_mm":183.7,"z_mm":25.0,"product_name":"","dispense_delay_ms":0},
-    "24":{"x_mm":194.8,"y_mm":184.9,"z_mm":15.0,"product_name":"","dispense_delay_ms":0},
-    "25":{"x_mm":22.0,"y_mm":239.6,"z_mm":45.0,"product_name":"","dispense_delay_ms":0},
-    "26":{"x_mm":56.1,"y_mm":239.7,"z_mm":40.0,"product_name":"","dispense_delay_ms":0},
-    "27":{"x_mm":88.2,"y_mm":239.0,"z_mm":20.0,"product_name":"","dispense_delay_ms":0},
-    "28":{"x_mm":123.4,"y_mm":241.5,"z_mm":45.0,"product_name":"","dispense_delay_ms":0},
-    "29":{"x_mm":161.7,"y_mm":241.3,"z_mm":15.0,"product_name":"","dispense_delay_ms":0},
-    "30":{"x_mm":196.0,"y_mm":238.9,"z_mm":20.0,"product_name":"","dispense_delay_ms":0}
+    "1": {
+      "x_mm": 21.9,
+      "y_mm": 22.0,
+      "z_mm": 35.0,
+      "product_name": "",
+      "dispense_delay_ms": 0
+    },
+    "2": {
+      "x_mm": 53.1,
+      "y_mm": 19.5,
+      "z_mm": 20.0,
+      "product_name": "",
+      "dispense_delay_ms": 0
+    },
+    "3": {
+      "x_mm": 91.0,
+      "y_mm": 18.9,
+      "z_mm": 35.0,
+      "product_name": "",
+      "dispense_delay_ms": 0
+    },
+    "4": {
+      "x_mm": 126.7,
+      "y_mm": 18.1,
+      "z_mm": 35.0,
+      "product_name": "",
+      "dispense_delay_ms": 0
+    },
+    "5": {
+      "x_mm": 160.5,
+      "y_mm": 21.4,
+      "z_mm": 25.0,
+      "product_name": "",
+      "dispense_delay_ms": 0
+    },
+    "6": {
+      "x_mm": 193.8,
+      "y_mm": 20.9,
+      "z_mm": 25.0,
+      "product_name": "",
+      "dispense_delay_ms": 0
+    },
+    "7": {
+      "x_mm": 20.5,
+      "y_mm": 76.6,
+      "z_mm": 30.0,
+      "product_name": "",
+      "dispense_delay_ms": 0
+    },
+    "8": {
+      "x_mm": 56.6,
+      "y_mm": 75.2,
+      "z_mm": 25.0,
+      "product_name": "",
+      "dispense_delay_ms": 0
+    },
+    "9": {
+      "x_mm": 90.5,
+      "y_mm": 73.4,
+      "z_mm": 45.0,
+      "product_name": "",
+      "dispense_delay_ms": 0
+    },
+    "10": {
+      "x_mm": 125.0,
+      "y_mm": 76.1,
+      "z_mm": 25.0,
+      "product_name": "",
+      "dispense_delay_ms": 0
+    },
+    "11": {
+      "x_mm": 159.8,
+      "y_mm": 77.0,
+      "z_mm": 15.0,
+      "product_name": "",
+      "dispense_delay_ms": 0
+    },
+    "12": {
+      "x_mm": 195.8,
+      "y_mm": 76.0,
+      "z_mm": 25.0,
+      "product_name": "",
+      "dispense_delay_ms": 0
+    },
+    "13": {
+      "x_mm": 20.0,
+      "y_mm": 131.0,
+      "z_mm": 45.0,
+      "product_name": "",
+      "dispense_delay_ms": 0
+    },
+    "14": {
+      "x_mm": 55.3,
+      "y_mm": 131.1,
+      "z_mm": 25.0,
+      "product_name": "",
+      "dispense_delay_ms": 0
+    },
+    "15": {
+      "x_mm": 88.9,
+      "y_mm": 129.7,
+      "z_mm": 35.0,
+      "product_name": "",
+      "dispense_delay_ms": 0
+    },
+    "16": {
+      "x_mm": 125.6,
+      "y_mm": 131.5,
+      "z_mm": 20.0,
+      "product_name": "",
+      "dispense_delay_ms": 0
+    },
+    "17": {
+      "x_mm": 158.0,
+      "y_mm": 129.1,
+      "z_mm": 30.0,
+      "product_name": "",
+      "dispense_delay_ms": 0
+    },
+    "18": {
+      "x_mm": 195.4,
+      "y_mm": 130.2,
+      "z_mm": 15.0,
+      "product_name": "",
+      "dispense_delay_ms": 0
+    },
+    "19": {
+      "x_mm": 20.2,
+      "y_mm": 185.7,
+      "z_mm": 25.0,
+      "product_name": "",
+      "dispense_delay_ms": 0
+    },
+    "20": {
+      "x_mm": 56.5,
+      "y_mm": 183.4,
+      "z_mm": 15.0,
+      "product_name": "",
+      "dispense_delay_ms": 0
+    },
+    "21": {
+      "x_mm": 91.2,
+      "y_mm": 185.8,
+      "z_mm": 35.0,
+      "product_name": "",
+      "dispense_delay_ms": 0
+    },
+    "22": {
+      "x_mm": 126.1,
+      "y_mm": 183.2,
+      "z_mm": 25.0,
+      "product_name": "",
+      "dispense_delay_ms": 0
+    },
+    "23": {
+      "x_mm": 158.5,
+      "y_mm": 183.7,
+      "z_mm": 25.0,
+      "product_name": "",
+      "dispense_delay_ms": 0
+    },
+    "24": {
+      "x_mm": 194.8,
+      "y_mm": 184.9,
+      "z_mm": 15.0,
+      "product_name": "",
+      "dispense_delay_ms": 0
+    },
+    "25": {
+      "x_mm": 22.0,
+      "y_mm": 239.6,
+      "z_mm": 45.0,
+      "product_name": "",
+      "dispense_delay_ms": 0
+    },
+    "26": {
+      "x_mm": 56.1,
+      "y_mm": 239.7,
+      "z_mm": 40.0,
+      "product_name": "",
+      "dispense_delay_ms": 0
+    },
+    "27": {
+      "x_mm": 88.2,
+      "y_mm": 239.0,
+      "z_mm": 20.0,
+      "product_name": "",
+      "dispense_delay_ms": 0
+    },
+    "28": {
+      "x_mm": 123.4,
+      "y_mm": 241.5,
+      "z_mm": 45.0,
+      "product_name": "",
+      "dispense_delay_ms": 0
+    },
+    "29": {
+      "x_mm": 161.7,
+      "y_mm": 241.3,
+      "z_mm": 15.0,
+      "product_name": "",
+      "dispense_delay_ms": 0
+    },
+    "30": {
+      "x_mm": 196.0,
+      "y_mm": 238.9,
+      "z_mm": 20.0,
+      "product_name": "",
+      "dispense_delay_ms": 0
+    }
   }
 }
