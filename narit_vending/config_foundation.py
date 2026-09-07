@@ -32,6 +32,12 @@ MOTION_OVERRIDE_FIELDS = (
     "homing_search_speed_mm_s",
     "homing_latch_speed_mm_s",
     "homing_timeout_s",
+    "drive_type",
+    "nominal_travel_mm",
+    "measured_travel_mm",
+    "travel_safety_margin_mm",
+    "pulley_pitch_mm",
+    "pulley_teeth",
 )
 
 

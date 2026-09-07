@@ -1656,16 +1656,19 @@
     MS.currentSetupTab = tabName;
     const motorFields = new Set(["motor_steps_per_rev", "driver_microsteps", "lead_screw_pitch_mm", "steps_per_mm", "max_travel_mm", "max_speed_mm_s", "default_speed_mm_s", "max_pulse_hz", "commissioned_max_speed_mm_s", "acceleration", "deceleration", "jog_step_mm", "settle_delay", "forward_direction"]);
     const homingFields = new Set(["home_position_mm", "homing_search_speed_mm_s", "homing_latch_speed_mm_s", "homing_timeout_s", "home_direction"]);
+    const travelFields = new Set(["motor_steps_per_rev", "driver_microsteps", "lead_screw_pitch_mm", "steps_per_mm", "max_travel_mm"]);
     const motorPanel = $(".motor-pulse-config-panel");
+    const travelPanel = $(".travel-calibration-panel");
     const pinPanel = $(".configuration-pin-panel");
-    const showMotorPanel = tabName === "motor" || tabName === "homing";
+    const showMotorPanel = tabName === "motor" || tabName === "homing" || tabName === "travel";
     if (motorPanel) motorPanel.hidden = !showMotorPanel;
+    if (travelPanel) travelPanel.hidden = tabName !== "travel";
     if (pinPanel) pinPanel.hidden = showMotorPanel;
     $$("[data-motor-card] label").forEach((label) => {
       const field = label.querySelector("[data-config-field]")?.dataset.configField;
-      label.hidden = tabName === "homing" ? !homingFields.has(field) : tabName === "motor" ? !motorFields.has(field) : false;
+      label.hidden = tabName === "homing" ? !homingFields.has(field) : tabName === "travel" ? !travelFields.has(field) : tabName === "motor" ? !motorFields.has(field) : false;
     });
-    $$("[data-motor-card] .motor-derived").forEach((node) => { node.hidden = tabName !== "motor"; });
+    $$("[data-motor-card] .motor-derived").forEach((node) => { node.hidden = tabName === "homing"; });
     $$("#configuration-pin-editor .schedule-card").forEach((card, index) => {
       card.hidden = (tabName === "nucleo" && index !== 0) || (tabName === "io" && index !== 1);
     });
@@ -2090,6 +2093,7 @@
         <div class="motor-derived"><span>Theoretical <b id="config-theoretical-${axis}">${fmt(theoreticalSteps, 3)} pulse/mm</b></span><span>Pulse Frequency <b id="config-frequency-${axis}">${fmt(pulseFrequency, 0)} Hz</b></span><span>Pulses / Rev <b id="config-ppr-${axis}">${fmt(pulsesPerRev, 0)}</b></span></div>
       </article>`;
     }).join("");
+    renderTravelCalibration();
 
     const isIrivBoard = hardware.board_profile === "IRIV_PiControl_CM4" || Boolean(hardware.iriv_io?.enabled) || MS.payload?.io?.enabled === true;
     if (isIrivBoard) {
@@ -2565,6 +2569,40 @@
     const reported = Number(motorTestState().max_frequency_hz);
     if (Number.isFinite(reported) && reported >= 10) return reported;
     return Number(MS.payload?.nucleo?.protocol || 1) >= 3 ? 50000 : 1000;
+  }
+
+  function renderTravelCalibration() {
+    const grid = el("travel-calibration-grid");
+    if (!grid || !MS.config) return;
+    grid.innerHTML = AXES.map((axis) => {
+      const cfg = MS.config.axes?.[axis] || {};
+      const nominal = Number(cfg.nominal_travel_mm ?? (axis === "z" ? 180 : 1800));
+      const measured = Number(cfg.measured_travel_mm ?? nominal);
+      const margin = Number(cfg.travel_safety_margin_mm ?? (axis === "z" ? 3 : 10));
+      const usable = Math.max(0, measured - margin);
+      const drive = cfg.drive_type || (axis === "z" ? "timing_belt" : "lead_screw");
+      return `<article class="travel-calibration-card" data-travel-axis="${axis}">
+        <div class="motor-config-head"><strong>AXIS ${axis.toUpperCase()}</strong><span>${drive === "timing_belt" ? "TIMING BELT" : "LEAD SCREW"}</span></div>
+        <div class="travel-source-note">${axis === "z" ? "GTD-A001 · 2GT belt · requested nominal stroke 180 mm" : "MISUMI MTSRL25-1800 · 25 mm screw · 5 mm/rev · nominal length 1,800 mm"}</div>
+        <div class="travel-calibration-fields">
+          <label><span>Nominal / Spec</span><input class="config-input" type="number" min="0.1" step="0.1" value="${nominal}" data-travel-field="nominal"><small>mm</small></label>
+          <label><span>Measured Min → Max</span><input class="config-input" type="number" min="0.1" step="0.1" value="${measured}" data-travel-field="measured"><small>mm measured by operator</small></label>
+          <label><span>Safety Margin</span><input class="config-input" type="number" min="0" step="0.1" value="${margin}" data-travel-field="margin"><small>mm removed before Max</small></label>
+        </div>
+        <div class="travel-result"><span>Recommended software travel</span><strong data-travel-result>${fmt(usable, 3)} mm</strong></div>
+        <button type="button" class="btn-secondary" data-apply-travel="${axis}">USE MEASURED − MARGIN</button>
+      </article>`;
+    }).join("");
+  }
+
+  function updateTravelCard(card) {
+    const measured = Number(card.querySelector('[data-travel-field="measured"]')?.value);
+    const margin = Number(card.querySelector('[data-travel-field="margin"]')?.value);
+    const result = Number.isFinite(measured) && Number.isFinite(margin) ? measured - margin : NaN;
+    const resultNode = card.querySelector("[data-travel-result]");
+    if (resultNode) resultNode.textContent = Number.isFinite(result) && result > 0 ? `${fmt(result, 3)} mm` : "INVALID";
+    card.classList.toggle("fault", !Number.isFinite(result) || result <= 0);
+    return result;
   }
 
   function motorTestParameters() {
@@ -4490,6 +4528,26 @@
     };
     configurationPage.addEventListener("input", markConfigurationDirty);
     configurationPage.addEventListener("change", markConfigurationDirty);
+    configurationPage.addEventListener("input", (event) => {
+      const card = event.target.closest?.("[data-travel-axis]");
+      if (card) updateTravelCard(card);
+    });
+    configurationPage.addEventListener("click", (event) => {
+      const button = event.target.closest?.("[data-apply-travel]");
+      if (!button) return;
+      const axis = button.dataset.applyTravel;
+      const card = button.closest("[data-travel-axis]");
+      const usable = updateTravelCard(card);
+      const maxInput = document.querySelector(`[data-config-axis="${axis}"][data-config-field="max_travel_mm"]`);
+      if (!maxInput || !Number.isFinite(usable) || usable <= 0) {
+        updateConfigurationState(`${axis.toUpperCase()}: measured travel must be greater than the safety margin.`);
+        return;
+      }
+      maxInput.value = usable.toFixed(3);
+      MS.configDirty = true;
+      updateConfigurationDerived();
+      updateConfigurationState(`${axis.toUpperCase()}: Maximum Travel staged at ${usable.toFixed(3)} mm. SAVE and APPLY are required; no motion was commanded.`);
+    });
     el("configuration-reset").addEventListener("click", () => renderConfigurationEditor(true));
     el("configuration-save").addEventListener("click", saveControllerConfiguration);
     el("configuration-apply").addEventListener("click", applyControllerConfiguration);

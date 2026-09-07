@@ -1118,6 +1118,12 @@ class MotionService:
                 "lead_screw_pitch_mm": lead_pitch,
                 "motor_steps_per_rev": motor_steps,
                 "driver_microsteps": microsteps,
+                "drive_type": current_axis.drive_type,
+                "nominal_travel_mm": current_axis.nominal_travel_mm,
+                "measured_travel_mm": current_axis.measured_travel_mm,
+                "travel_safety_margin_mm": current_axis.travel_safety_margin_mm,
+                "pulley_pitch_mm": current_axis.pulley_pitch_mm,
+                "pulley_teeth": current_axis.pulley_teeth,
             }
 
         for group_name in ("digital_inputs", "digital_outputs"):

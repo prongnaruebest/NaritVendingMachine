@@ -88,6 +88,12 @@ class AxisConfig:
     homing_search_speed_mm_s: float = 5.0
     homing_latch_speed_mm_s: float = 1.0
     homing_timeout_s: float = 120.0
+    drive_type: str = "lead_screw"
+    nominal_travel_mm: float | None = None
+    measured_travel_mm: float | None = None
+    travel_safety_margin_mm: float = 5.0
+    pulley_pitch_mm: float | None = None
+    pulley_teeth: int | None = None
 
     def __post_init__(self) -> None:
         positive_values = {
@@ -125,6 +131,18 @@ class AxisConfig:
             raise MotionError(f"{self.name}: homing search speed exceeds commissioned speed")
         if self.homing_latch_speed_mm_s > self.homing_search_speed_mm_s:
             raise MotionError(f"{self.name}: homing latch speed exceeds search speed")
+        if self.drive_type not in ("lead_screw", "timing_belt", "other"):
+            raise MotionError(f"{self.name}: unsupported drive_type")
+        for field_name in ("nominal_travel_mm", "measured_travel_mm"):
+            value = getattr(self, field_name)
+            if value is not None and (not math.isfinite(float(value)) or float(value) <= 0):
+                raise MotionError(f"{self.name}: {field_name} must be greater than zero")
+        if not math.isfinite(self.travel_safety_margin_mm) or self.travel_safety_margin_mm < 0:
+            raise MotionError(f"{self.name}: travel_safety_margin_mm cannot be negative")
+        if self.pulley_pitch_mm is not None and (not math.isfinite(self.pulley_pitch_mm) or self.pulley_pitch_mm <= 0):
+            raise MotionError(f"{self.name}: pulley_pitch_mm must be greater than zero")
+        if self.pulley_teeth is not None and self.pulley_teeth <= 0:
+            raise MotionError(f"{self.name}: pulley_teeth must be greater than zero")
 
     @property
     def step_pin(self) -> int:
@@ -1233,6 +1251,12 @@ def _axis_config_to_dict(config: AxisConfig) -> dict[str, int | float | str]:
         "homing_search_speed_mm_s": config.homing_search_speed_mm_s,
         "homing_latch_speed_mm_s": config.homing_latch_speed_mm_s,
         "homing_timeout_s": config.homing_timeout_s,
+        "drive_type": config.drive_type,
+        "nominal_travel_mm": config.nominal_travel_mm,
+        "measured_travel_mm": config.measured_travel_mm,
+        "travel_safety_margin_mm": config.travel_safety_margin_mm,
+        "pulley_pitch_mm": config.pulley_pitch_mm,
+        "pulley_teeth": config.pulley_teeth,
         "pulses_per_rev": config.pulses_per_rev,
     }
 
@@ -1279,6 +1303,12 @@ def _axis_config_from_dict(name: str, payload: dict[str, object]) -> AxisConfig:
         homing_search_speed_mm_s=float(payload.get("homing_search_speed_mm_s", min(default_speed, max_speed))),
         homing_latch_speed_mm_s=float(payload.get("homing_latch_speed_mm_s", min(1.0, default_speed, max_speed))),
         homing_timeout_s=float(payload.get("homing_timeout_s", 120.0)),
+        drive_type=str(payload.get("drive_type", "lead_screw")),
+        nominal_travel_mm=float(payload["nominal_travel_mm"]) if payload.get("nominal_travel_mm") is not None else None,
+        measured_travel_mm=float(payload["measured_travel_mm"]) if payload.get("measured_travel_mm") is not None else None,
+        travel_safety_margin_mm=float(payload.get("travel_safety_margin_mm", 5.0)),
+        pulley_pitch_mm=float(payload["pulley_pitch_mm"]) if payload.get("pulley_pitch_mm") is not None else None,
+        pulley_teeth=int(payload["pulley_teeth"]) if payload.get("pulley_teeth") is not None else None,
     )
 
 

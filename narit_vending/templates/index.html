@@ -8,7 +8,7 @@
   <link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='favicon-transparent-large.png') }}?v=20260721_v12">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=20260907_speed_continue_v12">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=20260907_travel_setup_v13">
 </head>
 <body>
   <div class="hmi-shell">
@@ -93,6 +93,7 @@
           </button>
           <div class="nav-submenu" aria-label="Machine setup pages">
             <button class="nav-subitem active" data-setup-sidebar="motor" data-setup-tab="motor"><span>Motor Settings</span></button>
+            <button class="nav-subitem" data-setup-sidebar="travel" data-setup-tab="travel"><span>Travel &amp; Drive Setup</span></button>
             <button class="nav-subitem" data-setup-sidebar="homing" data-setup-tab="homing"><span>Homing Settings</span></button>
             <button class="nav-subitem" data-setup-sidebar="io" data-setup-tab="io"><span>I/O Configuration</span></button>
             <button class="nav-subitem" data-setup-sidebar="nucleo" data-setup-tab="nucleo"><span>NUCLEO / USB</span></button>
@@ -949,6 +950,7 @@
         <div class="page-heading"><div><p class="panel-label">Controller Configuration</p><h2>Motor Pulse, GPIO &amp; Sensors</h2></div><span class="page-status-chip" id="configuration-save-status">LOADED</span></div>
         <nav class="setup-tabs" aria-label="Machine setup sections" role="tablist">
           <button type="button" class="active" data-setup-tab="motor" role="tab">Motor Settings</button>
+          <button type="button" data-setup-tab="travel" role="tab">Travel &amp; Drive Setup</button>
           <button type="button" data-setup-tab="homing" role="tab">Homing Settings</button>
           <button type="button" data-setup-tab="io" role="tab">I/O Configuration</button>
           <button type="button" data-setup-tab="nucleo" role="tab">NUCLEO / USB</button>
@@ -966,6 +968,11 @@
           <div class="panel page-panel motor-pulse-config-panel">
             <div class="panel-head"><div><p class="panel-label">Motor &amp; Homing Configuration</p><h2 class="panel-title">Axis Pulse, Speed &amp; Reference Parameters</h2></div><span class="page-note">Protocol v3 configurable limit: 50 kHz</span></div>
             <div class="motor-config-grid" id="configuration-motor-grid"></div>
+          </div>
+          <div class="panel page-panel travel-calibration-panel" hidden>
+            <div class="panel-head"><div><p class="panel-label">Measured Stroke Calibration</p><h2 class="panel-title">Convert Physical Measurement to Software Travel</h2></div><span class="page-note">No motion is started from this panel</span></div>
+            <p class="travel-calibration-intro">Home the axis, move toward the physical Max sensor under operator control, record the measured stroke, then subtract a safety margin. Applying a result only edits Maximum Travel; SAVE and APPLY are still required.</p>
+            <div class="travel-calibration-grid" id="travel-calibration-grid"></div>
           </div>
           <div class="panel page-panel configuration-pin-panel">
             <div class="panel-head"><div><p class="panel-label">Raspberry Pi GPIO</p><h2 class="panel-title">Pin Configuration &amp; Sensors</h2></div><span class="page-note" id="configuration-board-profile">Board: --</span></div>
@@ -1688,6 +1695,6 @@
   <!-- Toast notification -->
   <div class="toast" id="toast" role="status"></div>
 
-  <script src="{{ url_for('static', filename='app.js') }}?v=20260907_speed_continue_v12"></script>
+  <script src="{{ url_for('static', filename='app.js') }}?v=20260907_travel_setup_v13"></script>
 </body>
 </html>
