@@ -8147,3 +8147,136 @@ body { font-size: 14px; }
   .motion-primary-controls > .wz-top,
   .motion-primary-controls > .motion-jog-panel { grid-column: 1; grid-row: auto; }
 }
+
+/* Motion v26: one predictable responsive layout authority. */
+.workspace-view[data-view-page="motion"].active {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  min-width: 0;
+  padding: 16px;
+}
+.workspace-view[data-view-page="motion"].active > * {
+  flex: 0 0 auto;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+}
+.workspace-view[data-view-page="motion"] > .motion-primary-controls {
+  order: -30;
+  grid-template-columns: minmax(360px, 0.78fr) minmax(560px, 1.22fr);
+  gap: 16px;
+  align-items: stretch;
+}
+.motion-primary-controls > .wz-top,
+.motion-primary-controls > .motion-jog-panel,
+.motion-primary-controls .home-panel { height: 100%; }
+.workspace-view[data-view-page="motion"] .motion-primary-controls .home-panel,
+.workspace-view[data-view-page="motion"] .motion-primary-controls .motion-jog-panel {
+  min-height: 456px;
+  border-radius: 10px;
+}
+.motion-primary-controls > .wz-top { display: flex !important; align-self: stretch; }
+.motion-primary-controls > .wz-top > .home-panel { flex: 1; }
+.motion-primary-controls .home-panel {
+  display: flex;
+  flex-direction: column;
+}
+.motion-primary-controls .home-panel .panel-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 12px;
+}
+.motion-primary-controls .home-sequence-display {
+  display: grid;
+  flex: 1;
+  grid-template-rows: repeat(3, minmax(48px, 1fr));
+  align-content: stretch;
+  gap: 8px;
+}
+.motion-primary-controls .home-seq-step { min-height: 48px; padding: 8px 10px; }
+.motion-primary-controls .home-actions { margin-top: auto; }
+.motion-primary-controls .motion-jog-panel { padding: 14px 16px; }
+.motion-primary-controls .motion-jog-panel .rp-jog-control-layout {
+  grid-template-columns: minmax(290px, 1.08fr) minmax(230px, .92fr);
+  gap: 16px;
+}
+.motion-primary-controls .motion-jog-panel .rp-jog-main-column,
+.motion-primary-controls .motion-jog-panel .rp-jog-speed-rail {
+  height: 100%;
+  min-width: 0;
+}
+.motion-primary-controls .jog-axis-speed-bank { gap: 8px; }
+.motion-primary-controls .axis-speed-row { min-height: 74px; padding: 10px; }
+.workspace-view[data-view-page="motion"] > .motion-axis-panel { order: -20; }
+.workspace-view[data-view-page="motion"] .motion-axis-panel {
+  padding: 14px 16px;
+  border-radius: 10px;
+}
+.workspace-view[data-view-page="motion"] .motion-axis-panel .rp-axis-list {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.workspace-view[data-view-page="motion"] .motion-axis-panel .axis-card {
+  min-width: 0;
+  padding: 12px;
+}
+.workspace-view[data-view-page="motion"] > .travel-limit-panel { order: -10; }
+.workspace-view[data-view-page="motion"] .travel-limit-panel,
+.workspace-view[data-view-page="motion"] .target-panel,
+.workspace-view[data-view-page="motion"] .motion-slot-panel { border-radius: 10px; }
+.workspace-view[data-view-page="motion"] .travel-limit-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.workspace-view[data-view-page="motion"] .travel-limit-axis { min-width: 0; }
+.workspace-view[data-view-page="motion"] .axis-direct-move {
+  grid-template-columns: minmax(0, 1fr) 96px;
+}
+.workspace-view[data-view-page="motion"] .axis-direct-move label { grid-column: 1 / -1; }
+.workspace-view[data-view-page="motion"] .motion-target-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.workspace-view[data-view-page="motion"] .target-speed-authority,
+.workspace-view[data-view-page="motion"] .target-load-actions,
+.workspace-view[data-view-page="motion"] .target-actions { grid-column: 1 / -1; }
+
+@media (max-width: 1220px) {
+  .workspace-view[data-view-page="motion"] > .motion-primary-controls {
+    grid-template-columns: minmax(330px, .82fr) minmax(500px, 1.18fr);
+  }
+  .motion-primary-controls .motion-jog-panel .rp-jog-control-layout {
+    grid-template-columns: minmax(270px, 1fr) minmax(210px, .78fr);
+    gap: 12px;
+  }
+}
+@media (max-width: 980px) {
+  .workspace-view[data-view-page="motion"] > .motion-primary-controls {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .motion-primary-controls > .wz-top,
+  .motion-primary-controls > .motion-jog-panel { grid-column: 1; grid-row: auto; }
+  .workspace-view[data-view-page="motion"] .motion-primary-controls .home-panel,
+  .workspace-view[data-view-page="motion"] .motion-primary-controls .motion-jog-panel { min-height: 0; }
+  .motion-primary-controls .motion-jog-panel .rp-jog-control-layout {
+    grid-template-columns: minmax(280px, 1fr) minmax(240px, .8fr);
+  }
+  .workspace-view[data-view-page="motion"] .travel-limit-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 680px) {
+  .workspace-view[data-view-page="motion"].active { gap: 12px; padding: 12px; }
+  .motion-primary-controls .motion-jog-panel .rp-jog-control-layout,
+  .workspace-view[data-view-page="motion"] .motion-axis-panel .rp-axis-list,
+  .workspace-view[data-view-page="motion"] .motion-target-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .workspace-view[data-view-page="motion"] .target-col,
+  .workspace-view[data-view-page="motion"] .target-speed-authority,
+  .workspace-view[data-view-page="motion"] .target-load-actions,
+  .workspace-view[data-view-page="motion"] .target-actions { grid-column: 1; }
+}

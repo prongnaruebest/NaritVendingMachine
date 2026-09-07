@@ -69,6 +69,12 @@ class FrontendAcceptanceTests(unittest.TestCase):
         self.assertIn('grid-template-columns: repeat(2, minmax(0, 1fr))', STYLE)
         self.assertIn('@media (max-width: 920px)', STYLE)
 
+    def test_motion_v26_has_one_responsive_layout_authority(self) -> None:
+        self.assertIn("Motion v26: one predictable responsive layout authority", STYLE)
+        self.assertIn("grid-template-columns: minmax(360px, 0.78fr) minmax(560px, 1.22fr)", STYLE)
+        self.assertIn("@media (max-width: 980px)", STYLE)
+        self.assertIn("@media (max-width: 680px)", STYLE)
+
     def test_motion_has_one_visible_speed_control_bank(self) -> None:
         self.assertEqual(TEMPLATE.count('aria-label="Linked axis speed settings for jogging"'), 1)
         self.assertNotIn('Linked axis speed settings for minimum and maximum travel', TEMPLATE)
