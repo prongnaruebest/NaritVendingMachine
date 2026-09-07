@@ -2072,7 +2072,7 @@
         <div class="motor-config-fields">
           <label><span>Motor Steps / Rev</span>${configurationNumberInput(axis, "motor_steps_per_rev", config.motor_steps_per_rev, "1")}</label>
           <label><span>Driver Microsteps</span>${configurationNumberInput(axis, "driver_microsteps", config.driver_microsteps, "1")}</label>
-          <label><span>Lead Screw Pitch</span>${configurationNumberInput(axis, "lead_screw_pitch_mm", config.lead_screw_pitch_mm)}<small>mm/rev</small></label>
+          <label><span>Effective Travel / Rev</span>${configurationNumberInput(axis, "lead_screw_pitch_mm", config.lead_screw_pitch_mm)}<small>mm/rev after gearing</small></label>
           <label><span>Pulse Calibration</span>${configurationNumberInput(axis, "steps_per_mm", config.steps_per_mm)}<small>pulse/mm</small></label>
           <label><span>Maximum Travel</span>${configurationNumberInput(axis, "max_travel_mm", config.max_travel_mm)}<small>mm</small></label>
           <label><span>Maximum Speed</span>${configurationNumberInput(axis, "max_speed_mm_s", config.max_speed_mm_s)}<small>mm/s</small></label>
@@ -2583,7 +2583,7 @@
       const drive = cfg.drive_type || (axis === "z" ? "timing_belt" : "lead_screw");
       return `<article class="travel-calibration-card" data-travel-axis="${axis}">
         <div class="motor-config-head"><strong>AXIS ${axis.toUpperCase()}</strong><span>${drive === "timing_belt" ? "TIMING BELT" : "LEAD SCREW"}</span></div>
-        <div class="travel-source-note">${axis === "z" ? "GTD-A001 · 2GT belt · requested nominal stroke 180 mm" : "MISUMI MTSRL25-1800 · 25 mm screw · 5 mm/rev · nominal length 1,800 mm"}</div>
+        <div class="travel-source-note">${axis === "z" ? "GTD-A001 · 2GT belt · requested nominal stroke 180 mm" : "MISUMI MTSRL25-1800 · physical screw pitch 5 mm · calibrated effective travel 23.2727 mm/motor rev"}</div>
         <div class="travel-calibration-fields">
           <label><span>Nominal / Spec</span><input class="config-input" type="number" min="0.1" step="0.1" value="${nominal}" data-travel-field="nominal"><small>mm</small></label>
           <label><span>Measured Min → Max</span><input class="config-input" type="number" min="0.1" step="0.1" value="${measured}" data-travel-field="measured"><small>mm measured by operator</small></label>

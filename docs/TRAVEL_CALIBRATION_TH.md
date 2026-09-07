@@ -4,8 +4,8 @@
 
 | แกน | ระบบส่งกำลัง | ระยะอ้างอิง | ค่าคำนวณเริ่มต้น |
 | --- | --- | ---: | --- |
-| X | MISUMI MTSRL25-1800, pitch 5 mm/rev | 1,800 mm nominal | 200 step/rev × 8 microstep ÷ 5 = 320 pulse/mm |
-| Y | MISUMI MTSRL25-1800, pitch 5 mm/rev | 1,800 mm nominal | 200 step/rev × 8 microstep ÷ 5 = 320 pulse/mm |
+| X | MISUMI MTSRL25-1800, physical pitch 5 mm/rev | วัดจริง 1,600 mm | สอบเทียบร่วมกับ Y เป็น 68.75 pulse/mm; software travel 1,590 mm |
+| Y | MISUMI MTSRL25-1800, physical pitch 5 mm/rev | วัดจริง 1,600 mm | 110,000 pulse ÷ 1,600 mm = 68.75 pulse/mm; software travel 1,590 mm |
 | Z | GTD-A001, timing belt 2GT | 180 mm nominal | คงค่า 200 pulse/mm จนกว่าจะยืนยันจำนวนฟัน pulley และอัตราทด |
 
 ความยาวสกรู 1,800 mm ไม่ใช่หลักฐานว่า usable stroke เท่ากับ 1,800 mm เพราะตำแหน่งน็อต ชุดรองรับปลายเพลา และ limit sensor ทำให้ระยะจริงสั้นลง ค่า `max_travel_mm` สุดท้ายต้องมาจากการวัดกับเครื่องจริง
@@ -36,4 +36,14 @@
 
 ## ข้อจำกัดความเร็วชั่วคราว
 
-หลังพบ drive alarm ระบบตั้ง commissioned speed ชั่วคราวเป็น X/Y 5 mm/s และ Z 2 mm/s ค่านี้ไม่ใช่ความเร็วสูงสุดของกลไก แต่เป็นขอบเขตเริ่มต้นสำหรับ commissioning ใหม่ ค่าเพดาน 50,000 pulse/s ของ NUCLEO ไม่ใช่หลักฐานว่ากลไกสามารถทำงานที่ความเร็วนั้นได้อย่างปลอดภัย
+หลังการวัดล่าสุด ระบบเปิดช่วง slider ปกติเป็น X/Y 20 mm/s และ Z 10 mm/s เพื่อให้ปรับเกิน 5 mm/s ได้ โดยยังคงต้องเพิ่มความเร็วทีละขั้นและตรวจ drive alarm ค่าเพดาน 50,000 pulse/s ของ NUCLEO ไม่ใช่หลักฐานว่ากลไกสามารถทำงานที่ความเร็วนั้นได้อย่างปลอดภัย
+
+## ผลสอบเทียบ X/Y วันที่ 2026-09-07
+
+เมื่อ Y Max sensor ทำงาน Controller บันทึก 110,000 pulse และแสดง 343.75 mm ด้วยค่าเดิม 320 pulse/mm ขณะที่ผู้ควบคุมวัดระยะจริงได้ 1,600 mm:
+
+- `pulses_per_mm = 110000 / 1600 = 68.75`
+- `effective_travel_per_motor_rev = 1600 / 68.75 = 23.272727 mm/rev`
+- `software_travel = 1600 - 10 = 1590 mm`
+
+ค่า 23.272727 mm/rev เป็นค่า effective ของระบบทั้งหมด ไม่ใช่ physical pitch ของสกรู 5 mm/rev ความแตกต่างต้องตรวจการตั้ง microstep จริง อัตราทด coupling/gear และระยะที่วัดอีกครั้งก่อนถือเป็น calibration ขั้นสุดท้าย ค่า X ใช้ calibration เดียวกับ Y ตามข้อมูลที่ผู้ควบคุมแจ้งว่าระบบส่งกำลังและระยะจริงเท่ากัน
