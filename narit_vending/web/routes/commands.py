@@ -251,6 +251,21 @@ def make_commands_bp(ctrl: "ControllerClient") -> Blueprint:
         snap = ctrl.snapshot()
         return jsonify(r | _snap_status(snap)), 200 if r.get("accepted") else 400
 
+    @bp.post("/api/move-to-limit")
+    def api_move_to_limit():
+        payload = _json_payload()
+        axis = str(payload.get("axis", "")).lower()
+        endpoint = str(payload.get("endpoint", "")).lower()
+        if axis not in ("x", "y", "z") or endpoint not in ("min", "max"):
+            return jsonify({"ok": False, "error": "axis must be x/y/z and endpoint must be min/max"}), 400
+        try:
+            speed = _parse_opt_float(payload, "speed_mm_s")
+        except (TypeError, ValueError):
+            return jsonify({"ok": False, "error": "speed_mm_s must be a number"}), 400
+        r = _submit(ctrl, "MOVE_TO_LIMIT", {"axis": axis, "endpoint": endpoint, "speed_mm_s": speed})
+        snap = ctrl.snapshot()
+        return jsonify(r | _snap_status(snap)), 200 if r.get("accepted") else 400
+
     @bp.post("/api/system/motion/disable")
     def api_disable_motion():
         r = _submit(ctrl, "DISABLE_MOTION", {})

@@ -93,6 +93,16 @@ class CommandRouteTests(unittest.TestCase):
         self.assertEqual(envelope.command_type, "RUN_SLOT_SEQUENCE")
         self.assertEqual(envelope.parameters, {"slot_code": "01", "speed_mm_s": 12.0})
 
+    def test_move_to_limit_uses_dedicated_controller_command_and_axis_speed(self) -> None:
+        self.controller.submit_command.return_value = CommandResult(
+            accepted=True, command_id="limit-1", state="COMPLETED", result={"ok": True}
+        )
+        response = self.client.post("/api/move-to-limit", json={"axis": "z", "endpoint": "max", "speed_mm_s": 2})
+        self.assertEqual(response.status_code, 200)
+        envelope = self.controller.submit_command.call_args.args[0]
+        self.assertEqual(envelope.command_type, "MOVE_TO_LIMIT")
+        self.assertEqual(envelope.parameters, {"axis": "z", "endpoint": "max", "speed_mm_s": 2.0})
+
     def test_system_controls_are_controller_commands(self) -> None:
         self.controller.submit_command.return_value = CommandResult(
             accepted=True, command_id="system-1", state="COMPLETED", result={"ok": True}

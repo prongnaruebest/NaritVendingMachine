@@ -8,7 +8,7 @@
   <link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='favicon-transparent-large.png') }}?v=20260721_v12">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=20260907_calibration_v14">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=20260907_motion_safety_v17">
 </head>
 <body>
   <div class="hmi-shell">
@@ -1483,6 +1483,7 @@
               <div class="axis-kv"><span>Min Limit:</span><strong id="axis-lim-min-x" class="ok">CLEAR</strong></div>
               <div class="axis-kv"><span>Max Limit:</span><strong id="axis-lim-max-x" class="ok">CLEAR</strong></div>
             </div>
+            <div class="axis-direct-move"><label for="axis-goto-x">X target (mm)</label><input id="axis-goto-x" class="hmi-input" type="number" min="0" step="0.1"><button type="button" data-axis-goto="x">MOVE X</button></div>
           </div>
 
           <!-- Y Axis Card -->
@@ -1508,6 +1509,7 @@
               <div class="axis-kv"><span>Min Limit:</span><strong id="axis-lim-min-y" class="ok">CLEAR</strong></div>
               <div class="axis-kv"><span>Max Limit:</span><strong id="axis-lim-max-y" class="ok">CLEAR</strong></div>
             </div>
+            <div class="axis-direct-move"><label for="axis-goto-y">Y target (mm)</label><input id="axis-goto-y" class="hmi-input" type="number" min="0" step="0.1"><button type="button" data-axis-goto="y">MOVE Y</button></div>
           </div>
 
           <!-- Z Axis Card -->
@@ -1533,6 +1535,7 @@
               <div class="axis-kv"><span>Min Limit:</span><strong id="axis-lim-min-z" class="ok">CLEAR</strong></div>
               <div class="axis-kv"><span>Max Limit:</span><strong id="axis-lim-max-z" class="ok">CLEAR</strong></div>
             </div>
+            <div class="axis-direct-move"><label for="axis-goto-z">Z target (mm)</label><input id="axis-goto-z" class="hmi-input" type="number" min="0" step="0.1"><button type="button" data-axis-goto="z">MOVE Z</button></div>
           </div>
         </div>
       </div>
@@ -1700,6 +1703,6 @@
   <!-- Toast notification -->
   <div class="toast" id="toast" role="status"></div>
 
-  <script src="{{ url_for('static', filename='app.js') }}?v=20260907_hold_jog_v15"></script>
+  <script src="{{ url_for('static', filename='app.js') }}?v=20260907_motion_safety_v17"></script>
 </body>
 </html>

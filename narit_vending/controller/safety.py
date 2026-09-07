@@ -46,6 +46,7 @@ _MOTION_COMMANDS = frozenset({
 _HOME_COMMANDS = frozenset({
     "HOME_AXIS",
     "HOME_ALL",
+    "MOVE_TO_LIMIT",
 })
 
 # Motor test commands need motor_test_armed

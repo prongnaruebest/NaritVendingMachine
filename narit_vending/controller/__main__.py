@@ -142,6 +142,7 @@ def _register_handlers(bus: Any, service: Any) -> None:
         make_dispense_handler,
         make_execute_armed_move_handler,
         make_move_to_handler,
+        make_move_to_limit_handler,
         make_move_to_slot_handler,
         make_plan_move_handler,
         make_validate_target_handler,
@@ -177,6 +178,7 @@ def _register_handlers(bus: Any, service: Any) -> None:
     bus.register("HOME_ALL", make_home_all_handler(service))
     bus.register("JOG", make_jog_handler(service))
     bus.register("MOVE_TO", make_move_to_handler(service))
+    bus.register("MOVE_TO_LIMIT", make_move_to_limit_handler(service))
     bus.register("MOVE_TO_SLOT", make_move_to_slot_handler(service))
     bus.register("RUN_SLOT_SEQUENCE", make_run_slot_sequence_handler(service.sequence_service))
     bus.register("DISPENSE", make_dispense_handler(service))

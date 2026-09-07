@@ -1489,12 +1489,20 @@
 
     $$('[data-travel-axis]').forEach((button) => {
       const axis = button.dataset.travelAxis;
-      const reason = axis ? motionInhibitReasonForAxes([axis]) : "Axis is unavailable";
+      // Physical endpoint seeking is also the recovery/calibration path when
+      // an axis has lost its coordinate reference, so it must not require Home.
+      const reason = axis ? motionInhibitReason(false) : "Axis is unavailable";
       button.disabled = Boolean(reason);
       button.title = reason || `${axis.toUpperCase()} axis is ready for the next command`;
       button.setAttribute("aria-disabled", String(Boolean(reason)));
     });
-    const travelReason = motionInhibitReasonForAxes(AXES);
+    $$('[data-axis-goto]').forEach((button) => {
+      const axis = button.dataset.axisGoto;
+      const reason = axis ? motionInhibitReasonForAxes([axis]) : "Axis is unavailable";
+      button.disabled = Boolean(reason);
+      button.title = reason || `Move ${axis.toUpperCase()} to the entered position`;
+    });
+    const travelReason = motionInhibitReason(false);
     const travelInhibit = el("travel-limit-inhibit");
     if (travelInhibit) {
       travelInhibit.textContent = travelReason
@@ -1518,6 +1526,8 @@
       if (card) card.classList.toggle("limit-active", Boolean(data.head_limit || data.tail_limit));
       const input = el(`move-${axis}`);
       if (input && Number.isFinite(maximum)) input.max = String(maximum);
+      const directInput = el(`axis-goto-${axis}`);
+      if (directInput && Number.isFinite(maximum)) directInput.max = String(maximum);
     });
     $$(".home-axis").forEach((btn) => { btn.disabled = !canHome; });
 
@@ -4348,14 +4358,33 @@
         setText("travel-limit-feedback", `Moving ${axis.toUpperCase()} to ${limit.toUpperCase()} (${target.toFixed(3)} mm).`);
         command(
           `Move ${axis.toUpperCase()} to ${limit.toUpperCase()}`,
-          "/api/move",
-          { [`${axis}_mm`]: target, ...targetSpeedPayload([axis]) },
-          { requiredAxes: [axis], timeoutMs: 300000 },
+          "/api/move-to-limit",
+          { axis, endpoint: limit, speed_mm_s: effectiveMotionSpeed([axis]) },
+          { timeoutMs: 650000 },
         ).then((result) => {
           setText("travel-limit-feedback", result
             ? `${axis.toUpperCase()} ${limit.toUpperCase()} command completed. Verify the displayed position and limit sensor.`
             : `${axis.toUpperCase()} ${limit.toUpperCase()} command was rejected or stopped. Review the interlock message.`);
         });
+      });
+    });
+    $$('[data-axis-goto]').forEach((button) => {
+      button.addEventListener("click", () => {
+        const axis = button.dataset.axisGoto;
+        const input = el(`axis-goto-${axis}`);
+        const target = Number(input?.value);
+        const maximum = Number(MS.config?.axes?.[axis]?.max_travel_mm);
+        if (!Number.isFinite(target) || target < 0 || target > maximum) {
+          toast(`${axis.toUpperCase()} target must be within 0-${maximum} mm.`, "error");
+          return;
+        }
+        if (!window.confirm(`Move ${axis.toUpperCase()} to ${target.toFixed(3)} mm?\nConfirm the travel area is clear.`)) return;
+        command(
+          `Move ${axis.toUpperCase()} to ${target.toFixed(3)} mm`,
+          "/api/move",
+          { [`${axis}_mm`]: target, speed_mm_s: effectiveMotionSpeed([axis]) },
+          { requiredAxes: [axis], timeoutMs: 650000 },
+        );
       });
     });
     document.addEventListener("input", (event) => {

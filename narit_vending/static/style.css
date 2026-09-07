@@ -7966,3 +7966,9 @@ body { font-size: 14px; }
   .rpz-jog .rp-z-pad .rp-jog-btn { width: 64px; }
   .motion-jog-panel .rp-preset-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+/* Direct single-axis target control */
+.axis-direct-move { display:grid; grid-template-columns:minmax(0,1fr) 96px; gap:8px; align-items:end; margin-top:10px; }
+.axis-direct-move label { grid-column:1 / -1; color:var(--text-3); font-size:12px; }
+.axis-direct-move button { min-height:44px; border:1px solid var(--blue); border-radius:6px; background:var(--blue-dim); color:var(--blue-bright); font-weight:700; }
+.axis-direct-move button:disabled { opacity:.4; cursor:not-allowed; }
+@media (max-width: 600px) { .axis-direct-move { grid-template-columns:minmax(0,1fr); } }

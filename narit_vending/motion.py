@@ -390,6 +390,57 @@ class AxisController:
         plan = self.plan_absolute_move(target_mm, speed_mm_s=speed_mm_s, time_s=time_s)
         return self._execute_plan(plan)
 
+    def seek_limit(self, endpoint: str, speed_mm_s: float | None = None) -> dict[str, object]:
+        """Move until the selected physical limit input becomes active."""
+        if endpoint not in {"min", "max"}:
+            raise MotionError(f"{self.config.name}: endpoint must be min or max")
+        direction = self.config.home_direction if endpoint == "min" else self.config.forward_direction
+        sensor = self.head_limit if endpoint == "min" else self.tail_limit
+        if sensor.value:
+            self.position_steps = 0 if endpoint == "min" else self.mm_to_steps(self.config.max_travel_mm)
+            self.is_homed = True
+            return {"axis": self.config.name, "endpoint": endpoint, "sensor": "already_active", "steps": 0}
+        if self.estop.value or self.stop_requested():
+            self._guard_before_move(direction, 0)
+
+        speed = self.clamp_speed(speed_mm_s)
+        speed_hz = max(10.0, min(self.config.max_pulse_hz, speed * self.config.steps_per_mm))
+        deadline = monotonic() + self.config.homing_timeout_s
+        moved = 0
+        self.direction.value = bool(direction)
+        if self.motion_backend is not None and getattr(self.motion_backend, "expected_protocol", 1) >= 2:
+            segment_limit = max(1, int(getattr(self.motion_backend, "max_move_steps", NUCLEO_MOVE_CHUNK_STEPS)))
+            while not sensor.value:
+                if monotonic() >= deadline:
+                    raise LimitTriggeredError(f"{self.config.name}: {endpoint} limit not reached before timeout")
+                try:
+                    result = self.motion_backend.move(
+                        axis=self.config.name,
+                        direction=direction,
+                        steps=segment_limit,
+                        speed_hz=speed_hz,
+                        timeout_s=min(self.config.homing_timeout_s, segment_limit / speed_hz + 4.0),
+                        stop_requested=lambda: bool(self.estop.value or self.stop_requested() or sensor.value),
+                    )
+                    moved += int(result.get("steps", segment_limit))
+                except NucleoError:
+                    if sensor.value:
+                        break
+                    raise
+        else:
+            half_period = 0.5 / speed_hz
+            while not sensor.value:
+                if monotonic() >= deadline:
+                    raise LimitTriggeredError(f"{self.config.name}: {endpoint} limit not reached before timeout")
+                self._guard_during_move(direction)
+                self._pulse_once(half_period)
+                moved += 1
+
+        self.position_steps = 0 if endpoint == "min" else self.mm_to_steps(self.config.max_travel_mm)
+        self.is_homed = True
+        sleep(self.config.settle_delay)
+        return {"axis": self.config.name, "endpoint": endpoint, "sensor": "triggered", "steps": moved, "speed_mm_s": speed}
+
     def test_pulses(
         self,
         pulse_count: int,

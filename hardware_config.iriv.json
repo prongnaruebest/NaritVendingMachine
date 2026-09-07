@@ -25,21 +25,21 @@
     "x": {
       "step_pin": 16,
       "dir_pin": 23,
-      "enable_pin": 12,
+      "enable_pin": null,
       "active_high": true,
       "enable_active_high": false
     },
     "y": {
       "step_pin": 26,
       "dir_pin": 24,
-      "enable_pin": 13,
+      "enable_pin": null,
       "active_high": true,
       "enable_active_high": false
     },
     "z": {
       "step_pin": 18,
       "dir_pin": 25,
-      "enable_pin": 19,
+      "enable_pin": null,
       "active_high": true,
       "enable_active_high": false
     }
@@ -123,6 +123,26 @@
       "initial_value": false
     }
   },
+  "picontrol_io": {
+    "enabled": true,
+    "poll_interval_s": 0.02,
+    "inputs": {
+      "x_alarm": {
+        "channel": 0,
+        "pin": 13,
+        "active_state": true,
+        "fail_safe": true,
+        "label": "X_DRIVE_ALM"
+      },
+      "y_alarm": {
+        "channel": 1,
+        "pin": 17,
+        "active_state": true,
+        "fail_safe": true,
+        "label": "Y_DRIVE_ALM"
+      }
+    }
+  },
   "iriv_io": {
     "enabled": true,
     "host": "10.0.0.10",
@@ -197,7 +217,7 @@
         "active_state": false,
         "polarity_verified": true,
         "fail_safe": true,
-        "label": "E-Stop feedback; active LOW (NC contact) verified by pressed/released commissioning on 2026-09-03"
+        "label": "KM1_FEEDBACK / E-Stop; IRIV IO DI10 active LOW (NC contact)"
       }
     },
     "outputs": {
@@ -264,7 +284,7 @@
         "max_pulse_hz": 50000.0,
         "commissioned_max_speed_mm_s": 100.0,
         "homing_search_speed_mm_s": 20.0,
-        "homing_latch_speed_mm_s": 1.0,
+        "homing_latch_speed_mm_s": 5.0,
         "homing_timeout_s": 600.0,
         "lead_screw_pitch_mm": 23.272727,
         "motor_steps_per_rev": 200,
@@ -291,7 +311,7 @@
         "max_pulse_hz": 50000.0,
         "commissioned_max_speed_mm_s": 100.0,
         "homing_search_speed_mm_s": 20.0,
-        "homing_latch_speed_mm_s": 1.0,
+        "homing_latch_speed_mm_s": 5.0,
         "homing_timeout_s": 600.0,
         "lead_screw_pitch_mm": 23.272727,
         "motor_steps_per_rev": 200,
@@ -305,7 +325,7 @@
       },
       "z": {
         "steps_per_mm": 200.0,
-        "max_travel_mm": 180.0,
+        "max_travel_mm": 160.0,
         "max_speed_mm_s": 250.0,
         "default_speed_mm_s": 2.0,
         "acceleration": 100.0,
@@ -324,8 +344,8 @@
         "motor_steps_per_rev": 200,
         "driver_microsteps": 8,
         "drive_type": "timing_belt",
-        "nominal_travel_mm": 180.0,
-        "measured_travel_mm": null,
+        "nominal_travel_mm": 160.0,
+        "measured_travel_mm": 160.0,
         "travel_safety_margin_mm": 3.0,
         "pulley_pitch_mm": 2.0,
         "pulley_teeth": null

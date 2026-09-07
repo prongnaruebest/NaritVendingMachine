@@ -34,6 +34,7 @@ from .motion import (
 )
 from .mqtt_service import MQTTService
 from .iriv_io import IRIVIOBackend, IRIVIOError
+from .picontrol_io import PiControlIOBackend
 from .nucleo import NucleoLink
 
 
@@ -137,11 +138,20 @@ class MotionService:
             self.io_backend = IRIVIOBackend(iriv_config)
             self.io_backend.start()
 
+        picontrol_config = hw_config.get("picontrol_io", {})
+        self.picontrol_io: PiControlIOBackend | None = None
+        if isinstance(picontrol_config, dict) and picontrol_config.get("enabled"):
+            self.picontrol_io = PiControlIOBackend(picontrol_config)
+            self.picontrol_io.start()
+
         nucleo_config = hw_config.get("nucleo", {})
         self.nucleo_link: NucleoLink | None = None
         if isinstance(nucleo_config, dict) and nucleo_config.get("enabled"):
-            safety_perm = lambda: self.io_backend is None or not any(
-                c["active"] and c["level"] == "fault" for c in self.io_backend.alarm_channels()
+            safety_perm = lambda: not any(
+                c["active"] and c["level"] == "fault"
+                for backend in (self.io_backend, self.picontrol_io)
+                if backend is not None
+                for c in backend.alarm_channels()
             )
             self.nucleo_link = NucleoLink(nucleo_config, safety_permissive_fn=safety_perm)
             self.nucleo_link.start()
@@ -161,7 +171,7 @@ class MotionService:
             io_backend=self.io_backend,
             motion_backend=nucleo_motion,
         )
-        if self.io_backend is not None:
+        if self.io_backend is not None or self.picontrol_io is not None:
             self._safety_monitor_thread = threading.Thread(
                 target=self._safety_monitor_loop,
                 name="controller-safety-monitor",
@@ -180,8 +190,11 @@ class MotionService:
         with self.lock:
             controller_status = self.controller.status()
             io_status = self.io_backend.status_payload() if self.io_backend else {"enabled": False, "communication_ok": True}
+            picontrol_status = self.picontrol_io.status_payload() if self.picontrol_io else {"enabled": False, "communication_ok": True}
             nucleo_status = self.nucleo_link.status_payload() if self.nucleo_link else {"enabled": False, "communication_ok": True}
             alarm_channels = self.io_backend.alarm_channels() if self.io_backend else []
+            if self.picontrol_io is not None:
+                alarm_channels.extend(self.picontrol_io.alarm_channels())
             if self.nucleo_link is not None:
                 alarm_channels.append(self.nucleo_link.alarm_channel())
             hardware_fault = any(channel["active"] and channel["level"] == "fault" for channel in alarm_channels)
@@ -211,6 +224,7 @@ class MotionService:
                 "machine_state": controller_status["state"],
                 "alarm_channels": alarm_channels,
                 "io": io_status,
+                "picontrol_io": picontrol_status,
                 "nucleo": nucleo_status,
                 "operation": {
                     "phase": self.operation_phase,
@@ -351,9 +365,12 @@ class MotionService:
         estimated_duration_s: float | None = None,
     ):
         is_motor_test = command_name.startswith("motor_test_")
-        if motion_command and self.io_backend is not None:
+        if motion_command:
             active_io_faults = [
-                channel["label"] for channel in self.io_backend.alarm_channels()
+                channel["label"]
+                for backend in (self.io_backend, self.picontrol_io)
+                if backend is not None
+                for channel in backend.alarm_channels()
                 if channel["active"] and channel["level"] == "fault"
             ]
             if active_io_faults:
@@ -633,10 +650,15 @@ class MotionService:
         interval = min(0.05, max(0.02, float(self.io_backend.poll_interval_s) / 2))
         while not self._safety_monitor_stop.wait(interval):
             try:
-                estop_active = self.io_backend.input_active("estop")
+                estop_active = self.io_backend.input_active("estop") if self.io_backend is not None else False
+                drive_alarm = any(
+                    channel["active"] and channel["level"] == "fault"
+                    for channel in (self.picontrol_io.alarm_channels() if self.picontrol_io is not None else [])
+                )
             except Exception:
                 estop_active = True
-            if estop_active and not self._safety_trip_latched:
+                drive_alarm = True
+            if (estop_active or drive_alarm) and not self._safety_trip_latched:
                 self._latch_emergency_stop()
 
     def _latch_emergency_stop(self) -> None:
@@ -677,6 +699,10 @@ class MotionService:
             faults = [c["label"] for c in self.io_backend.alarm_channels() if c["active"] and c["level"] == "fault"]
             if faults:
                 return {"ok": False, "error": "Safety fault active: " + ", ".join(faults)}
+        if self.picontrol_io is not None:
+            faults = [c["label"] for c in self.picontrol_io.alarm_channels() if c["active"] and c["level"] == "fault"]
+            if faults:
+                return {"ok": False, "error": "Drive fault active: " + ", ".join(faults)}
         if self.nucleo_link is not None and not self.nucleo_link.communication_ok:
             return {"ok": False, "error": "NUCLEO USB handshake is not healthy"}
         if self.busy:
@@ -844,6 +870,16 @@ class MotionService:
             lambda: axis.move_mm(distance_mm, speed_mm_s=speed_mm_s, time_s=time_s),
         )
 
+    def move_to_limit(self, axis_name: str, endpoint: str, speed_mm_s: float | None = None) -> dict[str, object]:
+        if axis_name not in self.controller.axes() or endpoint not in {"min", "max"}:
+            return {"ok": False, "error": "axis and endpoint must identify X/Y/Z and min/max"}
+        axis = self.controller.axes()[axis_name]
+        return self._run(
+            f"seek_{axis_name}_{endpoint}_limit",
+            lambda: axis.seek_limit(endpoint, speed_mm_s=speed_mm_s),
+            estimated_duration_s=axis.config.homing_timeout_s,
+        )
+
     def move_to_slot(
         self,
         slot_code: str,
@@ -965,14 +1001,18 @@ class MotionService:
         with self.lock:
             controller_status = self.controller.status()
             io_ready = self.io_backend is None or self.io_backend.communication_ok
+            picontrol_ready = self.picontrol_io is None or self.picontrol_io.communication_ok
             nucleo_ready = self.nucleo_link is None or self.nucleo_link.communication_ok
             io_alarms = self.io_backend.alarm_channels() if self.io_backend else []
+            if self.picontrol_io is not None:
+                io_alarms.extend(self.picontrol_io.alarm_channels())
             io_safe = not any(channel["active"] and channel["level"] == "fault" for channel in io_alarms)
             axes_homed = all(bool(controller_status[axis].get("is_homed")) for axis in ("x", "y", "z"))
             machine_ready = (
                 axes_homed
                 and self.motion_enabled
                 and io_ready
+                and picontrol_ready
                 and nucleo_ready
                 and io_safe
                 and not bool(controller_status.get("estop"))
@@ -980,14 +1020,15 @@ class MotionService:
                 and not self.configuration_restart_required
             )
             return {
-                "status": "UP" if self.config_report.valid and io_ready and nucleo_ready else "DOWN",
-                "service_ready": self.config_report.valid and io_ready and nucleo_ready,
+                "status": "UP" if self.config_report.valid and io_ready and picontrol_ready and nucleo_ready else "DOWN",
+                "service_ready": self.config_report.valid and io_ready and picontrol_ready and nucleo_ready,
                 "machine_ready": machine_ready,
                 "machine_state": controller_status.get("state", "unknown"),
                 "axes_homed": axes_homed,
                 "config_revision": self.config_report.revision,
                 "config_valid": self.config_report.valid,
                 "iriv_io_ready": io_ready,
+                "picontrol_io_ready": picontrol_ready,
                 "nucleo_ready": nucleo_ready,
                 "motion_enabled": self.motion_enabled,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -1001,6 +1042,8 @@ class MotionService:
         self.mqtt_service.stop()
         if self.io_backend is not None:
             self.io_backend.close()
+        if self.picontrol_io is not None:
+            self.picontrol_io.close()
         if self.nucleo_link is not None:
             self.nucleo_link.close()
 

@@ -321,7 +321,7 @@ def _validate_pin_assignments(
         if not isinstance(value, dict):
             continue
         for key in ("step_pin", "dir_pin", "enable_pin"):
-            if key in value:
+            if key in value and value[key] is not None:
                 add(value[key], f"hardware.motors.{axis}.{key}")
     for group_name, group in (("digital_inputs", inputs), ("digital_outputs", outputs)):
         for name, value in group.items():
