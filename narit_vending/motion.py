@@ -28,8 +28,14 @@ def _slot_sort_key(item: tuple[str, object]) -> tuple[int, int | str]:
 
 
 def _home_backoff_limit_steps(steps_per_mm: float) -> int:
-    """Back off 2 mm before the low-speed precision latch pass."""
-    return max(1, int(round(2.0 * steps_per_mm)))
+    """Allow enough travel for a mechanical home switch to release.
+
+    Two millimetres was too short for the installed sensor/bracket geometry and
+    caused a false ``sensor did not release`` failure.  The move still stops as
+    soon as the input releases; 10 mm is only a watchdog ceiling, not a forced
+    move distance.
+    """
+    return max(1, int(round(10.0 * steps_per_mm)))
 
 
 class MotionError(RuntimeError):
