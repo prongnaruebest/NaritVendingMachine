@@ -1607,7 +1607,8 @@
 
   /* ── RENDER: FEED OVERRIDE ──────────────────────────────────── */
   function updateFeedOverride() {
-    setText("fo-pct-display", String(MS.feedOverridePct));
+    const pctDisplay = document.getElementById("fo-pct-display");
+    if (pctDisplay) pctDisplay.textContent = String(MS.feedOverridePct);
     const overrideValue = document.getElementById("fo-override-val");
     if (overrideValue) overrideValue.textContent = `${MS.feedOverridePct} %`;
 
@@ -1615,8 +1616,10 @@
     syncAxisSpeedBanks();
     const progSpd = effectiveMotionSpeed();
     const effSpd  = progSpd * (MS.feedOverridePct / 100);
-    setText("fo-prog-speed", progSpd > 0 ? `${fmtSpd(progSpd)} mm/s` : "-- mm/s");
-    setText("fo-eff-speed",  progSpd > 0 ? `${fmtSpd(effSpd)} mm/s`  : "-- mm/s");
+    const programmedSpeed = document.getElementById("fo-prog-speed");
+    const effectiveSpeed = document.getElementById("fo-eff-speed");
+    if (programmedSpeed) programmedSpeed.textContent = progSpd > 0 ? `${fmtSpd(progSpd)} mm/s` : "-- mm/s";
+    if (effectiveSpeed) effectiveSpeed.textContent = progSpd > 0 ? `${fmtSpd(effSpd)} mm/s` : "-- mm/s";
 
     // Highlight active preset
     $$(".fo-preset-btn").forEach((btn) => {
@@ -3948,6 +3951,22 @@
       const healthy = MS.online && nucleoOk && ioOk;
       architectureHealth.textContent = !MS.online ? "CONTROLLER OFFLINE" : !nucleoOk ? "NUCLEO OFFLINE" : !ioOk ? "IRIV I/O OFFLINE" : "ALL LINKS ONLINE";
       architectureHealth.className = `page-status-chip ${healthy ? "ok" : "fault"}`;
+      const motionEnabled = MS.payload?.safety?.motion_enabled === true;
+      const driveAlarm = Object.values(MS.payload?.picontrol_io?.inputs || {}).some((active) => active === true);
+      const safetyClear = MS.online && nucleoOk && ioOk && !status.estop && !MS.payload?.safety?.stop_requested && !driveAlarm;
+      const setArchitectureLive = (id, value, ok) => {
+        const node = el(id);
+        if (!node) return;
+        node.textContent = value;
+        node.className = ok ? "ok" : "fault";
+      };
+      setArchitectureLive("architecture-web-live", MS.online ? "ONLINE" : "OFFLINE", MS.online);
+      setArchitectureLive("architecture-controller-live", MS.online ? "ONLINE" : "OFFLINE", MS.online);
+      setArchitectureLive("architecture-motion-live", motionEnabled ? "ENABLED" : "DISABLED", motionEnabled);
+      setArchitectureLive("architecture-nucleo-live", nucleoOk ? "ONLINE" : "OFFLINE", nucleoOk);
+      setArchitectureLive("architecture-io-live", ioOk ? "ONLINE" : "OFFLINE", ioOk);
+      setArchitectureLive("architecture-safety-live", safetyClear ? "CLEAR" : "INHIBITED", safetyClear);
+      setText("architecture-protocol-live", `USB Serial · Protocol v${MS.payload?.nucleo?.protocol ?? "--"}`);
     }
 
     const alarmList = document.getElementById("alarm-page-list");

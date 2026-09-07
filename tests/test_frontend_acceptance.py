@@ -139,6 +139,16 @@ class FrontendAcceptanceTests(unittest.TestCase):
         self.assertIn('architectureHealth.textContent = !MS.online', APP_JS)
         self.assertIn('setText("sequence-order-title"', APP_JS)
 
+    def test_architecture_is_controller_centred_live_and_responsive(self) -> None:
+        self.assertIn('class="architecture-map"', TEMPLATE)
+        self.assertIn('id="architecture-controller-live"', TEMPLATE)
+        self.assertIn("ONLY THIS PROCESS MAY AUTHORIZE MOTION", TEMPLATE)
+        self.assertIn("STOP / DISARM / INHIBIT ALL FUTURE MOTION", TEMPLATE)
+        self.assertIn('class="architecture-boundary-grid"', TEMPLATE)
+        self.assertIn("setArchitectureLive", APP_JS)
+        self.assertIn("Architecture v32: controller-centred topology", STYLE)
+        self.assertIn("@media(max-width:820px)", STYLE)
+
     def test_home_controls_respect_explicit_motion_enable_latch(self) -> None:
         self.assertIn("MS.payload?.safety?.motion_enabled === false", APP_JS)
         self.assertIn("open System Control & Health and press ENABLE MOTION", APP_JS)

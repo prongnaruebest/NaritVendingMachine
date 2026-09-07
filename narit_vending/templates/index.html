@@ -8,7 +8,7 @@
   <link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='favicon-transparent-large.png') }}?v=20260721_v12">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=20260907_diagnostics_v31">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=20260908_architecture_v35">
 </head>
 <body>
   <div class="hmi-shell">
@@ -1274,86 +1274,72 @@
 
       <section class="workspace-view architecture-page" data-view-page="architecture">
         <div class="page-heading">
-          <div><p class="panel-label">System Design Reference</p><h2>NARIT Vending Architecture</h2></div>
+          <div><p class="panel-label">Live System Topology</p><h2>Who Controls What — and How Motion Stops</h2></div>
           <span class="page-status-chip" id="architecture-health">CHECKING LIVE STATUS</span>
         </div>
-        <p class="architecture-intro">Responsibilities are strictly separated: the Web HMI presents state and sends requests, the Controller owns safety decisions and GPIO control, and a single MQTT client runs inside the Controller to prevent duplicate client IDs and connection instability.</p>
+        <p class="architecture-intro">Read from left to right: interfaces may request work, but only the Controller may approve motion. The red safety rail can stop every software path independently of the page currently open.</p>
 
-        <section class="architecture-flow" aria-label="System architecture data flow">
-          <article class="architecture-node hmi"><span class="architecture-step">01</span><h3>Operator HMI</h3><p>The operator browser provides Dashboard, Motion, Slots, Alarms, and MQTT Monitor workspaces.</p><small>HTTP polling: <code>GET /api/state</code> every 1.5 seconds</small></article>
-          <div class="architecture-arrow"><span>HTTP / JSON</span>→</div>
-          <article class="architecture-node web"><span class="architecture-step">02</span><h3>Web Process</h3><p>Flask on port 80 serves HTML/CSS/JavaScript and API requests only. It never opens GPIO or creates an MQTT client.</p><small>Controller unavailable → command API returns 503</small></article>
-          <div class="architecture-arrow"><span>Unix IPC</span>→</div>
-          <article class="architecture-node controller"><span class="architecture-step">03</span><h3>Controller Process</h3><p>Owns machine state, command serialization, all safety decisions, IRIV I/O, USB motion commands, and the single MQTT client.</p><small><code>/run/narit-vending/ctrl.sock</code></small></article>
-          <div class="architecture-arrow split"><span>USB Serial</span>↘<br><span>Modbus TCP</span>→</div>
-          <article class="architecture-node hardware"><span class="architecture-step">04</span><h3>NUCLEO / IRIV I/O</h3><p>NUCLEO generates X/Y/Z STEP/DIR from Controller commands. IRIV I/O reports limits and the DI10 KM1 safety feedback.</p><small>Heartbeat or communication loss stops motion fail-safe</small></article>
-        </section>
-
-        <div class="architecture-grid">
-          <article class="panel page-panel architecture-card">
-            <div class="panel-head"><div><p class="panel-label">A. Web HMI</p><h2 class="panel-title">Presentation &amp; Request Layer</h2></div></div>
-            <ul>
-              <li>HTML/CSS/JavaScript displays XYZ position, homing state, alarms, slots, and Controller logs.</li>
-              <li>Home, Jog, GO TO SLOT, Dispense, and Reset Alarm use the REST API; the page never controls motors directly.</li>
-              <li>The Web process uses <strong>ControllerClient</strong> over IPC, isolating web crashes or restarts from machine motion.</li>
-              <li>MQTT Monitor reads telemetry through IPC, so the Web process never creates a duplicate MQTT client.</li>
-            </ul>
-          </article>
-          <article class="panel page-panel architecture-card controller-card">
-            <div class="panel-head"><div><p class="panel-label">B. Controller</p><h2 class="panel-title">Safety &amp; Motion Authority</h2></div></div>
-            <ul>
-              <li>Starts MotionService, then creates the StateMachine, CommandBus, and IPC Server before accepting commands.</li>
-              <li>Command handlers cover Stop, Clear Alarm, Home, Jog, Move, Go To Slot, Dispense, Validate/Arm, and Motor Test.</li>
-              <li>Every command checks interlocks before GPIO output: Controller online, E-Stop clear, software stop clear, no blocking alarms, homing complete, and coordinates within limits.</li>
-              <li>Targeted moves follow Validate → Arm → Execute so changed coordinates or speed cannot run without a fresh validation.</li>
-            </ul>
-          </article>
-          <article class="panel page-panel architecture-card safety-card">
-            <div class="panel-head"><div><p class="panel-label">C. Hardware Safety</p><h2 class="panel-title">Local, Immediate Interlocks</h2></div></div>
-            <ul>
-              <li>NUCLEO generates Step and Direction for X/Y/Z over the versioned USB protocol; the Web process never opens this link.</li>
-              <li>Minimum/maximum limit switches, X/Y driver alarms, DI10 KM1 feedback, and the physical E-Stop stop or reject unsafe movement.</li>
-              <li>Homing establishes a reference before absolute moves or slot positioning; a restart requires homing to be verified again.</li>
-              <li>GO TO SLOT uses Safe Z before X/Y motion, and Dispense is allowed only at the verified slot position.</li>
-            </ul>
-          </article>
-          <article class="panel page-panel architecture-card mqtt-card">
-            <div class="panel-head"><div><p class="panel-label">D. MQTT Contract</p><h2 class="panel-title">Controller-owned Persistent Session</h2></div></div>
-            <ul>
-              <li>The Controller owns one connection with a cabinet-specific client ID and <strong>clean session = false</strong>; the Web process never connects to the broker.</li>
-              <li>Subscribe: <code>cabinet/{cabinet_id}/command</code>; the supported action is <code>release</code> and requires <code>request_id</code> and <code>slot</code>.</li>
-              <li>Publish: <code>/scan</code>, <code>/status</code>, and <code>/presence</code>; presence uses QoS 1, retained delivery, and an offline Last Will.</li>
-              <li>Network or broker failures reconnect with a 4–60 second backoff; telemetry reports connection counts and the latest error.</li>
-            </ul>
-          </article>
-          <article class="panel page-panel architecture-card config-card">
-            <div class="panel-head"><div><p class="panel-label">E. Configuration &amp; Audit</p><h2 class="panel-title">Validated Machine Definition</h2></div></div>
-            <ul>
-              <li><code>machine_config.json</code> stores travel, steps/mm, Safe Z, home sequence, and slot XYZ; <code>hardware_config.json</code> stores GPIO and communication settings.</li>
-              <li>Before saving configuration, the system validates it, creates a revision, and stores a backup under <code>backups/config/</code>.</li>
-              <li>Event logs, machine snapshots, and MQTT telemetry support fault analysis without exposing passwords or tokens.</li>
-            </ul>
-          </article>
-          <article class="panel page-panel architecture-card deploy-card">
-            <div class="panel-head"><div><p class="panel-label">F. Deployment Rule</p><h2 class="panel-title">Keep MQTT Online During UI Work</h2></div></div>
-            <ul>
-              <li>Web-only deployment copies only <code>static/</code> and <code>templates/</code>, then restarts only the Web process.</li>
-              <li>The Controller and MQTT connection therefore remain online during UI work.</li>
-              <li>Use full deployment for Controller, GPIO, motion, or MQTT changes; restarting the Controller briefly publishes the actual offline presence state.</li>
-            </ul>
-          </article>
+        <div class="architecture-live-strip" aria-label="Live architecture connection status">
+          <article><span>Web / IPC</span><strong id="architecture-web-live">CHECKING</strong><small>HMI to Controller</small></article>
+          <article><span>Motion Authority</span><strong id="architecture-motion-live">CHECKING</strong><small>Controller-owned gate</small></article>
+          <article><span>NUCLEO USB</span><strong id="architecture-nucleo-live">CHECKING</strong><small id="architecture-protocol-live">Protocol --</small></article>
+          <article><span>IRIV I/O</span><strong id="architecture-io-live">CHECKING</strong><small>Modbus TCP</small></article>
+          <article><span>Safety</span><strong id="architecture-safety-live">CHECKING</strong><small>DI10 / alarms / watchdog</small></article>
         </div>
 
-        <section class="panel page-panel architecture-sequence">
-          <div class="panel-head"><div><p class="panel-label">Command Path</p><h2 class="panel-title">Example: Dispense Command from Backend</h2></div></div>
-          <ol>
-            <li>The backend publishes <code>release</code> to <code>cabinet/{cabinet_id}/command</code> with request ID, slot, and optional expiry time.</li>
-            <li>MQTTService validates JSON, action, request ID, slot, and expiry, and prevents duplicate request IDs from running twice.</li>
-            <li>The Controller checks safety interlocks, homing, slot XYZ, and the Safe Z → X/Y → target Z sequence before motion.</li>
-            <li>Results are published as received / phase / success or failed, with the reason and target/home verification.</li>
-            <li>The HMI reads state through Web → IPC and displays the same state used by the Controller; neither browser nor MQTT paths can bypass the safety layer.</li>
-          </ol>
+        <section class="architecture-map" aria-label="Controller-centred machine architecture">
+          <div class="architecture-map-column architecture-request-layer">
+            <p class="architecture-layer-label">REQUEST &amp; DISPLAY</p>
+            <article class="architecture-node-v2"><span class="architecture-node-type">OPERATOR INTERFACE</span><h3>Web HMI</h3><p>Displays live state and sends typed API requests. It never writes GPIO or generates pulses.</p><small>Browser → Flask · HTTP/JSON</small></article>
+            <article class="architecture-node-v2"><span class="architecture-node-type">REMOTE INTERFACE</span><h3>MQTT Backend</h3><p>Requests a validated release by request ID and receives status/result telemetry.</p><small>Duplicate and expired requests are rejected</small></article>
+          </div>
+
+          <div class="architecture-connector" aria-hidden="true"><span>REQUEST</span><i></i><span>STATE</span></div>
+
+          <div class="architecture-map-column architecture-authority-layer">
+            <p class="architecture-layer-label">SINGLE MACHINE AUTHORITY</p>
+            <article class="architecture-controller-core">
+              <div class="architecture-core-head"><span>CONTROLLER PROCESS</span><strong id="architecture-controller-live">CHECKING</strong></div>
+              <h3>CommandBus + Safety Interlock</h3>
+              <p>Serializes commands, checks readiness and owns the complete machine state.</p>
+              <ol><li>Validate request</li><li>Check E-Stop, alarms, links and Home</li><li>Plan bounded motion</li><li>Execute or reject with reason</li></ol>
+              <div class="architecture-authority-badge">ONLY THIS PROCESS MAY AUTHORIZE MOTION</div>
+            </article>
+          </div>
+
+          <div class="architecture-connector outbound" aria-hidden="true"><span>COMMAND</span><i></i><span>FEEDBACK</span></div>
+
+          <div class="architecture-map-column architecture-hardware-layer">
+            <p class="architecture-layer-label">REAL-TIME &amp; FIELD HARDWARE</p>
+            <article class="architecture-node-v2 hardware"><span class="architecture-node-type">USB SERIAL · PROTOCOL V3</span><h3>STM32 NUCLEO-F439ZI</h3><p>Generates timer-driven STEP/DIR for X/Y/Z and stops pulses on watchdog timeout.</p><small>Boot state: DISARMED</small></article>
+            <article class="architecture-node-v2 hardware"><span class="architecture-node-type">MODBUS TCP</span><h3>IRIV I/O</h3><p>Reports limits, product sensors and DI10/KM1; drives indication and dispense outputs.</p><small>Communication loss is fail-safe</small></article>
+          </div>
+
+          <div class="architecture-safety-rail">
+            <div><span>HARDWARE / SAFETY INPUTS</span><strong>Physical E-Stop · DI10/KM1 · X/Y Drive Alarm · Axis Limits</strong></div>
+            <div class="architecture-safety-action">STOP / DISARM / INHIBIT ALL FUTURE MOTION</div>
+          </div>
         </section>
+
+        <section class="architecture-boundaries panel page-panel">
+          <div class="panel-head"><div><p class="panel-label">Responsibility Matrix</p><h2 class="panel-title">Clear Ownership Prevents Unsafe Cross-Control</h2></div></div>
+          <div class="architecture-boundary-grid">
+            <article><span>WEB MAY</span><strong>Display · Request · Validate input shape</strong><small>Cannot decide that motion is safe.</small></article>
+            <article><span>CONTROLLER MUST</span><strong>Serialize · Interlock · Audit · Stop</strong><small>Authoritative decision for every command.</small></article>
+            <article><span>NUCLEO MUST</span><strong>Pulse · Heartbeat · Watchdog · Disarm</strong><small>Deterministic real-time execution.</small></article>
+            <article><span>I/O MUST</span><strong>Sense · Report · Fail safe</strong><small>Physical state always overrides UI intent.</small></article>
+          </div>
+        </section>
+
+        <details class="panel page-panel architecture-details">
+          <summary>Advanced reference · command path, configuration and deployment</summary>
+          <div class="architecture-detail-grid">
+            <article><h3>Normal motion request</h3><ol><li>HMI sends CommandEnvelope.</li><li>Controller validates safety, Home and limits.</li><li>Controller sends versioned USB command.</li><li>NUCLEO executes pulses and returns progress.</li><li>Controller publishes the resulting snapshot.</li></ol></article>
+            <article><h3>Remote dispense request</h3><ol><li>MQTT validates request ID, slot and expiry.</li><li>Controller rejects duplicate requests.</li><li>Safe Z → X/Y → target Z is executed.</li><li>Dispense occurs only at a verified slot.</li><li>Result is published to the backend.</li></ol></article>
+            <article><h3>Configuration ownership</h3><p><code>machine_config.iriv.json</code> stores axes, travel, Home and Slots. <code>hardware_config.iriv.json</code> stores USB and I/O mapping. Save requires validation and backup; Apply restarts the Controller and clears Homed state.</p></article>
+            <article><h3>Deployment boundary</h3><p>Web-only changes restart only Flask. Controller, motion, I/O or protocol changes require full deployment. Deployment never runs Home, Jog, GOTO or Dispense automatically.</p></article>
+          </div>
+        </details>
       </section>
 
       <section class="workspace-view" data-view-page="alarms">
@@ -1697,6 +1683,6 @@
   <!-- Toast notification -->
   <div class="toast" id="toast" role="status"></div>
 
-  <script src="{{ url_for('static', filename='app.js') }}?v=20260907_diagnostics_v31"></script>
+  <script src="{{ url_for('static', filename='app.js') }}?v=20260908_architecture_v35"></script>
 </body>
 </html>
