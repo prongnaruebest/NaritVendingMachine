@@ -8,7 +8,7 @@
   <link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='favicon-transparent-large.png') }}?v=20260721_v12">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=20260907_motion_safety_v17">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=20260907_axis_target_v18">
 </head>
 <body>
   <div class="hmi-shell">
@@ -228,7 +228,7 @@
           <div>
             <p class="panel-label">Axis End Positions</p>
             <h2 class="panel-title" id="travel-limit-title">Move to Configured Min / Max</h2>
-            <small class="target-purpose">Normal motion command with homing, software-limit and safety-interlock checks.</small>
+            <small class="target-purpose">Physical-limit seeking and direct single-axis positioning with Controller safety checks.</small>
           </div>
           <div class="travel-limit-header-actions">
             <button type="button" class="btn-reset-alarm" id="travel-reset-interlock">RESET STOP / ALARMS</button>
@@ -240,24 +240,27 @@
           <div class="travel-limit-axis" data-axis-card="x">
             <strong>X AXIS</strong><span id="travel-limit-x-range">0.0 — -- mm</span>
             <div class="travel-axis-live"><span>Current</span><b id="travel-limit-x-current">-- mm</b><span>Sensors</span><b id="travel-limit-x-sensors">MIN -- · MAX --</b></div>
+            <div class="axis-direct-move"><label for="axis-goto-x">Target position (mm)</label><input id="axis-goto-x" class="hmi-input" type="number" min="0" step="0.1" inputmode="decimal" placeholder="Enter X"><button type="button" data-axis-goto="x">MOVE X</button></div>
             <button type="button" class="btn-limit-min" data-travel-axis="x" data-travel-limit="min">X MIN</button>
             <button type="button" class="btn-limit-max" data-travel-axis="x" data-travel-limit="max">X MAX</button>
           </div>
           <div class="travel-limit-axis" data-axis-card="y">
             <strong>Y AXIS</strong><span id="travel-limit-y-range">0.0 — -- mm</span>
             <div class="travel-axis-live"><span>Current</span><b id="travel-limit-y-current">-- mm</b><span>Sensors</span><b id="travel-limit-y-sensors">MIN -- · MAX --</b></div>
+            <div class="axis-direct-move"><label for="axis-goto-y">Target position (mm)</label><input id="axis-goto-y" class="hmi-input" type="number" min="0" step="0.1" inputmode="decimal" placeholder="Enter Y"><button type="button" data-axis-goto="y">MOVE Y</button></div>
             <button type="button" class="btn-limit-min" data-travel-axis="y" data-travel-limit="min">Y MIN</button>
             <button type="button" class="btn-limit-max" data-travel-axis="y" data-travel-limit="max">Y MAX</button>
           </div>
           <div class="travel-limit-axis" data-axis-card="z">
             <strong>Z AXIS</strong><span id="travel-limit-z-range">0.0 — -- mm</span>
             <div class="travel-axis-live"><span>Current</span><b id="travel-limit-z-current">-- mm</b><span>Sensors</span><b id="travel-limit-z-sensors">MIN -- · MAX --</b></div>
+            <div class="axis-direct-move"><label for="axis-goto-z">Target position (mm)</label><input id="axis-goto-z" class="hmi-input" type="number" min="0" step="0.1" inputmode="decimal" placeholder="Enter Z"><button type="button" data-axis-goto="z">MOVE Z</button></div>
             <button type="button" class="btn-limit-min" data-travel-axis="z" data-travel-limit="min">Z MIN</button>
             <button type="button" class="btn-limit-max" data-travel-axis="z" data-travel-limit="max">Z MAX</button>
           </div>
         </div>
         <div class="travel-limit-inhibit" id="travel-limit-inhibit" role="alert">Checking motion interlocks…</div>
-        <div class="travel-limit-feedback" id="travel-limit-feedback" role="status" aria-live="polite">Select an axis endpoint. The machine must be homed before this command is enabled.</div>
+        <div class="travel-limit-feedback" id="travel-limit-feedback" role="status" aria-live="polite">Enter a position for one axis, or select a physical Min / Max endpoint.</div>
       </section>
 
       <!-- Target Positioning Workflow Panel -->
@@ -1483,7 +1486,6 @@
               <div class="axis-kv"><span>Min Limit:</span><strong id="axis-lim-min-x" class="ok">CLEAR</strong></div>
               <div class="axis-kv"><span>Max Limit:</span><strong id="axis-lim-max-x" class="ok">CLEAR</strong></div>
             </div>
-            <div class="axis-direct-move"><label for="axis-goto-x">X target (mm)</label><input id="axis-goto-x" class="hmi-input" type="number" min="0" step="0.1"><button type="button" data-axis-goto="x">MOVE X</button></div>
           </div>
 
           <!-- Y Axis Card -->
@@ -1509,7 +1511,6 @@
               <div class="axis-kv"><span>Min Limit:</span><strong id="axis-lim-min-y" class="ok">CLEAR</strong></div>
               <div class="axis-kv"><span>Max Limit:</span><strong id="axis-lim-max-y" class="ok">CLEAR</strong></div>
             </div>
-            <div class="axis-direct-move"><label for="axis-goto-y">Y target (mm)</label><input id="axis-goto-y" class="hmi-input" type="number" min="0" step="0.1"><button type="button" data-axis-goto="y">MOVE Y</button></div>
           </div>
 
           <!-- Z Axis Card -->
@@ -1535,7 +1536,6 @@
               <div class="axis-kv"><span>Min Limit:</span><strong id="axis-lim-min-z" class="ok">CLEAR</strong></div>
               <div class="axis-kv"><span>Max Limit:</span><strong id="axis-lim-max-z" class="ok">CLEAR</strong></div>
             </div>
-            <div class="axis-direct-move"><label for="axis-goto-z">Z target (mm)</label><input id="axis-goto-z" class="hmi-input" type="number" min="0" step="0.1"><button type="button" data-axis-goto="z">MOVE Z</button></div>
           </div>
         </div>
       </div>
@@ -1703,6 +1703,6 @@
   <!-- Toast notification -->
   <div class="toast" id="toast" role="status"></div>
 
-  <script src="{{ url_for('static', filename='app.js') }}?v=20260907_motion_safety_v17"></script>
+  <script src="{{ url_for('static', filename='app.js') }}?v=20260907_axis_target_v18"></script>
 </body>
 </html>
