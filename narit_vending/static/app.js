@@ -583,15 +583,27 @@
     fillManualTarget(slot, `Slot ${code} loaded`);
   }
 
-  function buildJogPayload(axis, direction) {
+  const HOLD_JOG_CHUNK_SECONDS = 0.12;
+
+  function buildJogPayload(axis, direction, continuous = false) {
+    const spd = effectiveMotionSpeed([axis]);
+    // A held jog is issued as short, time-bounded moves.  This keeps release,
+    // blur and page-hidden stopping responsive without latching the machine's
+    // software STOP or losing the controller's position accounting.
+    const distance = continuous
+      ? Math.max(spd * HOLD_JOG_CHUNK_SECONDS, 0.001)
+      : MS.selectedJogStep;
     const body = {
       axis,
-      distance_mm: MS.selectedJogStep * Number(direction),
+      distance_mm: distance * Number(direction),
     };
-    const spd = effectiveMotionSpeed([axis]);
     if (spd > 0) body.speed_mm_s = spd;
-    const jogTime = el("jog-time")?.value;
-    if (jogTime) body.time_s = Number(jogTime);
+    if (continuous) {
+      body.time_s = HOLD_JOG_CHUNK_SECONDS;
+    } else {
+      const jogTime = el("jog-time")?.value;
+      if (jogTime) body.time_s = Number(jogTime);
+    }
     return body;
   }
 

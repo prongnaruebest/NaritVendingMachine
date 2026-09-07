@@ -1540,7 +1540,7 @@
       <!-- Zone 2: Ergonomic Jog Control -->
       <div class="rpz rpz-jog">
         <div class="rpz-head">
-          <span class="rpz-title">Manual Jog Control</span>
+          <span class="rpz-title">Manual Jog Control — Hold to Run</span>
           <span class="safety-ind-sub" id="jog-status-text">HOME REQUIRED</span>
         </div>
 
@@ -1557,17 +1557,17 @@
           <div class="rp-jog-main-column">
             <div class="rp-jog-pad-area">
               <div class="rp-xy-pad">
-                <button class="rp-jog-btn jog-y-pos" data-jog="y:1" title="Jog Y+ (Up)">Y+</button>
-                <button class="rp-jog-btn jog-x-neg" data-jog="x:-1" title="Jog X- (Left)">X-</button>
+                <button class="rp-jog-btn jog-y-pos" data-jog="y:1" title="Hold to jog Y+; release to stop" aria-label="Hold to jog Y positive; release to stop">Y+</button>
+                <button class="rp-jog-btn jog-x-neg" data-jog="x:-1" title="Hold to jog X-; release to stop" aria-label="Hold to jog X negative; release to stop">X-</button>
                 <div class="rp-jog-center">XY PAD</div>
-                <button class="rp-jog-btn jog-x-pos" data-jog="x:1" title="Jog X+ (Right)">X+</button>
-                <button class="rp-jog-btn jog-y-neg" data-jog="y:-1" title="Jog Y- (Down)">Y-</button>
+                <button class="rp-jog-btn jog-x-pos" data-jog="x:1" title="Hold to jog X+; release to stop" aria-label="Hold to jog X positive; release to stop">X+</button>
+                <button class="rp-jog-btn jog-y-neg" data-jog="y:-1" title="Hold to jog Y-; release to stop" aria-label="Hold to jog Y negative; release to stop">Y-</button>
               </div>
 
               <div class="rp-z-pad">
                 <span class="rp-z-label">Z Axis</span>
-                <button class="rp-jog-btn" data-jog="z:1" title="Jog Z+ (Up)">Z+</button>
-                <button class="rp-jog-btn" data-jog="z:-1" title="Jog Z- (Down)">Z-</button>
+                <button class="rp-jog-btn" data-jog="z:1" title="Hold to jog Z+; release to stop" aria-label="Hold to jog Z positive; release to stop">Z+</button>
+                <button class="rp-jog-btn" data-jog="z:-1" title="Hold to jog Z-; release to stop" aria-label="Hold to jog Z negative; release to stop">Z-</button>
               </div>
             </div>
 
@@ -1598,6 +1598,7 @@
             <small class="jog-keyboard-help">Arrow keys: X/Y · Page Up/Down: Z · disabled while typing</small>
           </aside>
         </div>
+        <p class="page-note jog-hold-note">Hold an axis button to move; release it to stop. Jog also stops on pointer cancel, window blur, or when this page is hidden.</p>
       </div>
 
       <!-- Zone 3: Selected Slot Direct Controls -->
@@ -1699,6 +1700,6 @@
   <!-- Toast notification -->
   <div class="toast" id="toast" role="status"></div>
 
-  <script src="{{ url_for('static', filename='app.js') }}?v=20260907_calibration_v14"></script>
+  <script src="{{ url_for('static', filename='app.js') }}?v=20260907_hold_jog_v15"></script>
 </body>
 </html>
