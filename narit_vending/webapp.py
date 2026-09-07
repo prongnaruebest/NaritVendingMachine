@@ -1041,7 +1041,13 @@ class MotionService:
             home_position = _config_number(axis_payload, "home_position_mm", minimum=0.0, maximum=max_travel)
             max_pulse_hz = _config_number(axis_payload, "max_pulse_hz", minimum=10.0, maximum=50_000.0)
             commissioned_speed = _config_number(axis_payload, "commissioned_max_speed_mm_s", minimum=0.01, maximum=max_speed)
-            homing_search_speed = _config_number(axis_payload, "homing_search_speed_mm_s", minimum=0.01, maximum=commissioned_speed)
+            homing_speed_limit = min(max_speed, max_pulse_hz / steps_per_mm)
+            homing_search_speed = _config_number(
+                axis_payload,
+                "homing_search_speed_mm_s",
+                minimum=0.01,
+                maximum=homing_speed_limit,
+            )
             homing_latch_speed = _config_number(axis_payload, "homing_latch_speed_mm_s", minimum=0.01, maximum=homing_search_speed)
             homing_timeout = _config_number(axis_payload, "homing_timeout_s", minimum=1.0, maximum=3600.0)
             forward_direction = _config_integer(axis_payload, "forward_direction", minimum=0, maximum=1)

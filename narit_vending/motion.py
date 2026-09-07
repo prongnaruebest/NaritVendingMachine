@@ -133,8 +133,8 @@ class AxisConfig:
         pulse_limited_speed = self.max_pulse_hz / self.steps_per_mm
         if self.commissioned_max_speed_mm_s > min(self.max_speed_mm_s, pulse_limited_speed):
             raise MotionError(f"{self.name}: commissioned speed exceeds motor or pulse limit")
-        if self.homing_search_speed_mm_s > self.commissioned_max_speed_mm_s:
-            raise MotionError(f"{self.name}: homing search speed exceeds commissioned speed")
+        if self.homing_search_speed_mm_s > min(self.max_speed_mm_s, pulse_limited_speed):
+            raise MotionError(f"{self.name}: homing search speed exceeds motor or pulse limit")
         if self.homing_latch_speed_mm_s > self.homing_search_speed_mm_s:
             raise MotionError(f"{self.name}: homing latch speed exceeds search speed")
         if self.drive_type not in ("lead_screw", "timing_belt", "other"):
@@ -486,7 +486,13 @@ class AxisController:
             else _home_backoff_limit_steps(self.config.steps_per_mm)
         )
 
-        homing_speed = min(self.config.homing_search_speed_mm_s, self.config.commissioned_max_speed_mm_s)
+        # Homing has an independently commissioned search speed.  Normal Jog,
+        # GOTO and slot moves remain capped by commissioned_max_speed_mm_s.
+        homing_speed = min(
+            self.config.homing_search_speed_mm_s,
+            self.config.max_speed_mm_s,
+            self.config.max_pulse_hz / self.config.steps_per_mm,
+        )
         duration_s = max_steps / max(homing_speed * self.config.steps_per_mm, 1.0)
         search_deadline = monotonic() + self.config.homing_timeout_s
         self.direction.value = bool(self.config.home_direction)

@@ -39,6 +39,22 @@ class MotionV3RequirementTests(unittest.TestCase):
         with self.assertRaises(MotionError):
             axis_config(homing_search_speed_mm_s=2.0, homing_latch_speed_mm_s=3.0)
 
+    def test_homing_search_can_exceed_normal_commissioned_speed(self):
+        cfg = axis_config(
+            commissioned_max_speed_mm_s=5.0,
+            homing_search_speed_mm_s=20.0,
+        )
+        self.assertEqual(cfg.commissioned_max_speed_mm_s, 5.0)
+        self.assertEqual(cfg.homing_search_speed_mm_s, 20.0)
+
+    def test_homing_search_cannot_exceed_pulse_limit(self):
+        with self.assertRaises(MotionError):
+            axis_config(
+                max_pulse_hz=2_000.0,
+                commissioned_max_speed_mm_s=5.0,
+                homing_search_speed_mm_s=20.0,
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
