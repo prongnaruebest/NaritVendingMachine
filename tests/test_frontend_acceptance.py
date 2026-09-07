@@ -87,6 +87,8 @@ class FrontendAcceptanceTests(unittest.TestCase):
         self.assertIn('apiCall("/api/motion/controlled-stop", "POST", {}, 2500)', APP_JS)
         self.assertIn('await apiCall("/api/jog", "POST", payload, 650000)', APP_JS)
         self.assertNotIn("while (MS.manualJog.active && MS.manualJog.token === token)", APP_JS)
+        self.assertIn("if (continuous) body.continuous = true", APP_JS)
+        self.assertIn("atDirectionalLimit", APP_JS)
 
     def test_no_inline_javascript_navigation(self) -> None:
         self.assertNotIn("onclick=", TEMPLATE)

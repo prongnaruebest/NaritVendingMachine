@@ -590,6 +590,7 @@
       axis,
       distance_mm: distance * Number(direction),
     };
+    if (continuous) body.continuous = true;
     if (spd > 0) body.speed_mm_s = spd;
     if (!continuous) {
       const jogTime = el("jog-time")?.value;
@@ -1460,8 +1461,14 @@
       setText("jog-inhibit-text", inhibitReason);
     }
     $$("[data-jog]").forEach((btn) => {
-      const [axis] = btn.dataset.jog.split(":");
-      btn.disabled = !canJogAxis(axis);
+      const [axis, direction] = btn.dataset.jog.split(":");
+      const state = getAxis(axis);
+      const towardMin = Number(direction) < 0;
+      const atDirectionalLimit = towardMin ? Boolean(state.head_limit) : Boolean(state.tail_limit);
+      btn.disabled = !canJogAxis(axis) || atDirectionalLimit;
+      btn.title = atDirectionalLimit
+        ? `${axis.toUpperCase()} ${towardMin ? "Min" : "Max"} limit is active; jog only away from this limit`
+        : `Hold to jog ${axis.toUpperCase()}${towardMin ? "−" : "+"}; release to stop`;
     });
 
     if (!MS.manualJog.active) {

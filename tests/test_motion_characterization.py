@@ -94,6 +94,20 @@ class MotionCharacterizationTests(unittest.TestCase):
 
         self.assertEqual(order, ["z", "y", "x"])
 
+    def test_continuous_jog_uses_authoritative_remaining_travel(self) -> None:
+        axis = MagicMock()
+        axis.is_homed = True
+        axis.position_mm = 120.465
+        axis.config.max_travel_mm = 1590.0
+        service = MotionService.__new__(MotionService)
+        service.controller = MagicMock()
+        service.controller.axes.return_value = {"y": axis}
+        service._run = lambda _name, fn: {"ok": True, "result": fn()}
+
+        service.jog("y", 1469.535, speed_mm_s=30.0, continuous=True)
+
+        axis.move_mm.assert_called_once_with(1469.535, speed_mm_s=30.0, time_s=None)
+
     def test_move_to_slot_uses_safe_z_then_xy_then_target_z(self) -> None:
         controller, axes = self._mock_controller()
         events: list[tuple] = []

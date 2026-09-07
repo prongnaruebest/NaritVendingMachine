@@ -861,10 +861,20 @@ class MotionService:
         speed_mm_s: float | None = None,
         time_s: float | None = None,
         allow_unhomed: bool = False,
+        continuous: bool = False,
     ) -> dict[str, object]:
         axis = self.controller.axes()[axis_name]
         if not axis.is_homed and not allow_unhomed:
             return {"ok": False, "error": f"{axis_name.upper()} axis is not homed; use Motor Test Mode or bypass safety for raw testing"}
+        if continuous and axis.is_homed:
+            # Rebuild endpoint distance from the Controller's exact position.
+            # The HMI status is rounded to 0.001 mm and can otherwise request
+            # one pulse beyond the configured boundary after a prior jog.
+            distance_mm = (
+                axis.config.max_travel_mm - axis.position_mm
+                if distance_mm > 0
+                else -axis.position_mm
+            )
         return self._run(
             f"jog_{axis_name}",
             lambda: axis.move_mm(distance_mm, speed_mm_s=speed_mm_s, time_s=time_s),

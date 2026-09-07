@@ -103,6 +103,17 @@ class CommandRouteTests(unittest.TestCase):
         self.assertEqual(envelope.command_type, "MOVE_TO_LIMIT")
         self.assertEqual(envelope.parameters, {"axis": "z", "endpoint": "max", "speed_mm_s": 2.0})
 
+    def test_continuous_jog_flag_reaches_controller(self) -> None:
+        self.controller.submit_command.return_value = CommandResult(
+            accepted=True, command_id="jog-1", state="COMPLETED", result={"ok": True}
+        )
+        response = self.client.post("/api/jog", json={
+            "axis": "z", "distance_mm": 160, "speed_mm_s": 2, "continuous": True,
+        })
+        self.assertEqual(response.status_code, 200)
+        envelope = self.controller.submit_command.call_args.args[0]
+        self.assertTrue(envelope.parameters["continuous"])
+
     def test_system_controls_are_controller_commands(self) -> None:
         self.controller.submit_command.return_value = CommandResult(
             accepted=True, command_id="system-1", state="COMPLETED", result={"ok": True}

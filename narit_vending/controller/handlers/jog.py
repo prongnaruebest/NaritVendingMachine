@@ -37,7 +37,11 @@ def make_jog_handler(motion_service: Any):
             time_s = float(time_s)
 
         allow_unhomed = bool(params.get("allow_unhomed", False))
-        result = motion_service.jog(axis, distance_mm, speed_mm_s=speed_mm_s, time_s=time_s, allow_unhomed=allow_unhomed)
+        continuous = bool(params.get("continuous", False))
+        result = motion_service.jog(
+            axis, distance_mm, speed_mm_s=speed_mm_s, time_s=time_s,
+            allow_unhomed=allow_unhomed, continuous=continuous,
+        )
         return CommandResult(
             accepted=result.get("ok", False),
             command_id=envelope.command_id,

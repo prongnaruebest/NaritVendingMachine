@@ -89,6 +89,7 @@ def make_commands_bp(ctrl: "ControllerClient") -> Blueprint:
         except (TypeError, ValueError):
             return jsonify({"ok": False, "error": "distance_mm, speed_mm_s, and time_s must be numbers"}), 400
         allow_unhomed = bool(payload.get("allow_unhomed", False))
+        continuous = bool(payload.get("continuous", False))
         r = _submit(
             ctrl,
             "JOG",
@@ -98,6 +99,7 @@ def make_commands_bp(ctrl: "ControllerClient") -> Blueprint:
                 "speed_mm_s": speed_mm_s,
                 "time_s": time_s,
                 "allow_unhomed": allow_unhomed,
+                "continuous": continuous,
             },
         )
         snap = ctrl.snapshot()
