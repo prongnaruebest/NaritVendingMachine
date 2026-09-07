@@ -403,7 +403,13 @@ class AxisController:
         return self._execute_plan(plan)
 
     def seek_limit(self, endpoint: str, speed_mm_s: float | None = None) -> dict[str, object]:
-        """Move until the selected physical limit input becomes active."""
+        """Move until the selected physical limit input becomes active.
+
+        Endpoint seeking deliberately ignores the software coordinate and
+        configured travel boundary.  It is a sensor-finding operation, not a
+        move to the configured 0/max coordinate.  A generous physical-search
+        watchdog remains mandatory so a broken sensor cannot run forever.
+        """
         if endpoint not in {"min", "max"}:
             raise MotionError(f"{self.config.name}: endpoint must be min or max")
         direction = self.config.home_direction if endpoint == "min" else self.config.forward_direction
@@ -417,21 +423,29 @@ class AxisController:
 
         speed = self.clamp_speed(speed_mm_s)
         speed_hz = max(10.0, min(self.config.max_pulse_hz, speed * self.config.steps_per_mm))
-        deadline = monotonic() + self.config.homing_timeout_s
+        # Search up to twice the configured stroke at the effective speed plus
+        # a fixed allowance. This prevents the normal homing timeout from
+        # ending a slow Min/Max calibration before the physical switch while
+        # retaining a watchdog for missing or failed sensors.
+        expected_stroke_s = self.config.max_travel_mm / max(speed, 0.001)
+        seek_watchdog_s = max(self.config.homing_timeout_s, expected_stroke_s * 2.0 + 30.0)
+        deadline = monotonic() + seek_watchdog_s
         moved = 0
         self.direction.value = bool(direction)
         if self.motion_backend is not None and getattr(self.motion_backend, "expected_protocol", 1) >= 2:
             segment_limit = max(1, int(getattr(self.motion_backend, "max_move_steps", NUCLEO_MOVE_CHUNK_STEPS)))
             while not sensor.value:
                 if monotonic() >= deadline:
-                    raise LimitTriggeredError(f"{self.config.name}: {endpoint} limit not reached before timeout")
+                    raise LimitTriggeredError(
+                        f"{self.config.name}: {endpoint} physical limit not reached within {seek_watchdog_s:.1f} seconds"
+                    )
                 try:
                     result = self.motion_backend.move(
                         axis=self.config.name,
                         direction=direction,
                         steps=segment_limit,
                         speed_hz=speed_hz,
-                        timeout_s=min(self.config.homing_timeout_s, segment_limit / speed_hz + 4.0),
+                        timeout_s=min(seek_watchdog_s, segment_limit / speed_hz + 4.0),
                         stop_requested=lambda: bool(self.estop.value or self.stop_requested() or sensor.value),
                     )
                     moved += int(result.get("steps", segment_limit))
@@ -443,7 +457,9 @@ class AxisController:
             half_period = 0.5 / speed_hz
             while not sensor.value:
                 if monotonic() >= deadline:
-                    raise LimitTriggeredError(f"{self.config.name}: {endpoint} limit not reached before timeout")
+                    raise LimitTriggeredError(
+                        f"{self.config.name}: {endpoint} physical limit not reached within {seek_watchdog_s:.1f} seconds"
+                    )
                 self._guard_during_move(direction)
                 self._pulse_once(half_period)
                 moved += 1
@@ -451,7 +467,15 @@ class AxisController:
         self.position_steps = 0 if endpoint == "min" else self.mm_to_steps(self.config.max_travel_mm)
         self.is_homed = True
         sleep(self.config.settle_delay)
-        return {"axis": self.config.name, "endpoint": endpoint, "sensor": "triggered", "steps": moved, "speed_mm_s": speed}
+        return {
+            "axis": self.config.name,
+            "endpoint": endpoint,
+            "sensor": "triggered",
+            "steps": moved,
+            "speed_mm_s": speed,
+            "software_travel_ignored": True,
+            "watchdog_s": seek_watchdog_s,
+        }
 
     def test_pulses(
         self,

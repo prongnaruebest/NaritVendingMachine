@@ -1536,7 +1536,7 @@
     if (travelInhibit) {
       travelInhibit.textContent = travelReason
         ? `LOCKED: ${travelReason}`
-        : "READY: Select one configured endpoint. Only the selected axis will move.";
+        : "READY: Physical-limit seek ignores configured travel and stops only at the selected sensor or a safety fault.";
       travelInhibit.classList.toggle("is-ready", !travelReason);
     }
     const travelReset = el("travel-reset-interlock");

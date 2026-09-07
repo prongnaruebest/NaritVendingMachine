@@ -22,6 +22,11 @@ class MotionUsbChunkingTests(unittest.TestCase):
             forward_direction=1,
             home_direction=0,
             settle_delay=0.0,
+            max_travel_mm=160.0,
+            max_speed_mm_s=100.0,
+            commissioned_max_speed_mm_s=100.0,
+            max_pulse_hz=50_000.0,
+            homing_timeout_s=30.0,
         )
         axis.direction = SimpleNamespace(value=False)
         axis.estop = SimpleNamespace(value=False)
@@ -129,6 +134,27 @@ class MotionUsbChunkingTests(unittest.TestCase):
             axis._execute_plan(plan)
 
         self.assertEqual(axis.position_steps, 498)
+
+    def test_physical_limit_seek_ignores_software_travel_and_uses_sensor(self):
+        axis = self.make_axis(name="z", segment_limit=1_000_000)
+        axis.position_steps = axis.mm_to_steps(159.0)
+        axis.is_homed = True
+
+        def sensor_stopped_move(**kwargs):
+            # Firmware frame extends far beyond the one millimetre remaining
+            # in configured travel; only the physical sensor ends the seek.
+            axis.tail_limit.value = True
+            self.assertTrue(kwargs["stop_requested"]())
+            return {"steps": 600, "stopped": True}
+
+        axis.motion_backend.move.side_effect = sensor_stopped_move
+        result = axis.seek_limit("max", speed_mm_s=2.0)
+
+        self.assertEqual(result["sensor"], "triggered")
+        self.assertTrue(result["software_travel_ignored"])
+        self.assertEqual(result["steps"], 600)
+        self.assertEqual(axis.position_steps, axis.mm_to_steps(160.0))
+        self.assertTrue(axis.is_homed)
 
 
 if __name__ == "__main__":
