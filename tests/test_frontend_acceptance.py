@@ -62,6 +62,13 @@ class FrontendAcceptanceTests(unittest.TestCase):
         self.assertIn('.footer-axis-positions', STYLE)
         self.assertIn('grid-template-areas: "positions time" "message message"', STYLE)
 
+    def test_motion_places_compact_home_left_and_jog_right(self) -> None:
+        self.assertIn('primaryControls.className = "motion-primary-controls"', APP_JS)
+        self.assertIn('primaryControls.append(homeZone)', APP_JS)
+        self.assertIn('primaryControls.append(jogPanel)', APP_JS)
+        self.assertIn('grid-template-columns: minmax(280px, .72fr) minmax(560px, 1.55fr)', STYLE)
+        self.assertIn('@media (max-width: 920px)', STYLE)
+
     def test_no_inline_javascript_navigation(self) -> None:
         self.assertNotIn("onclick=", TEMPLATE)
         self.assertNotIn("javascript:", TEMPLATE.lower())

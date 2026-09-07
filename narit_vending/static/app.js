@@ -4072,13 +4072,23 @@
     const jogPanel = $(".rpz-jog");
     const slotEditor = $(".rpz-slot-editor");
     const liveDiagnostics = $(".rpz-log");
+    const homeZone = motionPage?.querySelector(":scope > .wz-top");
     if (motionPage && axisPanel) {
       axisPanel.classList.add("motion-axis-panel");
       motionPage.prepend(axisPanel);
     }
     if (motionPage && jogPanel) {
       jogPanel.classList.add("motion-jog-panel");
-      motionPage.append(jogPanel);
+      let primaryControls = motionPage.querySelector(":scope > .motion-primary-controls");
+      if (!primaryControls) {
+        primaryControls = document.createElement("section");
+        primaryControls.className = "motion-primary-controls";
+        primaryControls.setAttribute("aria-label", "Homing and manual jog controls");
+        if (homeZone) motionPage.insertBefore(primaryControls, homeZone);
+        else motionPage.prepend(primaryControls);
+      }
+      if (homeZone) primaryControls.append(homeZone);
+      primaryControls.append(jogPanel);
     }
     if (motionPage && slotEditor) {
       slotEditor.classList.add("motion-slot-panel");
