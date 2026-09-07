@@ -8,7 +8,7 @@
   <link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='favicon-transparent-large.png') }}?v=20260721_v12">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=20260907_speed_authority_v19">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=20260907_diagnostics_v21">
 </head>
 <body>
   <div class="hmi-shell">
@@ -770,6 +770,15 @@
               <small class="io-summary-sub" id="io-summary-estop-sub">DI10 NC Contact Verified</small>
             </div>
           </div>
+          <div class="io-summary-card">
+            <div class="io-summary-data"><span class="io-summary-title">PiControl Local DI</span><strong class="io-summary-value" id="io-summary-picontrol-state">--</strong><small class="io-summary-sub" id="io-summary-picontrol-sub">DI0/DI1 · separate input bank</small></div>
+          </div>
+          <div class="io-summary-card">
+            <div class="io-summary-data"><span class="io-summary-title">Drive Alarms</span><strong class="io-summary-value" id="io-summary-drive-state">--</strong><small class="io-summary-sub" id="io-summary-drive-sub">X/Y HBS860H feedback</small></div>
+          </div>
+          <div class="io-summary-card">
+            <div class="io-summary-data"><span class="io-summary-title">Latest Snapshot</span><strong class="io-summary-value" id="io-summary-age">--</strong><small class="io-summary-sub" id="io-summary-latency">Poll latency: --</small></div>
+          </div>
         </div>
 
         <!-- ── FILTER & SEARCH CONTROLS ───────────────────────── -->
@@ -780,12 +789,22 @@
             <button class="io-filter-btn" data-io-filter="outputs">Outputs (<span id="io-filter-cnt-outputs">4</span>)</button>
             <button class="io-filter-btn" data-io-filter="limits">Limit Switches (<span id="io-filter-cnt-limits">7</span>)</button>
             <button class="io-filter-btn" data-io-filter="sensors">Product Sensors (<span id="io-filter-cnt-sensors">3</span>)</button>
+            <button class="io-filter-btn" data-io-filter="safety">Safety</button>
+            <button class="io-filter-btn" data-io-filter="drive-alarms">Driver Alarms</button>
             <button class="io-filter-btn" data-io-filter="active-only">Active Only (<span id="io-filter-cnt-active">0</span>)</button>
           </div>
           <div class="io-search-box">
             <span class="io-search-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m16 16 5 5"/></svg></span>
             <input type="text" id="io-search-input" class="hmi-input" placeholder="Search signals (for example: DI0, X Min, E-Stop, DO1)...">
           </div>
+        </div>
+
+        <div class="panel page-panel io-section-panel" id="io-section-picontrol">
+          <div class="panel-head">
+            <div><p class="panel-label">PiControl CM4 Local Inputs · Not IRIV Modbus DI</p><h2 class="panel-title">HBS860H Driver Alarm Feedback</h2></div>
+            <span class="page-status-chip" id="io-picontrol-health">CHECKING</span>
+          </div>
+          <div class="io-cards-list io-grid-enhanced" id="io-page-picontrol-cards"></div>
         </div>
 
         <!-- ── DIGITAL INPUTS DETAILED GRID ───────────────────── -->
@@ -895,7 +914,8 @@
         </div>
 
         <!-- ── RAW MODBUS REGISTER INSPECTOR ──────────────────── -->
-        <div class="panel page-panel io-section-panel">
+        <details class="panel page-panel io-section-panel io-advanced-details">
+          <summary>Advanced · Raw Modbus registers and bitstream</summary>
           <div class="panel-head">
             <div>
               <p class="panel-label">Modbus TCP Protocol Inspector</p>
@@ -917,7 +937,7 @@
               </div>
             </div>
           </div>
-        </div>
+        </details>
       </section>
 
       <section class="workspace-view" data-view-page="configuration">
@@ -1670,6 +1690,6 @@
   <!-- Toast notification -->
   <div class="toast" id="toast" role="status"></div>
 
-  <script src="{{ url_for('static', filename='app.js') }}?v=20260907_home_interlock_v20"></script>
+  <script src="{{ url_for('static', filename='app.js') }}?v=20260907_diagnostics_v21"></script>
 </body>
 </html>

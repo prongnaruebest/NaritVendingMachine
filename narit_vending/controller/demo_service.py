@@ -10,6 +10,7 @@ import sqlite3
 import threading
 import time
 import uuid
+from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -49,7 +50,7 @@ class DemoSamplingService:
 
     def _init_db(self) -> None:
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
-        with self._connect() as db:
+        with closing(self._connect()) as db, db:
             db.executescript("""
             CREATE TABLE IF NOT EXISTS demo_sessions (
               session_id TEXT PRIMARY KEY, started_at TEXT NOT NULL, ended_at TEXT,
@@ -147,7 +148,7 @@ class DemoSamplingService:
             self._counters = {key: 0 for key in self._counters}
             requested = max(0, self._config["max_cycles"]) * len(self._config["slots"])
             self._counters["requested"] = requested
-            with self._connect() as db:
+            with closing(self._connect()) as db, db:
                 db.execute("INSERT INTO demo_sessions(session_id,started_at,state,configuration_json,requested) VALUES(?,?,?,?,?)", (self._session_id, self._started_at, self._state, json.dumps(self._config, sort_keys=True), requested))
             self._thread = threading.Thread(target=self._run, name="demo-slot-sampling", daemon=True)
             self._thread.start()
@@ -158,7 +159,7 @@ class DemoSamplingService:
         if self._config["mode"] == "random":
             rng.shuffle(slots)
         elif self._config["mode"] == "balanced":
-            with self._connect() as db:
+            with closing(self._connect()) as db, db:
                 counts = {row["slot_code"]: row["count"] for row in db.execute("SELECT slot_code,COUNT(*) count FROM demo_samples GROUP BY slot_code")}
             slots.sort(key=lambda slot: (counts.get(slot, 0), slot))
         return slots
@@ -191,7 +192,7 @@ class DemoSamplingService:
                     if not stopped:
                         self._counters["passed" if passed else "failed"] += 1
                     self._last_result = outcome if passed or stopped else f"FAILED: {reason}"
-                    with self._connect() as db:
+                    with closing(self._connect()) as db, db:
                         db.execute("INSERT INTO demo_samples VALUES(?,?,?,?,?,?,?,?,?)", (sample_id, self._session_id, self._cycle, slot, sample_started, _now(), round(time.monotonic()-t0, 3), outcome, reason))
                     if stopped:
                         break
@@ -211,7 +212,7 @@ class DemoSamplingService:
         finally:
             self._ended_at = _now()
             self._current_slot = self._next_slot = None
-            with self._connect() as db:
+            with closing(self._connect()) as db, db:
                 db.execute("UPDATE demo_sessions SET ended_at=?,state=?,attempted=?,passed=?,failed=?,skipped=?,stopped=?,final_reason=? WHERE session_id=?", (self._ended_at, self._state, self._counters["attempted"], self._counters["passed"], self._counters["failed"], self._counters["skipped"], self._counters["stopped"], reason, self._session_id))
 
     def pause(self) -> dict[str, Any]:
@@ -248,14 +249,14 @@ class DemoSamplingService:
             return {"state": self._state, "session_id": self._session_id, "started_at": self._started_at, "ended_at": self._ended_at, "cycle": self._cycle, "current_slot": self._current_slot, "next_slot": self._next_slot, "configuration": dict(self._config), "counters": dict(self._counters) | {"success_rate": round(100*self._counters["passed"]/attempted, 1) if attempted else 0.0}, "last_result": self._last_result, "pause_requested": self._pause_requested}
 
     def history(self, limit: int = 50) -> list[dict[str, Any]]:
-        with self._connect() as db:
+        with closing(self._connect()) as db, db:
             return [dict(row) for row in db.execute("SELECT * FROM demo_sessions ORDER BY started_at DESC LIMIT ?", (max(1, min(500, limit)),))]
 
     def export_csv(self) -> str:
         output = io.StringIO()
         writer = csv.writer(output)
         writer.writerow(("session_id", "cycle", "slot", "started_at", "completed_at", "duration_s", "result", "reason"))
-        with self._connect() as db:
+        with closing(self._connect()) as db, db:
             for row in db.execute("SELECT session_id,cycle_no,slot_code,started_at,completed_at,duration_s,result,reason FROM demo_samples ORDER BY started_at"):
                 writer.writerow(tuple(row))
         return output.getvalue()

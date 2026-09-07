@@ -3060,7 +3060,13 @@
     const phase = String(operation.phase || "").toUpperCase();
     const message = String(operation.message || "");
     const messageLower = message.toLowerCase();
-    const phaseOrder = ["VALIDATE_SLOT", "MOVE_X", "MOVE_Y", "MOVE_Z", "VERIFY_TARGET", "HOLD_AT_TARGET", "HOME_Z", "HOME_Y", "HOME_X", "VERIFY_HOME", "COMPLETED"];
+    const reportedSteps = Array.isArray(operation.steps)
+      ? operation.steps
+      : Array.isArray(MS.payload?.sequence?.steps) ? MS.payload.sequence.steps : [];
+    // Never invent a sequence.  When the Controller has no step list, show
+    // only the phase it actually reported instead of a hard-coded workflow.
+    const phaseOrder = reportedSteps.map((item) => String(item?.phase || item).toUpperCase()).filter(Boolean);
+    if (!phaseOrder.length && phase) phaseOrder.push(phase);
     const phaseLabels = {
       VALIDATE_SLOT: ["Validate Slot", "Read configured target and readiness"], MOVE_X: ["Move X", "Move X axis to saved target"],
       MOVE_Y: ["Move Y", "Move Y axis to saved target"], MOVE_Z: ["Move Z", "Move Z axis to saved target"],
@@ -3070,8 +3076,8 @@
       COMPLETED: ["Completed", "Publish final result and verification"],
     };
     const phaseIndex = phaseOrder.indexOf(phase);
-    const liveSequencePhase = phaseOrder.slice(0, -1).includes(phase);
-    const sequenceContext = activeCommand.startsWith("slot_sequence_") || liveSequencePhase || messageLower.includes("slot sequence");
+    const liveSequencePhase = phaseOrder.includes(phase) && !["COMPLETED", "FAILED", "STOPPED"].includes(phase);
+    const sequenceContext = activeCommand.startsWith("slot_sequence_") || messageLower.includes("slot sequence");
     const sequenceFailed = sequenceContext && ["FAILED", "STOPPED"].includes(phase);
     const sequenceCompleted = sequenceContext && !sequenceFailed && (phase === "COMPLETED" || messageLower.includes("completed slot sequence"));
     const slotMatch = activeCommand.match(/^slot_sequence_(.+)$/i);
@@ -3103,7 +3109,7 @@
       if (sequenceFailed && (index === activeIndex || activeIndex < 0 && index === 0)) state = "failed";
       else if (sequenceCompleted || (sequenceContext && activeIndex > index)) state = "complete";
       else if (sequenceContext && activeIndex === index) state = "active";
-      const [label, detail] = phaseLabels[step];
+      const [label, detail] = phaseLabels[step] || [step.replaceAll("_", " "), "Controller-reported phase"];
       return `<li class="sequence-step ${state}"><span>${String(index + 1).padStart(2, "0")}</span><strong>${esc(label)}</strong><small>${esc(detail)}</small></li>`;
     }).join("");
 
@@ -3308,6 +3314,12 @@
     const polarityVerified = Boolean(MS.payload?.io?.polarity_verified);
     const ioEnabled = Boolean(MS.payload?.io?.enabled);
     const ioCommOk = MS.payload?.io?.communication_ok;
+    const piControl = MS.payload?.picontrol_io || {};
+    const piCommOk = piControl.communication_ok;
+    const piInputs = piControl.inputs || {};
+    const piRawInputs = piControl.raw_inputs || {};
+    const snapshotAgeMs = MS.lastStatusAt ? Date.now() - MS.lastStatusAt : Infinity;
+    const snapshotStale = snapshotAgeMs > 3000;
 
     // Summary Strip
     const busState = el("io-summary-bus-state");
@@ -3355,23 +3367,39 @@
       estopSub.textContent = `DI10: ${rawDi10 ? "1 (Closed/NC)" : "0 (Open)"} · ${polarityVerified ? "Verified" : "Unverified"}`;
     }
 
+    const piSummary = el("io-summary-picontrol-state");
+    if (piSummary) {
+      piSummary.textContent = piCommOk === true ? "ONLINE" : piCommOk === false ? "OFFLINE" : "NO DATA";
+      piSummary.className = `io-summary-value ${piCommOk === true ? "ok" : "fault"}`;
+    }
+    setText("io-summary-picontrol-sub", piControl.last_success_at ? `Last poll ${fmtTimestamp(piControl.last_success_at)}` : (piControl.last_error || "No successful local-input poll"));
+    const driveFaults = ["x_alarm", "y_alarm"].filter((key) => piInputs[key] === true);
+    const driveSummary = el("io-summary-drive-state");
+    if (driveSummary) {
+      driveSummary.textContent = driveFaults.length ? `${driveFaults.length} ALARM` : piCommOk === true ? "CLEAR" : "UNKNOWN";
+      driveSummary.className = `io-summary-value ${driveFaults.length || piCommOk !== true ? "fault" : "ok"}`;
+    }
+    setText("io-summary-drive-sub", driveFaults.length ? driveFaults.map((key) => key.startsWith("x") ? "X_DRIVE_ALM" : "Y_DRIVE_ALM").join(" · ") : "X/Y HBS860H feedback clear");
+    setText("io-summary-age", snapshotStale ? "STALE" : `${Math.round(snapshotAgeMs)} ms`);
+    setText("io-summary-latency", `IRIV ${MS.payload?.io?.poll_latency_ms ?? "--"} ms · PiControl ${piControl.poll_latency_ms ?? "--"} ms`);
+
     let limitsCount = 0;
     let sensorsCount = 0;
     IO_PAGE_DI_CHANNELS.forEach((def) => {
       if (def.category === "limits") limitsCount++;
       if (def.category === "sensors") sensorsCount++;
     });
-    setText("io-filter-cnt-all", String(IO_PAGE_DI_CHANNELS.length + IO_PAGE_DO_CHANNELS.length));
-    setText("io-filter-cnt-inputs", String(IO_PAGE_DI_CHANNELS.length));
+    setText("io-filter-cnt-all", String(IO_PAGE_DI_CHANNELS.length + IO_PAGE_DO_CHANNELS.length + 2));
+    setText("io-filter-cnt-inputs", String(IO_PAGE_DI_CHANNELS.length + 2));
     setText("io-filter-cnt-outputs", String(IO_PAGE_DO_CHANNELS.length));
     setText("io-filter-cnt-limits", String(limitsCount));
     setText("io-filter-cnt-sensors", String(sensorsCount));
-    setText("io-filter-cnt-active", String(activeDiCount + activeDoCount));
+    setText("io-filter-cnt-active", String(activeDiCount + activeDoCount + driveFaults.length));
 
     const pageHealth = el("io-page-health");
     if (pageHealth) {
-      if (isEstopActive || activeAlarmCount() > 0 || ioCommOk === false) {
-        pageHealth.textContent = isEstopActive ? "E-STOP ACTIVE" : "FAULT DETECTED";
+      if (snapshotStale || isEstopActive || activeAlarmCount() > 0 || ioCommOk === false || piCommOk === false) {
+        pageHealth.textContent = snapshotStale ? "STALE DATA" : isEstopActive ? "E-STOP ACTIVE" : "FAULT DETECTED";
         pageHealth.className = "page-status-chip fault";
       } else {
         pageHealth.textContent = "ALL SIGNALS HEALTHY";
@@ -3387,6 +3415,8 @@
       if (currentFilter === "outputs" && !isOutput) return false;
       if (currentFilter === "limits" && (isOutput || item.category !== "limits")) return false;
       if (currentFilter === "sensors" && (isOutput || item.category !== "sensors")) return false;
+      if (currentFilter === "safety" && (isOutput || item.category !== "safety")) return false;
+      if (currentFilter === "drive-alarms") return false;
       if (currentFilter === "active-only") {
         const active = isOutput ? Boolean(outputs[item.key]) : Boolean(logicalInputs[item.key]);
         if (!active) return false;
@@ -3398,9 +3428,36 @@
       return true;
     }
 
+    const piSection = el("io-section-picontrol");
+    const showPi = ["all", "inputs", "drive-alarms", "active-only"].includes(currentFilter);
+    if (piSection) piSection.style.display = showPi ? "" : "none";
+    const piHealth = el("io-picontrol-health");
+    if (piHealth) {
+      piHealth.textContent = piCommOk === true ? (driveFaults.length ? "DRIVE ALARM" : "ONLINE / CLEAR") : "COMMUNICATION FAULT";
+      piHealth.className = `page-status-chip ${piCommOk === true && !driveFaults.length ? "ok" : "fault"}`;
+    }
+    const piCards = el("io-page-picontrol-cards");
+    if (piCards) {
+      const definitions = [
+        { key: "x_alarm", channel: 0, pin: 13, label: "X_DRIVE_ALM", driver: "HBS860H X" },
+        { key: "y_alarm", channel: 1, pin: 17, label: "Y_DRIVE_ALM", driver: "HBS860H Y" },
+      ].filter((def) => currentFilter !== "active-only" || piInputs[def.key] === true)
+       .filter((def) => !searchQuery || `${def.label} DI${def.channel} GPIO${def.pin} ${def.driver}`.toLowerCase().includes(searchQuery));
+      piCards.innerHTML = definitions.length ? definitions.map((def) => {
+        const active = piInputs[def.key] === true;
+        const raw = piRawInputs[`DI${def.channel}`];
+        return `<article class="io-card io-card-enhanced ${active ? "fault" : "safe"}">
+          <div class="io-card-head"><div class="io-head-left"><span class="io-channel-tag">PiControl DI${def.channel}</span><span class="io-wire-tag">GPIO${def.pin}</span></div><span class="io-channel-badge ${active ? "fault" : "ok"}">${active ? "ALARM" : "CLEAR"}</span></div>
+          <div class="io-signal-name">${def.label}</div><div class="io-signal-role">${def.driver} alarm feedback</div>
+          <div class="io-signal-desc">Separate local input bank; this is not IRIV Modbus DI${def.channel}.</div>
+          <div class="io-card-footer"><span class="io-card-raw">RAW: <b>${raw === true ? "1" : raw === false ? "0" : "--"}</b></span><span class="io-card-state ${active ? "fault" : "safe"}">${active ? "FAULT ACTIVE" : "NORMAL"}</span></div>
+        </article>`;
+      }).join("") : '<div class="io-empty-hint">No PiControl driver-alarm inputs match the current filters.</div>';
+    }
+
     const inputsSec = el("io-section-inputs");
     if (inputsSec) {
-      const showInputs = currentFilter === "all" || currentFilter === "inputs" || currentFilter === "limits" || currentFilter === "sensors" || currentFilter === "active-only";
+      const showInputs = currentFilter === "all" || currentFilter === "inputs" || currentFilter === "limits" || currentFilter === "sensors" || currentFilter === "safety" || currentFilter === "active-only";
       inputsSec.style.display = showInputs ? "" : "none";
     }
     const outputsSec = el("io-section-outputs");
@@ -3553,7 +3610,7 @@
         <tr class="product-row">
           <td><strong class="axis-badge product">Product Delivery</strong><div class="axis-sub">Chute &amp; Dispenser</div></td>
           <td><span class="limit-status-pill ${dropParkActive ? "triggered" : "normal"}">DI7: Drop Parking ${dropParkActive ? "PARKED" : "Clear"}</span></td>
-          <td><span class="limit-status-pill ${dropSensActive ? "triggered" : "normal"}">DI8: Drop Sensor ${dropSensActive ? "📦 DETECTED" : "Clear"}</span></td>
+          <td><span class="limit-status-pill ${dropSensActive ? "triggered" : "normal"}">DI8: Drop Sensor ${dropSensActive ? "ITEM DETECTED" : "Clear"}</span></td>
           <td><span class="limit-status-pill ${pickupSensActive ? "triggered" : "normal"}">DI9: Pickup Sensor ${pickupSensActive ? "RETRIEVED" : "Clear"}</span></td>
           <td><span class="limit-status-pill ${dispenseActive ? "triggered" : "normal"}">DO3: Dispense Relay ${dispenseActive ? "PULSED" : "OFF"}</span></td>
           <td>Interlocked dispensing sequence; optical confirmation before slot release.</td>

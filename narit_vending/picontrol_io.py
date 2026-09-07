@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import threading
 import time
+from datetime import datetime, timezone
 from typing import Any
 
 from gpiozero import DigitalInputDevice
@@ -19,6 +20,8 @@ class PiControlIOBackend:
         self._devices: dict[str, DigitalInputDevice] = {}
         self._raw: dict[str, bool] = {}
         self._error = ""
+        self._last_success_at: str | None = None
+        self._poll_latency_ms: float | None = None
         self._lock = threading.RLock()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
@@ -48,6 +51,7 @@ class PiControlIOBackend:
             self._poll_once()
 
     def _poll_once(self) -> None:
+        started = time.monotonic()
         try:
             values = {name: bool(device.value) for name, device in self._devices.items()}
         except Exception as exc:
@@ -57,6 +61,8 @@ class PiControlIOBackend:
         with self._lock:
             self._raw = values
             self._error = ""
+            self._poll_latency_ms = round((time.monotonic() - started) * 1000.0, 3)
+            self._last_success_at = datetime.now(timezone.utc).isoformat()
 
     def input_active(self, name: str) -> bool:
         info = self.inputs[name]
@@ -88,6 +94,21 @@ class PiControlIOBackend:
     def status_payload(self) -> dict[str, Any]:
         with self._lock:
             raw = dict(self._raw)
+            last_success_at = self._last_success_at
+            poll_latency_ms = self._poll_latency_ms
+            error = self._error
+        input_details = {}
+        for name, info in self.inputs.items():
+            input_details[name] = {
+                "channel": info.get("channel"),
+                "pin": info.get("pin"),
+                "label": info.get("label", name),
+                "active_state": bool(info.get("active_state", True)),
+                "fail_safe": bool(info.get("fail_safe", False)),
+                "raw_channel": f"DI{info.get('channel')}",
+                "raw_value": raw.get(name),
+                "active": self.input_active(name),
+            }
         return {
             "enabled": True,
             "communication_ok": self.communication_ok,
@@ -96,5 +117,9 @@ class PiControlIOBackend:
                 for name, info in self.inputs.items()
             },
             "inputs": {name: self.input_active(name) for name in self.inputs},
-            "last_error": self._error,
+            "input_details": input_details,
+            "last_success_at": last_success_at,
+            "poll_latency_ms": poll_latency_ms,
+            "poll_interval_s": self.poll_interval_s,
+            "last_error": error,
         }

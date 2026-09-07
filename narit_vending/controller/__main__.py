@@ -120,6 +120,7 @@ def _build_snapshot(service: Any) -> MachineSnapshot:
         motion_enabled=bool(safety.get("motion_enabled", True)),
         slots={str(code): dict(slot) for code, slot in dict(status.get("slots", {})).items()},
         io_status=dict(status.get("io", {})),
+        picontrol_io_status=dict(status.get("picontrol_io", {})),
         nucleo_status=dict(status.get("nucleo", {})),
         demo_status=dict(status.get("demo", {})),
     )

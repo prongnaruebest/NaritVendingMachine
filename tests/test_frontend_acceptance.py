@@ -100,6 +100,20 @@ class FrontendAcceptanceTests(unittest.TestCase):
         self.assertIn("open System Control & Health and press ENABLE MOTION", APP_JS)
         self.assertIn('homeAllButton.setAttribute("aria-disabled"', APP_JS)
 
+    def test_io_status_separates_picontrol_from_iriv_modbus(self) -> None:
+        self.assertIn('id="io-section-picontrol"', TEMPLATE)
+        self.assertIn('id="io-page-picontrol-cards"', TEMPLATE)
+        self.assertIn('data-io-filter="drive-alarms"', TEMPLATE)
+        self.assertIn("MS.payload?.picontrol_io", APP_JS)
+        self.assertIn("Separate local input bank; this is not IRIV Modbus", APP_JS)
+        self.assertNotIn("📦", APP_JS)
+        self.assertIn("<details", TEMPLATE)
+
+    def test_sequence_monitor_does_not_invent_a_workflow(self) -> None:
+        self.assertIn("Array.isArray(operation.steps)", APP_JS)
+        self.assertIn("if (!phaseOrder.length && phase) phaseOrder.push(phase)", APP_JS)
+        self.assertNotIn('const phaseOrder = ["VALIDATE_SLOT"', APP_JS)
+
 
 if __name__ == "__main__":
     unittest.main()

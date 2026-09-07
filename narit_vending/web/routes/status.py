@@ -96,6 +96,7 @@ def _status_from_snapshot(snap) -> dict:
         },
         "alarm_channels": snap.alarm_channels,
         "io": snap.io_status,
+        "picontrol_io": snap.picontrol_io_status,
         "nucleo": snap.nucleo_status,
         "demo": snap.demo_status,
         "slots": snap.slots,
@@ -117,6 +118,7 @@ def make_status_bp(ctrl: "ControllerClient") -> Blueprint:
         return jsonify({
             "ok": True,
             "io": status.get("io", {}),
+            "picontrol_io": status.get("picontrol_io", {}),
             "safety": {
                 "estop": status.get("status", {}).get("estop", False),
                 "stop_requested": snap.stop_requested,
