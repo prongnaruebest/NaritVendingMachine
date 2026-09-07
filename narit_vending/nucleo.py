@@ -50,17 +50,20 @@ class NucleoLink:
 
     @property
     def communication_ok(self) -> bool:
-        with self._lock:
-            return bool(
-                self._connected
-                and self._last_success_monotonic is not None
-                and time.monotonic() - self._last_success_monotonic <= self.stale_after_s
-            )
+        # Motion owns the serial lock for the complete pulse train. Telemetry
+        # must remain readable during that interval or the web status request
+        # times out and incorrectly reports the Controller as offline. These
+        # fields are replaced atomically; no serial I/O is performed here.
+        last_success = self._last_success_monotonic
+        return bool(
+            self._connected
+            and last_success is not None
+            and time.monotonic() - last_success <= self.stale_after_s
+        )
 
     @property
     def is_armed(self) -> bool:
-        with self._lock:
-            return self._armed
+        return self._armed
 
     def start(self) -> None:
         if self._thread and self._thread.is_alive():
@@ -490,12 +493,14 @@ class NucleoLink:
         }
 
     def status_payload(self) -> dict[str, Any]:
-        with self._lock:
-            payload = dict(self._last_payload)
-            last_success_at = self._last_success_at
-            last_error = self._last_error
-            armed = self._armed
-            moving = dict(self._moving_axes)
+        # Deliberately lock-free: see communication_ok. Dict state is published
+        # by replacement, so readers get either the previous or current complete
+        # snapshot while a MOVE/HOME command owns the serial lock.
+        payload = dict(self._last_payload)
+        last_success_at = self._last_success_at
+        last_error = self._last_error
+        armed = self._armed
+        moving = dict(self._moving_axes)
         return {
             "enabled": True,
             "communication_ok": self.communication_ok,
