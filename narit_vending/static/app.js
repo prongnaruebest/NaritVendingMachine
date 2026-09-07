@@ -1240,19 +1240,29 @@
       ).join("  ");
     }
 
-    // Motion
+    // Motion authority is the operator-controlled enable/disable state. Keep
+    // it separate from readiness so an unhomed axis never looks "disabled".
     const motionNode = el("strip-motion");
     if (motionNode) {
-      const allowed = !reason;
-      motionNode.className = `safety-ind-value ${allowed ? "ok" : "warn"}`;
-      motionNode.textContent = allowed ? "ENABLED" : "INHIBITED";
+      const motionEnabled = MS.online && MS.payload?.safety?.motion_enabled === true;
+      motionNode.className = `safety-ind-value ${motionEnabled ? "ok" : "fault"}`;
+      motionNode.textContent = motionEnabled ? "ENABLED" : "DISABLED";
+    }
+
+    // Readiness combines every current motion gate (connection, E-Stop,
+    // alarms, Home and authority). It does not change Motion Authority.
+    const readinessNode = el("strip-readiness");
+    if (readinessNode) {
+      const ready = !reason;
+      readinessNode.className = `safety-ind-value ${ready ? "ok" : "warn"}`;
+      readinessNode.textContent = ready ? "READY" : "INHIBITED";
     }
 
     // Reason
     const reasonNode = el("strip-motion-reason");
     if (reasonNode) {
       reasonNode.className = `motion-inhibit-reason ${reason ? "" : "clear"}`;
-      reasonNode.textContent = reason || "Motion enabled — all conditions met";
+      reasonNode.textContent = reason || "Machine ready — motion authority enabled and all safety conditions met";
     }
 
     // Alarm count

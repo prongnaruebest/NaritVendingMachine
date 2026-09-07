@@ -8,7 +8,7 @@
   <link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='favicon-transparent-large.png') }}?v=20260721_v12">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=20260907_z_jog_v29">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=20260907_motion_state_v30">
 </head>
 <body>
   <div class="hmi-shell">
@@ -184,9 +184,10 @@
             <div class="safety-indicators">
               <div class="safety-ind"><span class="safety-ind-label">E-Stop / KM1</span><div class="safety-ind-value ok" id="strip-estop">CLEAR</div><span class="safety-ind-sub" id="strip-estop-detail">NC VERIFIED</span></div>
               <div class="safety-ind"><span class="safety-ind-label">Homing Status</span><div class="safety-ind-value warn" id="strip-homing">NOT READY</div><span class="safety-ind-sub" id="strip-homing-detail">X !  Y !  Z !</span></div>
-              <div class="safety-ind"><span class="safety-ind-label">Motion Interlock</span><div class="safety-ind-value warn" id="strip-motion">INHIBITED</div></div>
+              <div class="safety-ind" aria-label="Motion authority"><span class="safety-ind-label">Motion Authority</span><div class="safety-ind-value warn" id="strip-motion">DISABLED</div><span class="safety-ind-sub">Enable / Disable state</span></div>
+              <div class="safety-ind" aria-label="Machine motion readiness"><span class="safety-ind-label">Machine Readiness</span><div class="safety-ind-value warn" id="strip-readiness">INHIBITED</div><span class="safety-ind-sub">Safety + Home + Connection</span></div>
               <div class="safety-ind"><span class="safety-ind-label">Active Alarms</span><div class="safety-ind-value ok" id="strip-alarms">0</div></div>
-              <div class="motion-inhibit-reason" id="strip-motion-reason">Connecting to controller...</div>
+              <div class="motion-inhibit-reason" id="strip-motion-reason" role="status" aria-atomic="true">Connecting to controller...</div>
             </div>
           </div>
         </section>
@@ -1691,6 +1692,6 @@
   <!-- Toast notification -->
   <div class="toast" id="toast" role="status"></div>
 
-  <script src="{{ url_for('static', filename='app.js') }}?v=20260907_z_jog_v29"></script>
+  <script src="{{ url_for('static', filename='app.js') }}?v=20260907_motion_state_v30"></script>
 </body>
 </html>

@@ -62,6 +62,14 @@ class FrontendAcceptanceTests(unittest.TestCase):
         self.assertIn('.footer-axis-positions', STYLE)
         self.assertIn('grid-template-areas: "positions time" "message message"', STYLE)
 
+    def test_header_separates_motion_authority_from_machine_readiness(self) -> None:
+        self.assertIn('id="strip-motion">DISABLED', TEMPLATE)
+        self.assertIn('id="strip-readiness">INHIBITED', TEMPLATE)
+        self.assertIn('MS.payload?.safety?.motion_enabled === true', APP_JS)
+        self.assertIn('motionNode.textContent = motionEnabled ? "ENABLED" : "DISABLED"', APP_JS)
+        self.assertIn('readinessNode.textContent = ready ? "READY" : "INHIBITED"', APP_JS)
+        self.assertIn('id="strip-motion-reason" role="status" aria-atomic="true"', TEMPLATE)
+
     def test_motion_places_compact_home_left_and_jog_right(self) -> None:
         self.assertIn('primaryControls.className = "motion-primary-controls"', APP_JS)
         self.assertIn('primaryControls.append(homeZone)', APP_JS)
