@@ -14,7 +14,7 @@ STYLE = (ROOT / "narit_vending" / "static" / "style.css").read_text(encoding="ut
 class FrontendAcceptanceTests(unittest.TestCase):
     def test_every_required_workspace_has_navigation_and_deep_link_support(self) -> None:
         required = {
-            "dashboard", "motion", "slots", "visualization", "diagnostics", "io-status",
+            "dashboard", "motion", "homing", "slots", "visualization", "diagnostics", "io-status",
             "alarms", "events", "flow", "sequence-monitor", "architecture", "configuration",
             "motor-test", "mqtt",
         }
@@ -57,6 +57,14 @@ class FrontendAcceptanceTests(unittest.TestCase):
     def test_no_inline_javascript_navigation(self) -> None:
         self.assertNotIn("onclick=", TEMPLATE)
         self.assertNotIn("javascript:", TEMPLATE.lower())
+
+    def test_homing_has_a_dedicated_workspace_and_system_control_follows_overview(self) -> None:
+        self.assertIn('data-view-page="homing"', TEMPLATE)
+        self.assertIn('id="nav-homing-controls" type="button" data-view-target="homing"', TEMPLATE)
+        self.assertEqual(TEMPLATE.count('id="homing-controls"'), 1)
+        self.assertEqual(TEMPLATE.count('id="home-all"'), 1)
+        self.assertLess(TEMPLATE.index('id="nav-dashboard"'), TEMPLATE.index('id="nav-system-control"'))
+        self.assertLess(TEMPLATE.index('id="nav-system-control"'), TEMPLATE.index('id="nav-motion"'))
 
 
 if __name__ == "__main__":

@@ -1531,7 +1531,7 @@
 
   /* ── MASTER RENDER ──────────────────────────────────────────── */
   const VALID_VIEWS = new Set([
-    "dashboard", "motion", "visualization", "diagnostics", "io-status", "configuration",
+    "dashboard", "motion", "homing", "visualization", "diagnostics", "io-status", "configuration",
     "motor-test", "system-control", "mqtt", "slots", "alarms", "events", "flow", "sequence-monitor", "architecture",
   ]);
   const DIAGNOSTIC_VIEWS = new Set(["diagnostics", "io-status", "alarms", "events", "flow", "sequence-monitor", "architecture"]);
@@ -1567,7 +1567,7 @@
   }
 
   function openHomingControls() {
-    switchWorkspace("motion");
+    switchWorkspace("homing");
     window.requestAnimationFrame(() => {
       const homingControls = el("homing-controls");
       homingControls?.scrollIntoView({ behavior: "smooth", block: "start" });
