@@ -8,7 +8,7 @@
   <link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='favicon-transparent-large.png') }}?v=20260721_v12">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=20260907_axis_target_v18">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=20260907_speed_authority_v19">
 </head>
 <body>
   <div class="hmi-shell">
@@ -296,41 +296,9 @@
               <span class="unit-tag">mm</span>
             </div>
           </div>
-          <div class="target-col">
-            <div class="field-label">Coordinated Speed</div>
-            <div class="field-input-wrap">
-              <input id="target-speed" class="hmi-input" type="number" step="0.1" min="0.1" value="5.0" readonly aria-label="Effective coordinated speed from linked axis settings">
-              <span class="unit-tag">mm/s</span>
-            </div>
-          </div>
-          <div class="target-col engineering-motion-option">
-            <div class="field-label">Target Duration (Optional)</div>
-            <div class="field-input-wrap">
-              <input id="target-duration" class="hmi-input" type="number" step="0.5" min="0.1" placeholder="Auto">
-              <span class="unit-tag">sec</span>
-            </div>
-          </div>
-          <div class="target-col engineering-motion-option">
-            <div class="field-label">Move Timeout</div>
-            <div class="field-input-wrap">
-              <input id="move-timeout" class="hmi-input" type="number" step="0.5" min="0.1" value="30.0">
-              <span class="unit-tag">sec</span>
-            </div>
-          </div>
-          <div class="target-col engineering-motion-option">
-            <div class="field-label">Acceleration</div>
-            <div class="field-input-wrap">
-              <input id="move-acceleration" class="hmi-input" type="number" step="1" min="1" max="30" placeholder="AUTO">
-              <span class="unit-tag">mm/s²</span>
-            </div>
-          </div>
-          <div class="target-col engineering-motion-option">
-            <div class="field-label">Deceleration</div>
-            <div class="field-input-wrap">
-              <input id="move-deceleration" class="hmi-input" type="number" step="1" min="1" max="30" placeholder="AUTO">
-              <span class="unit-tag">mm/s²</span>
-            </div>
-          </div>
+          <p class="target-speed-authority">
+            This move uses the linked X/Y/Z speed values above. Coordinated moves automatically use the lowest speed of the axes that actually move. Acceleration and deceleration come from the validated Machine Setup configuration.
+          </p>
           <div class="target-load-actions">
             <button type="button" class="btn-secondary" id="target-load-current">LOAD CURRENT XYZ</button>
             <button type="button" class="btn-secondary" id="target-load-selected-slot">LOAD SELECTED SLOT</button>
@@ -764,7 +732,6 @@
           </div>
           <div class="io-header-actions">
             <span class="page-status-chip ok" id="io-page-health">CHECKING</span>
-            <button class="btn-primary btn-sm" id="io-open-homing" type="button" aria-label="Open homing controls in Motion Control">OPEN HOMING CONTROLS</button>
             <button class="btn-secondary btn-sm" id="btn-io-refresh" title="Refresh I/O Status">Refresh</button>
           </div>
         </div>
@@ -1285,7 +1252,7 @@
       <section class="workspace-view architecture-page" data-view-page="architecture">
         <div class="page-heading">
           <div><p class="panel-label">System Design Reference</p><h2>NARIT Vending Architecture</h2></div>
-          <span class="page-status-chip ok">2 PROCESS / 1 MQTT CLIENT</span>
+          <span class="page-status-chip" id="architecture-health">CHECKING LIVE STATUS</span>
         </div>
         <p class="architecture-intro">Responsibilities are strictly separated: the Web HMI presents state and sends requests, the Controller owns safety decisions and GPIO control, and a single MQTT client runs inside the Controller to prevent duplicate client IDs and connection instability.</p>
 
@@ -1294,9 +1261,9 @@
           <div class="architecture-arrow"><span>HTTP / JSON</span>→</div>
           <article class="architecture-node web"><span class="architecture-step">02</span><h3>Web Process</h3><p>Flask on port 80 serves HTML/CSS/JavaScript and API requests only. It never opens GPIO or creates an MQTT client.</p><small>Controller unavailable → command API returns 503</small></article>
           <div class="architecture-arrow"><span>Unix IPC</span>→</div>
-          <article class="architecture-node controller"><span class="architecture-step">03</span><h3>Controller Process</h3><p>Owns machine state, the command bus, interlocks, MotionService, GPIO, and the single MQTT client.</p><small><code>/run/narit-vending/ctrl.sock</code></small></article>
-          <div class="architecture-arrow split"><span>GPIO</span>↘<br><span>MQTT</span>↗</div>
-          <article class="architecture-node hardware"><span class="architecture-step">04</span><h3>Machine / Broker</h3><p>Drives X/Y/Z Step, Direction, and Enable signals; reads limits and E-Stop; and exchanges commands with the MQTT broker.</p><small>Hardware safety remains local</small></article>
+          <article class="architecture-node controller"><span class="architecture-step">03</span><h3>Controller Process</h3><p>Owns machine state, command serialization, all safety decisions, IRIV I/O, USB motion commands, and the single MQTT client.</p><small><code>/run/narit-vending/ctrl.sock</code></small></article>
+          <div class="architecture-arrow split"><span>USB Serial</span>↘<br><span>Modbus TCP</span>→</div>
+          <article class="architecture-node hardware"><span class="architecture-step">04</span><h3>NUCLEO / IRIV I/O</h3><p>NUCLEO generates X/Y/Z STEP/DIR from Controller commands. IRIV I/O reports limits and the DI10 KM1 safety feedback.</p><small>Heartbeat or communication loss stops motion fail-safe</small></article>
         </section>
 
         <div class="architecture-grid">
@@ -1321,8 +1288,8 @@
           <article class="panel page-panel architecture-card safety-card">
             <div class="panel-head"><div><p class="panel-label">C. Hardware Safety</p><h2 class="panel-title">Local, Immediate Interlocks</h2></div></div>
             <ul>
-              <li>GPIO drives Step, Direction, and Enable for X, Y, and Z; only MotionService can access these devices.</li>
-              <li>Minimum/maximum limit switches and the physical E-Stop stop or reject unsafe movement.</li>
+              <li>NUCLEO generates Step and Direction for X/Y/Z over the versioned USB protocol; the Web process never opens this link.</li>
+              <li>Minimum/maximum limit switches, X/Y driver alarms, DI10 KM1 feedback, and the physical E-Stop stop or reject unsafe movement.</li>
               <li>Homing establishes a reference before absolute moves or slot positioning; a restart requires homing to be verified again.</li>
               <li>GO TO SLOT uses Safe Z before X/Y motion, and Dispense is allowed only at the verified slot position.</li>
             </ul>
@@ -1444,7 +1411,7 @@
           <p id="sequence-monitor-reason">Sequence phases are reported by the Controller. If no sequence is active, this monitor does not infer a running step.</p>
         </section>
         <section class="panel page-panel">
-          <div class="panel-head"><div><p class="panel-label">Execution Order</p><h2 class="panel-title">X → Y → Z → Hold → Home Z → Y → X</h2></div><span class="page-note">Controller-owned workflow</span></div>
+          <div class="panel-head"><div><p class="panel-label">Execution Order</p><h2 class="panel-title" id="sequence-order-title">Controller-reported sequence</h2></div><span class="page-note">Controller-owned workflow</span></div>
           <ol class="sequence-step-list" id="sequence-step-list" aria-live="polite"></ol>
         </section>
         <div class="sequence-monitor-details">
@@ -1703,6 +1670,6 @@
   <!-- Toast notification -->
   <div class="toast" id="toast" role="status"></div>
 
-  <script src="{{ url_for('static', filename='app.js') }}?v=20260907_axis_target_v18"></script>
+  <script src="{{ url_for('static', filename='app.js') }}?v=20260907_speed_authority_v19"></script>
 </body>
 </html>

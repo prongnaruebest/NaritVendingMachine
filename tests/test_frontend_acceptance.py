@@ -78,6 +78,23 @@ class FrontendAcceptanceTests(unittest.TestCase):
         self.assertIn('button.title = reason ||', APP_JS)
         self.assertIn("The axis is ready for the next Min/Max or Jog command", APP_JS)
 
+    def test_target_positioning_has_one_speed_authority(self) -> None:
+        for removed_id in (
+            "target-speed", "target-duration", "move-timeout",
+            "move-acceleration", "move-deceleration",
+        ):
+            self.assertNotIn(f'id="{removed_id}"', TEMPLATE)
+        self.assertIn("body.speed_mm_s = effectiveMotionSpeed(participatingAxes)", APP_JS)
+        self.assertNotIn('el("target-duration")', APP_JS)
+        self.assertNotIn('el("move-timeout")', APP_JS)
+
+    def test_advanced_diagnostics_are_read_only_and_use_live_state(self) -> None:
+        self.assertNotIn('id="io-open-homing"', TEMPLATE)
+        self.assertIn('id="architecture-health"', TEMPLATE)
+        self.assertIn('id="sequence-order-title"', TEMPLATE)
+        self.assertIn('architectureHealth.textContent = !MS.online', APP_JS)
+        self.assertIn('setText("sequence-order-title"', APP_JS)
+
 
 if __name__ == "__main__":
     unittest.main()

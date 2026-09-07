@@ -520,15 +520,7 @@
         participatingAxes.push(a);
       }
     });
-    const time = el("target-duration")?.value;
-    const timeout = el("move-timeout")?.value;
-    const acceleration = el("move-acceleration")?.value;
-    const deceleration = el("move-deceleration")?.value;
     body.speed_mm_s = effectiveMotionSpeed(participatingAxes);
-    if (time) body.time_s = Number(time);
-    if (timeout) body.timeout_s = Number(timeout);
-    if (acceleration) body.acceleration_mm_s2 = Number(acceleration);
-    if (deceleration) body.deceleration_mm_s2 = Number(deceleration);
     return body;
   }
 
@@ -608,11 +600,7 @@
   }
 
   function targetSpeedPayload(axes = AXES) {
-    const body = {};
-    const time = el("target-duration")?.value;
-    body.speed_mm_s = effectiveMotionSpeed(axes);
-    if (time) body.time_s = Number(time);
-    return body;
+    return { speed_mm_s: effectiveMotionSpeed(axes) };
   }
 
   /* ── VALIDATE MOVE ──────────────────────────────────────────── */
@@ -685,11 +673,11 @@
       return null;
     }
     const requestId = globalThis.crypto?.randomUUID?.() || `cmd-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-    const timeoutSeconds = Number(el("move-timeout")?.value || 30);
+    const plannedDuration = Number(MS.validation.plan?.duration_s || MS.validation.plan?.estimated_duration_s || 0);
     const result = await command(label, "/api/motion/execute", {
       arm_token: MS.validation.armToken,
       request_id: requestId,
-    }, { requiredAxes: plannedMoveAxes(), timeoutMs: Math.max(15000, (timeoutSeconds + 10) * 1000) });
+    }, { requiredAxes: plannedMoveAxes(), timeoutMs: Math.max(45000, (plannedDuration + 30) * 1000) });
     if (result) invalidateMotionWorkflow("Move completed — target must be validated again.");
     return result;
   }
@@ -812,7 +800,7 @@
       const delta = Number(tgt) - pos;
       setText(`axis-delta-${a}`, fmtDelta(delta).text);
       setText(`axis-direction-${a}`, Math.abs(delta) < 0.001 ? "IDLE" : delta > 0 ? "+ FORWARD" : "− REVERSE");
-      const programmedSpeed = Number(el("target-speed")?.value || 0);
+      const programmedSpeed = axisSpeed(a);
       const effectiveSpeed = axisPlan?.speed_mm_s;
       setText(`axis-speed-${a}`, programmedSpeed > 0 ? `${fmtSpd(programmedSpeed)} / ${effectiveSpeed == null ? "--" : fmtSpd(effectiveSpeed)}` : "-- / --");
       setText(`axis-realtime-${a}`, realtimeSpeedText(a));
@@ -1664,7 +1652,6 @@
     });
     const coordinated = effectiveMotionSpeed();
     MS.selectedJogSpeed = coordinated;
-    if (el("target-speed")) el("target-speed").value = coordinated.toFixed(1);
     setText("jog-speed-display", coordinated.toFixed(1));
   }
 
@@ -2335,7 +2322,7 @@
     try {
       const data = await apiCall("/api/motion/preview", "POST", {
         x_mm: Number(slot.x_mm), y_mm: Number(slot.y_mm), z_mm: Number(slot.z_mm),
-        speed_mm_s: effectiveMotionSpeed(), timeout_s: Number(el("move-timeout")?.value || 30),
+        speed_mm_s: effectiveMotionSpeed(),
       });
       MS.visualPreview = data.plan;
       toast(`Slot ${code} trajectory validated for preview only.`, "ok");
@@ -2380,7 +2367,6 @@
       y_mm: Number(slot.y_mm),
       z_mm: Number(slot.z_mm),
       speed_mm_s: effectiveMotionSpeed(),
-      timeout_s: Number(el("move-timeout")?.value || 30),
     };
 
     MS.visualGotoPending = true;
@@ -3094,6 +3080,9 @@
     setText("sequence-monitor-elapsed", sequenceContext && Number.isFinite(Number(command.elapsed_s)) ? `${fmtTime(command.elapsed_s)} s` : "--");
     setText("sequence-monitor-message", sequenceContext ? (message || "Controller is updating sequence state") : "Waiting for a Slot Sequence");
     setText("sequence-monitor-reason", sequenceFailed ? (MS.payload?.last_error || message || "Controller stopped the sequence before it could continue.") : sequenceCompleted ? "Controller reports target and home workflow complete. Review final status and verification before the next command." : sequenceContext ? "Live phase is reported by the Controller. This page is read-only and does not create a motion command." : "No Slot Sequence is active. Start a sequence from Slot Manager or receive a valid MQTT release command; this monitor will then show Controller-reported progress.");
+    setText("sequence-order-title", sequenceContext
+      ? phaseOrder.map((item) => phaseLabels[item][0]).join(" → ")
+      : "Waiting for Controller sequence data");
 
     const steps = el("sequence-step-list");
     if (steps) steps.innerHTML = phaseOrder.map((step, index) => {
@@ -3785,7 +3774,6 @@
         ["Motion Queue", MS.payload?.busy ? "BUSY" : "IDLE", MS.payload?.active_command || "No pending command", MS.payload?.busy ? "warn" : "ok"],
         ["Active Alarms", String(alarmCount), MS.payload?.last_error || "No controller faults", alarmCount ? "fault" : "ok"],
         ["Slot Database", String(Object.keys(MS.slots || {}).length), `${configuredSlots} configured locations`, "ok"],
-        ["Feed Override", `${MS.feedOverridePct}%`, `${fmtSpd(MS.selectedJogSpeed)} mm/s jog speed`, "ok"],
         ["Last Operation", operation.ok === false ? "FAILED" : "NORMAL", operation.message || "No operation message", operation.ok === false ? "fault" : "ok"],
       ];
       diagnostics.innerHTML = diagnosticItems.map(([label, value, detail, stateClass]) => `<article class="diagnostic-card ${stateClass}"><span>${esc(label)}</span><strong>${esc(value)}</strong><small>${esc(detail)}</small></article>`).join("");
@@ -3805,6 +3793,15 @@
     renderSequenceMonitor();
     renderSystemControl();
     renderDemoSampling();
+
+    const architectureHealth = el("architecture-health");
+    if (architectureHealth) {
+      const nucleoOk = MS.payload?.nucleo?.communication_ok === true;
+      const ioOk = MS.payload?.io?.communication_ok !== false;
+      const healthy = MS.online && nucleoOk && ioOk;
+      architectureHealth.textContent = !MS.online ? "CONTROLLER OFFLINE" : !nucleoOk ? "NUCLEO OFFLINE" : !ioOk ? "IRIV I/O OFFLINE" : "ALL LINKS ONLINE";
+      architectureHealth.className = `page-status-chip ${healthy ? "ok" : "fault"}`;
+    }
 
     const alarmList = document.getElementById("alarm-page-list");
     const alarmPriority = (channel) => channel.active ? (channel.level === "fault" ? 0 : 1) : 2;
@@ -4399,7 +4396,7 @@
       });
     });
 
-    ["move-x", "move-y", "move-z", "target-speed", "target-duration", "move-timeout", "move-acceleration", "move-deceleration"]
+    ["move-x", "move-y", "move-z"]
       .forEach((id) => el(id).addEventListener("input", () => {
         if (MS.validation.stage !== "idle") invalidateMotionWorkflow();
         updateFeedOverride();
@@ -4634,9 +4631,6 @@
       });
     });
 
-    /* --- Target speed input change — update feed override display --- */
-    el("target-speed").addEventListener("input", updateFeedOverride);
-
     /* --- I/O Status Page event listeners --- */
     $$(".io-filter-btn").forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -4653,7 +4647,6 @@
       refresh();
       toast("I/O Status refreshed", "ok");
     });
-    el("io-open-homing")?.addEventListener("click", openHomingControls);
     $$('[data-homing-shortcut]').forEach((button) => button.addEventListener("click", openHomingControls));
 
   }

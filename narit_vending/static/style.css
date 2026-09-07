@@ -7973,3 +7973,12 @@ body { font-size: 14px; }
 .axis-direct-move button { min-height:44px; border:1px solid var(--blue); border-radius:6px; background:var(--blue-dim); color:var(--blue-bright); font-weight:700; }
 .axis-direct-move button:disabled { opacity:.4; cursor:not-allowed; }
 @media (max-width: 600px) { .axis-direct-move { grid-template-columns:minmax(0,1fr); } }
+.target-speed-authority {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 10px 12px;
+  border-left: 3px solid var(--blue, #4da3ff);
+  background: rgba(77, 163, 255, 0.08);
+  color: var(--text-secondary, #9cb8d5);
+  line-height: 1.45;
+}
