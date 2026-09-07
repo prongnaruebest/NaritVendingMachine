@@ -95,6 +95,11 @@ class FrontendAcceptanceTests(unittest.TestCase):
         self.assertIn('architectureHealth.textContent = !MS.online', APP_JS)
         self.assertIn('setText("sequence-order-title"', APP_JS)
 
+    def test_home_controls_respect_explicit_motion_enable_latch(self) -> None:
+        self.assertIn("MS.payload?.safety?.motion_enabled === false", APP_JS)
+        self.assertIn("open System Control & Health and press ENABLE MOTION", APP_JS)
+        self.assertIn('homeAllButton.setAttribute("aria-disabled"', APP_JS)
+
 
 if __name__ == "__main__":
     unittest.main()

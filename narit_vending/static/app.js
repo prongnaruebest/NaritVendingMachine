@@ -223,6 +223,9 @@
     if (!MS.online)                           return "Controller offline — reconnecting...";
     if (status.estop)                         return "MOTION LOCKED — Emergency stop active";
     if (MS.payload?.safety?.stop_requested)   return "MOTION LOCKED — reset alarms before continuing";
+    if (MS.payload?.safety?.motion_enabled === false) {
+      return "MOTION LOCKED — open System Control & Health and press ENABLE MOTION";
+    }
     if (MS.payload?.safety?.configuration_restart_required || MS.config?.restart_required) {
       return "MOTION LOCKED — apply configuration and restart controller";
     }
@@ -1472,8 +1475,14 @@
     el("target-load-selected-slot").disabled = !MS.online || !selectedSlotReady;
     if (document.getElementById("visual-load-preview")) updateVisualButtons();
 
-    // Home buttons
-    el("home-all").disabled = !canHome;
+    // Home buttons — use the same Controller-derived interlock reason as all
+    // other motion controls.  In particular, do not present Home as available
+    // while the explicit Motion Enable latch is off.
+    const homeReason = motionInhibitReason(false);
+    const homeAllButton = el("home-all");
+    homeAllButton.disabled = Boolean(homeReason);
+    homeAllButton.title = homeReason || "Home all axes";
+    homeAllButton.setAttribute("aria-disabled", String(Boolean(homeReason)));
 
     $$('[data-travel-axis]').forEach((button) => {
       const axis = button.dataset.travelAxis;
@@ -1517,7 +1526,11 @@
       const directInput = el(`axis-goto-${axis}`);
       if (directInput && Number.isFinite(maximum)) directInput.max = String(maximum);
     });
-    $$(".home-axis").forEach((btn) => { btn.disabled = !canHome; });
+    $$(".home-axis").forEach((btn) => {
+      btn.disabled = Boolean(homeReason);
+      btn.title = homeReason || `Home ${btn.dataset.axis?.toUpperCase() || "axis"}`;
+      btn.setAttribute("aria-disabled", String(Boolean(homeReason)));
+    });
 
     // Stop button
     el("stop-button").disabled = !MS.online;
