@@ -8,7 +8,7 @@
   <link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='favicon-transparent-large.png') }}?v=20260721_v12">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=20260907_diagnostics_v21">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=20260907_axis_strip_v22">
 </head>
 <body>
   <div class="hmi-shell">
@@ -1671,7 +1671,7 @@
     </aside>
 
     <!-- ── FOOTER STATUS BAR ────────────────────────────────────── -->
-    <footer class="status-bar">
+    <footer class="status-bar" aria-label="Persistent machine status">
       <div class="status-pills">
         <span class="status-pill offline" id="footer-connection">
           <span class="status-dot"></span> OFFLINE
@@ -1683,6 +1683,11 @@
       <div class="status-center-bar" id="footer-status-text">
         Command: None  |  Motion: Idle  |  Controller ready
       </div>
+      <div class="footer-axis-positions" aria-label="Live axis positions" aria-live="off">
+        <span class="footer-axis-position" id="footer-axis-x"><b>X</b><output>--</output><small>mm</small></span>
+        <span class="footer-axis-position" id="footer-axis-y"><b>Y</b><output>--</output><small>mm</small></span>
+        <span class="footer-axis-position" id="footer-axis-z"><b>Z</b><output>--</output><small>mm</small></span>
+      </div>
       <div class="status-time" id="footer-status-time">--:--:--</div>
     </footer>
   </div>
@@ -1690,6 +1695,6 @@
   <!-- Toast notification -->
   <div class="toast" id="toast" role="status"></div>
 
-  <script src="{{ url_for('static', filename='app.js') }}?v=20260907_diagnostics_v21"></script>
+  <script src="{{ url_for('static', filename='app.js') }}?v=20260907_axis_strip_v22"></script>
 </body>
 </html>

@@ -54,6 +54,14 @@ class FrontendAcceptanceTests(unittest.TestCase):
         self.assertIn(".sidebar { display: block !important", STYLE)
         self.assertIn("overflow-x: auto", STYLE)
 
+    def test_live_axis_positions_are_persistent_across_workspaces(self) -> None:
+        for axis in ("x", "y", "z"):
+            self.assertEqual(TEMPLATE.count(f'id="footer-axis-{axis}"'), 1)
+        self.assertIn('aria-label="Live axis positions"', TEMPLATE)
+        self.assertIn('Number(getAxis(axis).position_mm)', APP_JS)
+        self.assertIn('.footer-axis-positions', STYLE)
+        self.assertIn('grid-template-areas: "positions time" "message message"', STYLE)
+
     def test_no_inline_javascript_navigation(self) -> None:
         self.assertNotIn("onclick=", TEMPLATE)
         self.assertNotIn("javascript:", TEMPLATE.lower())

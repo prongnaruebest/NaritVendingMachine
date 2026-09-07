@@ -1416,6 +1416,21 @@
     const motionState = MS.payload?.busy ? "Executing" : "Idle";
     setText("footer-status-text",
       `Command: ${cmd}  |  Motion: ${motionState}  |  ${op.message || "Ready"}`);
+
+    // Persistent compact coordinates — visible on every workspace and sourced
+    // from the same controller snapshot as the Motion Control axis cards.
+    for (const axis of AXES) {
+      const node = el(`footer-axis-${axis}`);
+      const output = node?.querySelector("output");
+      const position = Number(getAxis(axis).position_mm);
+      if (output) output.textContent = MS.online && Number.isFinite(position) ? fmtPos(position) : "--";
+      if (node) {
+        const moving = MS.payload?.busy && String(op.active_axis || "").toLowerCase() === axis;
+        node.classList.toggle("moving", Boolean(moving));
+        node.classList.toggle("offline", !MS.online);
+        node.title = `${axis.toUpperCase()} axis actual position: ${output?.textContent || "--"} mm`;
+      }
+    }
   }
 
   function renderMotionCommand() {
