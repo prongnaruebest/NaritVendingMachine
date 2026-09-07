@@ -84,6 +84,10 @@ STOP และ E-Stop มี priority สูงสุด คำสั่งป�
 - GOTO validation/preview/arm เดิมถูก invalidate
 - คำสั่งที่กำลังทำงานไม่ถูก retime โดย browser
 
+## I/O diagnostics telemetry
+
+`iriv_io.py` เก็บ raw transition, logical transition, active duration และจำนวนสัญญาณสั้นที่ debounce กรองออกต่อ input โดยส่งผ่าน MachineSnapshot/API ให้ HMI แสดงผล การนับนี้อยู่ในหน่วยความจำของ Controller และ reset เมื่อ service restart; safety decision ยังคงใช้ logical input หลัง polarity/debounce และไม่ได้ย้าย authority ไปไว้ใน browser
+
 ## Configuration ownership
 
 - `machine_config.iriv.json`: axes, travel, speed, homing และ slots สำหรับ IRIV runtime

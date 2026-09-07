@@ -18,7 +18,7 @@
 - **Motion Control:** Homing Workflow, Jog, Min/Max และ GOTO XYZ
 - **Positions & Slots:** แก้และบันทึกพิกัด Slot; Save ไม่ทำให้เครื่องเคลื่อนที่
 - **Machine Visualization:** ภาพตำแหน่งจริง/เป้าหมาย เลือก Slot และ Demo Slot Sampling
-- **Diagnostics & I/O:** DI/DO, Alarm, Event และรายละเอียด protocol
+- **Diagnostics & I/O:** DI/DO พร้อม raw/logical state, polarity, debounce, transition/noise counter, Alarm พร้อมแนวทาง recovery, Event และรายละเอียด protocol
 - **Machine Setup:** Motor, Homing, I/O, USB และ Manual Commissioning
 - **System Control & Health:** เปิด/ปิดสิทธิ์ Motion และกู้ USB handshake
 - **MQTT Monitor:** สถานะ broker และข้อความ โดยไม่เป็นเจ้าของ Motion
@@ -58,7 +58,23 @@ Home search อาศัย sensor จริงและ time watchdog ไม่
 3. ตรวจ Current position, travel range และ Min/Max sensors
 4. กด Min หรือ Max และยืนยันว่าพื้นที่ปลอดภัย
 
-คำสั่งระยะยาวไม่ต้องแบ่งระยะเอง Controller จะแบ่งจำนวน pulse ตาม capability `max_move_steps` ของ NUCLEO โดยอัตโนมัติ ปัจจุบันใช้ 10,000 pulses ต่อ USB frame และตรวจ Stop/E-Stop/limit ทุก segment
+คำสั่งระยะยาวไม่ต้องแบ่งระยะเอง Controller จะแบ่งจำนวน pulse ตาม capability `max_move_steps` ที่ NUCLEO handshake รายงานโดยอัตโนมัติ ห้ามยึดค่าคงที่จากหน้าเว็บ และ Controller ยังคงตรวจ Stop/E-Stop/limit ระหว่าง segment
+
+## อ่านหน้า Diagnostics & I/O
+
+- `RAW` คือบิตไฟฟ้าที่อ่านจาก IRIV I/O ส่วนสถานะ `TRIGGERED/CLEAR` คือค่าหลังใช้ polarity และ debounce แล้ว
+- `Transitions` แสดงจำนวนการเปลี่ยน logical/raw นับตั้งแต่ Controller เริ่มทำงาน ถ้า raw เพิ่มแต่ logical ไม่เพิ่ม แสดงว่าการเปลี่ยนนั้นถูก debounce กรองออก
+- `Filtered noise` ใช้ชี้ช่องที่มี pulse สั้นหรือ contact bounce ค่าสูงผิดปกติควรตรวจสาย, shield, ground, ระยะสาย และแหล่งรบกวน ห้ามแก้ด้วยการเพิ่ม debounce อย่างเดียวโดยไม่ตรวจฮาร์ดแวร์
+- `Last change` และ `Last active` ช่วยเทียบเวลาที่ sensor/limit ทำงานกับ Event Log
+- Counter เหล่านี้เริ่มใหม่เมื่อ Controller restart และไม่ใช่ประวัติถาวร
+
+## อ่านและกู้ Alarm
+
+- หน้า Alarms เรียงรายการที่ Active ก่อน และแสดง `RECOVERY` สำหรับสาเหตุแต่ละประเภท
+- แก้สาเหตุทางกายภาพหรือการสื่อสารก่อนกด Reset Alarms; ปุ่ม Reset ไม่ควรใช้เพื่อบังคับข้าม fault
+- หน้า System Control & Health แสดงประวัติ System/Safety ล่าสุดของ session เพื่อยืนยันว่า Enable, Disable, Reset หรือ connection change เกิดขึ้นเมื่อใด
+- หน้า Event Log กรองตาม Severity/Category/Outcome/Search แล้วกด **Export CSV** เพื่อบันทึกรายการที่กรองอยู่ได้
+- Event history ฝั่งหน้าเว็บเป็น in-memory ล่าสุด 200 รายการ จึงไม่ใช่ audit log ถาวรและจะเริ่มใหม่เมื่อ reload หน้า
 
 ## GOTO XYZ
 
