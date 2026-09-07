@@ -148,6 +148,10 @@ class IRIVIOBackend:
         )
         self._lock = threading.RLock()
         self._raw_inputs = [False] * 11
+        self._filtered_inputs = [False] * 11
+        self._input_candidates = [False] * 11
+        self._input_candidate_counts = [0] * 11
+        self._inputs_initialized = False
         self._output_values = {name: False for name in self.outputs}
         self._connected = False
         self._outputs_initialized = False
@@ -206,6 +210,30 @@ class IRIVIOBackend:
         now = time.monotonic()
         with self._lock:
             self._raw_inputs = values
+            if not self._inputs_initialized:
+                self._filtered_inputs = list(values)
+                self._input_candidates = list(values)
+                self._input_candidate_counts = [0] * len(values)
+                self._inputs_initialized = True
+            else:
+                # Position switches can pick up a one-scan spike from motor
+                # wiring. Debounce is opt-in per input; fail-safe inputs such as
+                # E-Stop remain immediate unless explicitly configured.
+                required_by_channel = {int(info["channel"]): max(1, int(info.get("debounce_samples", 1))) for info in self.inputs.values()}
+                for channel, raw in enumerate(values):
+                    required = required_by_channel.get(channel, 1)
+                    if raw == self._filtered_inputs[channel]:
+                        self._input_candidates[channel] = raw
+                        self._input_candidate_counts[channel] = 0
+                    else:
+                        if raw != self._input_candidates[channel]:
+                            self._input_candidates[channel] = raw
+                            self._input_candidate_counts[channel] = 1
+                        else:
+                            self._input_candidate_counts[channel] += 1
+                        if self._input_candidate_counts[channel] >= required:
+                            self._filtered_inputs[channel] = raw
+                            self._input_candidate_counts[channel] = 0
             self._connected = True
             self._last_success_monotonic = now
             self._last_success_at = datetime.now(timezone.utc).isoformat()
@@ -232,7 +260,7 @@ class IRIVIOBackend:
             return bool(info.get("fail_safe", False))
         channel = int(info["channel"])
         with self._lock:
-            raw = self._raw_inputs[channel]
+            raw = self._filtered_inputs[channel]
         return raw == bool(info.get("active_state", True))
 
     def output_value(self, name: str) -> bool:

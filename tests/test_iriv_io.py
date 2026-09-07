@@ -99,6 +99,36 @@ class IRIVIOBackendTests(unittest.TestCase):
         self.assertTrue(backend.communication_ok)
         self.assertTrue(backend.input_active("estop"))
 
+    def test_position_limit_debounce_rejects_short_input_spike(self) -> None:
+        client = FakeModbusClient()
+        config = _config()
+        config["inputs"]["z_tail_limit"]["debounce_samples"] = 3
+        client.inputs[0] = True
+        client.inputs[10] = True
+        backend = IRIVIOBackend(config, client=client)
+        backend._poll_once()
+
+        client.inputs[6] = True
+        backend._poll_once()
+        self.assertFalse(backend.input_active("z_tail_limit"))
+        client.inputs[6] = False
+        backend._poll_once()
+        self.assertFalse(backend.input_active("z_tail_limit"))
+
+    def test_position_limit_debounce_accepts_stable_input(self) -> None:
+        client = FakeModbusClient()
+        config = _config()
+        config["inputs"]["z_tail_limit"]["debounce_samples"] = 3
+        client.inputs[0] = True
+        client.inputs[10] = True
+        backend = IRIVIOBackend(config, client=client)
+        backend._poll_once()
+
+        client.inputs[6] = True
+        for _ in range(3):
+            backend._poll_once()
+        self.assertTrue(backend.input_active("z_tail_limit"))
+
 
 if __name__ == "__main__":
     unittest.main()

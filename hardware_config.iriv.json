@@ -149,7 +149,7 @@
     "port": 502,
     "unit_id": 255,
     "timeout_s": 0.25,
-    "poll_interval_s": 0.1,
+    "poll_interval_s": 0.02,
     "stale_after_s": 0.35,
     "inputs": {
       "x_head_limit": {
@@ -185,6 +185,7 @@
       "z_tail_limit": {
         "channel": 5,
         "active_state": true,
+        "debounce_samples": 3,
         "fail_safe": false,
         "label": "Z Max"
       },
