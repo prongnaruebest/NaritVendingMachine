@@ -65,6 +65,15 @@ class NucleoLink:
     def is_armed(self) -> bool:
         return self._armed
 
+    @property
+    def max_move_steps(self) -> int:
+        """Maximum pulse count accepted by one firmware MOVE frame."""
+        try:
+            advertised = int(self._last_payload.get("max_move_steps", NUCLEO_MOTION_MAX_STEPS))
+        except (TypeError, ValueError):
+            advertised = NUCLEO_MOTION_MAX_STEPS
+        return max(1, advertised)
+
     def start(self) -> None:
         if self._thread and self._thread.is_alive():
             return
@@ -513,6 +522,7 @@ class NucleoLink:
             "armed": armed,
             "watchdog": payload.get("watchdog", False),
             "moving": moving,
+            "max_move_steps": self.max_move_steps,
             "uptime_ms": payload.get("uptime_ms"),
             "last_success_at": last_success_at,
             "last_error": last_error,

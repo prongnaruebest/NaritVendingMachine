@@ -101,6 +101,7 @@ class NucleoMotionTests(unittest.TestCase):
         payload = link.status_payload()
         self.assertEqual(payload["protocol"], 2)
         self.assertEqual(payload["device"], "NUCLEO-F439ZI")
+        self.assertEqual(payload["max_move_steps"], NUCLEO_MOTION_MAX_STEPS)
         self.assertFalse(payload["armed"])
 
     def test_arm_and_disarm(self):

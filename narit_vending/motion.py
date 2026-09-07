@@ -17,9 +17,8 @@ from gpiozero import DigitalInputDevice, OutputDevice
 
 _logger = logging.getLogger(__name__)
 
-# The current USB firmware accepts at most 10,000 pulses in one MOVE frame.
-# Longer normal moves are split by the Controller; this is a transport limit,
-# not a machine-travel limit.
+# Conservative fallback for a backend that does not advertise its MOVE-frame
+# capability. NucleoLink exposes max_move_steps from the firmware handshake.
 NUCLEO_MOVE_CHUNK_STEPS = 10_000
 
 
@@ -681,6 +680,10 @@ class AxisController:
                     return True
                 return False
 
+            segment_limit = max(
+                1,
+                int(getattr(self.motion_backend, "max_move_steps", NUCLEO_MOVE_CHUNK_STEPS)),
+            )
             moved = 0
             remaining = plan.steps
             while remaining > 0:
@@ -690,7 +693,7 @@ class AxisController:
                     self._guard_during_move(plan.direction)
                     raise StopRequestedError(f"{self.config.name}: motion stopped before next USB move segment")
 
-                chunk_steps = min(NUCLEO_MOVE_CHUNK_STEPS, remaining)
+                chunk_steps = min(segment_limit, remaining)
                 chunk_duration_s = chunk_steps / speed_hz
                 res = self.motion_backend.move(
                     axis=self.config.name,
