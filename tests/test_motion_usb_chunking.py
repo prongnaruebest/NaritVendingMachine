@@ -111,6 +111,25 @@ class MotionUsbChunkingTests(unittest.TestCase):
         self.assertEqual(axis.motion_backend.move.call_count, 1)
         self.assertEqual(axis.position_steps, 1_234)
 
+    def test_transient_hold_release_is_not_reported_as_incomplete_usb_move(self):
+        axis = self.make_axis(name="z", segment_limit=1_000_000)
+        released = {"value": False}
+        axis.controlled_stop_requested = lambda: released["value"]
+
+        def stopped_move(**kwargs):
+            released["value"] = True
+            self.assertTrue(kwargs["stop_requested"]())
+            released["value"] = False
+            return {"steps": 498, "stopped": True}
+
+        axis.motion_backend.move.side_effect = stopped_move
+        plan = AxisMovePlan("z", 0.0, 5.0, 5.0, 1, 1_000, 6.5, 5.0 / 6.5)
+
+        with self.assertRaises(ControlledStopError):
+            axis._execute_plan(plan)
+
+        self.assertEqual(axis.position_steps, 498)
+
 
 if __name__ == "__main__":
     unittest.main()

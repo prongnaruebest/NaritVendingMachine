@@ -387,6 +387,11 @@ class MotionService:
             return {"ok": False, "error": "Machine is busy with another command"}
 
         try:
+            if motion_command:
+                # A release request can race with the final response of the
+                # preceding hold-to-run jog. No motion is active after acquiring
+                # command_lock, so any controlled-stop flag here is stale.
+                self.controller.clear_controlled_stop()
             with self.lock:
                 self.busy = True
                 self.active_command = command_name
@@ -456,6 +461,9 @@ class MotionService:
                 self.active_command = ""
                 self.command_started_monotonic = None
                 self.command_estimated_duration_s = None
+                if motion_command:
+                    # Never let a late hold-release poison the next command.
+                    self.controller.clear_controlled_stop()
             self.command_lock.release()
 
     def _armed_move_status(self) -> dict[str, object] | None:

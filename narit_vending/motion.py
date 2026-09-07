@@ -760,16 +760,23 @@ class AxisController:
             protocol_cap_hz = 50_000.0 if getattr(self.motion_backend, "expected_protocol", 1) >= 3 else 1_000.0
             speed_hz = max(10.0, min(protocol_cap_hz, speed_hz))
 
+            stop_context = {"reason": ""}
+
             def _stop_cond():
                 if self.estop.value:
+                    stop_context["reason"] = "emergency stop"
                     return True
                 if self.stop_requested():
+                    stop_context["reason"] = "stop requested"
                     return True
                 if self.controlled_stop_requested():
+                    stop_context["reason"] = "controlled jog release"
                     return True
                 if plan.direction == self.config.home_direction and self.head_limit.value:
+                    stop_context["reason"] = "Min limit triggered"
                     return True
                 if plan.direction != self.config.home_direction and self.tail_limit.value:
+                    stop_context["reason"] = "Max limit triggered"
                     return True
                 return False
 
@@ -804,11 +811,27 @@ class AxisController:
                 self.position_steps += completed if plan.direction == self.config.forward_direction else -completed
                 moved += completed
                 remaining -= completed
-                if bool(res.get("stopped")) and self.controlled_stop_requested():
+                stopped = bool(res.get("stopped"))
+                stop_reason = stop_context["reason"]
+                if stopped and (stop_reason == "controlled jog release" or self.controlled_stop_requested()):
+                    # The release flag may be cleared by the request lifecycle
+                    # before the USB worker returns. Preserve the reason observed
+                    # inside the worker so a normal jog release never becomes a
+                    # latched incomplete-segment alarm.
                     raise ControlledStopError(f"{self.config.name}: jog stopped when hold control was released")
+                if stopped and stop_reason in {"Min limit triggered", "Max limit triggered"}:
+                    self.is_homed = False
+                    raise LimitTriggeredError(f"{self.config.name}: {stop_reason}")
+                if stopped and stop_reason == "emergency stop":
+                    self.is_homed = False
+                    raise EmergencyStopError(f"{self.config.name}: emergency stop triggered")
+                if stopped and stop_reason == "stop requested":
+                    self.is_homed = False
+                    raise StopRequestedError(f"{self.config.name}: stop requested")
                 if completed != chunk_steps:
                     raise MotionError(
                         f"{self.config.name}: incomplete USB move segment ({completed}/{chunk_steps} steps)"
+                        + (f"; stop reason: {stop_reason}" if stop_reason else "")
                     )
             sleep(self.config.settle_delay)
             return moved
