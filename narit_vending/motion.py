@@ -1163,7 +1163,11 @@ class MotionController:
             speed_mm_s=speed_mm_s or self.speed_override,
             time_s=time_s,
         )
-        self.z.move_to_mm(slot.z_mm, speed_mm_s=speed_mm_s or self.speed_override)
+        # A slot on the same physical Z step needs no firmware command.  This
+        # explicit check prevents a no-op Z phase from being treated as a
+        # rejected zero-step MOVE by any current or future motion backend.
+        if self.z.mm_to_steps(slot.z_mm) != self.z.position_steps:
+            self.z.move_to_mm(slot.z_mm, speed_mm_s=speed_mm_s or self.speed_override)
         return slot
 
     def update_slot(

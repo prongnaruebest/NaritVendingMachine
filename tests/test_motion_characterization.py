@@ -175,6 +175,18 @@ class MotionCharacterizationTests(unittest.TestCase):
 
         self.assertEqual(events, [("z", 10.0), ("xy", 50.0, 75.0), ("z", 25.0)])
 
+    def test_move_to_slot_skips_z_when_target_is_the_current_step(self) -> None:
+        controller, axes = self._mock_controller()
+        axes["z"].position_mm = 25.0
+        axes["z"].position_steps = 2000
+        axes["z"].mm_to_steps.return_value = 2000
+        controller.move_to = MagicMock()
+
+        controller.move_to_slot("1", speed_mm_s=10.0)
+
+        controller.move_to.assert_called_once()
+        axes["z"].move_to_mm.assert_not_called()
+
     def test_coordinated_move_uses_shared_nucleo_backend_not_gpio_pulses(self) -> None:
         controller, axes = self._mock_controller()
         backend = MagicMock(expected_protocol=3)
