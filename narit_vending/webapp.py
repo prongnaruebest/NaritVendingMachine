@@ -790,12 +790,11 @@ class MotionService:
                     break
                 time.sleep(0.1)
             else:
-                self.picontrol_io.set_output("xy_drive_power", False)
                 return {
                     "ok": False,
-                    "error": "KM1/DI10 or X/Y drive alarm did not recover; DO0 returned OFF",
+                    "error": "DO0 is ON but KM1/DI10 or X/Y drive alarm did not recover; motion remains locked",
                     "motion_enabled": False,
-                    "drive_power_on": False,
+                    "drive_power_on": True,
                 }
 
             for axis_name in ("x", "y"):
@@ -878,11 +877,10 @@ class MotionService:
                         self.operation_message = "X/Y drive power restored; Home X/Y before enabling motion"
                     return {"ok": True, "drive_power_on": True, "motion_enabled": False, "homing_required": ["x", "y"]}
                 time.sleep(0.1)
-            self.picontrol_io.set_output("xy_drive_power", False)
             return {
                 "ok": False,
-                "error": "E-Stop/KM1 DI10 or X/Y drive alarm did not recover; DO0 returned OFF",
-                "drive_power_on": False,
+                "error": "DO0 is ON but E-Stop/KM1 DI10 or X/Y drive alarm did not recover; motion remains locked",
+                "drive_power_on": True,
                 "motion_enabled": False,
             }
         except Exception as exc:
