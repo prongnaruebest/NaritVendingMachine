@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NARIT Vending Machine — Full System Architecture</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({ startOnLoad: true, theme: 'dark', securityLevel: 'loose' });</script>
+<style>
+:root {
+  --bg: #070d18;
+  --surface: #0f172a;
+  --surface2: #1e293b;
+  --border: #334155;
+  --accent: #38bdf8;
+  --accent2: #818cf8;
+  --accent3: #c084fc;
+  --success: #34d399;
+  --warning: #fbbf24;
+  --danger: #f87171;
+  --text: #f1f5f9;
+  --text-dim: #94a3b8;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Noto Sans Thai', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.65;
+  padding: 2.5rem 3rem;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+header {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 2rem;
+  margin-bottom: 2.5rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+}
+.header-badge {
+  display: inline-block;
+  background: rgba(56,189,248,0.15);
+  color: var(--accent);
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+  border: 1px solid rgba(56,189,248,0.3);
+}
+h1 { font-size: 2.3rem; font-weight: 800; color: #fff; margin-bottom: 0.5rem; }
+h2 { font-size: 1.45rem; font-weight: 700; color: var(--accent); margin: 2rem 0 1rem; border-left: 4px solid var(--accent); padding-left: 0.75rem; }
+h3 { font-size: 1.1rem; font-weight: 600; color: var(--accent2); margin: 1.25rem 0 0.5rem; }
+p { color: var(--text-dim); margin-bottom: 1rem; font-size: 0.95rem; }
+.nav-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: var(--surface2);
+  color: var(--text);
+  text-decoration: none;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  font-size: 0.85rem;
+  transition: all 0.2s;
+}
+.nav-link:hover { background: var(--border); color: #fff; }
+
+.section-box {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.75rem;
+  margin-bottom: 2.5rem;
+}
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-top: 1rem; }
+.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.25rem; margin-top: 1rem; }
+.card {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1.25rem;
+}
+.card-title { font-size: 0.95rem; font-weight: 700; margin-bottom: 0.5rem; color: #fff; }
+.card-desc { font-size: 0.85rem; color: var(--text-dim); }
+
+.mermaid-wrapper {
+  background: #090f1d;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1.5rem;
+  margin: 1.25rem 0;
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+  font-size: 0.85rem;
+}
+th, td {
+  padding: 0.65rem 0.85rem;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+th { background: var(--surface2); color: var(--text); font-weight: 600; }
+td { color: var(--text-dim); }
+code {
+  background: #1e293b;
+  color: var(--accent);
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+  font-family: 'Consolas', monospace;
+  font-size: 0.85em;
+}
+
+.badge { display: inline-block; padding: 0.2rem 0.55rem; border-radius: 999px; font-size: 0.7rem; font-weight: 700; }
+.b-g { background: #064e3b; color: #34d399; }
+.b-r { background: #450a0a; color: #f87171; }
+.b-y { background: #451a03; color: #fbbf24; }
+.b-b { background: #1e3a5f; color: #60a5fa; }
+
+.callout {
+  padding: 1rem 1.25rem;
+  border-radius: 8px;
+  margin: 1.25rem 0;
+  font-size: 0.9rem;
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+}
+.callout.danger { background: #200b0b; border: 1px solid #7f1d1d; color: #fca5a5; }
+.callout.warn { background: #1f1406; border: 1px solid #78350f; color: #fde68a; }
+.callout.info { background: #0c1c38; border: 1px solid #1e3a5f; color: #93c5fd; }
+
+@media(max-width: 900px) {
+  body { padding: 1.25rem; }
+  .grid-2, .grid-3 { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <span class="header-badge">NARIT Vending Machine · Engineering Reference</span>
+    <h1>System Architecture v3.0</h1>
+    <p>สถาปัตยกรรมระบบควบคุมเครื่องจำหน่ายสินค้าอัตโนมัติ 3 แกน (IRIV PiControl + IRIV IO + NUCLEO-F439ZI)</p>
+  </div>
+  <div>
+    <a href="index.html" class="nav-link">⬅ เปิดสไลด์พรีเซนต์ (Presentation Deck)</a>
+  </div>
+</header>
+
+<!-- 1. SYSTEM CONTEXT -->
+<section class="section-box">
+  <h2>1. System Context &amp; Topology (ภาพรวมระบบและขอบเขต)</h2>
+  <p>ระบบแยกหน้าที่ระหว่าง Web Interface, Controller Orchestration, Pulse Generation และ Field I/O อย่างเด็ดขาด</p>
+
+  <div class="mermaid-wrapper">
+    <div class="mermaid">
+flowchart LR
+    OP["Operator / Engineer Browser"] -->|"HTTP :80"| WEB["Web Process\nFlask HMI & REST API"]
+    WEB <-->|"Unix Domain Socket\n/run/narit-vending/ctrl.sock"| CTRL["Controller Process\nSole Motion & Safety Authority"]
+    MQTT["MQTT Cloud Broker"] <-->|"MQTT Telemetry & Commands"| CTRL
+    CTRL <-->|"Modbus TCP\n10.0.0.10:502"| RIO["IRIV IO Unit\n(Unit ID 255)"]
+    CTRL <-->|"USB VCP 115200 baud\n/dev/serial/by-id/..."| NUC["STM32 NUCLEO-F439ZI\nHardware Pulse Generator"]
+    RIO --> SENSORS["Limit Switches (DI0-5)\nZ Home (DI6)\nProduct Sensors (DI7-9)\nE-Stop Feedback (DI10)"]
+    RIO --> AUX_OUT["SSR Outputs (DO0-3)\nReady / Moving / Alarm / Dispense"]
+    NUC --> NMOS["6-Channel NMOS Sink\n(Q1-Q6 Low-side Switches)"]
+    NMOS --> DRV["Motor Drivers\nHBS860H (X/Y) + DM542 (Z)"]
+    SAFE["Physical E-Stop + KM1 Relay"] -->|"Hardwired 60V Power Cut"| DRV
+    </div>
+  </div>
+
+  <div class="grid-3">
+    <div class="card">
+      <div class="card-title">🌐 Web Process</div>
+      <div class="card-desc">ให้บริการ HTML/CSS/JS และ API ทางพอร์ต 80 ไม่มีสิทธิ์ยุ่งเกี่ยวกับ GPIO, Serial หรือ Modbus โดยตรง หาก Controller ดับจะตอบ 503 ทันที</div>
+    </div>
+    <div class="card">
+      <div class="card-title">⚙️ Controller Process</div>
+      <div class="card-desc">เป็นศูนย์กลางความปลอดภัย (Sole Motion Authority) บริหารจัดการ StateMachine, CommandBus, SafetyInterlock และรันงานทีละคำสั่ง (Single-Flight)</div>
+    </div>
+    <div class="card">
+      <div class="card-title">⚡ NUCLEO-F439ZI</div>
+      <div class="card-desc">กำเนิดสัญญาณพัลส์ความเร็วสูงระดับไมโครวินาทีด้วย Timer Compare (TIM1/TIM2) มี Hardware Watchdog 500ms ดับสเต็ปทันทีหาก Heartbeat ขาด</div>
+    </div>
+  </div>
+</section>
+
+<!-- 2. DUAL-PROCESS & IPC -->
+<section class="section-box">
+  <h2>2. Dual-Process &amp; Unix IPC Isolation (การแยก Process)</h2>
+  <p>การแยก Process ออกจากกันช่วยให้สามารถอัปเดตหน้าตาเว็บหรือตั้งค่า HMI ได้แบบ Zero-Downtime โดยระบบขับเคลื่อนและ Safety ยังคงทำงานต่อเนื่อง</p>
+
+  <div class="mermaid-wrapper">
+    <div class="mermaid">
+sequenceDiagram
+    autonumber
+    actor User as Operator / Browser
+    participant Web as Web Process (Flask :80)
+    participant Socket as Unix IPC Socket (/run/ctrl.sock)
+    participant Ctrl as Controller Process (CommandBus)
+    participant Safety as SafetyInterlock Gate
+    participant Motion as MotionService / NucleoLink
+
+    User->>Web: POST /api/motion/move (target X/Y/Z)
+    Web->>Web: Validate JSON structure
+    Web->>Socket: Send CommandEnvelope (IPC)
+    Socket->>Ctrl: Dispatch to CommandBus
+    Ctrl->>Safety: Check E-Stop, Alarms, Limits, Homing
+    alt Safety Violations (e.g. E-Stop Active)
+        Safety-->>Ctrl: Reject Command
+        Ctrl-->>Socket: Return CommandResult(rejected, reason)
+        Socket-->>Web: HTTP 409 / 400
+        Web-->>User: Show Interlock Warning
+    else Safety Cleared
+        Safety-->>Ctrl: Approved
+        Ctrl->>Motion: Execute segmented move
+        Motion-->>Ctrl: Move Completed
+        Ctrl-->>Socket: Return CommandResult(success, snapshot)
+        Socket-->>Web: HTTP 200 OK
+        Web-->>User: Update Position in HMI
+    end
+    </div>
+  </div>
+
+  <div class="callout info">
+    <span>💡</span>
+    <div><strong>ความปลอดภัยระดับ OS:</strong> สิทธิ์การเข้าถึงไฟล์ซ็อกเก็ตถูกควบคุมด้วย User permissions ของ Linux Daemon ทำให้ Web Server ธรรมดาไม่สามารถหลอกลวงหรือข้ามขั้นตอนความปลอดภัยของ Controller ได้</div>
+  </div>
+</section>
+
+<!-- 3. HARDWARE & NMOS TOPOLOGY -->
+<section class="section-box">
+  <h2>3. Hardware Signal &amp; NMOS Electrical Topology</h2>
+  <p>วงจรแปลงสัญญาณลอจิก 3.3V จาก STM32 เป็นกระแสขับ Optocoupler ของ Stepper Drivers ผ่านวงจร Open-Drain Low-Side NMOS</p>
+
+  <table>
+    <thead><tr><th>แกน</th><th>สัญญาณ</th><th>STM32 Pin</th><th>Header Connector</th><th>วงจร NMOS</th><th>Driver &amp; Terminal</th></tr></thead>
+    <tbody>
+      <tr><td><strong>X</strong></td><td><code>X_PUL</code></td><td><code>PA8</code></td><td>CN12 pin 23 (TIM1_CH1)</td><td>Q1 Drain</td><td>HBS860H PUL-</td></tr>
+      <tr><td><strong>X</strong></td><td><code>X_DIR</code></td><td><code>PB0</code></td><td>CN10 pin 31 (GPIO Out)</td><td>Q2 Drain</td><td>HBS860H DIR-</td></tr>
+      <tr><td><strong>Y</strong></td><td><code>Y_PUL</code></td><td><code>PA9</code></td><td>CN12 pin 21 (TIM1_CH2)</td><td>Q3 Drain</td><td>HBS860H PUL-</td></tr>
+      <tr><td><strong>Y</strong></td><td><code>Y_DIR</code></td><td><code>PB1</code></td><td>CN10 pin 7 (GPIO Out)</td><td>Q4 Drain</td><td>HBS860H DIR-</td></tr>
+      <tr><td><strong>Z</strong></td><td><code>Z_PUL</code></td><td><code>PA5</code></td><td>CN12 pin 11 (TIM2_CH1)</td><td>Q5 Drain</td><td>DM542 PUL-</td></tr>
+      <tr><td><strong>Z</strong></td><td><code>Z_DIR</code></td><td><code>PB2</code></td><td>CN10 pin 15 (GPIO Out)</td><td>Q6 Drain</td><td>DM542 DIR-</td></tr>
+      <tr><td><strong>Common</strong></td><td><code>V-PULSE</code></td><td>+24V Supply</td><td>Terminal Block</td><td>—</td><td>Driver PUL+ &amp; DIR+ (Common Anode)</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout warn">
+    <span>⚠️</span>
+    <div><strong>PB0 Conflict:</strong> ขา <code>PB0</code> บนบอร์ด Nucleo ต่อขนานกับ LED1 สีเขียว ดังนั้นซอฟต์แวร์เฟิร์มแวร์จึงต้องปิดการใช้งาน LED ของบอร์ด เพื่อไม่ให้สัญญาณบอกทิศทางของแกน X ถูกรบกวน</div>
+  </div>
+</section>
+
+<!-- 4. SAFETY INTERLOCK & KM1 -->
+<section class="section-box">
+  <h2>4. Dual-Layer Safety &amp; KM1 Power Interlock</h2>
+  <p>โครงสร้างการป้องกันอันตราย 2 ชั้น: ฮาร์ดแวร์ตัดกำลังไฟตรง และซอฟต์แวร์ตรวจจับสถานะแบบ Fail-Safe</p>
+
+  <div class="grid-2">
+    <div class="card" style="border-left: 4px solid var(--danger);">
+      <div class="card-title" style="color:var(--danger)">🔴 Hardwired Safety Layer (ชั้นที่ 1)</div>
+      <div class="card-desc">
+        ปุ่มกด E-Stop หน้าตู้ต่อเข้ากับ Safety Relay สั่งปลดคอนแทกเตอร์ <strong>KM1</strong>
+        ตัดไฟ <strong>60V DC</strong> ที่จ่ายให้แก่ไดรเวอร์มอเตอร์แกน X และ Y ทันที ทำให้มอเตอร์ไม่มีแรงบิดโดยสิ้นเชิง ไม่พึ่งพาคอมพิวเตอร์หรือเฟิร์มแวร์
+      </div>
+    </div>
+    <div class="card" style="border-left: 4px solid var(--success);">
+      <div class="card-title" style="color:var(--success)">🟢 Software Fail-Safe Layer (ชั้นที่ 2)</div>
+      <div class="card-desc">
+        คอนแทกต์ช่วยของ KM1 ต่อเข้า IRIV IO ช่อง <strong>DI10 (Normally Closed)</strong>
+        Controller จะ Polling ทุก 20ms หากพบว่าวงจรเปิด หรือสัญญาณขาดหาย จะสั่ง Disarm และหยุดคำสั่งทั้งหมดทันที
+      </div>
+    </div>
+  </div>
+
+  <div class="callout danger">
+    <span>🚨</span>
+    <div><strong>Known Hardware Safety Gap (ต้องแก้ไขก่อน Commissioning มอเตอร์):</strong> ปัจจุบันไฟ 24V ของไดรเวอร์ Z (DM542) ยังไม่ผ่านคอนแทกเตอร์ KM1 ทำให้การกด E-Stop ไม่สามารถตัดไฟกำลังของ Z ได้ ต้องต่อสายไฟ 24V ของ Z ผ่าน KM1 ให้เรียบร้อยก่อนอนุญาตการเคลื่อนที่จริง</div>
+  </div>
+</section>
+
+<!-- 5. COMMAND EXECUTION & SEGMENTATION -->
+<section class="section-box">
+  <h2>5. Command Pipeline &amp; Motion Segmentation</h2>
+  <p>การแบ่งย่อยระยะทางเคลื่อนที่ตามขนาดบัฟเฟอร์ของ MCU (10,000 steps) เพื่อให้การควบคุมเป็นไปอย่างราบรื่นและปลอดภัย</p>
+
+  <div class="mermaid-wrapper">
+    <div class="mermaid">
+flowchart TD
+    CMD["User Command: Move 44,000 steps"] --> CB["CommandBus: Validate & Queue"]
+    CB --> SEG["Calculate Segments:\n[10k, 10k, 10k, 10k, 4k]"]
+    SEG --> S1["Execute Segment 1 (10,000)"]
+    S1 --> CK1{"Check Limits & E-Stop"}
+    CK1 -- OK --> S2["Execute Segment 2 (10,000)"]
+    CK1 -- Abort --> STOP["Halt Pulse, Disarm & Raise Alarm"]
+    S2 --> CK2{"Check Limits & E-Stop"}
+    CK2 -- OK --> S3["Execute Segment 3 (10,000)"]
+    S3 --> CK3{"Check Limits & E-Stop"}
+    CK3 -- OK --> S4["Execute Segment 4 (10,000)"]
+    S4 --> CK4{"Check Limits & E-Stop"}
+    CK4 -- OK --> S5["Execute Segment 5 (4,000)"]
+    S5 --> DONE["Target Reached & Update Snapshot"]
+    </div>
+  </div>
+</section>
+
+<!-- 6. PRODUCTION ENABLEMENT GATE -->
+<section class="section-box">
+  <h2>6. Production Enablement Gate (ประตูตรวจสอบความปลอดภัย)</h2>
+  <p>เงื่อนไขบังคับ 12 ประการที่ต้องผ่านการทดสอบครบทุกข้อ ก่อนอนุญาตให้ทำการ Flash เฟิร์มแวร์ขับเคลื่อนหรือสั่งเคลื่อนที่จริง</p>
+
+  <table>
+    <thead><tr><th>ลำดับ</th><th>รายการตรวจสอบ</th><th>วิธีตรวจสอบ</th><th>สถานะปัจจุบัน</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>DI10 Two-State Polarity</td><td>อ่านค่า DI10 ขณะกด E-Stop และปล่อย E-Stop</td><td><span class="badge b-y">รอทดสอบหน้าตู้</span></td></tr>
+      <tr><td>2</td><td>Z Power Cut via KM1</td><td>ตรวจว่าไฟ 24V ของ DM542 ดับเมื่อกด E-Stop</td><td><span class="badge b-r">ยังไม่ผ่าน (Safety Gap)</span></td></tr>
+      <tr><td>3</td><td>Dummy Load Voltage Test</td><td>วัดแรงดัน Drain-Source ของ NMOS ด้วย Dummy load</td><td><span class="badge b-y">รอตรวจ</span></td></tr>
+      <tr><td>4</td><td>Oscilloscope Step Pulse</td><td>ตรวจสัญญาณ PA8, PA9, PA5 ด้วย Scope โดยถอดมอเตอร์</td><td><span class="badge b-y">รอตรวจ</span></td></tr>
+      <tr><td>5</td><td>Watchdog Heartbeat Loss</td><td>จำลองตัดสาย USB ระหว่างส่งพัลส์ ต้องหยุดใน 500ms</td><td><span class="badge b-y">รอตรวจ</span></td></tr>
+      <tr><td>6</td><td>Controller Nucleo Backend</td><td>ทดสอบ Unit test จำลอง Fake serial ใน Controller</td><td><span class="badge b-g">ผ่านแล้ว (16 tests)</span></td></tr>
+      <tr><td>7</td><td>Low-Speed 10mm Test</td><td>เคลื่อนที่ 10mm ทีละแกน ตรวจทิศทางและระยะจริง</td><td><span class="badge b-y">รอตรวจหลังผ่าน 1-5</span></td></tr>
+      <tr><td>8</td><td>Full Commissioning</td><td>ทดสอบ Home All, Jog, GOTO และ Slot 1-30</td><td><span class="badge b-y">ขั้นตอนสุดท้าย</span></td></tr>
+    </tbody>
+  </table>
+</section>
+
+<footer style="text-align:center; padding: 2rem 0; color:var(--text-dim); font-size:0.85rem; border-top:1px solid var(--border)">
+  NARIT Vending Machine Motion Control System · Document Version 3.0 · Updated September 2026
+</footer>
+
+</body>
+</html>

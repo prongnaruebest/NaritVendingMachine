@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NARIT Vending Machine — Presentation &amp; Manual</title>
+<title>NARIT Vending Machine — Presentation &amp; Architecture &amp; Manual</title>
 <style>
 /* ─────────────────────────────────────
    Design tokens
@@ -23,7 +23,7 @@
   --text-dim:  #94a3b8;
   --text-faint:#475569;
 
-  --sidebar-w: 230px;
+  --sidebar-w: 240px;
 }
 
 /* ─────────────────────────────────────
@@ -99,24 +99,24 @@ body {
 
 /* Section group labels */
 .sidebar-group {
-  padding: .6rem .85rem .25rem;
+  padding: .65rem .85rem .25rem;
   font-size: .62rem;
   font-weight: 700;
   letter-spacing: 1.5px;
   text-transform: uppercase;
-  color: var(--text-faint);
+  color: var(--accent2);
 }
 
 /* Nav buttons */
 .nav-btn {
   display: flex;
   align-items: center;
-  gap: .6rem;
+  gap: .55rem;
   width: 100%;
   background: none;
   border: none;
   cursor: pointer;
-  padding: .45rem .85rem;
+  padding: .42rem .85rem;
   border-radius: 0;
   text-align: left;
   transition: background .15s;
@@ -140,10 +140,10 @@ body {
   min-width: 18px;
   flex-shrink: 0;
 }
-.nav-btn.active .nb-num { color: var(--accent); }
+.nav-btn.active .nb-num { color: var(--accent); font-weight: 700; }
 .nav-btn .nb-icon { font-size: .95rem; flex-shrink:0; }
 .nav-btn .nb-label {
-  font-size: .77rem;
+  font-size: .76rem;
   color: var(--text-dim);
   line-height: 1.3;
   flex: 1;
@@ -274,6 +274,7 @@ p  { font-size:.88rem; color:var(--text-dim); line-height:1.7; }
 .card.aw  { border-left:3px solid var(--warning); }
 .card.ad  { border-left:3px solid var(--danger); }
 .card.ap  { border-left:3px solid var(--accent3); }
+.card.ac  { border-left:3px solid var(--accent2); }
 .card .ci { font-size:1.5rem; margin-bottom:.4rem; }
 .card .ct { font-size:.82rem; font-weight:600; color:var(--text); margin-bottom:.25rem; }
 .card .cb { font-size:.76rem; color:var(--text-dim); line-height:1.55; }
@@ -369,7 +370,7 @@ code { background:var(--surface2); border:1px solid var(--border); border-radius
 .sn-w { background:#1c1000; border-color:var(--warning); color:var(--warning); }
 
 /* ─────────────────────────────────────
-   Manual specific: step list
+   Step list
 ───────────────────────────────────── */
 .step-list { display:flex; flex-direction:column; gap:.4rem; counter-reset:steps; }
 .step-item {
@@ -387,7 +388,9 @@ code { background:var(--surface2); border:1px solid var(--border); border-radius
 .step-item .st { color:var(--text); line-height:1.5; flex:1; }
 .step-item .st em { color:var(--text-dim); font-style:normal; }
 
-/* Warning callout */
+/* ─────────────────────────────────────
+   Callout
+───────────────────────────────────── */
 .callout {
   padding:.7rem 1rem;
   border-radius:8px;
@@ -401,8 +404,30 @@ code { background:var(--surface2); border:1px solid var(--border); border-radius
 .callout.success { background:#022c22; border:1px solid #065f46; color:#34d399; }
 .callout .c-icon { font-size:1rem; flex-shrink:0; }
 
-/* Shortcut key */
-.key { display:inline-block; background:var(--surface2); border:1px solid var(--border); border-radius:4px; padding:.05rem .35rem; font-family:'Consolas',monospace; font-size:.78em; color:var(--text); }
+/* ─────────────────────────────────────
+   Diagram blocks & boxes
+───────────────────────────────────── */
+.box-canvas {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: .8rem;
+}
+.arch-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: .5rem;
+}
+.arch-tag {
+  font-family: 'Consolas', monospace;
+  font-size: .75rem;
+  color: var(--accent2);
+}
 
 /* Troubleshoot table */
 .trouble-table { width:100%; border-collapse:collapse; font-size:.75rem; }
@@ -413,9 +438,6 @@ code { background:var(--surface2); border:1px solid var(--border); border-radius
 
 /* Hero glow */
 .hero-glow { position:absolute; top:-60px; right:-60px; width:340px; height:340px; border-radius:50%; background:radial-gradient(circle,rgba(59,130,246,.14) 0%,transparent 70%); pointer-events:none; }
-
-/* Divider */
-.divider { border:none; border-top:1px solid var(--border); margin:.2rem 0; }
 
 /* responsive */
 @media(max-width:900px) {
@@ -432,13 +454,13 @@ code { background:var(--surface2); border:1px solid var(--border); border-radius
 <body>
 
 <!-- ═══════════════════════════════════
-     SIDEBAR
+     SIDEBAR NAVIGATION
 ════════════════════════════════════ -->
 <aside class="sidebar">
   <div class="sidebar-header">
     <div class="sidebar-logo">
       NARIT
-      <span>Vending Machine · 2026</span>
+      <span>Vending Machine · Architecture</span>
     </div>
   </div>
 
@@ -451,89 +473,42 @@ code { background:var(--surface2); border:1px solid var(--border); border-radius
   <!-- Nav list -->
   <div class="sidebar-scroll">
 
+    <!-- GROUP 1: OVERVIEW -->
     <div class="sidebar-group">📊 Project Overview</div>
-    <button class="nav-btn active" data-idx="0" onclick="goTo(0)">
-      <span class="nb-num">01</span><span class="nb-icon">🏠</span>
-      <span class="nb-label">ภาพรวมโปรเจค</span>
-    </button>
-    <button class="nav-btn" data-idx="1" onclick="goTo(1)">
-      <span class="nb-num">02</span><span class="nb-icon">📡</span>
-      <span class="nb-label">สถานะระบบ</span>
-    </button>
-    <button class="nav-btn" data-idx="2" onclick="goTo(2)">
-      <span class="nb-num">03</span><span class="nb-icon">🏗️</span>
-      <span class="nb-label">สถาปัตยกรรม Software</span>
-    </button>
-    <button class="nav-btn" data-idx="3" onclick="goTo(3)">
-      <span class="nb-num">04</span><span class="nb-icon">🔧</span>
-      <span class="nb-label">Hardware Mapping</span>
-    </button>
-    <button class="nav-btn" data-idx="4" onclick="goTo(4)">
-      <span class="nb-num">05</span><span class="nb-icon">🌐</span>
-      <span class="nb-label">Network &amp; Transport</span>
-    </button>
-    <button class="nav-btn" data-idx="5" onclick="goTo(5)">
-      <span class="nb-num">06</span><span class="nb-icon">⚙️</span>
-      <span class="nb-label">Axis Specs &amp; Slots</span>
-    </button>
-    <button class="nav-btn" data-idx="6" onclick="goTo(6)">
-      <span class="nb-num">07</span><span class="nb-icon">🔄</span>
-      <span class="nb-label">State Machine</span>
-    </button>
-    <button class="nav-btn" data-idx="7" onclick="goTo(7)">
-      <span class="nb-num">08</span><span class="nb-icon">💾</span>
-      <span class="nb-label">Firmware Status</span>
-    </button>
-    <button class="nav-btn" data-idx="8" onclick="goTo(8)">
-      <span class="nb-num">09</span><span class="nb-icon">🛡️</span>
-      <span class="nb-label">Production Gate</span>
-    </button>
-    <button class="nav-btn" data-idx="9" onclick="goTo(9)">
-      <span class="nb-num">10</span><span class="nb-icon">🗺️</span>
-      <span class="nb-label">Next Steps</span>
-    </button>
+    <button class="nav-btn active" data-idx="0" onclick="goTo(0)"><span class="nb-num">01</span><span class="nb-icon">🏠</span><span class="nb-label">ภาพรวมโปรเจค</span></button>
+    <button class="nav-btn" data-idx="1" onclick="goTo(1)"><span class="nb-num">02</span><span class="nb-icon">📡</span><span class="nb-label">สถานะระบบ</span></button>
+    <button class="nav-btn" data-idx="2" onclick="goTo(2)"><span class="nb-num">03</span><span class="nb-icon">🏗️</span><span class="nb-label">สถาปัตยกรรม Software</span></button>
+    <button class="nav-btn" data-idx="3" onclick="goTo(3)"><span class="nb-num">04</span><span class="nb-icon">🔧</span><span class="nb-label">Hardware Mapping</span></button>
+    <button class="nav-btn" data-idx="4" onclick="goTo(4)"><span class="nb-num">05</span><span class="nb-icon">🌐</span><span class="nb-label">Network &amp; Transport</span></button>
+    <button class="nav-btn" data-idx="5" onclick="goTo(5)"><span class="nb-num">06</span><span class="nb-icon">⚙️</span><span class="nb-label">Axis Specs &amp; Slots</span></button>
+    <button class="nav-btn" data-idx="6" onclick="goTo(6)"><span class="nb-num">07</span><span class="nb-icon">🔄</span><span class="nb-label">State Machine</span></button>
+    <button class="nav-btn" data-idx="7" onclick="goTo(7)"><span class="nb-num">08</span><span class="nb-icon">💾</span><span class="nb-label">Firmware Status</span></button>
+    <button class="nav-btn" data-idx="8" onclick="goTo(8)"><span class="nb-num">09</span><span class="nb-icon">🛡️</span><span class="nb-label">Production Gate</span></button>
+    <button class="nav-btn" data-idx="9" onclick="goTo(9)"><span class="nb-num">10</span><span class="nb-icon">🗺️</span><span class="nb-label">Next Steps</span></button>
 
-    <div class="sidebar-group">📖 คู่มือการใช้งาน</div>
-    <button class="nav-btn" data-idx="10" onclick="goTo(10)">
-      <span class="nb-num">11</span><span class="nb-icon">📋</span>
-      <span class="nb-label">ก่อนเริ่มใช้งาน</span>
-    </button>
-    <button class="nav-btn" data-idx="11" onclick="goTo(11)">
-      <span class="nb-num">12</span><span class="nb-icon">🏠</span>
-      <span class="nb-label">Homing Workflow</span>
-    </button>
-    <button class="nav-btn" data-idx="12" onclick="goTo(12)">
-      <span class="nb-num">13</span><span class="nb-icon">🕹️</span>
-      <span class="nb-label">Jog &amp; Min/Max</span>
-    </button>
-    <button class="nav-btn" data-idx="13" onclick="goTo(13)">
-      <span class="nb-num">14</span><span class="nb-icon">🎯</span>
-      <span class="nb-label">GOTO XYZ</span>
-    </button>
-    <button class="nav-btn" data-idx="14" onclick="goTo(14)">
-      <span class="nb-num">15</span><span class="nb-icon">📍</span>
-      <span class="nb-label">Positions &amp; Slots</span>
-    </button>
-    <button class="nav-btn" data-idx="15" onclick="goTo(15)">
-      <span class="nb-num">16</span><span class="nb-icon">🩺</span>
-      <span class="nb-label">Diagnostics &amp; I/O</span>
-    </button>
-    <button class="nav-btn" data-idx="16" onclick="goTo(16)">
-      <span class="nb-num">17</span><span class="nb-icon">🚨</span>
-      <span class="nb-label">Alarm &amp; Recovery</span>
-    </button>
-    <button class="nav-btn" data-idx="17" onclick="goTo(17)">
-      <span class="nb-num">18</span><span class="nb-icon">🔬</span>
-      <span class="nb-label">Demo Slot Sampling</span>
-    </button>
-    <button class="nav-btn" data-idx="18" onclick="goTo(18)">
-      <span class="nb-num">19</span><span class="nb-icon">📐</span>
-      <span class="nb-label">Travel Calibration</span>
-    </button>
-    <button class="nav-btn" data-idx="19" onclick="goTo(19)">
-      <span class="nb-num">20</span><span class="nb-icon">🔍</span>
-      <span class="nb-label">Troubleshooting</span>
-    </button>
+    <!-- GROUP 2: ARCHITECTURE DEEP-DIVE -->
+    <div class="sidebar-group">🏛️ Architecture (สถาปัตยกรรม)</div>
+    <button class="nav-btn" data-idx="10" onclick="goTo(10)"><span class="nb-num">11</span><span class="nb-icon">📐</span><span class="nb-label">System Context &amp; Safety</span></button>
+    <button class="nav-btn" data-idx="11" onclick="goTo(11)"><span class="nb-num">12</span><span class="nb-icon">⚡</span><span class="nb-label">Dual-Process &amp; Unix IPC</span></button>
+    <button class="nav-btn" data-idx="12" onclick="goTo(12)"><span class="nb-num">13</span><span class="nb-icon">🔌</span><span class="nb-label">Hardware Signal &amp; NMOS</span></button>
+    <button class="nav-btn" data-idx="13" onclick="goTo(13)"><span class="nb-num">14</span><span class="nb-icon">🔒</span><span class="nb-label">Safety Loop &amp; KM1 Relay</span></button>
+    <button class="nav-btn" data-idx="14" onclick="goTo(14)"><span class="nb-num">15</span><span class="nb-icon">🚦</span><span class="nb-label">CommandBus &amp; Priority</span></button>
+    <button class="nav-btn" data-idx="15" onclick="goTo(15)"><span class="nb-num">16</span><span class="nb-icon">🧩</span><span class="nb-label">Long-Move Segmentation</span></button>
+    <button class="nav-btn" data-idx="16" onclick="goTo(16)"><span class="nb-num">17</span><span class="nb-icon">🎬</span><span class="nb-label">Sequence Orchestration</span></button>
+    <button class="nav-btn" data-idx="17" onclick="goTo(17)"><span class="nb-num">18</span><span class="nb-icon">☁️</span><span class="nb-label">MQTT &amp; Cloud Contract</span></button>
+
+    <!-- GROUP 3: MANUAL -->
+    <div class="sidebar-group">📖 คู่มือการใช้งาน (Manual)</div>
+    <button class="nav-btn" data-idx="18" onclick="goTo(18)"><span class="nb-num">19</span><span class="nb-icon">📋</span><span class="nb-label">ก่อนเริ่มใช้งาน</span></button>
+    <button class="nav-btn" data-idx="19" onclick="goTo(19)"><span class="nb-num">20</span><span class="nb-icon">🏠</span><span class="nb-label">Homing Workflow</span></button>
+    <button class="nav-btn" data-idx="20" onclick="goTo(20)"><span class="nb-num">21</span><span class="nb-icon">🕹️</span><span class="nb-label">Jog &amp; Min/Max</span></button>
+    <button class="nav-btn" data-idx="21" onclick="goTo(21)"><span class="nb-num">22</span><span class="nb-icon">🎯</span><span class="nb-label">GOTO XYZ</span></button>
+    <button class="nav-btn" data-idx="22" onclick="goTo(22)"><span class="nb-num">23</span><span class="nb-icon">📍</span><span class="nb-label">Positions &amp; Slots</span></button>
+    <button class="nav-btn" data-idx="23" onclick="goTo(23)"><span class="nb-num">24</span><span class="nb-icon">🩺</span><span class="nb-label">Diagnostics &amp; I/O</span></button>
+    <button class="nav-btn" data-idx="24" onclick="goTo(24)"><span class="nb-num">25</span><span class="nb-icon">🚨</span><span class="nb-label">Alarm &amp; Recovery</span></button>
+    <button class="nav-btn" data-idx="25" onclick="goTo(25)"><span class="nb-num">26</span><span class="nb-icon">🔬</span><span class="nb-label">Demo Slot Sampling</span></button>
+    <button class="nav-btn" data-idx="26" onclick="goTo(26)"><span class="nb-num">27</span><span class="nb-icon">📐</span><span class="nb-label">Travel Calibration</span></button>
+    <button class="nav-btn" data-idx="27" onclick="goTo(27)"><span class="nb-num">28</span><span class="nb-icon">🔍</span><span class="nb-label">Troubleshooting</span></button>
   </div>
 
   <!-- Footer -->
@@ -541,12 +516,12 @@ code { background:var(--surface2); border:1px solid var(--border); border-radius
   <div class="sidebar-footer">
     <button class="sf-btn" onclick="prevSlide()" title="Previous">&#8593;</button>
     <button class="sf-btn" onclick="nextSlide()" title="Next">&#8595;</button>
-    <span class="sf-counter" id="counter">1 / 20</span>
+    <span class="sf-counter" id="counter">1 / 28</span>
   </div>
 </aside>
 
 <!-- ═══════════════════════════════════
-     MAIN
+     MAIN VIEWPORT
 ════════════════════════════════════ -->
 <div class="main">
   <!-- Top bar -->
@@ -615,7 +590,7 @@ code { background:var(--surface2); border:1px solid var(--border); border-radius
       </div>
     </section>
 
-    <!-- ════════════════ 03 ARCHITECTURE ════════════════ -->
+    <!-- ════════════════ 03 ARCHITECTURE OVERVIEW ════════════════ -->
     <section class="slide" data-title="สถาปัตยกรรม Software" data-section="Project Overview">
       <div class="slide-label">Application Architecture</div>
       <h2>โครงสร้างระบบ Software</h2>
@@ -867,11 +842,423 @@ code { background:var(--surface2); border:1px solid var(--border); border-radius
       </div>
     </section>
 
-    <!-- ──────────────────────────────
-         MANUAL SECTION
-    ────────────────────────────────── -->
+    <!-- ──────────────────────────────────────────────
+         GROUP 2: ARCHITECTURE DEEP-DIVE
+    ────────────────────────────────────────────────── -->
 
-    <!-- ════════════════ 11 PRE-START ════════════════ -->
+    <!-- ════════════════ 11 ARCHITECTURE CONTEXT ════════════════ -->
+    <section class="slide" data-title="System Context & Safety" data-section="Architecture">
+      <div class="slide-label">Architecture Deep-Dive · 01</div>
+      <h2>System Context &amp; Safety Boundary</h2>
+      <p>โครงสร้างสถาปัตยกรรมรวมของระบบ IRIV PiControl + IRIV IO + NUCLEO-F439ZI และขอบเขตความปลอดภัยระดับตู้</p>
+
+      <div class="box-canvas">
+        <div class="arch-header">
+          <span style="font-weight:700; color:var(--accent2)">📐 High-Level Topology Block Diagram</span>
+          <span class="arch-tag">IRIV_PiControl_CM4 ↔ NUCLEO-F439ZI ↔ IRIV_IO_Modbus</span>
+        </div>
+        <div class="flow" style="justify-content:space-between; gap:.6rem;">
+          <div class="fn fb" style="flex:1">
+            <strong>Operator Browser</strong><br>
+            <span style="font-size:.68rem; color:var(--text-dim)">HMI / REST API :80</span>
+          </div>
+          <div class="fa">➔ HTTP ➔</div>
+          <div class="fn fc" style="flex:1.2">
+            <strong>Web Process (Flask)</strong><br>
+            <span style="font-size:.68rem; color:var(--text-dim)">Render &amp; Validate Input</span>
+          </div>
+          <div class="fa">➔ Unix IPC ➔</div>
+          <div class="fn fg" style="flex:1.5">
+            <strong>Controller Process</strong><br>
+            <span style="font-size:.68rem; color:var(--success)">Sole Motion &amp; Safety Authority</span>
+          </div>
+        </div>
+        <div class="flow" style="justify-content:space-between; gap:.6rem;">
+          <div class="fn fp" style="flex:1.5">
+            <strong>NUCLEO-F439ZI (MCU)</strong><br>
+            <span style="font-size:.68rem; color:var(--accent3)">TIM1/TIM2 Pulse Generator</span>
+          </div>
+          <div class="fa">➔ USB VCP ➔</div>
+          <div class="fn fb" style="flex:1; border-color:var(--text-faint)">
+            <strong>Controller Core</strong><br>
+            <span style="font-size:.68rem; color:var(--text-dim)">CommandBus + SafetyInterlock</span>
+          </div>
+          <div class="fa">➔ Modbus TCP ➔</div>
+          <div class="fn fy" style="flex:1.5">
+            <strong>IRIV IO Unit (10.0.0.10)</strong><br>
+            <span style="font-size:.68rem; color:var(--warning)">DI0–DI10 Limits &amp; E-Stop</span>
+          </div>
+        </div>
+        <div class="flow" style="justify-content:space-between; gap:.6rem;">
+          <div class="fn fy" style="flex:1.2">
+            <strong>6-Channel NMOS Sink</strong><br>
+            <span style="font-size:.68rem; color:var(--text-dim)">Low-side switches Q1–Q6</span>
+          </div>
+          <div class="fa">➔ Optocouplers ➔</div>
+          <div class="fn fg" style="flex:1.3">
+            <strong>Motor Drivers (HBS860H &amp; DM542)</strong><br>
+            <span style="font-size:.68rem; color:var(--text-dim)">X/Y/Z Steppers</span>
+          </div>
+          <div class="fa" style="color:var(--danger)">⚡ Hardwired ⚡</div>
+          <div class="fn fr" style="flex:1.2">
+            <strong>KM1 Safety Relay &amp; E-Stop</strong><br>
+            <span style="font-size:.68rem; color:var(--danger)">Hardwired Power Cut (60V)</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card-grid col3">
+        <div class="card as">
+          <div class="ct">1. Single Authority Rule</div>
+          <div class="cb">Browser และ Web process ไม่มีสิทธิ์เข้าถึง GPIO หรือสร้าง Pulse เอง ทุกคำสั่งต้องผ่าน Controller IPC</div>
+        </div>
+        <div class="card aw">
+          <div class="ct">2. Hardwired Priority</div>
+          <div class="cb">E-Stop และ Safety Relay KM1 มีอำนาจตัดกำลังขับโดยตรง ไม่พึ่งพาซอฟต์แวร์หรือเครือข่าย</div>
+        </div>
+        <div class="card ap">
+          <div class="ct">3. Continuous Safety</div>
+          <div class="cb">ตรวจ Safety ก่อนเริ่ม และระหว่างการหมุนทุก Step หาก Watchdog ขาดเกิน 500ms MCU จะ Disarm ทันที</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ════════════════ 12 DUAL PROCESS & IPC ════════════════ -->
+    <section class="slide" data-title="Dual-Process & Unix IPC" data-section="Architecture">
+      <div class="slide-label">Architecture Deep-Dive · 02</div>
+      <h2>Dual-Process Isolation &amp; Unix IPC</h2>
+      <p>การแบ่งแยก Process ระดับ OS เพื่อป้องกัน Browser หรือ Web Server ขัดขวางความปลอดภัยของ Motion Control</p>
+
+      <div class="card-grid col2">
+        <div class="card al">
+          <h3 style="margin-bottom:.6rem; color:var(--accent2)">🌐 Web Process (Flask)</h3>
+          <div class="step-list">
+            <div class="step-item"><div class="sn">1</div><div class="st"><strong>พอร์ตให้บริการ:</strong> พอร์ต 80 HTTP ให้บริการ HMI Static files (JS/CSS) และ REST API</div></div>
+            <div class="step-item"><div class="sn">2</div><div class="st"><strong>ไร้สิทธิ์ฮาร์ดแวร์:</strong> ไม่เปิด GPIO, ไม่ต่อ Serial, ไม่ต่อ Modbus และไม่เปิด MQTT Client</div></div>
+            <div class="step-item"><div class="sn">3</div><div class="st"><strong>Client-Side Only:</strong> ใช้ <code>ControllerClient</code> ส่ง <code>CommandEnvelope</code> ผ่าน IPC</div></div>
+            <div class="step-item"><div class="sn">4</div><div class="st"><strong>Zero-Downtime Deploy:</strong> อัปเดต UI/CSS ได้โดยไม่ต้องรีสตาร์ท Controller มอเตอร์ไม่สะดุด</div></div>
+            <div class="step-item"><div class="sn">5</div><div class="st"><strong>Fail-Safe 503:</strong> หาก Controller ดับ Web จะตอบ 503 ทันที ไม่ใช้ข้อมูลเก่ามาหลอกว่า READY</div></div>
+          </div>
+        </div>
+
+        <div class="card as">
+          <h3 style="margin-bottom:.6rem; color:var(--success)">⚙️ Controller Process (Core)</h3>
+          <div class="step-list">
+            <div class="step-item"><div class="sn">1</div><div class="st"><strong>IPC Server:</strong> รับฟังคำสั่งผ่าน Unix Domain Socket <code>/run/narit-vending/ctrl.sock</code></div></div>
+            <div class="step-item"><div class="sn">2</div><div class="st"><strong>Motion Owner:</strong> เป็นเจ้าของ <code>MotionService</code>, <code>SequenceService</code>, <code>NucleoLink</code></div></div>
+            <div class="step-item"><div class="sn">3</div><div class="st"><strong>Safety Gatekeeper:</strong> รัน <code>SafetyInterlock</code> ตรวจสอบสิทธิ์และ E-Stop ก่อนขับเคลื่อนเสมอ</div></div>
+            <div class="step-item"><div class="sn">4</div><div class="st"><strong>Single Snapshot:</strong> คำนวณสถานะรวมจุดเดียว สร้าง <code>MachineSnapshot</code> ส่งให้ Web และ MQTT</div></div>
+            <div class="step-item"><div class="sn">5</div><div class="st"><strong>Priority Execution:</strong> STOP และ E-Stop มีคิวพิเศษที่แซงคิวคำสั่งปกติได้ทันที</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="callout info">
+        <span class="c-icon">💡</span>
+        <div><strong>IPC Contract:</strong> ส่งข้อมูลในรูปแบบ JSON Stream ผ่าน Socket พร้อม Request-ID และ Session Traceability หาก IPC ตัดการเชื่อมต่อ Request ทั้งหมดจะถูกปฏิเสธอย่างปลอดภัย</div>
+      </div>
+    </section>
+
+    <!-- ════════════════ 13 HARDWARE SIGNAL & NMOS ════════════════ -->
+    <section class="slide" data-title="Hardware Signal & NMOS" data-section="Architecture">
+      <div class="slide-label">Architecture Deep-Dive · 03</div>
+      <h2>Hardware Signal &amp; NMOS Topology</h2>
+      <p>วงจรขับสัญญาณพัลส์จาก MCU 3.3V ไปยัง Stepper Driver Optocouplers ผ่าน Open-Drain NMOS</p>
+
+      <div class="card-grid col2">
+        <div>
+          <h3 style="margin-bottom:.6rem; color:var(--accent2)">STM32 Pin Mapping &amp; Functions</h3>
+          <table class="data-table">
+            <thead><tr><th>สัญญาณ</th><th>STM32 Pin</th><th>Connector</th><th>หน้าที่ / Timer Channel</th><th>NMOS</th></tr></thead>
+            <tbody>
+              <tr><td><code>X_PUL</code></td><td><code>PA8</code></td><td>CN12 pin 23</td><td><code>TIM1_CH1</code> Hardware Pulse</td><td>Q1</td></tr>
+              <tr><td><code>X_DIR</code></td><td><code>PB0</code></td><td>CN10 pin 31</td><td>GPIO Direction (LED1 Disabled)</td><td>Q2</td></tr>
+              <tr><td><code>Y_PUL</code></td><td><code>PA9</code></td><td>CN12 pin 21</td><td><code>TIM1_CH2</code> Hardware Pulse</td><td>Q3</td></tr>
+              <tr><td><code>Y_DIR</code></td><td><code>PB1</code></td><td>CN10 pin 7</td><td>GPIO Direction</td><td>Q4</td></tr>
+              <tr><td><code>Z_PUL</code></td><td><code>PA5</code></td><td>CN12 pin 11</td><td><code>TIM2_CH1</code> Hardware Pulse</td><td>Q5</td></tr>
+              <tr><td><code>Z_DIR</code></td><td><code>PB2</code></td><td>CN10 pin 15</td><td>GPIO Direction</td><td>Q6</td></tr>
+            </tbody>
+          </table>
+          <p style="font-size:.69rem; color:var(--text-faint); margin-top:.4rem">Reference: ST UM1974 Nucleo-144 manual &amp; nucleo_motion.c</p>
+        </div>
+
+        <div>
+          <h3 style="margin-bottom:.6rem; color:var(--accent2)">Electrical Schematic (Single Channel)</h3>
+          <div class="card" style="font-family:'Consolas',monospace; font-size:.72rem; color:var(--accent2); line-height:1.75">
+            MCU 3.3V Pulse/Dir ──[ Rg 100Ω ]──┬── Gate (Qn)<br>
+                                               │<br>
+                                            [ Rpd 47kΩ ]<br>
+                                               │<br>
+            MCU GND ────────── Source (Qn) ───┴── 0V-SIGNAL<br>
+                                 │<br>
+                               Drain (Qn) ──────── Driver PUL- / DIR-<br>
+                               <br>
+            Field +24V Supply ────────────────── Driver PUL+ / DIR+
+          </div>
+          <div class="callout warn" style="margin-top:.6rem">
+            <span class="c-icon">⚠️</span>
+            <div><strong>Common-Anode Optocoupler:</strong> เมื่อ STM32 ส่ง HIGH → NMOS จะนำกระแส ดึงขา <code>PUL-</code> ลง GND ทำให้มีกระแสไหลผ่าน Optocoupler ของ Driver</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card-grid col3" style="margin-top:.4rem">
+        <div class="card al"><div class="ct">Gate Resistor (Rg)</div><div class="cb">จำกัดกระแสชาร์จ Gate และลดการกระเพื่อม (Ringing) ของสัญญาณ PWM</div></div>
+        <div class="card al"><div class="ct">Pull-Down (Rpd)</div><div class="cb">ดึง Gate ลง GND อัตโนมัติเมื่อ MCU รีเซ็ตหรือสายสัญญาณหลุด เพื่อความปลอดภัย</div></div>
+        <div class="card al"><div class="ct">Isolator Isolation</div><div class="cb">แยกกราวด์สัญญาณตู้ (24V Field) ออกจาก MCU 3.3V โดยสิ้นเชิง</div></div>
+      </div>
+    </section>
+
+    <!-- ════════════════ 14 SAFETY LOOP & KM1 ════════════════ -->
+    <section class="slide" data-title="Safety Loop & KM1 Relay" data-section="Architecture">
+      <div class="slide-label">Architecture Deep-Dive · 04</div>
+      <h2>Safety Loop &amp; Power Interlock (KM1)</h2>
+      <p>โครงสร้างความปลอดภัยแบบ Dual-Layer: ฮาร์ดแวร์ตัดกำลังไฟตรง ร่วมกับซอฟต์แวร์ควบคุมสถานะฉุกเฉิน</p>
+
+      <div class="card-grid col2">
+        <div class="card ad">
+          <h3 style="margin-bottom:.6rem; color:var(--danger)">🔴 Hardwired Safety Layer (ชั้นที่ 1)</h3>
+          <p style="font-size:.78rem; line-height:1.6; color:var(--text-dim)">
+            ปุ่มกด E-Stop ทางกายภาพบนหน้าตู้ ต่อพ่วงผ่าน <strong>Safety Relay</strong> ควบคุมคอนแทกเตอร์ <strong>KM1</strong>
+            เมื่อกดปุ่ม คอนแทกต์จะเปิดทันที ตัดไฟกำลัง <strong>60V DC</strong> ที่จ่ายให้แก่ไดรเวอร์ X และ Y (HBS860H)
+            ทำให้มอเตอร์หยุดหมุนด้วยแรงเฉื่อยทันทีโดยไม่ผ่านคอมพิวเตอร์
+          </p>
+          <div class="callout danger" style="margin-top:.6rem">
+            <span class="c-icon">🚨</span>
+            <div><strong>Critical Safety Gap ของ Z:</strong> ขณะนี้ไฟ 24V ของไดรเวอร์ Z (DM542) ยังไม่ผ่าน KM1 ทำให้ Z หยุดเฉพาะทางซอฟต์แวร์ — ต้องเดินสายผ่าน KM1 ก่อนใช้งานจริง!</div>
+          </div>
+        </div>
+
+        <div class="card as">
+          <h3 style="margin-bottom:.6rem; color:var(--success)">🟢 Software Fail-Safe Guard (ชั้นที่ 2)</h3>
+          <div class="step-list">
+            <div class="step-item"><div class="sn">1</div><div class="st"><strong>DI10 NC Feedback:</strong> หน้าสัมผัสช่วยของ KM1 ต่อเข้า IRIV IO DI10 แบบ ปกติปิด (Normally Closed)</div></div>
+            <div class="step-item"><div class="sn">2</div><div class="st"><strong>Two-State Verification:</strong> ต้องทดสอบกดและปล่อยจริงเพื่อยืนยัน Polarity ก่อนปลดล็อกระบบ</div></div>
+            <div class="step-item"><div class="sn">3</div><div class="st"><strong>Fail-Safe Polling:</strong> หากสาย Modbus ขาด หรือค่า DI10 ไม่พร้อม Controller จะเข้า <code>E_STOP</code> ทันที</div></div>
+            <div class="step-item"><div class="sn">4</div><div class="st"><strong>Immediate Disarm:</strong> สั่งตัดพัลส์ของ MCU ทันที และส่งข้อความ Disarm ผ่าน USB VCP</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="box-canvas" style="margin-top:.4rem">
+        <div class="arch-header">
+          <span style="font-weight:700; color:var(--accent2)">🔄 Safety Interlock Decision Matrix</span>
+          <span class="arch-tag">Fail-Safe State Transition</span>
+        </div>
+        <table class="data-table">
+          <thead><tr><th>เหตุการณ์</th><th>ผลการตรวจฮาร์ดแวร์</th><th>ปฏิกิริยาของ Controller</th><th>สถานะเครื่องจักร</th></tr></thead>
+          <tbody>
+            <tr><td>กด E-Stop หน้าตู้</td><td>KM1 ปลดไฟ 60V + DI10 เปลี่ยนสถานะ</td><td>ยกเลิกคิวงาน, ส่ง USB DISARM, ล้างค่า Homed</td><td><span class="badge b-r">E_STOP</span></td></tr>
+            <tr><td>ชน Limit Switch (DI0–DI5)</td><td>Limit Sensor ติด active</td><td>หยุดพัลส์ทันที, บันทึก Alarm พร้อมแกนที่ชน</td><td><span class="badge b-y">ALARM</span></td></tr>
+            <tr><td>สาย USB Nucleo หลุด</td><td>Heartbeat ขาดเกิน 500ms</td><td>MCU ดับ STEP/DIR LOW, Controller ปฏิเสธงาน</td><td><span class="badge b-r">NOT_READY</span></td></tr>
+            <tr><td>สาย LAN Modbus หลุด</td><td>Timeout > 250ms</td><td>หยุดคำสั่งทันที, ถือว่า E-Stop Active</td><td><span class="badge b-r">E_STOP</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ════════════════ 15 COMMAND BUS & PRIORITY ════════════════ -->
+    <section class="slide" data-title="CommandBus & Priority" data-section="Architecture">
+      <div class="slide-label">Architecture Deep-Dive · 05</div>
+      <h2>CommandBus &amp; Priority Execution</h2>
+      <p>กลไกการรับคำสั่งแบบ Single-Flight Dispatch พร้อมช่องทางด่วนพิเศษสำหรับคำสั่งหยุดฉุกเฉิน</p>
+
+      <div class="card-grid col2">
+        <div class="card al">
+          <h3 style="margin-bottom:.5rem; color:var(--accent)">1. Structure of CommandEnvelope</h3>
+          <p style="font-size:.76rem; color:var(--text-dim); margin-bottom:.5rem">ทุกคำสั่งจาก HMI, REST API หรือ MQTT จะถูกห่อหุ้มเป็น Envelope กลาง:</p>
+          <pre style="background:var(--surface2); border:1px solid var(--border); border-radius:6px; padding:.6rem; font-size:.7rem; color:var(--accent2); line-height:1.5"><code>{
+  "command_id": "cmd-8f921a",
+  "name": "MOVE_TO_SLOT",
+  "source": "hmi_web",
+  "created_at": 1725350400.12,
+  "arm_token": "arm-550e8400-...",
+  "payload": { "slot": 12, "speed": 15.0 }
+}</code></pre>
+        </div>
+
+        <div class="card as">
+          <h3 style="margin-bottom:.5rem; color:var(--success)">2. Priority Lane vs Normal Queue</h3>
+          <div class="step-list">
+            <div class="step-item"><div class="sn">P</div><div class="st"><strong>High-Priority Lane:</strong> คำสั่ง <code>STOP</code>, <code>E_STOP</code>, <code>DISARM</code> จะแทรกเข้าประมวลผลทันทีโดยไม่ต้องรอคิว</div></div>
+            <div class="step-item"><div class="sn">1</div><div class="st"><strong>Single-Flight Dispatcher:</strong> ยอมให้มี Motion Command รันได้ทีละ 1 คำสั่งเท่านั้น ป้องกันมอเตอร์รับคำสั่งซ้อน</div></div>
+            <div class="step-item"><div class="sn">2</div><div class="st"><strong>SafetyInterlock Pre-Check:</strong> คำสั่งจะถูกส่งไปยัง Handlers ก็ต่อเมื่อผ่านการตรวจสอบเงื่อนไขความปลอดภัยครบ</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="box-canvas" style="margin-top:.4rem">
+        <div class="arch-header"><span style="font-weight:700; color:var(--accent2)">📦 Command Execution Flowchart</span></div>
+        <div class="flow" style="justify-content:space-around">
+          <div class="fn fb">HTTP / MQTT / HMI</div>
+          <div class="fa">➔</div>
+          <div class="fn fc">CommandEnvelope</div>
+          <div class="fa">➔</div>
+          <div class="fn fp">CommandBus (Priority Check)</div>
+          <div class="fa">➔</div>
+          <div class="fn fg">SafetyInterlock Gate</div>
+          <div class="fa">➔</div>
+          <div class="fn fy">Motion Handlers</div>
+        </div>
+      </div>
+
+      <div class="card-grid col3" style="margin-top:.3rem">
+        <div class="card al"><div class="ct">Idempotency</div><div class="cb">คำสั่งซ้ำที่มี request_id เดิมจาก MQTT จะถูกกรองออก ไม่สั่งมอเตอร์ซ้ำ</div></div>
+        <div class="card aw"><div class="ct">Token Expiry</div><div class="cb">Arm token มีอายุจำกัด หากเครื่องเปลี่ยนสถานะ Token จะกลายเป็นโมฆะ</div></div>
+        <div class="card as"><div class="ct">Atomic Feedback</div><div class="cb">ตอบกลับสถานะทันทีแบบ Non-blocking และอัปเดตผลลัพธ์ผ่าน Snapshot</div></div>
+      </div>
+    </section>
+
+    <!-- ════════════════ 16 LONG-MOVE SEGMENTATION ════════════════ -->
+    <section class="slide" data-title="Long-Move Segmentation" data-section="Architecture">
+      <div class="slide-label">Architecture Deep-Dive · 06</div>
+      <h2>Long-Move Segmentation &amp; Watchdog</h2>
+      <p>สถาปัตยกรรมแบ่งย่อยคำสั่งเคลื่อนที่ระยะไกลตามขีดความสามารถของ Firmware พร้อมการตรวจ Safety ระหว่างทาง</p>
+
+      <div class="card-grid col2">
+        <div>
+          <h3 style="margin-bottom:.6rem; color:var(--accent2)">ทำไมต้องแบ่งย่อย (Segmentation)?</h3>
+          <p style="font-size:.78rem; line-height:1.6; color:var(--text-dim)">
+            เฟิร์มแวร์ Nucleo Candidate v2 ถูกออกแบบตามหลักความปลอดภัย ให้รับคำสั่งพัลส์ได้สูงสุด <strong>10,000 steps ต่อเฟรม</strong>
+            เพื่อป้องกันมอเตอร์วิ่งค้างในระยะยาวหากเกิดข้อผิดพลาดในการสื่อสาร
+            เมื่อระบบต้องการเคลื่อนที่ระยะไกล เช่น <strong>44,000 pulses</strong> Controller จะคำนวณและแตกเป็นเฟรมย่อยอัตโนมัติ:
+          </p>
+          <div class="card" style="font-family:'Consolas',monospace; font-size:.73rem; color:var(--accent); margin-top:.6rem; line-height:1.7">
+            Target Move = 44,000 pulses<br>
+            ├── Segment 1: 10,000 steps [Check Safety &amp; Limits]<br>
+            ├── Segment 2: 10,000 steps [Check Safety &amp; Limits]<br>
+            ├── Segment 3: 10,000 steps [Check Safety &amp; Limits]<br>
+            ├── Segment 4: 10,000 steps [Check Safety &amp; Limits]<br>
+            └── Segment 5: &nbsp;4,000 steps [Final Position Verify]
+          </div>
+        </div>
+
+        <div>
+          <h3 style="margin-bottom:.6rem; color:var(--accent2)">Watchdog &amp; Heartbeat Architecture</h3>
+          <div class="step-list">
+            <div class="step-item"><div class="sn">1</div><div class="st"><strong>500ms Hardware Watchdog:</strong> เฟิร์มแวร์ STM32 มีตัวนับเวลาถอยหลัง หากไม่ได้รับคำสั่ง <code>HEARTBEAT SAFE</code> ภายใน 500ms ไทเมอร์ขับสเต็ปจะหยุดทันที</div></div>
+            <div class="step-item"><div class="sn">2</div><div class="st"><strong>Fresh Sensor Verification:</strong> Controller จะส่ง Heartbeat ได้ก็ต่อเมื่ออ่านค่าจาก IRIV IO Modbus สำเร็จและสถานะปลอดภัย</div></div>
+            <div class="step-item"><div class="sn">3</div><div class="st"><strong>Inter-Segment Position Sync:</strong> หลังจบแต่ละ Segment ระบบจะอัปเดตพิกัดปัจจุบันใน MachineSnapshot ทันที</div></div>
+          </div>
+          <div class="callout warn" style="margin-top:.5rem">
+            <span class="c-icon">⚠️</span>
+            <div><strong>No Software Interpolation by UI:</strong> หน้าเว็บ Browser มีหน้าที่เพียงส่งเป้าหมายสุดท้าย การแบ่งพัลส์เป็นหน้าที่ของ Controller เท่านั้น</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card-grid col3" style="margin-top:.4rem">
+        <div class="card as"><div class="ct">Stop Anywhere</div><div class="cb">สามารถกดปุ่มหยุดได้ทันทีทุกขณะ โดย Controller จะยกเลิก Segment ถัดไปทันที</div></div>
+        <div class="card ap"><div class="ct">Limit Enforcement</div><div class="cb">หาก Limit Switch ถูกชนระหว่าง Segment มอเตอร์จะหยุดทันทีภายในระดับ Millisecond</div></div>
+        <div class="card al"><div class="ct">Smooth Re-sync</div><div class="cb">ถ้าการเคลื่อนที่หยุดกลางทาง ระบบจะบันทึกพิกัดจริงล่าสุด และบังคับให้ผู้ใช้ตรวจเช็ค</div></div>
+      </div>
+    </section>
+
+    <!-- ════════════════ 17 SEQUENCE ORCHESTRATION ════════════════ -->
+    <section class="slide" data-title="Sequence Orchestration" data-section="Architecture">
+      <div class="slide-label">Architecture Deep-Dive · 07</div>
+      <h2>Sequence Orchestration &amp; Two-Phase Commit</h2>
+      <p>การจัดลำดับกระบวนการหยิบ-จ่ายสินค้าอัตโนมัติ (Dispense Sequence) พร้อมกลไก Validate-Arm-Execute</p>
+
+      <div class="card-grid col2">
+        <div class="card al">
+          <h3 style="margin-bottom:.6rem; color:var(--accent)">1. สองรูปแบบการเคลื่อนที่สู่ Slot</h3>
+          <table class="data-table">
+            <thead><tr><th>รูปแบบ</th><th>การเคลื่อนที่</th><th>การทำงาน</th></tr></thead>
+            <tbody>
+              <tr>
+                <td><strong>Standard Go To Slot</strong></td>
+                <td>Safe Z ➔ X/Y ➔ Target Z</td>
+                <td>เคลื่อนไปยังช่องเป้าหมายแล้วค้างตำแหน่งไว้ ไม่สั่งจ่ายสินค้า</td>
+              </tr>
+              <tr>
+                <td><strong>RUN_SLOT_SEQUENCE</strong></td>
+                <td>X ➔ Y ➔ Z ➔ Hold 3s ➔ Home Z/Y/X</td>
+                <td>ลำดับการจ่ายสินค้าเต็มรูปแบบ เมื่อเสร็จจะถอยกลับจุด Home อัตโนมัติ</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="card as">
+          <h3 style="margin-bottom:.6rem; color:var(--success)">2. กลไก Two-Phase Commit (Arm Token)</h3>
+          <div class="step-list">
+            <div class="step-item"><div class="sn">1</div><div class="st"><strong>Validate:</strong> ตรวจสอบพิกัด X/Y/Z ว่าอยู่ในช่วง Stroke และเครื่องอยู่ในสถานะ READY</div></div>
+            <div class="step-item"><div class="sn">2</div><div class="st"><strong>Arm:</strong> Controller ออกโทเคน <code>arm_token</code> ที่มีอายุ 30 วินาที เพื่อล็อกเป้าหมาย</div></div>
+            <div class="step-item"><div class="sn">3</div><div class="st"><strong>Execute:</strong> ส่งโทเคนกลับมาเพื่อยืนยันการเริ่มเคลื่อนที่ หากมีการเปลี่ยนความเร็ว โทเคนจะถูกยกเลิกทันที</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="box-canvas" style="margin-top:.4rem">
+        <div class="arch-header"><span style="font-weight:700; color:var(--accent2)">🔄 Dispense Flow State Machine</span></div>
+        <div class="flow" style="justify-content:space-between">
+          <div class="fn fb">1. Validate &amp; Arm</div>
+          <div class="fa">➔</div>
+          <div class="fn fc">2. Move XY to Slot</div>
+          <div class="fa">➔</div>
+          <div class="fn fp">3. Move Z to Depth</div>
+          <div class="fa">➔</div>
+          <div class="fn fy">4. Dispense &amp; Hold 3s</div>
+          <div class="fa">➔</div>
+          <div class="fn fg">5. Safe Retract &amp; Home</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ════════════════ 18 MQTT & CLOUD CONTRACT ════════════════ -->
+    <section class="slide" data-title="MQTT & Cloud Contract" data-section="Architecture">
+      <div class="slide-label">Architecture Deep-Dive · 08</div>
+      <h2>MQTT Cloud Contract &amp; Telemetry Sanitization</h2>
+      <p>การเชื่อมต่อคลาวด์ผ่านโพรโทคอล MQTT โดยมี Controller เป็นเจ้าของเพียงรายเดียว และระบบปิดบังข้อมูลลับ</p>
+
+      <div class="card-grid col2">
+        <div>
+          <h3 style="margin-bottom:.6rem; color:var(--accent2)">Topic Contract &amp; Ownership</h3>
+          <table class="data-table">
+            <thead><tr><th>ทิศทาง</th><th>Topic Template</th><th>เนื้อหา / กฎความปลอดภัย</th></tr></thead>
+            <tbody>
+              <tr>
+                <td><strong>Subscribe</strong></td>
+                <td><code>vending/{cabinet_id}/command</code></td>
+                <td>รับคำสั่ง <code>release</code> พร้อม <code>slot</code> และ <code>request_id</code> (ตรวจสอบ Expired และ Duplicate)</td>
+              </tr>
+              <tr>
+                <td><strong>Publish</strong></td>
+                <td><code>vending/{cabinet_id}/status</code></td>
+                <td>รายงานสถานะการเคลื่อนที่, ผลลัพธ์ความสำเร็จ/ข้อผิดพลาด</td>
+              </tr>
+              <tr>
+                <td><strong>Publish (Retained)</strong></td>
+                <td><code>vending/{cabinet_id}/presence</code></td>
+                <td>รายงานสถานะออนไลน์ด้วย QoS 1 พร้อม Last-Will-and-Testament (LWT) แจ้ง Offline หากโปรเซสดับ</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div>
+          <h3 style="margin-bottom:.6rem; color:var(--accent2)">Security &amp; Sanitization Policy</h3>
+          <div class="step-list">
+            <div class="step-item"><div class="sn">1</div><div class="st"><strong>Single Client Connection:</strong> มีเพียง Controller Process เท่านั้นที่เชื่อมต่อไปยัง Broker ป้องกัน Client ID ซ้ำ</div></div>
+            <div class="step-item"><div class="sn">2</div><div class="st"><strong>Telemetry Redaction:</strong> ข้อมูล Telemetry ที่ส่งผ่าน API หรือแสดงใน HMI จะถูกปิดบังรหัสผ่านและโทเคนอย่างถาวร</div></div>
+            <div class="step-item"><div class="sn">3</div><div class="st"><strong>Isolation from Local Safety:</strong> หากการเชื่อมต่ออินเทอร์เน็ตหลุด จะไม่ส่งผลกระทบต่อ E-Stop หรือระบบความปลอดภัยในตู้</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card-grid col3" style="margin-top:.4rem">
+        <div class="card as"><div class="ct">Clean Session False</div><div class="cb">เก็บบันทึกการสมัครรับข้อมูล ป้องกันคำสั่งสูญหายระหว่างการ Reconnect ชั่วขณะ</div></div>
+        <div class="card aw"><div class="ct">Backoff Retry</div><div class="cb">หน่วงเวลาเชื่อมต่อใหม่แบบ Exponential Backoff 4–60 วินาที ป้องกันเซิร์ฟเวอร์ค้าง</div></div>
+        <div class="card al"><div class="ct">Sanitized Telemetry API</div><div class="cb">เรียกดูสถานะความปลอดภัยได้ที่ <code>GET /api/mqtt/status</code> โดยไร้ข้อมูล Credentials</div></div>
+      </div>
+    </section>
+
+    <!-- ──────────────────────────────────────────────
+         GROUP 3: MANUAL SECTION (SLIDES 19 - 28)
+    ────────────────────────────────────────────────── -->
+
+    <!-- ════════════════ 19 PRE-START ════════════════ -->
     <section class="slide" data-title="ก่อนเริ่มใช้งาน" data-section="คู่มือการใช้งาน">
       <div class="slide-label">คู่มือการใช้งาน</div>
       <h2>ก่อนเริ่มใช้งาน</h2>
@@ -906,7 +1293,7 @@ code { background:var(--surface2); border:1px solid var(--border); border-radius
       </table>
     </section>
 
-    <!-- ════════════════ 12 HOMING ════════════════ -->
+    <!-- ════════════════ 20 HOMING ════════════════ -->
     <section class="slide" data-title="Homing Workflow" data-section="คู่มือการใช้งาน">
       <div class="slide-label">คู่มือการใช้งาน</div>
       <h2>Homing Workflow</h2>
@@ -940,7 +1327,7 @@ code { background:var(--surface2); border:1px solid var(--border); border-radius
       </div>
     </section>
 
-    <!-- ════════════════ 13 JOG ════════════════ -->
+    <!-- ════════════════ 21 JOG ════════════════ -->
     <section class="slide" data-title="Jog & Min/Max" data-section="คู่มือการใช้งาน">
       <div class="slide-label">คู่มือการใช้งาน</div>
       <h2>Jog &amp; Move to Min/Max</h2>
@@ -977,7 +1364,7 @@ code { background:var(--surface2); border:1px solid var(--border); border-radius
       </div>
     </section>
 
-    <!-- ════════════════ 14 GOTO ════════════════ -->
+    <!-- ════════════════ 22 GOTO ════════════════ -->
     <section class="slide" data-title="GOTO XYZ" data-section="คู่มือการใช้งาน">
       <div class="slide-label">คู่มือการใช้งาน</div>
       <h2>GOTO XYZ</h2>
@@ -1000,7 +1387,7 @@ code { background:var(--surface2); border:1px solid var(--border); border-radius
       </div>
     </section>
 
-    <!-- ════════════════ 15 POSITIONS ════════════════ -->
+    <!-- ════════════════ 23 POSITIONS ════════════════ -->
     <section class="slide" data-title="Positions & Slots" data-section="คู่มือการใช้งาน">
       <div class="slide-label">คู่มือการใช้งาน</div>
       <h2>Positions, Slots &amp; Visualization</h2>
@@ -1034,7 +1421,7 @@ code { background:var(--surface2); border:1px solid var(--border); border-radius
       </div>
     </section>
 
-    <!-- ════════════════ 16 DIAGNOSTICS ════════════════ -->
+    <!-- ════════════════ 24 DIAGNOSTICS ════════════════ -->
     <section class="slide" data-title="Diagnostics & I/O" data-section="คู่มือการใช้งาน">
       <div class="slide-label">คู่มือการใช้งาน</div>
       <h2>Diagnostics &amp; I/O</h2>
@@ -1066,7 +1453,7 @@ code { background:var(--surface2); border:1px solid var(--border); border-radius
       </div>
     </section>
 
-    <!-- ════════════════ 17 ALARM RECOVERY ════════════════ -->
+    <!-- ════════════════ 25 ALARM RECOVERY ════════════════ -->
     <section class="slide" data-title="Alarm & Recovery" data-section="คู่มือการใช้งาน">
       <div class="slide-label">คู่มือการใช้งาน</div>
       <h2>Alarm &amp; Recovery</h2>
@@ -1105,7 +1492,7 @@ code { background:var(--surface2); border:1px solid var(--border); border-radius
       </div>
     </section>
 
-    <!-- ════════════════ 18 DEMO SLOT SAMPLING ════════════════ -->
+    <!-- ════════════════ 26 DEMO SLOT SAMPLING ════════════════ -->
     <section class="slide" data-title="Demo Slot Sampling" data-section="คู่มือการใช้งาน">
       <div class="slide-label">คู่มือการใช้งาน</div>
       <h2>Demo Slot Sampling</h2>
@@ -1144,7 +1531,7 @@ code { background:var(--surface2); border:1px solid var(--border); border-radius
       </div>
     </section>
 
-    <!-- ════════════════ 19 CALIBRATION ════════════════ -->
+    <!-- ════════════════ 27 CALIBRATION ════════════════ -->
     <section class="slide" data-title="Travel Calibration" data-section="คู่มือการใช้งาน">
       <div class="slide-label">คู่มือการใช้งาน</div>
       <h2>Travel Calibration</h2>
@@ -1181,7 +1568,7 @@ code { background:var(--surface2); border:1px solid var(--border); border-radius
       </div>
     </section>
 
-    <!-- ════════════════ 20 TROUBLESHOOTING ════════════════ -->
+    <!-- ════════════════ 28 TROUBLESHOOTING ════════════════ -->
     <section class="slide" data-title="Troubleshooting" data-section="คู่มือการใช้งาน">
       <div class="slide-label">คู่มือการใช้งาน</div>
       <h2>Troubleshooting</h2>
