@@ -16,6 +16,7 @@ from gpiozero import DigitalInputDevice, OutputDevice
 from gpiozero.pins.mock import MockFactory
 
 from .config_foundation import load_hardware_payload
+from .controller.homing_orchestrator import HomingOrchestrator
 from .domain.errors import (
     ActiveLimitError,
     ControlledStopError,
@@ -942,61 +943,17 @@ class MotionController:
         self.timer_seconds: float = 0.0
         self.last_plan: CoordinatedMovePlan | None = None
         self._state_name = "idle"
+        self._homing = HomingOrchestrator(axes=self.axes, home_order=self.config.home_order)
         self.set_state("idle")
 
     def axes(self) -> dict[str, AxisController]:
         return {"x": self.x, "y": self.y, "z": self.z}
 
     def home_axis(self, axis_name: str, progress: Callable[[str, str], None] | None = None) -> None:
-        axis = self.axes()[axis_name.lower()]
-        axis.home(progress=(lambda phase: progress(axis.config.name, phase)) if progress is not None else None)
-        if axis.config.home_position_mm > 0:
-            if progress is not None:
-                progress(axis.config.name, "positioning")
-            try:
-                axis.move_to_mm(axis.config.home_position_mm, speed_mm_s=axis.config.commissioned_max_speed_mm_s)
-            except Exception:
-                axis.is_homed = False
-                raise
-        if progress is not None:
-            progress(axis.config.name, "passed")
+        self._homing.home_axis(axis_name, progress=progress)
 
     def home_all(self, progress: Callable[[str, str], None] | None = None) -> None:
-        backend_protocol = getattr(self.x.motion_backend, "expected_protocol", 1) if self.x.motion_backend is not None else 1
-        if (
-            self.x.motion_backend is not None
-            and isinstance(backend_protocol, (int, float))
-            and backend_protocol >= 3
-            and hasattr(self.x.motion_backend, "home_parallel")
-        ):
-            axes = self.axes()
-            plans = {}
-            for name, axis in axes.items():
-                if progress is not None:
-                    progress(name, "searching")
-                plans[name] = {
-                    "direction": axis.config.home_direction,
-                    "speed_hz": min(axis.config.max_pulse_hz, axis.config.homing_search_speed_mm_s * axis.config.steps_per_mm),
-                    "limit": lambda current=axis: current.head_limit.value,
-                    "abort": lambda current=axis: bool(current.estop.value or current.stop_requested()),
-                    "timeout_s": axis.config.homing_timeout_s,
-                }
-            self.x.motion_backend.home_parallel(plans)
-            for name, axis in axes.items():
-                axis.home(progress=(lambda phase, current=name: progress(current, phase)) if progress is not None else None)
-                if axis.config.home_position_mm > 0:
-                    if progress is not None:
-                        progress(name, "positioning")
-                    try:
-                        axis.move_to_mm(axis.config.home_position_mm, speed_mm_s=axis.config.commissioned_max_speed_mm_s)
-                    except Exception:
-                        axis.is_homed = False
-                        raise
-                if progress is not None:
-                    progress(name, "passed")
-            return
-        for axis_name in self.config.home_order:
-            self.home_axis(axis_name, progress=progress)
+        self._homing.home_all(progress=progress)
 
     def move_by_mm(
         self,
