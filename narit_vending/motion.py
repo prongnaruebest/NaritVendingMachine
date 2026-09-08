@@ -36,6 +36,13 @@ from .domain.motion_math import (
     pulses_per_revolution,
 )
 from .domain.motion_plans import AxisMovePlan, CoordinatedMovePlan, build_axis_move_plan
+from .domain.motion_policy import (
+    LimitViolation,
+    SegmentOutcome,
+    active_physical_limit,
+    assess_directional_limit,
+    classify_segment_outcome,
+)
 
 
 _logger = logging.getLogger(__name__)
@@ -771,22 +778,29 @@ class AxisController:
                     stop_requested=_stop_cond,
                 )
                 completed = int(res.get("steps", chunk_steps))
-                if completed < 0 or completed > chunk_steps:
+                try:
+                    outcome = classify_segment_outcome(
+                        expected_steps=chunk_steps,
+                        completed_steps=completed,
+                        stopped=bool(res.get("stopped")),
+                        stop_reason=stop_context["reason"],
+                        controlled_stop_active=bool(res.get("stopped")) and self.controlled_stop_requested(),
+                    )
+                except ValueError:
                     raise MotionError(
                         f"{self.config.name}: invalid completed step count {completed} for {chunk_steps}-step segment"
                     )
                 self.position_steps += completed if plan.direction == self.config.forward_direction else -completed
                 moved += completed
                 remaining -= completed
-                stopped = bool(res.get("stopped"))
                 stop_reason = stop_context["reason"]
-                if stopped and (stop_reason == "controlled jog release" or self.controlled_stop_requested()):
+                if outcome is SegmentOutcome.CONTROLLED_STOP:
                     # The release flag may be cleared by the request lifecycle
                     # before the USB worker returns. Preserve the reason observed
                     # inside the worker so a normal jog release never becomes a
                     # latched incomplete-segment alarm.
                     raise ControlledStopError(f"{self.config.name}: jog stopped when hold control was released")
-                if stopped and stop_reason in {"Min limit triggered", "Max limit triggered"}:
+                if outcome in {SegmentOutcome.MIN_LIMIT, SegmentOutcome.MAX_LIMIT}:
                     # A directional end-stop is a recoverable endpoint, not a
                     # loss of machine reference.  Snap the logical coordinate
                     # to the known physical endpoint and reject only further
@@ -803,13 +817,13 @@ class AxisController:
                     raise ActiveLimitError(
                         f"{self.config.name}: {stop_reason}; move in the {away} direction"
                     )
-                if stopped and stop_reason == "emergency stop":
+                if outcome is SegmentOutcome.EMERGENCY_STOP:
                     self.is_homed = False
                     raise EmergencyStopError(f"{self.config.name}: emergency stop triggered")
-                if stopped and stop_reason == "stop requested":
+                if outcome is SegmentOutcome.STOP_REQUESTED:
                     self.is_homed = False
                     raise StopRequestedError(f"{self.config.name}: stop requested")
-                if completed != chunk_steps:
+                if outcome is SegmentOutcome.INCOMPLETE:
                     raise MotionError(
                         f"{self.config.name}: incomplete USB move segment ({completed}/{chunk_steps} steps)"
                         + (f"; stop reason: {stop_reason}" if stop_reason else "")
@@ -852,17 +866,24 @@ class AxisController:
             raise EmergencyStopError(f"{self.config.name}: emergency stop is active")
         if self.stop_requested():
             raise StopRequestedError(f"{self.config.name}: stop requested")
-        if direction == self.config.home_direction and self.head_limit.value:
+        assessment = assess_directional_limit(
+            direction=direction,
+            home_direction=self.config.home_direction,
+            min_active=bool(self.head_limit.value),
+            max_active=bool(self.tail_limit.value),
+            is_homed=self.is_homed,
+            current_steps=self.position_steps,
+            delta_steps=delta_steps,
+            max_steps=self.mm_to_steps(self.config.max_travel_mm),
+        )
+        if assessment.violation is LimitViolation.MIN_ACTIVE:
             raise ActiveLimitError(f"{self.config.name}: Min limit is active; jog in the positive direction")
-        if direction != self.config.home_direction and self.tail_limit.value:
+        if assessment.violation is LimitViolation.MAX_ACTIVE:
             raise ActiveLimitError(f"{self.config.name}: Max limit is active; jog in the negative direction")
-        if self.is_homed:
-            target_steps = self.position_steps + delta_steps
-            max_steps = self.mm_to_steps(self.config.max_travel_mm)
-            if target_steps < 0 or target_steps > max_steps:
-                raise TravelBoundaryError(
-                    f"{self.config.name}: target exceeds configured travel 0-{self.config.max_travel_mm:.2f} mm"
-                )
+        if assessment.violation is LimitViolation.SOFTWARE_TRAVEL:
+            raise TravelBoundaryError(
+                f"{self.config.name}: target exceeds configured travel 0-{self.config.max_travel_mm:.2f} mm"
+            )
 
     def _guard_during_move(self, direction: int) -> None:
         if self.estop.value:
@@ -873,12 +894,18 @@ class AxisController:
             self.stop()
             self.is_homed = False
             raise StopRequestedError(f"{self.config.name}: stop requested")
-        if direction == self.config.home_direction and self.head_limit.value:
+        active_limit = active_physical_limit(
+            direction=direction,
+            home_direction=self.config.home_direction,
+            min_active=bool(self.head_limit.value),
+            max_active=bool(self.tail_limit.value),
+        )
+        if active_limit is LimitViolation.MIN_ACTIVE:
             self.stop()
             if self.is_homed:
                 self.position_steps = 0
             raise ActiveLimitError(f"{self.config.name}: Min limit reached; move in the positive direction")
-        if direction != self.config.home_direction and self.tail_limit.value:
+        if active_limit is LimitViolation.MAX_ACTIVE:
             self.stop()
             if self.is_homed:
                 self.position_steps = self.mm_to_steps(self.config.max_travel_mm)
@@ -1255,8 +1282,13 @@ class MotionController:
                 if self.emergency_stop_active() or self.stop_requested() or self.controlled_stop_requested():
                     return True
                 return any(
-                    (axis_plan.direction == axes[name].config.home_direction and axes[name].head_limit.value)
-                    or (axis_plan.direction != axes[name].config.home_direction and axes[name].tail_limit.value)
+                    active_physical_limit(
+                        direction=axis_plan.direction,
+                        home_direction=axes[name].config.home_direction,
+                        min_active=bool(axes[name].head_limit.value),
+                        max_active=bool(axes[name].tail_limit.value),
+                    )
+                    is not None
                     for name, axis_plan in plan.axes.items()
                 )
 

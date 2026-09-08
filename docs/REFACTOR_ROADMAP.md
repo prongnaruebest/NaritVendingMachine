@@ -54,7 +54,7 @@ Exit criterion: hardware adapters can be replaced by deterministic fakes and PEN
 ## Phase 4 — Motion and homing services
 
 - [x] Extract pure conversion and planning modules.
-- [ ] Extract limit policy and completion policy.
+- [x] Extract limit policy and completion policy.
 - [ ] Extract homing orchestration from axis pulse execution.
 - [ ] Add PEND completion verification behind a commissioned capability flag.
 - [ ] Preserve protocol v2 fallback and v3 parallel behavior.
