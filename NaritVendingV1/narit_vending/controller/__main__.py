@@ -117,9 +117,12 @@ def _build_snapshot(service: Any) -> MachineSnapshot:
         stop_requested=bool(safety.get("stop_requested", False)),
         controlled_stop_requested=bool(safety.get("controlled_stop_requested", False)),
         speed_override=getattr(service.controller, "speed_override", None),
+        motion_enabled=bool(safety.get("motion_enabled", True)),
         slots={str(code): dict(slot) for code, slot in dict(status.get("slots", {})).items()},
         io_status=dict(status.get("io", {})),
+        picontrol_io_status=dict(status.get("picontrol_io", {})),
         nucleo_status=dict(status.get("nucleo", {})),
+        demo_status=dict(status.get("demo", {})),
     )
 
 
@@ -140,16 +143,24 @@ def _register_handlers(bus: Any, service: Any) -> None:
         make_dispense_handler,
         make_execute_armed_move_handler,
         make_move_to_handler,
+        make_move_to_limit_handler,
         make_move_to_slot_handler,
         make_plan_move_handler,
         make_validate_target_handler,
     )
     from narit_vending.controller.handlers.sequence import make_run_slot_sequence_handler
+    from narit_vending.controller.handlers.demo import make_demo_handler
     from narit_vending.controller.handlers.stop import (
         make_clear_alarm_handler,
         make_controlled_stop_handler,
         make_schedule_restart_handler,
         make_stop_handler,
+        make_disable_motion_handler,
+        make_enable_motion_handler,
+        make_reset_nucleo_link_handler,
+        make_reset_xy_drive_power_handler,
+        make_cut_xy_drive_power_handler,
+        make_restore_xy_drive_power_handler,
     )
 
     bus.register("STOP", make_stop_handler(service))
@@ -157,10 +168,24 @@ def _register_handlers(bus: Any, service: Any) -> None:
     bus.register("CONTROLLED_STOP", make_controlled_stop_handler(service))
     bus.register("CLEAR_ALARM", make_clear_alarm_handler(service))
     bus.register("SCHEDULE_RESTART", make_schedule_restart_handler(service))
+    bus.register("DISABLE_MOTION", make_disable_motion_handler(service))
+    bus.register("ENABLE_MOTION", make_enable_motion_handler(service))
+    bus.register("RESET_NUCLEO_LINK", make_reset_nucleo_link_handler(service))
+    bus.register("RESET_XY_DRIVE_POWER", make_reset_xy_drive_power_handler(service))
+    bus.register("CUT_XY_DRIVE_POWER", make_cut_xy_drive_power_handler(service))
+    bus.register("RESTORE_XY_DRIVE_POWER", make_restore_xy_drive_power_handler(service))
+    for command_type, action in (
+        ("CONFIGURE_DEMO", "configure"), ("VALIDATE_DEMO", "validate"),
+        ("ARM_DEMO", "arm"), ("START_DEMO", "start"),
+        ("PAUSE_DEMO", "pause"), ("RESUME_DEMO", "resume"),
+        ("STOP_DEMO", "stop"),
+    ):
+        bus.register(command_type, make_demo_handler(service, action))
     bus.register("HOME_AXIS", make_home_axis_handler(service))
     bus.register("HOME_ALL", make_home_all_handler(service))
     bus.register("JOG", make_jog_handler(service))
     bus.register("MOVE_TO", make_move_to_handler(service))
+    bus.register("MOVE_TO_LIMIT", make_move_to_limit_handler(service))
     bus.register("MOVE_TO_SLOT", make_move_to_slot_handler(service))
     bus.register("RUN_SLOT_SEQUENCE", make_run_slot_sequence_handler(service.sequence_service))
     bus.register("DISPENSE", make_dispense_handler(service))
@@ -171,6 +196,12 @@ def _register_handlers(bus: Any, service: Any) -> None:
     bus.register("ARM_MOTOR_TEST", make_arm_motor_test_handler(service))
     bus.register("DISARM_MOTOR_TEST", make_disarm_motor_test_handler(service))
     bus.register("RUN_MOTOR_TEST", make_run_motor_test_handler(service))
+    from narit_vending.controller.handlers.slots import (
+        make_save_slot_handler,
+        make_save_slot_from_current_handler,
+    )
+    bus.register("SAVE_SLOT", make_save_slot_handler(service))
+    bus.register("SAVE_SLOT_FROM_CURRENT", make_save_slot_from_current_handler(service))
     _log.info("Registered %d command handlers", len(bus._handlers))
 
 
@@ -192,6 +223,8 @@ async def _async_main(service: Any, args: argparse.Namespace) -> None:
         save_config_fn=service.save_configuration,
         mqtt_status_fn=service.mqtt_service.status_payload,
         mqtt_control_fn=service.mqtt_service.set_runtime_enabled,
+        demo_history_fn=service.demo_service.history,
+        demo_export_fn=service.demo_service.export_csv,
     )
     await ipc.start()
     _log.info("Controller IPC server ready — state machine: %s", state_machine.state.value)

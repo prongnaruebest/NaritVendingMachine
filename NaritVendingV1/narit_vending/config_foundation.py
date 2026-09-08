@@ -26,6 +26,18 @@ MOTION_OVERRIDE_FIELDS = (
     "lead_screw_pitch_mm",
     "motor_steps_per_rev",
     "driver_microsteps",
+    "home_position_mm",
+    "max_pulse_hz",
+    "commissioned_max_speed_mm_s",
+    "homing_search_speed_mm_s",
+    "homing_latch_speed_mm_s",
+    "homing_timeout_s",
+    "drive_type",
+    "nominal_travel_mm",
+    "measured_travel_mm",
+    "travel_safety_margin_mm",
+    "pulley_pitch_mm",
+    "pulley_teeth",
 )
 
 
@@ -260,6 +272,13 @@ def _validate_axis_values(axis: str, payload: dict[str, object], issues: list[Co
             issues.append(ConfigIssue("error", "DIRECTION_INVALID", f"effective.axes.{axis}.{field}", "direction must be 0 or 1"))
     if payload.get("home_direction") == payload.get("forward_direction"):
         issues.append(ConfigIssue("error", "DIRECTION_CONFLICT", f"effective.axes.{axis}", "home and forward directions must be opposite"))
+    try:
+        home_position = float(payload.get("home_position_mm", 0.0))
+        max_travel = float(payload["max_travel_mm"])
+        if not 0 <= home_position <= max_travel:
+            issues.append(ConfigIssue("error", "HOME_POSITION_OUT_OF_RANGE", f"effective.axes.{axis}.home_position_mm", "home position must be within configured travel"))
+    except (KeyError, TypeError, ValueError):
+        issues.append(ConfigIssue("error", "HOME_POSITION_INVALID", f"effective.axes.{axis}.home_position_mm", "home position must be a number"))
 
 
 def _validate_signal_polarity(inputs: dict[str, object], issues: list[ConfigIssue]) -> None:
@@ -302,7 +321,7 @@ def _validate_pin_assignments(
         if not isinstance(value, dict):
             continue
         for key in ("step_pin", "dir_pin", "enable_pin"):
-            if key in value:
+            if key in value and value[key] is not None:
                 add(value[key], f"hardware.motors.{axis}.{key}")
     for group_name, group in (("digital_inputs", inputs), ("digital_outputs", outputs)):
         for name, value in group.items():

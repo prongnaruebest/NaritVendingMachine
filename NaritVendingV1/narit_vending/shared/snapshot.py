@@ -74,9 +74,12 @@ class MachineSnapshot:
     stop_requested: bool
     controlled_stop_requested: bool
     speed_override: float | None
+    motion_enabled: bool = True
     slots: dict[str, dict[str, Any]] = field(default_factory=dict)
     io_status: dict[str, Any] = field(default_factory=dict)
+    picontrol_io_status: dict[str, Any] = field(default_factory=dict)
     nucleo_status: dict[str, Any] = field(default_factory=dict)
+    demo_status: dict[str, Any] = field(default_factory=dict)
     snapshot_at: str = field(default_factory=_now_iso)
 
     def to_dict(self) -> dict[str, Any]:
@@ -111,9 +114,12 @@ class MachineSnapshot:
             stop_requested=bool(data.get("stop_requested", False)),
             controlled_stop_requested=bool(data.get("controlled_stop_requested", False)),
             speed_override=data.get("speed_override"),
+            motion_enabled=bool(data.get("motion_enabled", True)),
             slots={str(code): dict(slot) for code, slot in dict(data.get("slots", {})).items()},
             io_status=dict(data.get("io_status", {})),
+            picontrol_io_status=dict(data.get("picontrol_io_status", {})),
             nucleo_status=dict(data.get("nucleo_status", {})),
+            demo_status=dict(data.get("demo_status", {})),
             snapshot_at=str(data.get("snapshot_at", _now_iso())),
         )
 
@@ -141,4 +147,5 @@ class MachineSnapshot:
             stop_requested=False,
             controlled_stop_requested=False,
             speed_override=None,
+            motion_enabled=False,
         )

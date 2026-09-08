@@ -37,7 +37,8 @@
     // UI state
     feedOverridePct: 100,   // 0–100, displayed
     selectedJogStep: 1.0,
-    selectedJogSpeed: 15.0,
+    selectedJogSpeed: 5.0,
+    axisSpeeds: { x: 5.0, y: 5.0, z: 5.0 },
     keyboardJogEnabled: false,
     selectedSlotCode: "",
     slotSequenceMode: false,
@@ -64,6 +65,8 @@
     eventFilters: { search: "", severity: "all", category: "all", outcome: "all" },
     selectedEventId: "",
     currentView: "motion",
+    currentSetupTab: "motor",
+    demoArmToken: "",
   };
 
   /* ── DOM HELPERS ────────────────────────────────────────────── */
@@ -220,6 +223,9 @@
     if (!MS.online)                           return "Controller offline — reconnecting...";
     if (status.estop)                         return "MOTION LOCKED — Emergency stop active";
     if (MS.payload?.safety?.stop_requested)   return "MOTION LOCKED — reset alarms before continuing";
+    if (MS.payload?.safety?.motion_enabled === false) {
+      return "MOTION LOCKED — open System Control & Health and press ENABLE MOTION";
+    }
     if (MS.payload?.safety?.configuration_restart_required || MS.config?.restart_required) {
       return "MOTION LOCKED — apply configuration and restart controller";
     }
@@ -234,7 +240,7 @@
 
   function canJogAxis(axis) {
     if (motionInhibitReason(false) !== "") return false;
-    if (el("jog-allow-unhomed")?.checked) return true;
+    if ($("#jog-allow-unhomed")?.checked) return true;
     return Boolean(getAxis(axis).is_homed);
   }
   function motionInhibitReasonForAxes(axes) {
@@ -252,21 +258,6 @@
       && motionInhibitReasonForAxes(plannedMoveAxes()) === "";
   }
   function canHomeAxis() { return motionInhibitReason(false) === ""; }
-  function motionAllowed(requireHome = true) { return motionInhibitReason(requireHome) === ""; }
-  function buildJogPayload(axis, dir, continuous = false) {
-    const speed_mm_s = Number(MS.selectedJogSpeed || 15.0);
-    const step = continuous
-      ? Math.max(0.2, Math.min(5.0, Number((speed_mm_s * 0.15).toFixed(2))))
-      : Number(MS.selectedJogStep || 1.0);
-    const direction = Number(dir);
-    const distance_mm = step * direction;
-    const allow_unhomed = Boolean(el("jog-allow-unhomed")?.checked || !getAxis(axis).is_homed);
-    return { axis, distance_mm, speed_mm_s, allow_unhomed };
-  }
-  function targetSpeedPayload() {
-    return { speed_mm_s: Number(MS.selectedJogSpeed || 15.0) };
-  }
-
   /* ── SLOT STATUS ────────────────────────────────────────────── */
   function slotStatus(slot) {
     const hasProduct = Boolean(slot.product_name);
@@ -411,6 +402,24 @@
     return MS.events.filter(eventMatches).slice().sort((a, b) => eventPriority(a) - eventPriority(b) || eventAt(b) - eventAt(a));
   }
 
+  function exportFilteredEventsCsv() {
+    const quote = (value) => `"${String(value ?? "").replace(/"/g, '""')}"`;
+    const rows = [["timestamp_ict", "severity", "category", "outcome", "message"]];
+    sortedEvents().forEach((event) => rows.push([
+      eventTime(event), eventSeverity(event).toUpperCase(), eventCategory(event),
+      eventOutcome(event), sanitizeEventText(event.message),
+    ]));
+    const blob = new Blob(["\ufeff" + rows.map((row) => row.map(quote).join(",")).join("\r\n")], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `narit-events-${new Date().toISOString().replace(/[:.]/g, "-")}.csv`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  }
+
   function renderEventDetail(event) {
     const detail = el("event-detail-content");
     const state = el("event-detail-state");
@@ -524,24 +533,15 @@
   /* ── BUILD PAYLOADS ─────────────────────────────────────────── */
   function buildMovePayload() {
     const body = {};
+    const participatingAxes = [];
     AXES.forEach((a) => {
       const v = el(`move-${a}`)?.value;
-      if (v !== "" && v !== null && v !== undefined) body[`${a}_mm`] = Number(v);
+      if (v !== "" && v !== null && v !== undefined) {
+        body[`${a}_mm`] = Number(v);
+        participatingAxes.push(a);
+      }
     });
-    const spd = el("target-speed")?.value;
-    const time = el("target-duration")?.value;
-    const timeout = el("move-timeout")?.value;
-    const acceleration = el("move-acceleration")?.value;
-    const deceleration = el("move-deceleration")?.value;
-    if (spd) body.speed_mm_s = Number(spd);
-    if (time) body.time_s = Number(time);
-    if (timeout) body.timeout_s = Number(timeout);
-    if (acceleration) body.acceleration_mm_s2 = Number(acceleration);
-    if (deceleration) body.deceleration_mm_s2 = Number(deceleration);
-    // Apply feed override
-    if (body.speed_mm_s) {
-      body.speed_mm_s = body.speed_mm_s * (MS.feedOverridePct / 100);
-    }
+    body.speed_mm_s = effectiveMotionSpeed(participatingAxes);
     return body;
   }
 
@@ -596,25 +596,29 @@
     fillManualTarget(slot, `Slot ${code} loaded`);
   }
 
-  function buildJogPayload(axis, direction) {
+  function buildJogPayload(axis, direction, continuous = false) {
+    const spd = effectiveMotionSpeed([axis]);
+    const current = Number(getAxis(axis).position_mm);
+    const maximum = Number(MS.config?.axes?.[axis]?.max_travel_mm);
+    // Hold-to-run uses one uninterrupted timer pulse train toward the software
+    // boundary. Releasing the control sends a priority controlled-stop.
+    const remaining = Number(direction) > 0 ? maximum - current : current;
+    const distance = continuous ? Math.max(remaining, 0.001) : MS.selectedJogStep;
     const body = {
       axis,
-      distance_mm: MS.selectedJogStep * Number(direction),
+      distance_mm: distance * Number(direction),
     };
-    const spd = MS.selectedJogSpeed * (MS.feedOverridePct / 100);
+    if (continuous) body.continuous = true;
     if (spd > 0) body.speed_mm_s = spd;
-    const jogTime = el("jog-time")?.value;
-    if (jogTime) body.time_s = Number(jogTime);
+    if (!continuous) {
+      const jogTime = el("jog-time")?.value;
+      if (jogTime) body.time_s = Number(jogTime);
+    }
     return body;
   }
 
-  function targetSpeedPayload() {
-    const body = {};
-    const spd = el("target-speed")?.value || el("move-speed")?.value;
-    const time = el("target-duration")?.value;
-    if (spd) body.speed_mm_s = Number(spd) * (MS.feedOverridePct / 100);
-    if (time) body.time_s = Number(time);
-    return body;
+  function targetSpeedPayload(axes = AXES) {
+    return { speed_mm_s: effectiveMotionSpeed(axes) };
   }
 
   /* ── VALIDATE MOVE ──────────────────────────────────────────── */
@@ -687,11 +691,11 @@
       return null;
     }
     const requestId = globalThis.crypto?.randomUUID?.() || `cmd-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-    const timeoutSeconds = Number(el("move-timeout")?.value || 30);
+    const plannedDuration = Number(MS.validation.plan?.duration_s || MS.validation.plan?.estimated_duration_s || 0);
     const result = await command(label, "/api/motion/execute", {
       arm_token: MS.validation.armToken,
       request_id: requestId,
-    }, { requiredAxes: plannedMoveAxes(), timeoutMs: Math.max(15000, (timeoutSeconds + 10) * 1000) });
+    }, { requiredAxes: plannedMoveAxes(), timeoutMs: Math.max(45000, (plannedDuration + 30) * 1000) });
     if (result) invalidateMotionWorkflow("Move completed — target must be validated again.");
     return result;
   }
@@ -814,7 +818,7 @@
       const delta = Number(tgt) - pos;
       setText(`axis-delta-${a}`, fmtDelta(delta).text);
       setText(`axis-direction-${a}`, Math.abs(delta) < 0.001 ? "IDLE" : delta > 0 ? "+ FORWARD" : "− REVERSE");
-      const programmedSpeed = Number(el("target-speed")?.value || 0);
+      const programmedSpeed = axisSpeed(a);
       const effectiveSpeed = axisPlan?.speed_mm_s;
       setText(`axis-speed-${a}`, programmedSpeed > 0 ? `${fmtSpd(programmedSpeed)} / ${effectiveSpeed == null ? "--" : fmtSpd(effectiveSpeed)}` : "-- / --");
       setText(`axis-realtime-${a}`, realtimeSpeedText(a));
@@ -864,7 +868,8 @@
     const homing    = getOperation().homing || {};
     const container = el("home-sequence-display");
     if (!container) return;
-    setText("home-sequence-label", homeOrder.map((axis) => axis.toUpperCase()).join("→"));
+    const parallelHome = Number(MS.payload?.nucleo?.protocol || MS.config?.hardware?.nucleo?.protocol_version || 0) >= 3;
+    setText("home-sequence-label", parallelHome ? "X + Y + Z" : homeOrder.map((axis) => axis.toUpperCase()).join("→"));
 
     container.innerHTML = homeOrder.map((axis, idx) => {
       const phase = homing[axis] || "not_homed";
@@ -876,16 +881,23 @@
       const statusText =
         effectivePhase === "passed"    ? "HOMED ✓" :
         effectivePhase === "searching" ? "SEARCHING" :
+        effectivePhase === "sensor_found" ? "SENSOR FOUND" :
         effectivePhase === "backoff"   ? "BACKOFF" :
+        effectivePhase === "latching"  ? "LATCH APPROACH" :
+        effectivePhase === "zero_set"  ? "ZERO SET" :
+        effectivePhase === "positioning" ? "OFFSET MOVE" :
         effectivePhase === "completed" ? "COMPLETED" :
         effectivePhase === "failed"    ? "FAILED ✗" :
         effectivePhase === "waiting"   ? "QUEUED" :
         "NOT HOMED";
 
+      const cfg = MS.config?.axes?.[axis] || {};
+      const minActive = Boolean(axisData.head_limit);
+      const detailText = `MIN ${minActive ? "ACTIVE" : "CLEAR"} · Search ${Number(cfg.homing_search_speed_mm_s || 0).toFixed(1)} · Latch ${Number(cfg.homing_latch_speed_mm_s || 0).toFixed(1)} · Home ${Number(cfg.home_position_mm || 0).toFixed(1)} mm`;
       return `
         <div class="home-seq-step ${effectivePhase}" aria-label="${axis.toUpperCase()} axis homing: ${statusText}">
           <div class="home-seq-num">${idx + 1}</div>
-          <div class="home-seq-axis">${axis.toUpperCase()} Axis</div>
+          <div class="home-seq-axis">${axis.toUpperCase()} Axis<small class="home-seq-detail">${esc(detailText)}</small></div>
           <div class="home-seq-status">${statusText}</div>
         </div>
       `;
@@ -1233,7 +1245,7 @@
     const polarityVerified = MS.payload?.io?.polarity_verified;
     if (estopNode) {
       estopNode.className = `safety-ind-value ${estopActive ? "fault" : (polarityVerified === false ? "warn" : "ok")}`;
-      estopNode.textContent = estopActive ? "🛑 ACTIVE" : (polarityVerified === false ? "UNVERIFIED" : "CLEAR");
+      estopNode.textContent = estopActive ? "E-STOP ACTIVE" : (polarityVerified === false ? "UNVERIFIED" : "CLEAR");
     }
     if (estopDetail) {
       estopDetail.textContent = polarityVerified === false ? "POLARITY PENDING" : "NC VERIFIED";
@@ -1253,19 +1265,29 @@
       ).join("  ");
     }
 
-    // Motion
+    // Motion authority is the operator-controlled enable/disable state. Keep
+    // it separate from readiness so an unhomed axis never looks "disabled".
     const motionNode = el("strip-motion");
     if (motionNode) {
-      const allowed = !reason;
-      motionNode.className = `safety-ind-value ${allowed ? "ok" : "warn"}`;
-      motionNode.textContent = allowed ? "ENABLED" : "INHIBITED";
+      const motionEnabled = MS.online && MS.payload?.safety?.motion_enabled === true;
+      motionNode.className = `safety-ind-value ${motionEnabled ? "ok" : "fault"}`;
+      motionNode.textContent = motionEnabled ? "ENABLED" : "DISABLED";
+    }
+
+    // Readiness combines every current motion gate (connection, E-Stop,
+    // alarms, Home and authority). It does not change Motion Authority.
+    const readinessNode = el("strip-readiness");
+    if (readinessNode) {
+      const ready = !reason;
+      readinessNode.className = `safety-ind-value ${ready ? "ok" : "warn"}`;
+      readinessNode.textContent = ready ? "READY" : "INHIBITED";
     }
 
     // Reason
     const reasonNode = el("strip-motion-reason");
     if (reasonNode) {
       reasonNode.className = `motion-inhibit-reason ${reason ? "" : "clear"}`;
-      reasonNode.textContent = reason || "Motion enabled — all conditions met";
+      reasonNode.textContent = reason || "Machine ready — motion authority enabled and all safety conditions met";
     }
 
     // Alarm count
@@ -1426,6 +1448,21 @@
     const motionState = MS.payload?.busy ? "Executing" : "Idle";
     setText("footer-status-text",
       `Command: ${cmd}  |  Motion: ${motionState}  |  ${op.message || "Ready"}`);
+
+    // Persistent compact coordinates — visible on every workspace and sourced
+    // from the same controller snapshot as the Motion Control axis cards.
+    for (const axis of AXES) {
+      const node = el(`footer-axis-${axis}`);
+      const output = node?.querySelector("output");
+      const position = Number(getAxis(axis).position_mm);
+      if (output) output.textContent = MS.online && Number.isFinite(position) ? fmtPos(position) : "--";
+      if (node) {
+        const moving = MS.payload?.busy && String(op.active_axis || "").toLowerCase() === axis;
+        node.classList.toggle("moving", Boolean(moving));
+        node.classList.toggle("offline", !MS.online);
+        node.title = `${axis.toUpperCase()} axis actual position: ${output?.textContent || "--"} mm`;
+      }
+    }
   }
 
   function renderMotionCommand() {
@@ -1459,12 +1496,22 @@
       setText("jog-inhibit-text", inhibitReason);
     }
     $$("[data-jog]").forEach((btn) => {
-      const [axis] = btn.dataset.jog.split(":");
+      const [axis, direction] = btn.dataset.jog.split(":");
+      const state = getAxis(axis);
+      const towardMin = Number(direction) < 0;
+      const atDirectionalLimit = towardMin ? Boolean(state.head_limit) : Boolean(state.tail_limit);
+      // Keep both directions available. The Controller remains authoritative:
+      // a direction into an active limit is rejected without latching STOP,
+      // while the direction away from it moves immediately.
       btn.disabled = !canJogAxis(axis);
+      btn.dataset.limitActive = atDirectionalLimit ? "true" : "false";
+      btn.title = atDirectionalLimit
+        ? `${axis.toUpperCase()} ${towardMin ? "Min" : "Max"} limit is active; this direction will be safely rejected`
+        : `Hold to jog ${axis.toUpperCase()}${towardMin ? "−" : "+"}; release to stop`;
     });
 
     if (!MS.manualJog.active) {
-      const bypassHome = Boolean(el("jog-allow-unhomed")?.checked);
+      const bypassHome = Boolean($("#jog-allow-unhomed")?.checked);
       const homed = allAxesHomed();
       setText("jog-status-text", homed ? "READY" : (bypassHome ? "UNHOMED JOG PERMITTED" : "HOME REQUIRED"));
       const jogStatus = el("jog-status-text");
@@ -1485,9 +1532,62 @@
     el("target-load-selected-slot").disabled = !MS.online || !selectedSlotReady;
     if (document.getElementById("visual-load-preview")) updateVisualButtons();
 
-    // Home buttons
-    el("home-all").disabled = !canHome;
-    $$(".home-axis").forEach((btn) => { btn.disabled = !canHome; });
+    // Home buttons — use the same Controller-derived interlock reason as all
+    // other motion controls.  In particular, do not present Home as available
+    // while the explicit Motion Enable latch is off.
+    const homeReason = motionInhibitReason(false);
+    const homeAllButton = el("home-all");
+    homeAllButton.disabled = Boolean(homeReason);
+    homeAllButton.title = homeReason || "Home all axes";
+    homeAllButton.setAttribute("aria-disabled", String(Boolean(homeReason)));
+
+    $$('[data-travel-axis]').forEach((button) => {
+      const axis = button.dataset.travelAxis;
+      // Physical endpoint seeking is also the recovery/calibration path when
+      // an axis has lost its coordinate reference, so it must not require Home.
+      const reason = axis ? motionInhibitReason(false) : "Axis is unavailable";
+      button.disabled = Boolean(reason);
+      button.title = reason || `${axis.toUpperCase()} axis is ready for the next command`;
+      button.setAttribute("aria-disabled", String(Boolean(reason)));
+    });
+    $$('[data-axis-goto]').forEach((button) => {
+      const axis = button.dataset.axisGoto;
+      const reason = axis ? motionInhibitReasonForAxes([axis]) : "Axis is unavailable";
+      button.disabled = Boolean(reason);
+      button.title = reason || `Move ${axis.toUpperCase()} to the entered position`;
+    });
+    const travelReason = motionInhibitReason(false);
+    const travelInhibit = el("travel-limit-inhibit");
+    if (travelInhibit) {
+      travelInhibit.textContent = travelReason
+        ? `LOCKED: ${travelReason}`
+        : "READY: Physical-limit seek ignores configured travel and stops only at the selected sensor or a safety fault.";
+      travelInhibit.classList.toggle("is-ready", !travelReason);
+    }
+    const travelReset = el("travel-reset-interlock");
+    if (travelReset) {
+      travelReset.disabled = !MS.online || Boolean(MS.payload?.busy) || (!MS.payload?.safety?.stop_requested && !MS.payload?.last_error);
+    }
+    const operatorStop = el("operator-stop");
+    if (operatorStop) operatorStop.disabled = !MS.online;
+    AXES.forEach((axis) => {
+      const maximum = Number(MS.config?.axes?.[axis]?.max_travel_mm);
+      const data = getAxis(axis);
+      setText(`travel-limit-${axis}-range`, `0.0 — ${Number.isFinite(maximum) ? fmtPos(maximum) : "--"} mm`);
+      setText(`travel-limit-${axis}-current`, `${fmtPos(data.position_mm)} mm`);
+      setText(`travel-limit-${axis}-sensors`, `MIN ${data.head_limit ? "TRIGGERED" : "CLEAR"} · MAX ${data.tail_limit ? "TRIGGERED" : "CLEAR"}`);
+      const card = document.querySelector(`[data-axis-card="${axis}"]`);
+      if (card) card.classList.toggle("limit-active", Boolean(data.head_limit || data.tail_limit));
+      const input = el(`move-${axis}`);
+      if (input && Number.isFinite(maximum)) input.max = String(maximum);
+      const directInput = el(`axis-goto-${axis}`);
+      if (directInput && Number.isFinite(maximum)) directInput.max = String(maximum);
+    });
+    $$(".home-axis").forEach((btn) => {
+      btn.disabled = Boolean(homeReason);
+      btn.title = homeReason || `Home ${btn.dataset.axis?.toUpperCase() || "axis"}`;
+      btn.setAttribute("aria-disabled", String(Boolean(homeReason)));
+    });
 
     // Stop button
     el("stop-button").disabled = !MS.online;
@@ -1507,15 +1607,19 @@
 
   /* ── RENDER: FEED OVERRIDE ──────────────────────────────────── */
   function updateFeedOverride() {
-    setText("fo-pct-display", String(MS.feedOverridePct));
+    const pctDisplay = document.getElementById("fo-pct-display");
+    if (pctDisplay) pctDisplay.textContent = String(MS.feedOverridePct);
     const overrideValue = document.getElementById("fo-override-val");
     if (overrideValue) overrideValue.textContent = `${MS.feedOverridePct} %`;
 
     // Programmed speed from the target speed field
-    const progSpd = Number(el("target-speed")?.value || el("move-speed")?.value || 0);
+    syncAxisSpeedBanks();
+    const progSpd = effectiveMotionSpeed();
     const effSpd  = progSpd * (MS.feedOverridePct / 100);
-    setText("fo-prog-speed", progSpd > 0 ? `${fmtSpd(progSpd)} mm/s` : "-- mm/s");
-    setText("fo-eff-speed",  progSpd > 0 ? `${fmtSpd(effSpd)} mm/s`  : "-- mm/s");
+    const programmedSpeed = document.getElementById("fo-prog-speed");
+    const effectiveSpeed = document.getElementById("fo-eff-speed");
+    if (programmedSpeed) programmedSpeed.textContent = progSpd > 0 ? `${fmtSpd(progSpd)} mm/s` : "-- mm/s";
+    if (effectiveSpeed) effectiveSpeed.textContent = progSpd > 0 ? `${fmtSpd(effSpd)} mm/s` : "-- mm/s";
 
     // Highlight active preset
     $$(".fo-preset-btn").forEach((btn) => {
@@ -1526,8 +1630,11 @@
   /* ── MASTER RENDER ──────────────────────────────────────────── */
   const VALID_VIEWS = new Set([
     "dashboard", "motion", "visualization", "diagnostics", "io-status", "configuration",
-    "motor-test", "mqtt", "slots", "alarms", "events", "flow", "sequence-monitor",
+    "motor-test", "system-control", "mqtt", "slots", "alarms", "events", "flow", "sequence-monitor", "architecture",
   ]);
+  const DIAGNOSTIC_VIEWS = new Set(["diagnostics", "io-status", "alarms", "events", "flow", "sequence-monitor", "architecture"]);
+  const POSITION_VIEWS = new Set(["slots", "visualization"]);
+  const SETUP_VIEWS = new Set(["configuration", "motor-test"]);
 
 
   function switchWorkspace(view, updateHash = true) {
@@ -1539,9 +1646,14 @@
     MS.currentView = nextView;
     $$('[data-view-page]').forEach((page) => page.classList.toggle("active", page.dataset.viewPage === nextView));
     $$('[data-view-target]').forEach((button) => {
-      const active = button.dataset.viewTarget === nextView;
+      const target = button.dataset.viewTarget;
+      const isPrimaryDiagnostics = button.id === "nav-diagnostics" && DIAGNOSTIC_VIEWS.has(nextView);
+      const isPrimarySetup = button.id === "nav-configuration" && SETUP_VIEWS.has(nextView);
+      const isPrimaryPositions = button.id === "nav-slots" && POSITION_VIEWS.has(nextView);
+      const active = target === nextView || isPrimaryDiagnostics || isPrimarySetup || isPrimaryPositions;
       button.classList.toggle("active", active);
-      button.setAttribute("aria-current", active ? "page" : "false");
+      if (active) button.setAttribute("aria-current", "page");
+      else button.removeAttribute("aria-current");
     });
     const shell = $(".hmi-shell");
     if (shell) {
@@ -1550,6 +1662,122 @@
     }
     if (updateHash && location.hash !== `#${nextView}`) history.replaceState(null, "", `#${nextView}`);
     renderWorkspacePages();
+  }
+
+  function openHomingControls() {
+    switchWorkspace("motion");
+    window.requestAnimationFrame(() => {
+      const homingControls = el("homing-controls");
+      homingControls?.scrollIntoView({ behavior: "smooth", block: "start" });
+      homingControls?.focus({ preventScroll: true });
+      homingControls?.classList.add("attention-focus");
+      window.setTimeout(() => homingControls?.classList.remove("attention-focus"), 1600);
+    });
+  }
+
+  function axisSpeedLimit(axis) {
+    const cfg = MS.config?.axes?.[axis] || {};
+    const candidates = [cfg.commissioned_max_speed_mm_s, cfg.max_speed_mm_s, Number(cfg.max_pulse_hz) / Number(cfg.steps_per_mm)]
+      .map(Number).filter((value) => Number.isFinite(value) && value > 0);
+    return candidates.length ? Math.min(...candidates) : 250;
+  }
+
+  function axisSpeed(axis) {
+    return Math.max(0.1, Math.min(axisSpeedLimit(axis), Number(MS.axisSpeeds[axis]) || 5));
+  }
+
+  function effectiveMotionSpeed(axes = AXES) {
+    const selected = axes.filter((axis) => AXES.includes(axis));
+    return Math.min(...(selected.length ? selected : AXES).map(axisSpeed)) * (MS.feedOverridePct / 100);
+  }
+
+  function renderAxisSpeedBanks() {
+    $$('[data-axis-speed-bank]').forEach((bank) => {
+      if (bank.dataset.ready === "true") return;
+      bank.innerHTML = AXES.map((axis) => `<label class="axis-speed-row">
+        <strong>${axis.toUpperCase()}</strong>
+        <input type="range" min="0.1" max="250" step="0.1" data-axis-speed-range="${axis}" aria-label="${axis.toUpperCase()} axis speed">
+        <input type="number" min="0.1" max="250" step="0.1" data-axis-speed-number="${axis}" aria-label="${axis.toUpperCase()} axis speed value">
+        <span>mm/s</span><small data-axis-speed-conversion="${axis}">-- pulse/s · -- rpm</small>
+      </label>`).join("") + '<p class="axis-speed-note">Single-axis commands use that axis value. Coordinated XYZ and slot moves use the lowest participating-axis value.</p>';
+      bank.dataset.ready = "true";
+    });
+    syncAxisSpeedBanks();
+  }
+
+  function syncAxisSpeedBanks() {
+    AXES.forEach((axis) => {
+      const speed = axisSpeed(axis);
+      MS.axisSpeeds[axis] = speed;
+      const max = axisSpeedLimit(axis);
+      $$(`[data-axis-speed-range="${axis}"], [data-axis-speed-number="${axis}"]`).forEach((input) => {
+        input.max = String(max);
+        if (document.activeElement !== input) input.value = speed.toFixed(1);
+      });
+      const cfg = MS.config?.axes?.[axis] || {};
+      const ppm = Number(cfg.steps_per_mm || 0);
+      const ppr = Number(cfg.motor_steps_per_rev || 0) * Number(cfg.driver_microsteps || 0);
+      const pulse = speed * ppm;
+      const rpm = ppr > 0 ? pulse * 60 / ppr : NaN;
+      $$(`[data-axis-speed-conversion="${axis}"]`).forEach((node) => {
+        node.textContent = `${Math.round(pulse).toLocaleString()} pulse/s · ${Number.isFinite(rpm) ? rpm.toFixed(1) : "--"} rpm`;
+      });
+    });
+    const coordinated = effectiveMotionSpeed();
+    MS.selectedJogSpeed = coordinated;
+    setText("jog-speed-display", coordinated.toFixed(1));
+  }
+
+  function setAxisSpeed(axis, rawValue, invalidate = true) {
+    if (!AXES.includes(axis)) return;
+    const parsed = Number(rawValue);
+    if (!Number.isFinite(parsed) || parsed <= 0) return;
+    MS.axisSpeeds[axis] = Math.min(axisSpeedLimit(axis), Math.max(0.1, parsed));
+    try { localStorage.setItem("narit.axisSpeeds", JSON.stringify(MS.axisSpeeds)); } catch (_) {}
+    if (invalidate && MS.validation.stage !== "idle") invalidateMotionWorkflow("Axis speed changed — validate, preview and arm the GOTO command again.");
+    syncAxisSpeedBanks();
+    updateFeedOverride();
+    // Speed is a next-command parameter. Re-evaluate direct Jog and Min/Max
+    // controls immediately; they are not dependent on the GOTO arm token.
+    updateButtonStates();
+    const locked = motionInhibitReasonForAxes([axis]);
+    setText("travel-limit-feedback", locked
+      ? `${axis.toUpperCase()} speed saved for the next command. Motion remains locked: ${locked}`
+      : `${axis.toUpperCase()} speed set to ${axisSpeed(axis).toFixed(1)} mm/s. The axis is ready for the next Min/Max or Jog command.`);
+  }
+
+  function applySetupTab(tabName = "motor") {
+    MS.currentSetupTab = tabName;
+    const motorFields = new Set(["motor_steps_per_rev", "driver_microsteps", "lead_screw_pitch_mm", "steps_per_mm", "max_travel_mm", "max_speed_mm_s", "default_speed_mm_s", "max_pulse_hz", "commissioned_max_speed_mm_s", "acceleration", "deceleration", "jog_step_mm", "settle_delay", "forward_direction"]);
+    const homingFields = new Set(["home_position_mm", "homing_search_speed_mm_s", "homing_latch_speed_mm_s", "homing_timeout_s", "home_direction"]);
+    const travelFields = new Set(["motor_steps_per_rev", "driver_microsteps", "lead_screw_pitch_mm", "steps_per_mm", "max_travel_mm"]);
+    const motorPanel = $(".motor-pulse-config-panel");
+    const travelPanel = $(".travel-calibration-panel");
+    const pinPanel = $(".configuration-pin-panel");
+    const showMotorPanel = tabName === "motor" || tabName === "homing" || tabName === "travel";
+    if (motorPanel) motorPanel.hidden = !showMotorPanel;
+    if (travelPanel) travelPanel.hidden = tabName !== "travel";
+    if (pinPanel) pinPanel.hidden = showMotorPanel;
+    $$("[data-motor-card] label").forEach((label) => {
+      const field = label.querySelector("[data-config-field]")?.dataset.configField;
+      label.hidden = tabName === "homing" ? !homingFields.has(field) : tabName === "travel" ? !travelFields.has(field) : tabName === "motor" ? !motorFields.has(field) : false;
+    });
+    $$("[data-motor-card] .motor-derived").forEach((node) => { node.hidden = tabName === "homing"; });
+    $$("#configuration-pin-editor .schedule-card").forEach((card, index) => {
+      card.hidden = (tabName === "nucleo" && index !== 0) || (tabName === "io" && index !== 1);
+    });
+    $$('[data-setup-tab]').forEach((button) => {
+      const active = button.dataset.setupTab === tabName;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-selected", String(active));
+      button.setAttribute("tabindex", active ? "0" : "-1");
+    });
+    $$('[data-setup-sidebar]').forEach((button) => {
+      const active = button.dataset.setupSidebar === tabName && MS.currentView === "configuration";
+      button.classList.toggle("active", active);
+      if (active) button.setAttribute("aria-current", "page");
+      else button.removeAttribute("aria-current");
+    });
   }
 
   function renderVisualization() {
@@ -1938,11 +2166,17 @@
         <div class="motor-config-fields">
           <label><span>Motor Steps / Rev</span>${configurationNumberInput(axis, "motor_steps_per_rev", config.motor_steps_per_rev, "1")}</label>
           <label><span>Driver Microsteps</span>${configurationNumberInput(axis, "driver_microsteps", config.driver_microsteps, "1")}</label>
-          <label><span>Lead Screw Pitch</span>${configurationNumberInput(axis, "lead_screw_pitch_mm", config.lead_screw_pitch_mm)}<small>mm/rev</small></label>
+          <label><span>Effective Travel / Rev</span>${configurationNumberInput(axis, "lead_screw_pitch_mm", config.lead_screw_pitch_mm)}<small>mm/rev after gearing</small></label>
           <label><span>Pulse Calibration</span>${configurationNumberInput(axis, "steps_per_mm", config.steps_per_mm)}<small>pulse/mm</small></label>
           <label><span>Maximum Travel</span>${configurationNumberInput(axis, "max_travel_mm", config.max_travel_mm)}<small>mm</small></label>
           <label><span>Maximum Speed</span>${configurationNumberInput(axis, "max_speed_mm_s", config.max_speed_mm_s)}<small>mm/s</small></label>
           <label><span>Default Speed</span>${configurationNumberInput(axis, "default_speed_mm_s", config.default_speed_mm_s)}<small>mm/s</small></label>
+          <label><span>Home Position</span>${configurationNumberInput(axis, "home_position_mm", config.home_position_mm ?? 0)}<small>mm after Min sensor</small></label>
+          <label><span>Max Pulse Rate</span>${configurationNumberInput(axis, "max_pulse_hz", config.max_pulse_hz ?? 50000, "100")}<small>pulse/s</small></label>
+          <label><span>Commissioned Max</span>${configurationNumberInput(axis, "commissioned_max_speed_mm_s", config.commissioned_max_speed_mm_s ?? config.max_speed_mm_s)}<small>mm/s</small></label>
+          <label><span>Home Search Speed</span>${configurationNumberInput(axis, "homing_search_speed_mm_s", config.homing_search_speed_mm_s ?? config.default_speed_mm_s)}<small>mm/s</small></label>
+          <label><span>Home Latch Speed</span>${configurationNumberInput(axis, "homing_latch_speed_mm_s", config.homing_latch_speed_mm_s ?? 1)}<small>mm/s</small></label>
+          <label><span>Home Watchdog</span>${configurationNumberInput(axis, "homing_timeout_s", config.homing_timeout_s ?? 120, "1")}<small>seconds</small></label>
           <label><span>Acceleration</span>${configurationNumberInput(axis, "acceleration", config.acceleration)}<small>mm/s²</small></label>
           <label><span>Deceleration</span>${configurationNumberInput(axis, "deceleration", config.deceleration)}<small>mm/s²</small></label>
           <label><span>Jog Step</span>${configurationNumberInput(axis, "jog_step_mm", config.jog_step_mm)}<small>mm</small></label>
@@ -1953,6 +2187,7 @@
         <div class="motor-derived"><span>Theoretical <b id="config-theoretical-${axis}">${fmt(theoreticalSteps, 3)} pulse/mm</b></span><span>Pulse Frequency <b id="config-frequency-${axis}">${fmt(pulseFrequency, 0)} Hz</b></span><span>Pulses / Rev <b id="config-ppr-${axis}">${fmt(pulsesPerRev, 0)}</b></span></div>
       </article>`;
     }).join("");
+    renderTravelCalibration();
 
     const isIrivBoard = hardware.board_profile === "IRIV_PiControl_CM4" || Boolean(hardware.iriv_io?.enabled) || MS.payload?.io?.enabled === true;
     if (isIrivBoard) {
@@ -1992,6 +2227,7 @@
       }
       MS.configDirty = false;
       updateConfigurationState();
+      applySetupTab($("[data-setup-tab].active")?.dataset.setupTab || "motor");
       return;
     }
 
@@ -2062,6 +2298,13 @@
       document.querySelectorAll(`[data-config-axis="${axis}"]`).forEach((input) => {
         axes[axis][input.dataset.configField] = Number(input.value);
       });
+      const travelCard = document.querySelector(`.travel-calibration-card[data-travel-axis="${axis}"]`);
+      if (travelCard) {
+        const travelValue = (field) => Number(travelCard.querySelector(`[data-travel-field="${field}"]`)?.value);
+        axes[axis].nominal_travel_mm = travelValue("nominal");
+        axes[axis].measured_travel_mm = travelValue("measured");
+        axes[axis].travel_safety_margin_mm = travelValue("margin");
+      }
     });
     // IRIV owns physical I/O, so its GPIO editor is intentionally not rendered.
     // Preserve the installed hardware config and overlay only browser-editable fields.
@@ -2159,7 +2402,7 @@
     try {
       const data = await apiCall("/api/motion/preview", "POST", {
         x_mm: Number(slot.x_mm), y_mm: Number(slot.y_mm), z_mm: Number(slot.z_mm),
-        speed_mm_s: Number(el("target-speed")?.value || 10), timeout_s: Number(el("move-timeout")?.value || 30),
+        speed_mm_s: effectiveMotionSpeed(),
       });
       MS.visualPreview = data.plan;
       toast(`Slot ${code} trajectory validated for preview only.`, "ok");
@@ -2203,8 +2446,7 @@
       x_mm: Number(slot.x_mm),
       y_mm: Number(slot.y_mm),
       z_mm: Number(slot.z_mm),
-      speed_mm_s: Number(el("target-speed")?.value || 10) * (MS.feedOverridePct / 100),
-      timeout_s: Number(el("move-timeout")?.value || 30),
+      speed_mm_s: effectiveMotionSpeed(),
     };
 
     MS.visualGotoPending = true;
@@ -2376,7 +2618,7 @@
         <div><span>Pulse</span><strong>${MS.online ? fmtSteps(data.position_steps) : "---"}</strong></div>
         <div><span>Direction</span><strong>${esc(direction)}</strong></div>
         <div><span>Limits</span><strong>${esc(limitState)}</strong></div>
-        <div class="dashboard-axis-speed"><span>Cmd / Eff.</span><strong>${fmtSpd(MS.selectedJogSpeed)} / ${fmtSpd(MS.selectedJogSpeed * MS.feedOverridePct / 100)}<small> mm/s</small></strong></div>
+        <div class="dashboard-axis-speed"><span>Cmd / Eff.</span><strong>${fmtSpd(axisSpeed(axis))} / ${fmtSpd(effectiveMotionSpeed([axis]))}<small> mm/s</small></strong></div>
       </article>`;
     }).join("");
 
@@ -2423,17 +2665,59 @@
     renderDashboardIOSummary();
   }
 
+  function motorTestFrequencyCap() {
+    const reported = Number(motorTestState().max_frequency_hz);
+    if (Number.isFinite(reported) && reported >= 10) return reported;
+    return Number(MS.payload?.nucleo?.protocol || 1) >= 3 ? 50000 : 1000;
+  }
+
+  function renderTravelCalibration() {
+    const grid = el("travel-calibration-grid");
+    if (!grid || !MS.config) return;
+    grid.innerHTML = AXES.map((axis) => {
+      const cfg = MS.config.axes?.[axis] || {};
+      const nominal = Number(cfg.nominal_travel_mm ?? (axis === "z" ? 180 : 1800));
+      const measured = Number(cfg.measured_travel_mm ?? nominal);
+      const margin = Number(cfg.travel_safety_margin_mm ?? (axis === "z" ? 3 : 10));
+      const usable = Math.max(0, measured - margin);
+      const drive = cfg.drive_type || (axis === "z" ? "timing_belt" : "lead_screw");
+      return `<article class="travel-calibration-card" data-travel-axis="${axis}">
+        <div class="motor-config-head"><strong>AXIS ${axis.toUpperCase()}</strong><span>${drive === "timing_belt" ? "TIMING BELT" : "LEAD SCREW"}</span></div>
+        <div class="travel-source-note">${axis === "z" ? "GTD-A001 · 2GT belt · requested nominal stroke 180 mm" : `MISUMI MTSRL25-1800 · physical screw pitch 5 mm · calibrated effective travel ${Number(cfg.lead_screw_pitch_mm || 24.7273).toFixed(4)} mm/motor rev`}</div>
+        <label class="travel-direct-label"><span><strong>Maximum Travel</strong></span>${configurationNumberInput(axis, "max_travel_mm", cfg.max_travel_mm)}<small>mm — editable directly; Save and Apply are required</small></label>
+        <div class="travel-calibration-fields">
+          <label><span>Nominal / Spec</span><input class="config-input" type="number" min="0.1" step="0.1" value="${nominal}" data-travel-field="nominal"><small>mm</small></label>
+          <label><span>Measured Min → Max</span><input class="config-input" type="number" min="0.1" step="0.1" value="${measured}" data-travel-field="measured"><small>mm measured by operator</small></label>
+          <label><span>Safety Margin</span><input class="config-input" type="number" min="0" step="0.1" value="${margin}" data-travel-field="margin"><small>mm removed before Max</small></label>
+        </div>
+        <div class="travel-result"><span>Recommended software travel</span><strong data-travel-result>${fmt(usable, 3)} mm</strong></div>
+        <button type="button" class="btn-secondary" data-apply-travel="${axis}">USE MEASURED − MARGIN</button>
+      </article>`;
+    }).join("");
+  }
+
+  function updateTravelCard(card) {
+    const measured = Number(card.querySelector('[data-travel-field="measured"]')?.value);
+    const margin = Number(card.querySelector('[data-travel-field="margin"]')?.value);
+    const result = Number.isFinite(measured) && Number.isFinite(margin) ? measured - margin : NaN;
+    const resultNode = card.querySelector("[data-travel-result]");
+    if (resultNode) resultNode.textContent = Number.isFinite(result) && result > 0 ? `${fmt(result, 3)} mm` : "INVALID";
+    card.classList.toggle("fault", !Number.isFinite(result) || result <= 0);
+    return result;
+  }
+
   function motorTestParameters() {
     const freqVal = Number(el("motor-test-frequency")?.value || 400);
+    const frequencyCap = motorTestFrequencyCap();
     return {
       axis: el("motor-test-axis")?.value || "x",
       direction: el("motor-test-direction")?.value || "forward",
-      frequency: Math.max(10, Math.min(1000, Number.isFinite(freqVal) ? freqVal : 400)),
+      frequency: Math.max(10, Math.min(frequencyCap, Number.isFinite(freqVal) ? freqVal : 400)),
       pulses: Number(el("motor-test-pulses")?.value || 200),
       stepsPerRev: Number(el("motor-test-steps-rev")?.value || 200),
       microsteps: Number(el("motor-test-microsteps")?.value || 2),
       pitch: Number(el("motor-test-pitch")?.value || 5),
-      ignoreLimits: el("motor-test-bypass-limits") ? el("motor-test-bypass-limits").checked : true,
+      ignoreLimits: el("motor-test-bypass-limits") ? el("motor-test-bypass-limits").checked : false,
     };
   }
 
@@ -2445,7 +2729,7 @@
     el("motor-test-microsteps").value = Number(config.driver_microsteps || 2);
     el("motor-test-pitch").value = Number(config.lead_screw_pitch_mm || 5);
     const freqEl = el("motor-test-frequency");
-    if (freqEl && (!freqEl.value || Number(freqEl.value) > 1000 || Number(freqEl.value) < 10)) {
+    if (freqEl && (!freqEl.value || Number(freqEl.value) > motorTestFrequencyCap() || Number(freqEl.value) < 10)) {
       freqEl.value = "400";
     }
     updateMotorTestCalculations();
@@ -2460,7 +2744,8 @@
     const distance = parameters.pulses / ppm;
     const rpm = parameters.frequency * 60 / ppr;
     const rawFreq = Number(el("motor-test-frequency")?.value);
-    const jogValid = Number.isFinite(parameters.frequency) && parameters.frequency >= 10 && parameters.frequency <= 1000
+    const frequencyCap = motorTestFrequencyCap();
+    const jogValid = Number.isFinite(rawFreq) && rawFreq >= 10 && rawFreq <= frequencyCap
       && Number.isFinite(parameters.stepsPerRev) && parameters.stepsPerRev > 0
       && Number.isFinite(parameters.microsteps) && parameters.microsteps > 0
       && Number.isFinite(parameters.pitch) && parameters.pitch > 0;
@@ -2480,14 +2765,38 @@
     $$("[data-motor-test-jog]").forEach((button) => {
       button.disabled = !jogValid || (MS.motorTestJog.active ? button !== MS.motorTestJog.button : !ready);
     });
+    // Enable/disable Goto Limit buttons
+    $$("[data-goto-axis]").forEach((button) => {
+      const axis  = button.dataset.gotoAxis?.toUpperCase();
+      const limit = button.dataset.gotoLimit;
+      if (motorTestGoto.active) {
+        if (button === motorTestGoto.button) {
+          button.disabled = false;
+          button.textContent = "\u25A0 ABORT GOTO";
+        } else {
+          button.disabled = true;
+        }
+      } else {
+        button.disabled = !ready || MS.motorTestJog.active;
+        if (axis && limit) {
+          button.textContent = limit === "min" ? "\u27EA " + axis + " MIN" : axis + " MAX \u27EB";
+        }
+      }
+    });
+    const gotoProfileEl = el("motor-test-goto-profile");
+    if (gotoProfileEl) {
+      gotoProfileEl.textContent = ready
+        ? fmt(parameters.frequency, 0) + " Hz \xB7 Full-stroke"
+        : (armed ? "WAITING \u2014 system busy" : "ARM first to enable");
+    }
     setText(
       "motor-test-jog-profile",
       jogValid ? `HOLD TO RUN · ${fmt(parameters.frequency, 0)} Hz (STM32)` : "INVALID PROFILE",
     );
-    if (Number.isFinite(rawFreq) && rawFreq > 1000) {
-      setText("motor-test-result", "STM32 Protocol v2 frequency limit is 1,000 Hz. Capped to 1,000 Hz.");
+    if (Number.isFinite(rawFreq) && rawFreq > frequencyCap) {
+      setText("motor-test-result", `STM32 protocol frequency limit is ${frequencyCap.toLocaleString()} Hz.`);
     } else if (!valid) {
-      setText("motor-test-result", "INVALID PROFILE — frequency must be 10–1,000 Hz; one-shot duration maximum 10 seconds and 10,000 pulses.");
+      setText("motor-test-result", `INVALID PROFILE — frequency must be 10–${frequencyCap.toLocaleString()} Hz; one-shot duration maximum 10 seconds and 10,000 pulses.`);
     }
   }
 
@@ -2538,7 +2847,7 @@
     setText("motor-test-result", `HOLD JOG ACTIVE — Axis ${axis.toUpperCase()} ${direction.toUpperCase()}. Release the button to stop.`);
     try {
       while (MS.motorTestJog.active && MS.motorTestJog.token === token) {
-        const frequency = Math.min(1000, Math.max(10, Number(el("motor-test-frequency")?.value || 400)));
+        const frequency = Math.min(motorTestFrequencyCap(), Math.max(10, Number(el("motor-test-frequency")?.value || 400)));
         const pulseCount = Math.max(1, Math.min(1000, Math.round(frequency * 0.2)));
         await apiCall(
           "/api/maintenance/motor-test",
@@ -2549,7 +2858,7 @@
             direction,
             pulse_count: pulseCount,
             pulse_frequency_hz: frequency,
-            ignore_limits: Boolean(el("motor-test-bypass-limits")?.checked ?? true),
+            ignore_limits: Boolean(el("motor-test-bypass-limits")?.checked ?? false),
           },
           3000,
         );
@@ -2565,6 +2874,101 @@
     }
   }
 
+  // ── Goto Limit (Motor Test) ──────────────────────────────────────────────
+  // State for goto limit operation
+  const motorTestGoto = { active: false, token: 0, button: null };
+
+  function stopMotorTestGoto(message) {
+    if (!motorTestGoto.active) return;
+    motorTestGoto.active = false;
+    motorTestGoto.token += 1;
+    if (motorTestGoto.button) {
+      motorTestGoto.button.classList.remove("running");
+      motorTestGoto.button.disabled = false;
+    }
+    motorTestGoto.button = null;
+    const statusEl = el("motor-test-goto-status");
+    if (statusEl) {
+      statusEl.textContent = message || "GOTO COMPLETE";
+      statusEl.style.display = "";
+      statusEl.className = "motor-test-goto-status done";
+    }
+    updateMotorTestCalculations();
+  }
+
+  async function runGotoLimit(axis, limit, button) {
+    if (motorTestGoto.active || MS.motorTestJog.active || button.disabled) return;
+    const state = motorTestState();
+    if (!state.armed) {
+      toast("ARM TEST MODE first before using Goto Limit.", "warn");
+      return;
+    }
+    const ignoreLimits = Boolean(el("motor-test-bypass-limits")?.checked ?? false);
+    const frequency = Math.min(motorTestFrequencyCap(), Math.max(10, Number(el("motor-test-frequency")?.value || 400)));
+    // Full-stroke: calculate pulses from config max_travel_mm
+    const axisCfg = MS.config?.axes?.[axis] || {};
+    const stepsPerRev = Number(axisCfg.motor_steps_per_rev || 200);
+    const microsteps  = Number(axisCfg.driver_microsteps || 2);
+    const pitch       = Number(axisCfg.lead_screw_pitch_mm || 5);
+    const maxTravel   = Number(axisCfg.max_travel_mm || 100);
+    const ppm = (stepsPerRev * microsteps) / pitch;              // pulses per mm
+    const totalPulses = Math.ceil(maxTravel * ppm * 1.05);       // +5% safety margin
+    // direction: min → reverse, max → forward
+    const direction = (limit === "min") ? "reverse" : "forward";
+
+    const token = ++motorTestGoto.token;
+    motorTestGoto.active = true;
+    motorTestGoto.button = button;
+    button.classList.add("running");
+    button.disabled = true;
+
+    const statusEl = el("motor-test-goto-status");
+    if (statusEl) {
+      statusEl.style.display = "";
+      statusEl.className = "motor-test-goto-status active";
+      statusEl.textContent = `GOTO ${axis.toUpperCase()} ${limit.toUpperCase()} — Running ${fmt(maxTravel, 1)} mm stroke at ${fmt(frequency, 0)} Hz ...`;
+    }
+    updateMotorTestCalculations();
+
+    // Send in chunks of 200ms worth of pulses (same as hold-jog), cycling until done
+    const chunkPulses = Math.max(1, Math.min(1000, Math.round(frequency * 0.2)));
+    let pulsesRemaining = totalPulses;
+    try {
+      while (motorTestGoto.active && motorTestGoto.token === token && pulsesRemaining > 0) {
+        const sendPulses = Math.min(chunkPulses, pulsesRemaining);
+        const resp = await apiCall(
+          "/api/maintenance/motor-test",
+          "POST",
+          {
+            action: "pulse",
+            axis,
+            direction,
+            pulse_count: sendPulses,
+            pulse_frequency_hz: frequency,
+            ignore_limits: ignoreLimits,
+          },
+          3000,
+        );
+        // Stop if limit switch hit (backend returns ok:false when limit tripped)
+        if (resp && resp.ok === false) {
+          stopMotorTestGoto(`LIMIT REACHED — ${axis.toUpperCase()} ${limit.toUpperCase()} end stop.`);
+          return;
+        }
+        pulsesRemaining -= sendPulses;
+      }
+    } catch (err) {
+      if (motorTestGoto.token === token) {
+        stopMotorTestGoto(`GOTO STOPPED — ${humanizeError(err.message)}`);
+        toast(humanizeError(err.message), "error");
+      }
+      return;
+    }
+    if (motorTestGoto.token === token) {
+      stopMotorTestGoto(`GOTO ${axis.toUpperCase()} ${limit.toUpperCase()} — Full stroke complete.`);
+    }
+    refresh().catch(() => {});
+  }
+
   function renderMotorTest() {
     if (!document.getElementById("motor-test-page-status")) return;
     const test = motorTestState();
@@ -2575,7 +2979,7 @@
 
     const pageStatus = el("motor-test-page-status");
     if (pageStatus) {
-      pageStatus.textContent = armed ? "⚡ ARMED (TEST MODE)" : (isAlarm ? "ALARM TRIPPED" : "DISARMED");
+      pageStatus.textContent = armed ? "ARMED (TEST MODE)" : (isAlarm ? "ALARM TRIPPED" : "DISARMED");
       pageStatus.className = `page-status-chip ${armed ? "warn" : (isAlarm ? "fault" : "")}`;
     }
 
@@ -2583,9 +2987,9 @@
     if (safetyPanel) safetyPanel.classList.toggle("armed", armed);
 
     if (armed) {
-      setText("motor-test-countdown", "⚡ TEST MODE ACTIVE (ARMED) — READY TO PULSE / JOG");
+      setText("motor-test-countdown", "TEST MODE ACTIVE (ARMED) — READY TO PULSE / JOG");
     } else if (isAlarm || isStopReq) {
-      setText("motor-test-countdown", "⚠️ ALARM TRIPPED — CLICK RESET ALARMS TO UNLOCK");
+      setText("motor-test-countdown", "WARNING: ALARM TRIPPED — CLICK RESET ALARMS TO UNLOCK");
     } else {
       setText("motor-test-countdown", "PRESS ARM TO ENABLE PULSE OUTPUT");
     }
@@ -2610,7 +3014,8 @@
     const nucChip = el("test-nucleo-chip");
     const nucComm = MS.payload?.nucleo?.communication_ok;
     if (nucChip) {
-      nucChip.textContent = nucComm ? (armed ? "ARMED (V2)" : "ONLINE (V2)") : "OFFLINE";
+      const protocol = Number(MS.payload?.nucleo?.protocol || 1);
+      nucChip.textContent = nucComm ? `${armed ? "ARMED" : "ONLINE"} (V${protocol})` : "OFFLINE";
       nucChip.className = `page-status-chip ${nucComm ? (armed ? "warn" : "ok") : "fault"}`;
     }
 
@@ -2636,7 +3041,7 @@
     const telPower = el("test-tel-power");
     if (telPower) {
       const estop = Boolean(status.estop || MS.payload?.io?.inputs?.estop);
-      telPower.textContent = estop ? "🛑 E-STOP TRIPPED (60V CUT)" : "KM1 RELAY CLOSED (60V LIVE)";
+      telPower.textContent = estop ? "E-STOP TRIPPED (60V CUT)" : "KM1 RELAY CLOSED (60V LIVE)";
       telPower.style.color = estop ? "var(--red-bright, #ff4d4d)" : "var(--ok, #25d389)";
     }
 
@@ -2723,7 +3128,13 @@
     const phase = String(operation.phase || "").toUpperCase();
     const message = String(operation.message || "");
     const messageLower = message.toLowerCase();
-    const phaseOrder = ["VALIDATE_SLOT", "MOVE_X", "MOVE_Y", "MOVE_Z", "VERIFY_TARGET", "HOLD_AT_TARGET", "HOME_Z", "HOME_Y", "HOME_X", "VERIFY_HOME", "COMPLETED"];
+    const reportedSteps = Array.isArray(operation.steps)
+      ? operation.steps
+      : Array.isArray(MS.payload?.sequence?.steps) ? MS.payload.sequence.steps : [];
+    // Never invent a sequence.  When the Controller has no step list, show
+    // only the phase it actually reported instead of a hard-coded workflow.
+    const phaseOrder = reportedSteps.map((item) => String(item?.phase || item).toUpperCase()).filter(Boolean);
+    if (!phaseOrder.length && phase) phaseOrder.push(phase);
     const phaseLabels = {
       VALIDATE_SLOT: ["Validate Slot", "Read configured target and readiness"], MOVE_X: ["Move X", "Move X axis to saved target"],
       MOVE_Y: ["Move Y", "Move Y axis to saved target"], MOVE_Z: ["Move Z", "Move Z axis to saved target"],
@@ -2733,8 +3144,8 @@
       COMPLETED: ["Completed", "Publish final result and verification"],
     };
     const phaseIndex = phaseOrder.indexOf(phase);
-    const liveSequencePhase = phaseOrder.slice(0, -1).includes(phase);
-    const sequenceContext = activeCommand.startsWith("slot_sequence_") || liveSequencePhase || messageLower.includes("slot sequence");
+    const liveSequencePhase = phaseOrder.includes(phase) && !["COMPLETED", "FAILED", "STOPPED"].includes(phase);
+    const sequenceContext = activeCommand.startsWith("slot_sequence_") || messageLower.includes("slot sequence");
     const sequenceFailed = sequenceContext && ["FAILED", "STOPPED"].includes(phase);
     const sequenceCompleted = sequenceContext && !sequenceFailed && (phase === "COMPLETED" || messageLower.includes("completed slot sequence"));
     const slotMatch = activeCommand.match(/^slot_sequence_(.+)$/i);
@@ -2756,6 +3167,9 @@
     setText("sequence-monitor-elapsed", sequenceContext && Number.isFinite(Number(command.elapsed_s)) ? `${fmtTime(command.elapsed_s)} s` : "--");
     setText("sequence-monitor-message", sequenceContext ? (message || "Controller is updating sequence state") : "Waiting for a Slot Sequence");
     setText("sequence-monitor-reason", sequenceFailed ? (MS.payload?.last_error || message || "Controller stopped the sequence before it could continue.") : sequenceCompleted ? "Controller reports target and home workflow complete. Review final status and verification before the next command." : sequenceContext ? "Live phase is reported by the Controller. This page is read-only and does not create a motion command." : "No Slot Sequence is active. Start a sequence from Slot Manager or receive a valid MQTT release command; this monitor will then show Controller-reported progress.");
+    setText("sequence-order-title", sequenceContext
+      ? phaseOrder.map((item) => phaseLabels[item][0]).join(" → ")
+      : "Waiting for Controller sequence data");
 
     const steps = el("sequence-step-list");
     if (steps) steps.innerHTML = phaseOrder.map((step, index) => {
@@ -2763,7 +3177,7 @@
       if (sequenceFailed && (index === activeIndex || activeIndex < 0 && index === 0)) state = "failed";
       else if (sequenceCompleted || (sequenceContext && activeIndex > index)) state = "complete";
       else if (sequenceContext && activeIndex === index) state = "active";
-      const [label, detail] = phaseLabels[step];
+      const [label, detail] = phaseLabels[step] || [step.replaceAll("_", " "), "Controller-reported phase"];
       return `<li class="sequence-step ${state}"><span>${String(index + 1).padStart(2, "0")}</span><strong>${esc(label)}</strong><small>${esc(detail)}</small></li>`;
     }).join("");
 
@@ -2909,7 +3323,7 @@
 
     const logNode = el("comm-logical-estop");
     if (logNode) {
-      logNode.textContent = logicalEstop ? "🛑 E-STOP ACTIVE (UNSAFE)" : "✓ CLEAR (SAFE)";
+      logNode.textContent = logicalEstop ? "E-STOP ACTIVE (UNSAFE)" : "CLEAR (SAFE)";
       logNode.className = logicalEstop ? "fault" : "ok";
     }
 
@@ -2968,6 +3382,12 @@
     const polarityVerified = Boolean(MS.payload?.io?.polarity_verified);
     const ioEnabled = Boolean(MS.payload?.io?.enabled);
     const ioCommOk = MS.payload?.io?.communication_ok;
+    const piControl = MS.payload?.picontrol_io || {};
+    const piCommOk = piControl.communication_ok;
+    const piInputs = piControl.inputs || {};
+    const piRawInputs = piControl.raw_inputs || {};
+    const snapshotAgeMs = MS.lastStatusAt ? Date.now() - MS.lastStatusAt : Infinity;
+    const snapshotStale = snapshotAgeMs > 3000;
 
     // Summary Strip
     const busState = el("io-summary-bus-state");
@@ -3007,7 +3427,7 @@
     const estopSub = el("io-summary-estop-sub");
     const isEstopActive = Boolean(logicalInputs.estop || getStatus().estop);
     if (estopState) {
-      estopState.textContent = isEstopActive ? "🛑 TRIPPED" : "CLEAR";
+      estopState.textContent = isEstopActive ? "E-STOP TRIPPED" : "CLEAR";
       estopState.className = `io-summary-value ${isEstopActive ? "fault" : "ok"}`;
     }
     if (estopSub) {
@@ -3015,23 +3435,42 @@
       estopSub.textContent = `DI10: ${rawDi10 ? "1 (Closed/NC)" : "0 (Open)"} · ${polarityVerified ? "Verified" : "Unverified"}`;
     }
 
+    const piSummary = el("io-summary-picontrol-state");
+    if (piSummary) {
+      piSummary.textContent = piCommOk === true ? "ONLINE" : piCommOk === false ? "OFFLINE" : "NO DATA";
+      piSummary.className = `io-summary-value ${piCommOk === true ? "ok" : "fault"}`;
+    }
+    setText("io-summary-picontrol-sub", piControl.last_success_at ? `Last poll ${fmtTimestamp(piControl.last_success_at)}` : (piControl.last_error || "No successful local-input poll"));
+    const driveFaults = ["x_alarm", "y_alarm"].filter((key) => piInputs[key] === true);
+    const driveSummary = el("io-summary-drive-state");
+    if (driveSummary) {
+      driveSummary.textContent = driveFaults.length ? `${driveFaults.length} ALARM` : piCommOk === true ? "CLEAR" : "UNKNOWN";
+      driveSummary.className = `io-summary-value ${driveFaults.length || piCommOk !== true ? "fault" : "ok"}`;
+    }
+    setText("io-summary-drive-sub", driveFaults.length ? driveFaults.map((key) => key.startsWith("x") ? "X_DRIVE_ALM" : "Y_DRIVE_ALM").join(" · ") : "X/Y HBS860H feedback clear");
+    setText("io-summary-age", snapshotStale ? "STALE" : `${Math.round(snapshotAgeMs)} ms`);
+    setText("io-summary-latency", `IRIV ${MS.payload?.io?.poll_latency_ms ?? "--"} ms · PiControl ${piControl.poll_latency_ms ?? "--"} ms`);
+    const filteredNoise = Object.values(inputDetails).reduce((total, detail) => total + Number(detail?.filtered_spikes || 0), 0);
+    setText("io-summary-noise-count", String(filteredNoise));
+    setText("io-summary-noise-sub", filteredNoise ? "Review channels with filtered spikes below" : "No rejected input transitions since Controller start");
+
     let limitsCount = 0;
     let sensorsCount = 0;
     IO_PAGE_DI_CHANNELS.forEach((def) => {
       if (def.category === "limits") limitsCount++;
       if (def.category === "sensors") sensorsCount++;
     });
-    setText("io-filter-cnt-all", String(IO_PAGE_DI_CHANNELS.length + IO_PAGE_DO_CHANNELS.length));
-    setText("io-filter-cnt-inputs", String(IO_PAGE_DI_CHANNELS.length));
+    setText("io-filter-cnt-all", String(IO_PAGE_DI_CHANNELS.length + IO_PAGE_DO_CHANNELS.length + 2));
+    setText("io-filter-cnt-inputs", String(IO_PAGE_DI_CHANNELS.length + 2));
     setText("io-filter-cnt-outputs", String(IO_PAGE_DO_CHANNELS.length));
     setText("io-filter-cnt-limits", String(limitsCount));
     setText("io-filter-cnt-sensors", String(sensorsCount));
-    setText("io-filter-cnt-active", String(activeDiCount + activeDoCount));
+    setText("io-filter-cnt-active", String(activeDiCount + activeDoCount + driveFaults.length));
 
     const pageHealth = el("io-page-health");
     if (pageHealth) {
-      if (isEstopActive || activeAlarmCount() > 0 || ioCommOk === false) {
-        pageHealth.textContent = isEstopActive ? "E-STOP ACTIVE" : "FAULT DETECTED";
+      if (snapshotStale || isEstopActive || activeAlarmCount() > 0 || ioCommOk === false || piCommOk === false) {
+        pageHealth.textContent = snapshotStale ? "STALE DATA" : isEstopActive ? "E-STOP ACTIVE" : "FAULT DETECTED";
         pageHealth.className = "page-status-chip fault";
       } else {
         pageHealth.textContent = "ALL SIGNALS HEALTHY";
@@ -3047,6 +3486,8 @@
       if (currentFilter === "outputs" && !isOutput) return false;
       if (currentFilter === "limits" && (isOutput || item.category !== "limits")) return false;
       if (currentFilter === "sensors" && (isOutput || item.category !== "sensors")) return false;
+      if (currentFilter === "safety" && (isOutput || item.category !== "safety")) return false;
+      if (currentFilter === "drive-alarms") return false;
       if (currentFilter === "active-only") {
         const active = isOutput ? Boolean(outputs[item.key]) : Boolean(logicalInputs[item.key]);
         if (!active) return false;
@@ -3058,9 +3499,36 @@
       return true;
     }
 
+    const piSection = el("io-section-picontrol");
+    const showPi = ["all", "inputs", "drive-alarms", "active-only"].includes(currentFilter);
+    if (piSection) piSection.style.display = showPi ? "" : "none";
+    const piHealth = el("io-picontrol-health");
+    if (piHealth) {
+      piHealth.textContent = piCommOk === true ? (driveFaults.length ? "DRIVE ALARM" : "ONLINE / CLEAR") : "COMMUNICATION FAULT";
+      piHealth.className = `page-status-chip ${piCommOk === true && !driveFaults.length ? "ok" : "fault"}`;
+    }
+    const piCards = el("io-page-picontrol-cards");
+    if (piCards) {
+      const definitions = [
+        { key: "x_alarm", channel: 0, pin: 13, label: "X_DRIVE_ALM", driver: "HBS860H X" },
+        { key: "y_alarm", channel: 1, pin: 17, label: "Y_DRIVE_ALM", driver: "HBS860H Y" },
+      ].filter((def) => currentFilter !== "active-only" || piInputs[def.key] === true)
+       .filter((def) => !searchQuery || `${def.label} DI${def.channel} GPIO${def.pin} ${def.driver}`.toLowerCase().includes(searchQuery));
+      piCards.innerHTML = definitions.length ? definitions.map((def) => {
+        const active = piInputs[def.key] === true;
+        const raw = piRawInputs[`DI${def.channel}`];
+        return `<article class="io-card io-card-enhanced ${active ? "fault" : "safe"}">
+          <div class="io-card-head"><div class="io-head-left"><span class="io-channel-tag">PiControl DI${def.channel}</span><span class="io-wire-tag">GPIO${def.pin}</span></div><span class="io-channel-badge ${active ? "fault" : "ok"}">${active ? "ALARM" : "CLEAR"}</span></div>
+          <div class="io-signal-name">${def.label}</div><div class="io-signal-role">${def.driver} alarm feedback</div>
+          <div class="io-signal-desc">Separate local input bank; this is not IRIV Modbus DI${def.channel}.</div>
+          <div class="io-card-footer"><span class="io-card-raw">RAW: <b>${raw === true ? "1" : raw === false ? "0" : "--"}</b></span><span class="io-card-state ${active ? "fault" : "safe"}">${active ? "FAULT ACTIVE" : "NORMAL"}</span></div>
+        </article>`;
+      }).join("") : '<div class="io-empty-hint">No PiControl driver-alarm inputs match the current filters.</div>';
+    }
+
     const inputsSec = el("io-section-inputs");
     if (inputsSec) {
-      const showInputs = currentFilter === "all" || currentFilter === "inputs" || currentFilter === "limits" || currentFilter === "sensors" || currentFilter === "active-only";
+      const showInputs = currentFilter === "all" || currentFilter === "inputs" || currentFilter === "limits" || currentFilter === "sensors" || currentFilter === "safety" || currentFilter === "active-only";
       inputsSec.style.display = showInputs ? "" : "none";
     }
     const outputsSec = el("io-section-outputs");
@@ -3079,7 +3547,11 @@
           const detail = inputDetails[def.key] || {};
           const rawBit = rawInputs[`DI${def.channel}`] ?? false;
           const isActive = logicalInputs[def.key] ?? false;
-          const label = detail.label || def.label;
+          const label = def.label;
+          const logicalTransitions = Number(detail.logical_transitions || 0);
+          const rawTransitions = Number(detail.raw_transitions || 0);
+          const filteredSpikes = Number(detail.filtered_spikes || 0);
+          const lastChange = detail.last_logical_change_at || detail.last_raw_change_at;
 
           let statusClass = "inactive";
           let stateText = "INACTIVE (0)";
@@ -3123,6 +3595,14 @@
                   <i class="io-dot ${statusClass}"></i> ${stateText}
                 </span>
               </div>
+              <dl class="io-diagnostic-meta">
+                <div><dt>Polarity</dt><dd>${detail.active_low ? "ACTIVE LOW" : "ACTIVE HIGH"}</dd></div>
+                <div><dt>Debounce</dt><dd>${Number(detail.debounce_samples || 1)} samples</dd></div>
+                <div><dt>Transitions</dt><dd>${logicalTransitions} / ${rawTransitions} logical/raw</dd></div>
+                <div class="${filteredSpikes ? "warn" : ""}"><dt>Filtered noise</dt><dd>${filteredSpikes}</dd></div>
+                <div><dt>Last change</dt><dd>${lastChange ? esc(fmtTimestamp(lastChange)) : "--"}</dd></div>
+                <div><dt>Last active</dt><dd>${detail.active_since_at ? "ACTIVE NOW" : detail.last_active_duration_ms != null ? `${Number(detail.last_active_duration_ms).toFixed(0)} ms` : "--"}</dd></div>
+              </dl>
             </div>
           `;
         }).join("");
@@ -3138,7 +3618,7 @@
         doContainer.innerHTML = visibleDos.map((def) => {
           const detail = outputDetails[def.key] || {};
           const isOn = Boolean(outputs[def.key]);
-          const label = detail.label || def.label;
+          const label = def.label;
           const statusClass = isOn ? (def.key === "alarm" ? "fault" : "active") : "inactive";
 
           return `
@@ -3188,34 +3668,34 @@
       tableBody.innerHTML = `
         <tr>
           <td><strong class="axis-badge">X Axis</strong><div class="axis-sub">Horizontal Gantry</div></td>
-          <td><span class="limit-status-pill ${xMinActive ? "triggered" : "normal"}">DI0: X Min ${xMinActive ? "🛑 ACTIVE" : "✓ Normal"}</span></td>
-          <td><span class="limit-status-pill ${xMaxActive ? "triggered" : "normal"}">DI1: X Max ${xMaxActive ? "🛑 ACTIVE" : "✓ Normal"}</span></td>
+          <td><span class="limit-status-pill ${xMinActive ? "triggered" : "normal"}">DI0: X Min ${xMinActive ? "ACTIVE" : "Normal"}</span></td>
+          <td><span class="limit-status-pill ${xMaxActive ? "triggered" : "normal"}">DI1: X Max ${xMaxActive ? "ACTIVE" : "Normal"}</span></td>
           <td><span class="limit-status-pill normal">--</span></td>
           <td><code>PA8 (PUL) / PB0 (DIR)</code><br><small>Driver: HBS860H X</small></td>
           <td>Stop X gantry instantly; inhibit negative / positive jogging accordingly.</td>
         </tr>
         <tr>
           <td><strong class="axis-badge">Y Axis</strong><div class="axis-sub">Depth Gantry</div></td>
-          <td><span class="limit-status-pill ${yMinActive ? "triggered" : "normal"}">DI2: Y Min ${yMinActive ? "🛑 ACTIVE" : "✓ Normal"}</span></td>
-          <td><span class="limit-status-pill ${yMaxActive ? "triggered" : "normal"}">DI3: Y Max ${yMaxActive ? "🛑 ACTIVE" : "✓ Normal"}</span></td>
+          <td><span class="limit-status-pill ${yMinActive ? "triggered" : "normal"}">DI2: Y Min ${yMinActive ? "ACTIVE" : "Normal"}</span></td>
+          <td><span class="limit-status-pill ${yMaxActive ? "triggered" : "normal"}">DI3: Y Max ${yMaxActive ? "ACTIVE" : "Normal"}</span></td>
           <td><span class="limit-status-pill normal">--</span></td>
           <td><code>PA9 (PUL) / PB1 (DIR)</code><br><small>Driver: HBS860H Y</small></td>
           <td>Stop Y gantry instantly; inhibit negative / positive jogging accordingly.</td>
         </tr>
         <tr>
           <td><strong class="axis-badge">Z Axis</strong><div class="axis-sub">Vertical Elevator</div></td>
-          <td><span class="limit-status-pill ${zMinActive ? "triggered" : "normal"}">DI4: Z Min ${zMinActive ? "🛑 ACTIVE" : "✓ Normal"}</span></td>
-          <td><span class="limit-status-pill ${zMaxActive ? "triggered" : "normal"}">DI5: Z Max ${zMaxActive ? "🛑 ACTIVE" : "✓ Normal"}</span></td>
-          <td><span class="limit-status-pill ${zHomeActive ? "home-active" : "normal"}">DI6: Z Home ${zHomeActive ? "⚡ HOMED" : "Clear"}</span></td>
+          <td><span class="limit-status-pill ${zMinActive ? "triggered" : "normal"}">DI4: Z Min ${zMinActive ? "ACTIVE" : "Normal"}</span></td>
+          <td><span class="limit-status-pill ${zMaxActive ? "triggered" : "normal"}">DI5: Z Max ${zMaxActive ? "ACTIVE" : "Normal"}</span></td>
+          <td><span class="limit-status-pill ${zHomeActive ? "home-active" : "normal"}">DI6: Z Home ${zHomeActive ? "HOMED" : "Clear"}</span></td>
           <td><code>PA5 (PUL) / PB2 (DIR)</code><br><small>Driver: DM542 Z</small></td>
           <td>Stop Z carriage; Z Home registers gantry zero reference position.</td>
         </tr>
         <tr class="product-row">
           <td><strong class="axis-badge product">Product Delivery</strong><div class="axis-sub">Chute &amp; Dispenser</div></td>
-          <td><span class="limit-status-pill ${dropParkActive ? "triggered" : "normal"}">DI7: Drop Parking ${dropParkActive ? "⚡ PARKED" : "Clear"}</span></td>
-          <td><span class="limit-status-pill ${dropSensActive ? "triggered" : "normal"}">DI8: Drop Sensor ${dropSensActive ? "📦 DETECTED" : "Clear"}</span></td>
-          <td><span class="limit-status-pill ${pickupSensActive ? "triggered" : "normal"}">DI9: Pickup Sensor ${pickupSensActive ? "🖐️ RETRIEVED" : "Clear"}</span></td>
-          <td><span class="limit-status-pill ${dispenseActive ? "triggered" : "normal"}">DO3: Dispense Relay ${dispenseActive ? "⚡ PULSED" : "OFF"}</span></td>
+          <td><span class="limit-status-pill ${dropParkActive ? "triggered" : "normal"}">DI7: Drop Parking ${dropParkActive ? "PARKED" : "Clear"}</span></td>
+          <td><span class="limit-status-pill ${dropSensActive ? "triggered" : "normal"}">DI8: Drop Sensor ${dropSensActive ? "ITEM DETECTED" : "Clear"}</span></td>
+          <td><span class="limit-status-pill ${pickupSensActive ? "triggered" : "normal"}">DI9: Pickup Sensor ${pickupSensActive ? "RETRIEVED" : "Clear"}</span></td>
+          <td><span class="limit-status-pill ${dispenseActive ? "triggered" : "normal"}">DO3: Dispense Relay ${dispenseActive ? "PULSED" : "OFF"}</span></td>
           <td>Interlocked dispensing sequence; optical confirmation before slot release.</td>
         </tr>
       `;
@@ -3243,7 +3723,7 @@
     const logEstopEl = el("io-comm-logical-estop");
     const logDescEl = el("io-comm-logical-desc");
     if (logEstopEl) {
-      logEstopEl.textContent = estopLogic ? "🛑 E-STOP TRIPPED (UNSAFE)" : "✓ CLEAR (SAFE)";
+      logEstopEl.textContent = estopLogic ? "E-STOP TRIPPED (UNSAFE)" : "CLEAR (SAFE)";
       logEstopEl.className = estopLogic ? "fault" : "ok";
     }
     if (logDescEl) {
@@ -3358,6 +3838,78 @@
     }
   }
 
+  function renderSystemControl() {
+    const io = MS.payload?.io || {};
+    const picontrol = MS.payload?.picontrol_io || {};
+    const nucleo = MS.payload?.nucleo || {};
+    const safety = MS.payload?.safety || {};
+    const estop = Boolean(safety.estop_active || getStatus().estop);
+    const motionEnabled = Boolean(safety.motion_enabled);
+    const healthy = MS.online && io.communication_ok !== false && nucleo.communication_ok !== false && !estop;
+    const cards = [
+      ["IRIV Pi / Controller", MS.online ? "ONLINE" : "OFFLINE", MS.online ? "Web API and Controller IPC responding" : "Controller snapshot unavailable", MS.online],
+      ["IRIV I/O", io.communication_ok ? "ONLINE" : "OFFLINE", io.last_success_at ? `Last response: ${fmtTimestamp(io.last_success_at)}` : (io.last_error || "No successful Modbus poll"), Boolean(io.communication_ok)],
+      ["STM32 NUCLEO", nucleo.communication_ok ? "ONLINE" : "OFFLINE", `${nucleo.port || "USB not configured"} · Protocol v${nucleo.protocol ?? "--"}`, Boolean(nucleo.communication_ok)],
+      ["DI10 E-Stop", estop ? "ACTIVE" : "CLEAR", estop ? "All-axis stop is latched" : "NC safety input is clear", !estop],
+    ];
+    const grid = el("system-health-grid");
+    if (grid) grid.innerHTML = cards.map(([label, value, detail, ok]) => `<article class="system-health-card ${ok ? "ok" : "fault"}"><span>${esc(label)}</span><strong>${esc(value)}</strong><small>${esc(detail)}</small></article>`).join("");
+    setText("system-overall-state", healthy ? "COMMUNICATION HEALTHY" : "ACTION REQUIRED");
+    setClass("system-overall-state", `page-status-chip ${healthy ? "ok" : "fault"}`);
+    setText("system-motion-state", motionEnabled ? "ENABLED" : "DISABLED");
+    setClass("system-motion-state", `page-status-chip ${motionEnabled ? "ok" : "fault"}`);
+    setText("system-nucleo-state", nucleo.communication_ok ? "ONLINE" : "OFFLINE");
+    setClass("system-nucleo-state", `page-status-chip ${nucleo.communication_ok ? "ok" : "fault"}`);
+    setText("system-di10-state", estop ? "E-STOP ACTIVE" : "CLEAR");
+    setClass("system-di10-state", `page-status-chip ${estop ? "fault" : "ok"}`);
+    setText("system-di10-logical", estop ? "ACTIVE / STOPPED" : "CLEAR");
+    setText("system-di10-raw", io.raw_inputs?.DI10 === true ? "HIGH / 1" : io.raw_inputs?.DI10 === false ? "LOW / 0" : "--");
+    const enable = el("system-motion-enable");
+    if (enable) enable.disabled = motionEnabled || !MS.online || estop || !io.communication_ok || !nucleo.communication_ok;
+    const disable = el("system-motion-disable");
+    if (disable) disable.disabled = !MS.online || !motionEnabled;
+    const reset = el("system-nucleo-reset");
+    if (reset) reset.disabled = !MS.online || Boolean(MS.payload?.busy);
+    const drivePowerOn = picontrol.outputs?.xy_drive_power === true;
+    setText("system-drive-power-state", drivePowerOn ? "POWER ON" : "POWER OFF");
+    setClass("system-drive-power-state", `page-status-chip ${drivePowerOn ? "ok" : "fault"}`);
+    const driveReset = el("system-drive-power-reset");
+    if (driveReset) driveReset.disabled = !MS.online || Boolean(MS.payload?.busy) || picontrol.communication_ok === false;
+    const driveCut = el("system-drive-power-cut");
+    if (driveCut) driveCut.disabled = !MS.online || !drivePowerOn;
+    const driveRestore = el("system-drive-power-restore");
+    if (driveRestore) driveRestore.disabled = !MS.online || drivePowerOn || Boolean(MS.payload?.busy) || picontrol.communication_ok === false;
+    const history = el("system-action-history");
+    if (history) {
+      const entries = MS.events.filter((event) => ["SYSTEM", "SAFETY", "INTERLOCK", "CONFIG"].includes(eventCategory(event))).slice(0, 8);
+      history.innerHTML = entries.length ? entries.map((event) => `<li><time>${esc(eventTime(event))}</time><b>${esc(eventOutcome(event))}</b><span>${esc(sanitizeEventText(event.message))}</span></li>`).join("") : "<li>No system-control events in this browser session.</li>";
+    }
+  }
+
+  function renderDemoSampling() {
+    const demo = MS.payload?.demo || {};
+    const state = String(demo.state || "IDLE").toUpperCase();
+    const counters = demo.counters || {};
+    setText("demo-state", state);
+    setClass("demo-state", `page-status-chip ${["FAILED", "STOPPED", "E_STOPPED"].includes(state) ? "fault" : ["RUNNING", "MOVING_TO_SLOT", "STARTING"].includes(state) ? "ok" : ""}`);
+    setText("demo-session", demo.session_id ? String(demo.session_id).slice(0, 10) : "--");
+    setText("demo-cycle", demo.cycle || 0);
+    setText("demo-slots", `${demo.current_slot || "--"} / ${demo.next_slot || "--"}`);
+    setText("demo-last-result", demo.last_result || "--");
+    const grid = el("demo-counter-grid");
+    if (grid) grid.innerHTML = ["requested", "attempted", "passed", "failed", "skipped", "stopped", "success_rate"].map((key) => `<div><span>${esc(key.replace("_", " ").toUpperCase())}</span><strong>${esc(counters[key] ?? 0)}${key === "success_rate" ? "%" : ""}</strong></div>`).join("");
+    const active = ["STARTING", "RUNNING", "MOVING_TO_SLOT", "PAUSE_REQUESTED", "PAUSED", "STOPPING"].includes(state);
+    const paused = state === "PAUSED";
+    const setDisabled = (id, disabled) => { const node = el(id); if (node) node.disabled = disabled; };
+    setDisabled("demo-configure", active);
+    setDisabled("demo-validate", active);
+    setDisabled("demo-arm", active);
+    setDisabled("demo-start", state !== "ARMED" || !MS.demoArmToken);
+    setDisabled("demo-pause", !["STARTING", "RUNNING", "MOVING_TO_SLOT"].includes(state));
+    setDisabled("demo-resume", !paused);
+    setDisabled("demo-stop", !active);
+  }
+
   function renderWorkspacePages() {
     const status = getStatus();
     const operation = getOperation();
@@ -3390,7 +3942,6 @@
         ["Motion Queue", MS.payload?.busy ? "BUSY" : "IDLE", MS.payload?.active_command || "No pending command", MS.payload?.busy ? "warn" : "ok"],
         ["Active Alarms", String(alarmCount), MS.payload?.last_error || "No controller faults", alarmCount ? "fault" : "ok"],
         ["Slot Database", String(Object.keys(MS.slots || {}).length), `${configuredSlots} configured locations`, "ok"],
-        ["Feed Override", `${MS.feedOverridePct}%`, `${fmtSpd(MS.selectedJogSpeed)} mm/s jog speed`, "ok"],
         ["Last Operation", operation.ok === false ? "FAILED" : "NORMAL", operation.message || "No operation message", operation.ok === false ? "fault" : "ok"],
       ];
       diagnostics.innerHTML = diagnosticItems.map(([label, value, detail, stateClass]) => `<article class="diagnostic-card ${stateClass}"><span>${esc(label)}</span><strong>${esc(value)}</strong><small>${esc(detail)}</small></article>`).join("");
@@ -3408,14 +3959,50 @@
     renderMotorTest();
     renderMqttMonitor();
     renderSequenceMonitor();
+    renderSystemControl();
+    renderDemoSampling();
+
+    const architectureHealth = el("architecture-health");
+    if (architectureHealth) {
+      const nucleoOk = MS.payload?.nucleo?.communication_ok === true;
+      const ioOk = MS.payload?.io?.communication_ok !== false;
+      const healthy = MS.online && nucleoOk && ioOk;
+      architectureHealth.textContent = !MS.online ? "CONTROLLER OFFLINE" : !nucleoOk ? "NUCLEO OFFLINE" : !ioOk ? "IRIV I/O OFFLINE" : "ALL LINKS ONLINE";
+      architectureHealth.className = `page-status-chip ${healthy ? "ok" : "fault"}`;
+      const motionEnabled = MS.payload?.safety?.motion_enabled === true;
+      const driveAlarm = Object.values(MS.payload?.picontrol_io?.inputs || {}).some((active) => active === true);
+      const safetyClear = MS.online && nucleoOk && ioOk && !status.estop && !MS.payload?.safety?.stop_requested && !driveAlarm;
+      const setArchitectureLive = (id, value, ok) => {
+        const node = el(id);
+        if (!node) return;
+        node.textContent = value;
+        node.className = ok ? "ok" : "fault";
+      };
+      setArchitectureLive("architecture-web-live", MS.online ? "ONLINE" : "OFFLINE", MS.online);
+      setArchitectureLive("architecture-controller-live", MS.online ? "ONLINE" : "OFFLINE", MS.online);
+      setArchitectureLive("architecture-motion-live", motionEnabled ? "ENABLED" : "DISABLED", motionEnabled);
+      setArchitectureLive("architecture-nucleo-live", nucleoOk ? "ONLINE" : "OFFLINE", nucleoOk);
+      setArchitectureLive("architecture-io-live", ioOk ? "ONLINE" : "OFFLINE", ioOk);
+      setArchitectureLive("architecture-safety-live", safetyClear ? "CLEAR" : "INHIBITED", safetyClear);
+      setText("architecture-protocol-live", `USB Serial · Protocol v${MS.payload?.nucleo?.protocol ?? "--"}`);
+    }
 
     const alarmList = document.getElementById("alarm-page-list");
     const alarmPriority = (channel) => channel.active ? (channel.level === "fault" ? 0 : 1) : 2;
     const orderedAlarms = alarmChannels().sort((left, right) => alarmPriority(left) - alarmPriority(right));
+    const alarmRecovery = (channel) => {
+      if (channel.code === "ESTOP") return "Release the physical E-Stop, verify DI10/KM1 feedback, then reset alarms.";
+      if (/DRV-[XY]/.test(channel.code)) return "Inspect the HBS860H fault indication and mechanics; remove the cause before resetting drive power.";
+      if (/-(MIN|MAX)$/.test(channel.code)) return "Move only away from the active limit, then verify that the sensor returns CLEAR.";
+      if (/-HOME$/.test(channel.code)) return `Run Home ${channel.code.charAt(0)} after all safety inputs are clear.`;
+      if (/NUCLEO|USB/.test(channel.code)) return "Check USB power/cable and protocol handshake; use Reset USB Link only while motion is stopped.";
+      if (/IO|CTRL/.test(channel.code)) return "Restore the communication link and review Event Log before enabling motion.";
+      return "Review the source and Event Log, remove the cause, then use Reset Alarms if the condition is clear.";
+    };
     if (alarmList) alarmList.innerHTML = orderedAlarms.map((channel) => `
       <article class="alarm-page-item ${channel.active ? channel.level : "clear"}">
         <i class="alarm-point-light ${channel.active ? channel.level : "clear"}" aria-hidden="true"></i>
-        <div><span>${esc(channel.code)}</span><strong>${esc(channel.label)}</strong><small>${esc(channel.detail)}</small></div>
+        <div><span>${esc(channel.code)}</span><strong>${esc(channel.label)}</strong><small>${esc(channel.detail)}</small><small class="alarm-recovery"><b>RECOVERY</b> ${esc(alarmRecovery(channel))}</small></div>
         <b class="alarm-page-state">${channel.active ? (channel.level === "fault" ? "ALARM" : "WARNING") : "NORMAL"}</b>
       </article>
     `).join("");
@@ -3576,6 +4163,7 @@
       // Rebuild homing sequence panel with actual order
       renderHomingSequence();
       renderWorkspacePages();
+      updateFeedOverride();
       renderConfigurationEditor(true);
       loadMotorTestAxisConfig();
       log("Machine configuration loaded", "info", "SYSTEM");
@@ -3589,24 +4177,116 @@
     const motionPage = $('[data-view-page="motion"]');
     const diagnosticsPage = $('[data-view-page="diagnostics"]');
     const axisPanel = $(".rpz-status");
+    const jogPanel = $(".rpz-jog");
+    const slotEditor = $(".rpz-slot-editor");
     const liveDiagnostics = $(".rpz-log");
+    const homeZone = motionPage?.querySelector(":scope > .wz-top");
     if (motionPage && axisPanel) {
       axisPanel.classList.add("motion-axis-panel");
       motionPage.prepend(axisPanel);
+    }
+    if (motionPage && jogPanel) {
+      jogPanel.classList.add("motion-jog-panel");
+      let primaryControls = motionPage.querySelector(":scope > .motion-primary-controls");
+      if (!primaryControls) {
+        primaryControls = document.createElement("section");
+        primaryControls.className = "motion-primary-controls";
+        primaryControls.setAttribute("aria-label", "Homing and manual jog controls");
+        if (homeZone) motionPage.insertBefore(primaryControls, homeZone);
+        else motionPage.prepend(primaryControls);
+      }
+      if (homeZone) primaryControls.append(homeZone);
+      primaryControls.append(jogPanel);
+    }
+    if (motionPage && slotEditor) {
+      slotEditor.classList.add("motion-slot-panel");
+      motionPage.append(slotEditor);
     }
     if (diagnosticsPage && liveDiagnostics) {
       liveDiagnostics.classList.add("diagnostics-live-log");
       diagnosticsPage.append(liveDiagnostics);
     }
+    const diagnosticsTabs = $('[data-view-page="diagnostics"] .setup-tabs');
+    ["io-status", "alarms", "events", "flow", "sequence-monitor", "architecture"].forEach((view) => {
+      const page = $(`[data-view-page="${view}"]`);
+      if (page && diagnosticsTabs && !page.querySelector(".context-tabs")) {
+        const nav = diagnosticsTabs.cloneNode(true);
+        nav.classList.add("context-tabs");
+        page.prepend(nav);
+      }
+    });
+    const setupTabs = $('[data-view-page="configuration"] .setup-tabs');
+    const commissioningPage = $('[data-view-page="motor-test"]');
+    if (commissioningPage && setupTabs && !commissioningPage.querySelector(".context-tabs")) {
+      const nav = setupTabs.cloneNode(true);
+      nav.classList.add("context-tabs");
+      commissioningPage.prepend(nav);
+    }
   }
 
   function bind() {
-
     /* --- Workspace navigation --- */
     $$('[data-view-target]').forEach((button) => {
       button.addEventListener("click", () => switchWorkspace(button.dataset.viewTarget));
     });
     window.addEventListener("hashchange", () => switchWorkspace(location.hash.slice(1), false));
+
+    const runSystemAction = async (path, successMessage) => {
+      try {
+        await apiCall(path, "POST", {}, 10000);
+        setText("system-action-result", successMessage);
+        toast(successMessage, "ok");
+        await refresh();
+      } catch (err) {
+        setText("system-action-result", err.message);
+        toast(`SYSTEM CONTROL FAILED — ${err.message}`, "error");
+      }
+    };
+    el("system-motion-disable")?.addEventListener("click", () => runSystemAction("/api/system/motion/disable", "Motion disabled; all axes stopped and disarmed."));
+    el("system-motion-enable")?.addEventListener("click", () => runSystemAction("/api/system/motion/enable", "Motion enabled for future validated commands."));
+    el("system-nucleo-reset")?.addEventListener("click", () => {
+      if (window.confirm("Stop and disarm all axes, then reset the NUCLEO USB link and handshake? This is not a physical NRST reset.")) runSystemAction("/api/system/nucleo/reset-link", "NUCLEO USB link reset; motion remains disabled.");
+    });
+    el("system-drive-power-reset")?.addEventListener("click", () => {
+      const warning = "Reset X/Y drive power now? All axes will stop, NUCLEO will disarm, KM1 will remove 60 V for 3 seconds, and X/Y homing references will be cleared.";
+      if (window.confirm(warning)) runSystemAction("/api/system/drives/reset-power", "X/Y drive power reset complete. Motion remains disabled; Home X/Y before use.");
+    });
+    el("system-drive-power-cut")?.addEventListener("click", () => {
+      if (window.confirm("Cut 60 V power to X/Y drives and keep it OFF? All axes will stop and X/Y homing references will be cleared.")) {
+        runSystemAction("/api/system/drives/cut-power", "X/Y drive power is OFF. Motion remains disabled.");
+      }
+    });
+    el("system-drive-power-restore")?.addEventListener("click", () => {
+      if (window.confirm("Restore 60 V power to X/Y drives through KM1? Motion will remain disabled and X/Y must be homed before use.")) {
+        runSystemAction("/api/system/drives/restore-power", "X/Y drive power restored. Motion remains disabled; Home X/Y before use.");
+      }
+    });
+
+    const demoPayload = () => {
+      const selected = MS.visualTargetSlot || MS.selectedSlotCode || "1";
+      const mode = el("demo-mode")?.value || "sequential";
+      return {mode, slots: mode === "selected" ? [selected] : Object.keys(MS.slots), sample_count: Number(el("demo-max-cycles")?.value || 0), max_duration_s: Number(el("demo-max-duration")?.value || 0), dwell_s: Number(el("demo-dwell")?.value || 0), speed_mm_s: effectiveMotionSpeed(), stop_on_failure: true};
+    };
+    const demoAction = async (action, payload = {}) => {
+      try {
+        const data = await apiCall(`/api/demo/${action}`, "POST", payload, 10000);
+        const result = data.result || data;
+        if (action === "arm") MS.demoArmToken = result.arm_token || "";
+        if (["configure", "validate", "start", "stop"].includes(action) && action !== "arm") {
+          if (action !== "start") MS.demoArmToken = "";
+        }
+        setText("demo-feedback", result.error || `Demo ${action}: ${result.state || "accepted"}`);
+        await refresh();
+      } catch (err) { setText("demo-feedback", err.message); toast(`DEMO ${action.toUpperCase()} FAILED — ${err.message}`, "error"); }
+    };
+    el("demo-configure")?.addEventListener("click", () => demoAction("configure", demoPayload()));
+    el("demo-validate")?.addEventListener("click", () => demoAction("validate"));
+    el("demo-arm")?.addEventListener("click", () => demoAction("arm"));
+    el("demo-start")?.addEventListener("click", () => { if (window.confirm("Start the bounded motion-only Demo Slot Sampling sequence? Confirm the machine area is clear.")) demoAction("start", {arm_token: MS.demoArmToken}); });
+    el("demo-pause")?.addEventListener("click", () => demoAction("pause"));
+    el("demo-resume")?.addEventListener("click", () => demoAction("resume"));
+    el("demo-stop")?.addEventListener("click", () => demoAction("stop"));
+    ["demo-mode", "demo-max-cycles", "demo-max-duration", "demo-dwell"].forEach((id) => el(id)?.addEventListener("change", () => { MS.demoArmToken = ""; setText("demo-feedback", "Demo parameters changed — Configure, Validate and Arm again."); renderDemoSampling(); }));
 
     $$(".flow-node").forEach((node) => node.addEventListener("click", () => {
       const detail = el("flow-step-detail");
@@ -3660,12 +4340,13 @@
     });
 
     /* --- Hold-to-Run Manual Jog Engine --- */
-    function stopManualJog() {
+    function stopManualJog(sendControllerStop = true) {
       if (MS.manualJog.holdTimer) {
         clearTimeout(MS.manualJog.holdTimer);
         MS.manualJog.holdTimer = null;
       }
       if (!MS.manualJog.active && !MS.manualJog.isHolding) return;
+      const wasHolding = MS.manualJog.isHolding;
       MS.manualJog.active = false;
       MS.manualJog.isHolding = false;
       MS.manualJog.token += 1;
@@ -3673,8 +4354,11 @@
         MS.manualJog.button.classList.remove("running");
         MS.manualJog.button = null;
       }
-      const bypassHome = Boolean(el("jog-allow-unhomed")?.checked);
+      const bypassHome = Boolean($("#jog-allow-unhomed")?.checked);
       setText("jog-status-text", allAxesHomed() ? "READY" : (bypassHome ? "UNHOMED JOG PERMITTED" : "HOME REQUIRED"));
+      if (sendControllerStop && wasHolding) {
+        apiCall("/api/motion/controlled-stop", "POST", {}, 2500).catch(() => {});
+      }
     }
 
     function beginManualJog(axis, dir, btn, event) {
@@ -3702,14 +4386,9 @@
         MS.manualJog.isHolding = true;
         setText("jog-status-text", `JOGGING ${axis.toUpperCase()} ${dir === "1" ? "+" : "−"}...`);
         try {
-          while (MS.manualJog.active && MS.manualJog.token === token) {
-            if (!canJogAxis(axis)) break;
+          if (MS.manualJog.active && MS.manualJog.token === token && canJogAxis(axis)) {
             const payload = buildJogPayload(axis, dir, true);
-            const res = await apiCall("/api/jog", "POST", payload, 2500);
-            if (!res || !res.ok) {
-              if (res && res.error) toast(humanizeError(res.error), "error");
-              break;
-            }
+            await apiCall("/api/jog", "POST", payload, 650000);
           }
         } catch (err) {
           if (MS.manualJog.token === token) {
@@ -3717,7 +4396,7 @@
           }
         } finally {
           if (MS.manualJog.token === token) {
-            stopManualJog();
+            stopManualJog(false);
             refresh().catch(() => {});
           }
         }
@@ -3760,7 +4439,7 @@
       if (document.hidden) stopManualJog();
     });
 
-    el("jog-allow-unhomed")?.addEventListener("change", () => {
+    $("#jog-allow-unhomed")?.addEventListener("change", () => {
       updateButtonStates();
     });
 
@@ -3778,13 +4457,15 @@
     /* --- Jog speed presets --- */
     $$(".speed-preset").forEach((btn) => {
       btn.addEventListener("click", () => {
+        AXES.forEach((axis) => { MS.axisSpeeds[axis] = Number(btn.dataset.speed); });
         MS.selectedJogSpeed = Number(btn.dataset.speed);
+        try { localStorage.setItem("narit.axisSpeeds", JSON.stringify(MS.axisSpeeds)); } catch (_) {}
         $$(".speed-preset").forEach((b) => b.classList.toggle("active", b === btn));
-        setText("jog-speed-display", `${fmtSpd(MS.selectedJogSpeed)}`);
+        syncAxisSpeedBanks();
         if (el("move-speed")) el("move-speed").value = MS.selectedJogSpeed;
         updateFeedOverride();
         // Also save to controller
-        command(`Set jog speed ${MS.selectedJogSpeed} mm/s`, "/api/speed",
+        command(`Set coordinated speed ${MS.selectedJogSpeed} mm/s`, "/api/speed",
           { speed_mm_s: MS.selectedJogSpeed }, { isStop: true, noCheck: true });
       });
     });
@@ -3859,8 +4540,74 @@
     el("abort-motion").addEventListener("click", () => {
       command("Abort motion", "/api/motion/abort", undefined, { isStop: true, noCheck: true });
     });
+    el("event-export-csv")?.addEventListener("click", exportFilteredEventsCsv);
 
-    ["move-x", "move-y", "move-z", "target-speed", "target-duration", "move-timeout", "move-acceleration", "move-deceleration"]
+    el("operator-stop").addEventListener("click", () => {
+      setText("travel-limit-feedback", "STOP requested — waiting for controller status.");
+      command("Stop motion", "/api/stop", undefined, { isStop: true, noCheck: true });
+    });
+    el("travel-reset-interlock").addEventListener("click", async () => {
+      setText("travel-limit-feedback", "Resetting software Stop latch and resettable alarms…");
+      const result = await command("Reset stop and alarms", "/api/clear-alarm", undefined, { isStop: true, noCheck: true });
+      setText("travel-limit-feedback", result
+        ? "Reset accepted. Waiting for Controller readiness before enabling Min / Max."
+        : "Reset was rejected. Review the interlock reason above.");
+    });
+    $$('[data-travel-axis]').forEach((button) => {
+      button.addEventListener("click", () => {
+        const axis = button.dataset.travelAxis;
+        const limit = button.dataset.travelLimit;
+        const maximum = Number(MS.config?.axes?.[axis]?.max_travel_mm);
+        if (!AXES.includes(axis) || !["min", "max"].includes(limit) || !Number.isFinite(maximum)) {
+          toast("Axis travel configuration is unavailable.", "error");
+          return;
+        }
+        const target = limit === "min" ? 0 : maximum;
+        setText("travel-limit-feedback", `Moving ${axis.toUpperCase()} to ${limit.toUpperCase()} (${target.toFixed(3)} mm).`);
+        command(
+          `Move ${axis.toUpperCase()} to ${limit.toUpperCase()}`,
+          "/api/move-to-limit",
+          { axis, endpoint: limit, speed_mm_s: effectiveMotionSpeed([axis]) },
+          { timeoutMs: 650000 },
+        ).then((result) => {
+          setText("travel-limit-feedback", result
+            ? `${axis.toUpperCase()} ${limit.toUpperCase()} command completed. Verify the displayed position and limit sensor.`
+            : `${axis.toUpperCase()} ${limit.toUpperCase()} command was rejected or stopped. Review the interlock message.`);
+        });
+      });
+    });
+    $$('[data-axis-goto]').forEach((button) => {
+      button.addEventListener("click", () => {
+        const axis = button.dataset.axisGoto;
+        const input = el(`axis-goto-${axis}`);
+        const target = Number(input?.value);
+        const maximum = Number(MS.config?.axes?.[axis]?.max_travel_mm);
+        if (!Number.isFinite(target) || target < 0 || target > maximum) {
+          toast(`${axis.toUpperCase()} target must be within 0-${maximum} mm.`, "error");
+          return;
+        }
+        setText("travel-limit-feedback", `Moving ${axis.toUpperCase()} to ${target.toFixed(3)} mm.`);
+        command(
+          `Move ${axis.toUpperCase()} to ${target.toFixed(3)} mm`,
+          "/api/move",
+          { [`${axis}_mm`]: target, speed_mm_s: effectiveMotionSpeed([axis]) },
+          { requiredAxes: [axis], timeoutMs: 650000 },
+        );
+      });
+    });
+    document.addEventListener("input", (event) => {
+      const control = event.target.closest?.("[data-axis-speed-range], [data-axis-speed-number]");
+      if (!control) return;
+      setAxisSpeed(control.dataset.axisSpeedRange || control.dataset.axisSpeedNumber, control.value);
+    });
+    $$('[data-setup-tab]').forEach((button) => {
+      button.addEventListener('click', () => {
+        if (MS.currentView !== "configuration") switchWorkspace("configuration");
+        applySetupTab(button.dataset.setupTab);
+      });
+    });
+
+    ["move-x", "move-y", "move-z"]
       .forEach((id) => el(id).addEventListener("input", () => {
         if (MS.validation.stage !== "idle") invalidateMotionWorkflow();
         updateFeedOverride();
@@ -3990,9 +4737,25 @@
       });
       button.addEventListener("contextmenu", (event) => event.preventDefault());
     });
-    window.addEventListener("blur", () => stopMotorTestJog("WINDOW LOST FOCUS — pulse output stopped."));
+    // Goto Limit buttons — single click, runs full stroke
+    $$("[data-goto-axis]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const axis  = button.dataset.gotoAxis;
+        const limit = button.dataset.gotoLimit;
+        if (!axis || !limit) return;
+        if (motorTestGoto.active) {
+          stopMotorTestGoto("GOTO ABORTED by user.");
+        } else {
+          runGotoLimit(axis, limit, button);
+        }
+      });
+    });
+    window.addEventListener("blur", () => {
+      stopMotorTestJog("WINDOW LOST FOCUS — pulse output stopped.");
+      stopMotorTestGoto("WINDOW LOST FOCUS — goto stopped.");
+    });
     document.addEventListener("visibilitychange", () => {
-      if (document.hidden) stopMotorTestJog("PAGE HIDDEN — pulse output stopped.");
+      if (document.hidden) { stopMotorTestJog("PAGE HIDDEN — pulse output stopped."); stopMotorTestGoto("PAGE HIDDEN — goto stopped."); }
     });
     el("motor-test-open-config").addEventListener("click", () => switchWorkspace("configuration"));
     el("motor-test-axis").addEventListener("change", () => {
@@ -4022,7 +4785,7 @@
 
     const configurationPage = document.querySelector('[data-view-page="configuration"]');
     const markConfigurationDirty = (event) => {
-      if (!event.target.matches("[data-config-axis], [data-pin-group]")) return;
+      if (!event.target.matches("[data-config-axis], [data-pin-group], [data-travel-field]")) return;
       if (event.target.dataset.pinGroup === "digital_inputs" && event.target.dataset.pinField === "pull_up") {
         const activeLogic = document.querySelector(`[data-pin-group="digital_inputs"][data-pin-name="${event.target.dataset.pinName}"][data-pin-field="active_high"]`);
         if (activeLogic) activeLogic.checked = !event.target.checked;
@@ -4033,6 +4796,28 @@
     };
     configurationPage.addEventListener("input", markConfigurationDirty);
     configurationPage.addEventListener("change", markConfigurationDirty);
+    configurationPage.addEventListener("input", (event) => {
+      const card = event.target.closest?.("[data-travel-axis]");
+      if (card) {
+        updateTravelCard(card);
+      }
+    });
+    configurationPage.addEventListener("click", (event) => {
+      const button = event.target.closest?.("[data-apply-travel]");
+      if (!button) return;
+      const axis = button.dataset.applyTravel;
+      const card = button.closest("[data-travel-axis]");
+      const usable = updateTravelCard(card);
+      const maxInput = document.querySelector(`[data-config-axis="${axis}"][data-config-field="max_travel_mm"]`);
+      if (!maxInput || !Number.isFinite(usable) || usable <= 0) {
+        updateConfigurationState(`${axis.toUpperCase()}: measured travel must be greater than the safety margin.`);
+        return;
+      }
+      maxInput.value = usable.toFixed(3);
+      MS.configDirty = true;
+      updateConfigurationDerived();
+      updateConfigurationState(`${axis.toUpperCase()}: Maximum Travel staged at ${usable.toFixed(3)} mm. SAVE and APPLY are required; no motion was commanded.`);
+    });
     el("configuration-reset").addEventListener("click", () => renderConfigurationEditor(true));
     el("configuration-save").addEventListener("click", saveControllerConfiguration);
     el("configuration-apply").addEventListener("click", applyControllerConfiguration);
@@ -4059,9 +4844,6 @@
       });
     });
 
-    /* --- Target speed input change — update feed override display --- */
-    el("target-speed").addEventListener("input", updateFeedOverride);
-
     /* --- I/O Status Page event listeners --- */
     $$(".io-filter-btn").forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -4078,12 +4860,20 @@
       refresh();
       toast("I/O Status refreshed", "ok");
     });
+    $$('[data-homing-shortcut]').forEach((button) => button.addEventListener("click", openHomingControls));
 
   }
 
   /* ── INIT ───────────────────────────────────────────────────── */
   document.addEventListener("DOMContentLoaded", () => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("narit.axisSpeeds") || "{}");
+      AXES.forEach((axis) => {
+        if (Number.isFinite(Number(saved[axis])) && Number(saved[axis]) > 0) MS.axisSpeeds[axis] = Number(saved[axis]);
+      });
+    } catch (_) {}
     organizeWorkspacePanels();
+    renderAxisSpeedBanks();
     bind();
     switchWorkspace(location.hash.slice(1) || "motion", false);
     log("Industrial motion HMI initialised", "info", "SYSTEM");

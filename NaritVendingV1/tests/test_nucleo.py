@@ -1,4 +1,6 @@
 import json
+import threading
+import time
 import unittest
 
 from narit_vending.nucleo import NucleoLink
@@ -61,6 +63,32 @@ class NucleoLinkTests(unittest.TestCase):
 
         self.assertFalse(link.communication_ok)
         self.assertTrue(link.alarm_channel()["active"])
+
+    def test_status_remains_non_blocking_while_motion_owns_serial_lock(self):
+        link = NucleoLink(self.config(), serial_factory=lambda **kwargs: FakeSerial())
+        link._connected = True
+        link._last_success_monotonic = time.monotonic()
+        link._last_payload = {"device": "NUCLEO-F439ZI", "protocol": 1, "safe": False}
+        locked = threading.Event()
+        release = threading.Event()
+
+        def hold_motion_lock():
+            with link._lock:
+                locked.set()
+                release.wait(1.0)
+
+        worker = threading.Thread(target=hold_motion_lock)
+        worker.start()
+        self.assertTrue(locked.wait(0.5))
+        started = time.monotonic()
+        try:
+            status = link.status_payload()
+        finally:
+            release.set()
+            worker.join(1.0)
+
+        self.assertLess(time.monotonic() - started, 0.1)
+        self.assertTrue(status["communication_ok"])
 
 
 if __name__ == "__main__":

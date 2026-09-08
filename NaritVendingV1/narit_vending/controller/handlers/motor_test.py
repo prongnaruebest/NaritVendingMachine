@@ -65,7 +65,7 @@ def make_run_motor_test_handler(motion_service: Any):
         except (KeyError, TypeError, ValueError) as exc:
             return CommandResult.rejected(envelope.command_id, f"Invalid parameters: {exc}")
 
-        ignore_limits = bool(p.get("ignore_limits", True))
+        ignore_limits = bool(p.get("ignore_limits", False))
         result = motion_service.run_motor_test(
             axis, direction, pulse_count, pulse_frequency_hz, ignore_limits=ignore_limits
         )

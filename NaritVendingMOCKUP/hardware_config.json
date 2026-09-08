@@ -128,7 +128,7 @@
     "axes": {
       "x": {
         "steps_per_mm": 80.0,
-        "max_travel_mm": 220.0,
+        "max_travel_mm": 1700.0,
         "max_speed_mm_s": 20.0,
         "default_speed_mm_s": 10.0,
         "acceleration": 40.0,
@@ -143,7 +143,7 @@
       },
       "y": {
         "steps_per_mm": 80.0,
-        "max_travel_mm": 260.0,
+        "max_travel_mm": 1700.0,
         "max_speed_mm_s": 15.0,
         "default_speed_mm_s": 8.0,
         "acceleration": 30.0,

@@ -21,6 +21,8 @@ from narit_vending.shared.ipc_protocol import (
     METHOD_CONFIG_SAVE,
     METHOD_MQTT_CONTROL,
     METHOD_MQTT_STATUS,
+    METHOD_DEMO_HISTORY,
+    METHOD_DEMO_EXPORT,
     METHOD_PING,
     METHOD_SNAPSHOT,
     METHOD_SUBMIT,
@@ -50,6 +52,8 @@ class IPCServer:
         save_config_fn: Callable[[dict], dict],
         mqtt_status_fn: Callable[[], dict] | None = None,
         mqtt_control_fn: Callable[[bool], dict] | None = None,
+        demo_history_fn: Callable[[int], list] | None = None,
+        demo_export_fn: Callable[[], str] | None = None,
     ) -> None:
         self._bus = command_bus
         self._snapshot_fn = snapshot_fn
@@ -57,6 +61,8 @@ class IPCServer:
         self._save_config_fn = save_config_fn
         self._mqtt_status_fn = mqtt_status_fn
         self._mqtt_control_fn = mqtt_control_fn
+        self._demo_history_fn = demo_history_fn
+        self._demo_export_fn = demo_export_fn
         self._server: asyncio.AbstractServer | None = None
         self._addr = ipc_address()
 
@@ -177,6 +183,16 @@ class IPCServer:
             if not isinstance(enabled, bool):
                 raise InvalidParamsError("MQTT control requires boolean enabled")
             return await loop.run_in_executor(_EXECUTOR, self._mqtt_control_fn, enabled)
+
+        if method == METHOD_DEMO_HISTORY:
+            if self._demo_history_fn is None:
+                raise MethodNotFoundError("Demo history is unavailable")
+            return await loop.run_in_executor(_EXECUTOR, self._demo_history_fn, int(params.get("limit", 50)))
+
+        if method == METHOD_DEMO_EXPORT:
+            if self._demo_export_fn is None:
+                raise MethodNotFoundError("Demo export is unavailable")
+            return await loop.run_in_executor(_EXECUTOR, self._demo_export_fn)
 
         raise MethodNotFoundError(f"Unknown method: {method!r}")
 

@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>NARIT Vending Machine — Presentation &amp; Architecture &amp; Manual</title>
+<link rel="icon" type="image/png" href="favicon.png">
 <style>
 /* ─────────────────────────────────────
    Design tokens
@@ -53,16 +54,39 @@ body {
 }
 
 .sidebar-header {
-  padding: 1.1rem 1rem .8rem;
+  padding: .85rem .85rem .75rem;
   border-bottom: 1px solid var(--border);
 }
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: .65rem;
+  text-decoration: none;
+  cursor: pointer;
+}
+.sidebar-brand-img {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  object-fit: contain;
+  background: rgba(15, 23, 42, 0.9);
+  padding: 3px;
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.2);
+  flex-shrink: 0;
+  transition: transform .2s, box-shadow .2s;
+}
+.sidebar-brand:hover .sidebar-brand-img {
+  transform: scale(1.05);
+  box-shadow: 0 0 18px rgba(56, 189, 248, 0.45);
+}
 .sidebar-logo {
-  font-size: .95rem;
+  font-size: .92rem;
   font-weight: 800;
   color: var(--accent2);
   line-height: 1.25;
 }
-.sidebar-logo span { color: var(--text-dim); font-weight: 400; font-size: .8rem; display:block; margin-top:2px; }
+.sidebar-logo span { color: var(--text-dim); font-weight: 500; font-size: .72rem; display:block; margin-top:2px; letter-spacing:.02em; }
 
 .sidebar-search {
   margin: .65rem .7rem .5rem;
@@ -204,6 +228,17 @@ body {
   padding: 0 1.5rem;
   gap: .75rem;
   flex-shrink: 0;
+}
+.topbar-logo-img {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  object-fit: contain;
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  background: rgba(15, 23, 42, 0.7);
+  padding: 2px;
+  flex-shrink: 0;
+  box-shadow: 0 0 8px rgba(56, 189, 248, 0.2);
 }
 .topbar-breadcrumb { font-size: .8rem; color: var(--text-dim); }
 .topbar-breadcrumb strong { color: var(--text); }
@@ -442,10 +477,10 @@ code { background:var(--surface2); border:1px solid var(--border); border-radius
 /* responsive */
 @media(max-width:900px) {
   :root { --sidebar-w: 56px; }
-  .nb-label, .nb-num, .sidebar-header span,
+  .nb-label, .nb-num, .sidebar-logo,
   .sidebar-search, .sidebar-group, .sf-counter { display:none; }
+  .sidebar-brand { justify-content:center; }
   .nav-btn { justify-content:center; padding:.55rem; }
-  .sidebar-logo { font-size:1.1rem; text-align:center; }
   .col3 { grid-template-columns:1fr 1fr; }
   .col4 { grid-template-columns:1fr 1fr; }
 }
@@ -458,9 +493,12 @@ code { background:var(--surface2); border:1px solid var(--border); border-radius
 ════════════════════════════════════ -->
 <aside class="sidebar">
   <div class="sidebar-header">
-    <div class="sidebar-logo">
-      NARIT
-      <span>Vending Machine · Architecture</span>
+    <div class="sidebar-brand" onclick="goTo(0)" title="ไปยังสไลด์แรก: NARIT Smart Vending">
+      <img src="favicon.png" alt="NARIT Logo" class="sidebar-brand-img">
+      <div class="sidebar-logo">
+        NARIT
+        <span>Smart Vending Machine</span>
+      </div>
     </div>
   </div>
 
@@ -537,6 +575,7 @@ code { background:var(--surface2); border:1px solid var(--border); border-radius
 <div class="main">
   <!-- Top bar -->
   <div class="topbar">
+    <img src="favicon.png" alt="NARIT Logo" class="topbar-logo-img">
     <span class="topbar-breadcrumb" id="breadcrumb"><strong>ภาพรวมโปรเจค</strong></span>
     <span class="topbar-tag" id="topSection">Project Overview</span>
     <span class="topbar-spacer"></span>
@@ -552,7 +591,10 @@ code { background:var(--surface2); border:1px solid var(--border); border-radius
     <!-- ════════════════ 01 HERO ════════════════ -->
     <section class="slide active" data-title="ภาพรวมโปรเจค" data-section="Project Overview">
       <div class="hero-glow"></div>
-      <div class="slide-label">Project Presentation · Sep 2026</div>
+      <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:1rem; margin-bottom:.6rem;">
+        <img src="logo.svg" alt="NARIT Vending Machine Motion Control" style="height:54px; max-width:100%; object-fit:contain; filter:drop-shadow(0 4px 18px rgba(56,189,248,0.25));">
+        <div class="slide-label" style="margin:0;">Project Presentation · Sep 2026</div>
+      </div>
       <h1>NARIT<br><span style="color:var(--accent2)">Vending Machine</span><br><span style="font-size:1.6rem">Motion Control</span></h1>
       <p class="hero-sub">ระบบควบคุม motion 3 แกน (X/Y/Z) ด้วย <strong>IRIV PiControl</strong> + <strong>IRIV IO</strong> + <strong>NUCLEO-F439ZI</strong> สำหรับตู้จ่ายสินค้าอัตโนมัติ โครงการ NARIT</p>
       <div class="card-grid col4">

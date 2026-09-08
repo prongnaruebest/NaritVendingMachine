@@ -14,8 +14,9 @@ from narit_vending.motion import MotionError, NucleoError
 _log = logging.getLogger(__name__)
 
 NUCLEO_MOTION_MIN_SPEED_HZ = 10.0
-NUCLEO_MOTION_MAX_SPEED_HZ = 1000.0
-NUCLEO_MOTION_MAX_STEPS = 10000
+NUCLEO_MOTION_MAX_SPEED_HZ = 50_000.0
+NUCLEO_MOTION_MAX_STEPS = 1_000_000
+NUCLEO_LEGACY_MAX_STEPS = 10_000
 
 
 class NucleoLink:
@@ -50,17 +51,29 @@ class NucleoLink:
 
     @property
     def communication_ok(self) -> bool:
-        with self._lock:
-            return bool(
-                self._connected
-                and self._last_success_monotonic is not None
-                and time.monotonic() - self._last_success_monotonic <= self.stale_after_s
-            )
+        # Motion owns the serial lock for the complete pulse train. Telemetry
+        # must remain readable during that interval or the web status request
+        # times out and incorrectly reports the Controller as offline. These
+        # fields are replaced atomically; no serial I/O is performed here.
+        last_success = self._last_success_monotonic
+        return bool(
+            self._connected
+            and last_success is not None
+            and time.monotonic() - last_success <= self.stale_after_s
+        )
 
     @property
     def is_armed(self) -> bool:
-        with self._lock:
-            return self._armed
+        return self._armed
+
+    @property
+    def max_move_steps(self) -> int:
+        """Maximum pulse count accepted by one firmware MOVE frame."""
+        try:
+            advertised = int(self._last_payload.get("max_move_steps", NUCLEO_LEGACY_MAX_STEPS))
+        except (TypeError, ValueError):
+            advertised = NUCLEO_LEGACY_MAX_STEPS
+        return max(1, advertised)
 
     def start(self) -> None:
         if self._thread and self._thread.is_alive():
@@ -313,6 +326,28 @@ class NucleoLink:
             except Exception:
                 return False
 
+    def reset_connection(self) -> dict[str, Any]:
+        """Fail-safe USB transport reset followed by a fresh protocol handshake.
+
+        This deliberately does not claim to toggle the board's NRST pin.  Pulse
+        output is stopped and disarmed before the serial port is reopened.
+        """
+        with self._lock:
+            self.stop()
+            self.disarm()
+            self._close_serial()
+            self._connected = False
+            self._last_success_monotonic = None
+            self._last_error = "USB link reset requested; waiting for handshake"
+            self._poll_once()
+            return {
+                "ok": self.communication_ok,
+                "reset_type": "usb_reconnect_and_handshake",
+                "physical_nrst": False,
+                "communication_ok": self.communication_ok,
+                "error": self._last_error or None,
+            }
+
     def move(
         self,
         axis: str,
@@ -328,8 +363,9 @@ class NucleoLink:
             raise NucleoError(f"Invalid axis '{axis}' — expected X, Y, or Z")
         dir_val = 1 if int(direction) != 0 else 0
         steps_val = int(steps)
-        if steps_val < 1 or steps_val > NUCLEO_MOTION_MAX_STEPS:
-            raise NucleoError(f"steps must be between 1 and {NUCLEO_MOTION_MAX_STEPS} (requested {steps_val})")
+        move_limit = self.max_move_steps
+        if steps_val < 1 or steps_val > move_limit:
+            raise NucleoError(f"steps must be between 1 and {move_limit} (requested {steps_val})")
         speed_val = float(speed_hz)
         if speed_val < NUCLEO_MOTION_MIN_SPEED_HZ or speed_val > NUCLEO_MOTION_MAX_SPEED_HZ:
             raise NucleoError(
@@ -362,6 +398,7 @@ class NucleoLink:
 
             # Keep watchdog alive with HEARTBEAT SAFE while waiting for completion
             estimated_duration_s = steps_val / speed_val
+            motion_started = time.monotonic()
             overall_timeout_s = timeout_s or (estimated_duration_s + 4.0)
             overall_deadline = time.monotonic() + overall_timeout_s
             axis_key = axis_char.lower()
@@ -372,7 +409,22 @@ class NucleoLink:
 
                     if stop_requested is not None and stop_requested():
                         self.stop()
-                        raise NucleoError("Motion aborted by stop request or limit trigger")
+                        # A sensor-triggered endpoint stop is a normal end of
+                        # seek. Return the firmware to idle/disarmed so the
+                        # next command (especially movement away from the
+                        # active limit) can start cleanly.
+                        self.disarm()
+                        elapsed_s = max(0.0, time.monotonic() - motion_started)
+                        completed_steps = min(steps_val, max(0, int(round(elapsed_s * speed_val))))
+                        return {
+                            "ok": True,
+                            "axis": axis_key,
+                            "direction": dir_val,
+                            "steps": completed_steps,
+                            "speed_hz": speed_val,
+                            "duration_s": elapsed_s,
+                            "stopped": True,
+                        }
 
                     serial_port.write(b"HEARTBEAT SAFE\n")
                     serial_port.flush()
@@ -409,6 +461,55 @@ class NucleoLink:
             "duration_s": estimated_duration_s,
         }
 
+    def home_parallel(self, plans: dict[str, dict[str, Any]]) -> dict[str, int]:
+        """Search all requested home sensors concurrently (Protocol v2.1 firmware)."""
+        moved = {axis: 0 for axis in plans}
+        active = set(plans)
+        started = {axis: time.monotonic() for axis in plans}
+        with self._lock:
+            if not self.communication_ok or not self.arm(safety_permissive=True):
+                raise NucleoError("Nucleo is not online or could not be armed")
+            serial_port = self._open_serial()
+            try:
+                while active:
+                    for axis in tuple(active):
+                        plan = plans[axis]
+                        if time.monotonic() - started[axis] >= float(plan.get("timeout_s", 120.0)):
+                            raise NucleoError(f"Parallel home timeout on axis {axis.upper()}")
+                        if bool(plan["limit"]()):
+                            active.remove(axis)
+                            continue
+                        cmd = f"MOVE {axis.upper()} {int(plan['direction'])} {NUCLEO_MOTION_MAX_STEPS} {int(plan['speed_hz'])}\n"
+                        serial_port.write(cmd.encode("ascii")); serial_port.flush()
+                        ack = self._read_json_response(serial_port, time.monotonic() + self.timeout_s, expected_types={"ack"})
+                        if not ack or ack.get("status") != "moving":
+                            raise NucleoError(f"Parallel home start rejected for axis {axis.upper()}")
+
+                    chunk_done: set[str] = set()
+                    while active - chunk_done:
+                        time.sleep(0.05)
+                        if any(bool(plans[a]["abort"]()) for a in active):
+                            self.stop(); raise NucleoError("Parallel homing aborted by safety request")
+                        for axis in tuple(active - chunk_done):
+                            if bool(plans[axis]["limit"]()):
+                                serial_port.write(f"STOP {axis.upper()}\n".encode("ascii")); serial_port.flush()
+                                self._read_json_response(serial_port, time.monotonic() + self.timeout_s, expected_types={"ack"})
+                                active.remove(axis)
+                        serial_port.write(b"HEARTBEAT SAFE\n"); serial_port.flush()
+                        hb = self._read_json_response(serial_port, time.monotonic() + 0.2, expected_types={"heartbeat"})
+                        if hb:
+                            moving = hb.get("moving", {})
+                            for axis in tuple(active):
+                                if not moving.get(axis, 0):
+                                    moved[axis] += NUCLEO_MOTION_MAX_STEPS
+                                    chunk_done.add(axis)
+                if not self.disarm():
+                    raise NucleoError("Parallel home completed but Nucleo failed to disarm")
+                return moved
+            except Exception:
+                self.stop()
+                raise
+
     def alarm_channel(self) -> dict[str, Any]:
         return {
             "code": "NUCLEO-COMM",
@@ -419,12 +520,14 @@ class NucleoLink:
         }
 
     def status_payload(self) -> dict[str, Any]:
-        with self._lock:
-            payload = dict(self._last_payload)
-            last_success_at = self._last_success_at
-            last_error = self._last_error
-            armed = self._armed
-            moving = dict(self._moving_axes)
+        # Deliberately lock-free: see communication_ok. Dict state is published
+        # by replacement, so readers get either the previous or current complete
+        # snapshot while a MOVE/HOME command owns the serial lock.
+        payload = dict(self._last_payload)
+        last_success_at = self._last_success_at
+        last_error = self._last_error
+        armed = self._armed
+        moving = dict(self._moving_axes)
         return {
             "enabled": True,
             "communication_ok": self.communication_ok,
@@ -437,6 +540,7 @@ class NucleoLink:
             "armed": armed,
             "watchdog": payload.get("watchdog", False),
             "moving": moving,
+            "max_move_steps": self.max_move_steps,
             "uptime_ms": payload.get("uptime_ms"),
             "last_success_at": last_success_at,
             "last_error": last_error,

@@ -70,7 +70,7 @@ class HealthApiTests(unittest.TestCase):
         html = response.get_data(as_text=True)
 
         self.assertEqual(response.status_code, 200)
-        for workspace in ("dashboard", "motion", "visualization", "slots", "diagnostics", "io-status", "configuration", "mqtt", "alarms", "events", "flow"):
+        for workspace in ("dashboard", "motion", "visualization", "slots", "diagnostics", "io-status", "configuration", "system-control", "mqtt", "alarms", "events", "flow"):
             self.assertIn(f'data-view-target="{workspace}"', html)
         self.assertIn('data-view-page="io-status"', html)
         self.assertIn('id="visual-home-all"', html)
@@ -78,6 +78,13 @@ class HealthApiTests(unittest.TestCase):
             "slot-summary-total", "slot-summary-ready", "slot-summary-empty",
             "slot-summary-invalid", "slot-summary-selected", "slot-detail-status",
         ):
+            self.assertIn(f'id="{element_id}"', html)
+        self.assertIn('data-view-page="system-control"', html)
+        self.assertIn('id="system-motion-enable"', html)
+        self.assertIn('id="system-motion-disable"', html)
+        self.assertIn('id="system-nucleo-reset"', html)
+        self.assertIn("does <strong>not</strong> toggle the physical NRST pin", html)
+        for element_id in ("demo-configure", "demo-validate", "demo-arm", "demo-start", "demo-pause", "demo-resume", "demo-stop", "demo-counter-grid"):
             self.assertIn(f'id="{element_id}"', html)
         for status in ("not-configured", "invalid", "alarm"):
             self.assertIn(f'value="{status}"', html)
@@ -112,6 +119,27 @@ class HealthApiTests(unittest.TestCase):
         self.assertIn("slotAtCurrentPosition(slot)", app_js)
         self.assertIn("const canDispense = validSlot && canMove && slotAtCurrentPosition(slot);", app_js)
         self.assertIn("if (!window.confirm(confirmation)) return;", app_js)
+
+    def test_motion_page_exposes_operator_position_and_stop_controls(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        html = (root / "narit_vending" / "templates" / "index.html").read_text(encoding="utf-8")
+        app_js = (root / "narit_vending" / "static" / "app.js").read_text(encoding="utf-8")
+
+        self.assertIn('id="operator-stop"', html)
+        self.assertEqual(html.count('data-travel-axis='), 6)
+        self.assertIn('class="panel target-panel">', html)
+        self.assertIn('command("Stop motion", "/api/stop"', app_js)
+        self.assertIn('{ requiredAxes: [axis], timeoutMs: 650000 }', app_js)
+        self.assertIn("if (!window.confirm(confirmation)) return;", app_js)
+        self.assertIn('travel-limit-x-sensors', html)
+        self.assertRegex(html, r"app\.js'\) \}\}\?v=\d{8}_[a-z0-9_]+")
+        self.assertRegex(html, r"style\.css'\) \}\}\?v=\d{8}_[a-z0-9_]+")
+        self.assertNotIn('id="io-open-homing"', html)
+        self.assertIn('id="homing-controls"', html)
+        self.assertNotIn('id="nav-homing-controls"', html)
+        self.assertIn('$("[data-goto-axis]").forEach', app_js)
+        self.assertIn("Protocol-aware: v2 ≤1 kHz · v3 ≤50 kHz", html)
+        self.assertNotIn('id="motor-test-bypass-limits" checked', html)
 
     def test_alarm_page_sorts_fault_warning_and_normal_states(self) -> None:
         app_js = (Path(__file__).resolve().parents[1] / "narit_vending" / "static" / "app.js").read_text(encoding="utf-8")

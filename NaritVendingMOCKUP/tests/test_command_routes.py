@@ -93,6 +93,65 @@ class CommandRouteTests(unittest.TestCase):
         self.assertEqual(envelope.command_type, "RUN_SLOT_SEQUENCE")
         self.assertEqual(envelope.parameters, {"slot_code": "01", "speed_mm_s": 12.0})
 
+    def test_move_to_limit_uses_dedicated_controller_command_and_axis_speed(self) -> None:
+        self.controller.submit_command.return_value = CommandResult(
+            accepted=True, command_id="limit-1", state="COMPLETED", result={"ok": True}
+        )
+        response = self.client.post("/api/move-to-limit", json={"axis": "z", "endpoint": "max", "speed_mm_s": 2})
+        self.assertEqual(response.status_code, 200)
+        envelope = self.controller.submit_command.call_args.args[0]
+        self.assertEqual(envelope.command_type, "MOVE_TO_LIMIT")
+        self.assertEqual(envelope.parameters, {"axis": "z", "endpoint": "max", "speed_mm_s": 2.0})
+
+    def test_continuous_jog_flag_reaches_controller(self) -> None:
+        self.controller.submit_command.return_value = CommandResult(
+            accepted=True, command_id="jog-1", state="COMPLETED", result={"ok": True}
+        )
+        response = self.client.post("/api/jog", json={
+            "axis": "z", "distance_mm": 160, "speed_mm_s": 2, "continuous": True,
+        })
+        self.assertEqual(response.status_code, 200)
+        envelope = self.controller.submit_command.call_args.args[0]
+        self.assertTrue(envelope.parameters["continuous"])
+
+    def test_system_controls_are_controller_commands(self) -> None:
+        self.controller.submit_command.return_value = CommandResult(
+            accepted=True, command_id="system-1", state="COMPLETED", result={"ok": True}
+        )
+        cases = (
+            ("/api/system/motion/disable", "DISABLE_MOTION"),
+            ("/api/system/motion/enable", "ENABLE_MOTION"),
+            ("/api/system/nucleo/reset-link", "RESET_NUCLEO_LINK"),
+            ("/api/system/drives/reset-power", "RESET_XY_DRIVE_POWER"),
+            ("/api/system/drives/cut-power", "CUT_XY_DRIVE_POWER"),
+            ("/api/system/drives/restore-power", "RESTORE_XY_DRIVE_POWER"),
+        )
+        for path, command_type in cases:
+            with self.subTest(path=path):
+                response = self.client.post(path)
+                self.assertEqual(response.status_code, 200)
+                envelope = self.controller.submit_command.call_args.args[0]
+                self.assertEqual(envelope.command_type, command_type)
+
+    def test_demo_controls_are_controller_commands(self) -> None:
+        self.controller.submit_command.return_value = CommandResult(
+            accepted=True, command_id="demo-1", state="COMPLETED", result={"ok": True}
+        )
+        cases = (
+            ("/api/demo/configure", "CONFIGURE_DEMO", {"max_cycles": 1}),
+            ("/api/demo/validate", "VALIDATE_DEMO", {}),
+            ("/api/demo/arm", "ARM_DEMO", {}),
+            ("/api/demo/start", "START_DEMO", {"arm_token": "token"}),
+            ("/api/demo/pause", "PAUSE_DEMO", {}),
+            ("/api/demo/resume", "RESUME_DEMO", {}),
+            ("/api/demo/stop", "STOP_DEMO", {}),
+        )
+        for path, command_type, payload in cases:
+            with self.subTest(path=path):
+                response = self.client.post(path, json=payload)
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(self.controller.submit_command.call_args.args[0].command_type, command_type)
+
 
 if __name__ == "__main__":
     unittest.main()

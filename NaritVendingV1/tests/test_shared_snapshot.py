@@ -57,17 +57,20 @@ class TestSharedSnapshot(unittest.TestCase):
             controlled_stop_requested=False,
             speed_override=None,
             slots={"1": {"x_mm": 10.0, "y_mm": 20.0, "z_mm": 30.0}},
+            picontrol_io_status={"communication_ok": True, "inputs": {"x_alarm": False}},
         )
         d = snap.to_dict()
         self.assertEqual(d["state"], "READY")
         self.assertIn("x", d)
         self.assertEqual(d["x"]["position_mm"], 10.0)
         self.assertEqual(d["slots"]["1"]["z_mm"], 30.0)
+        self.assertTrue(d["picontrol_io_status"]["communication_ok"])
 
         snap2 = MachineSnapshot.from_dict(d)
         self.assertEqual(snap2.state, "READY")
         self.assertEqual(snap2.axes["x"].position_mm, 10.0)
         self.assertEqual(snap2.slots["1"]["y_mm"], 20.0)
+        self.assertFalse(snap2.picontrol_io_status["inputs"]["x_alarm"])
 
 
 if __name__ == "__main__":

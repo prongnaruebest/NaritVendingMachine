@@ -47,6 +47,24 @@ def make_move_to_handler(motion_service: Any):
     return handle
 
 
+def make_move_to_limit_handler(motion_service: Any):
+    from narit_vending.shared.commands import CommandResult
+
+    def handle(envelope: "CommandEnvelope") -> "CommandResult":
+        p = envelope.parameters
+        result = motion_service.move_to_limit(
+            str(p.get("axis", "")).lower(),
+            str(p.get("endpoint", "")).lower(),
+            speed_mm_s=_parse_float_or_none(p, "speed_mm_s"),
+        )
+        return CommandResult(
+            accepted=result.get("ok", False), command_id=envelope.command_id,
+            state="COMPLETED" if result.get("ok") else "FAILED",
+            reason=result.get("error"), result=result, completed_at=_now(),
+        )
+    return handle
+
+
 def make_move_to_slot_handler(motion_service: Any):
     from narit_vending.shared.commands import CommandResult
 

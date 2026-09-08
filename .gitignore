@@ -11,4 +11,5 @@ backups/
 .vscode/
 .agents/
 .stm32-workspace/
-
+*.sqlite3
+*.db

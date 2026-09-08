@@ -34,6 +34,7 @@ def _make_dummy_snapshot() -> MachineSnapshot:
         stop_requested=False,
         controlled_stop_requested=False,
         speed_override=None,
+        picontrol_io_status={"communication_ok": True, "inputs": {"x_alarm": False}},
     )
 
 
@@ -87,6 +88,7 @@ class TestIPCRoundTrip(unittest.TestCase):
         snap = self.client.snapshot()
         self.assertEqual(snap.state, "READY")
         self.assertEqual(snap.config_revision, "test_rev")
+        self.assertTrue(snap.picontrol_io_status["communication_ok"])
 
     def test_submit_command(self):
         env = CommandEnvelope(command_type="STOP", source="http", parameters={})

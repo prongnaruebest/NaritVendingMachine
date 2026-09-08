@@ -26,6 +26,13 @@ _PRIORITY_COMMANDS = frozenset({
     "CLEAR_ALARM",
     "CONTROLLED_STOP",
     "SCHEDULE_RESTART",
+    "DISABLE_MOTION",
+    "ENABLE_MOTION",
+    "RESET_NUCLEO_LINK",
+    "RESET_XY_DRIVE_POWER",
+    "CUT_XY_DRIVE_POWER",
+    "RESTORE_XY_DRIVE_POWER",
+    "STOP_DEMO",
 })
 
 # Commands that require the machine to be READY (homed + no alarm + no estop)
@@ -42,6 +49,7 @@ _MOTION_COMMANDS = frozenset({
 _HOME_COMMANDS = frozenset({
     "HOME_AXIS",
     "HOME_ALL",
+    "MOVE_TO_LIMIT",
 })
 
 # Motor test commands need motor_test_armed
@@ -100,6 +108,14 @@ class SafetyInterlock:
 
         reasons: list[str] = []
         actions: list[str] = []
+
+        demo_active = str(snapshot.demo_status.get("state", "")).upper() in {
+            "STARTING", "RUNNING", "MOVING_TO_SLOT", "PAUSE_REQUESTED", "PAUSED", "STOPPING"
+        }
+        demo_commands = {"CONFIGURE_DEMO", "VALIDATE_DEMO", "ARM_DEMO", "START_DEMO", "PAUSE_DEMO", "RESUME_DEMO", "STOP_DEMO"}
+        if demo_active and cmd not in demo_commands and cmd not in _PRIORITY_COMMANDS:
+            reasons.append("DEMO_ACTIVE")
+            actions.append("Pause or stop Demo Slot Sampling before issuing another command")
 
         # ── 1. E-Stop ──────────────────────────────────────────────────────────
         if snapshot.estop:

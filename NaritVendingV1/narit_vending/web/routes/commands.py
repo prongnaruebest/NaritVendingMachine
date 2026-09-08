@@ -6,7 +6,7 @@ import logging
 import math
 from typing import TYPE_CHECKING, Any
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, Response, jsonify, request
 
 if TYPE_CHECKING:
     from narit_vending.web.ipc_client import ControllerClient
@@ -89,6 +89,7 @@ def make_commands_bp(ctrl: "ControllerClient") -> Blueprint:
         except (TypeError, ValueError):
             return jsonify({"ok": False, "error": "distance_mm, speed_mm_s, and time_s must be numbers"}), 400
         allow_unhomed = bool(payload.get("allow_unhomed", False))
+        continuous = bool(payload.get("continuous", False))
         r = _submit(
             ctrl,
             "JOG",
@@ -98,6 +99,7 @@ def make_commands_bp(ctrl: "ControllerClient") -> Blueprint:
                 "speed_mm_s": speed_mm_s,
                 "time_s": time_s,
                 "allow_unhomed": allow_unhomed,
+                "continuous": continuous,
             },
         )
         snap = ctrl.snapshot()
@@ -250,6 +252,89 @@ def make_commands_bp(ctrl: "ControllerClient") -> Blueprint:
         r = _submit(ctrl, "CLEAR_ALARM", {})
         snap = ctrl.snapshot()
         return jsonify(r | _snap_status(snap)), 200 if r.get("accepted") else 400
+
+    @bp.post("/api/move-to-limit")
+    def api_move_to_limit():
+        payload = _json_payload()
+        axis = str(payload.get("axis", "")).lower()
+        endpoint = str(payload.get("endpoint", "")).lower()
+        if axis not in ("x", "y", "z") or endpoint not in ("min", "max"):
+            return jsonify({"ok": False, "error": "axis must be x/y/z and endpoint must be min/max"}), 400
+        try:
+            speed = _parse_opt_float(payload, "speed_mm_s")
+        except (TypeError, ValueError):
+            return jsonify({"ok": False, "error": "speed_mm_s must be a number"}), 400
+        r = _submit(ctrl, "MOVE_TO_LIMIT", {"axis": axis, "endpoint": endpoint, "speed_mm_s": speed})
+        snap = ctrl.snapshot()
+        return jsonify(r | _snap_status(snap)), 200 if r.get("accepted") else 400
+
+    @bp.post("/api/system/motion/disable")
+    def api_disable_motion():
+        r = _submit(ctrl, "DISABLE_MOTION", {})
+        snap = ctrl.snapshot()
+        return jsonify(r | _snap_status(snap)), 200 if r.get("accepted") else 400
+
+    @bp.post("/api/system/motion/enable")
+    def api_enable_motion():
+        r = _submit(ctrl, "ENABLE_MOTION", {})
+        snap = ctrl.snapshot()
+        return jsonify(r | _snap_status(snap)), 200 if r.get("accepted") else 400
+
+    @bp.post("/api/system/nucleo/reset-link")
+    def api_reset_nucleo_link():
+        r = _submit(ctrl, "RESET_NUCLEO_LINK", {})
+        snap = ctrl.snapshot()
+        return jsonify(r | _snap_status(snap)), 200 if r.get("accepted") else 503
+
+    @bp.post("/api/system/drives/reset-power")
+    def api_reset_xy_drive_power():
+        r = _submit(ctrl, "RESET_XY_DRIVE_POWER", {})
+        snap = ctrl.snapshot()
+        return jsonify(r | _snap_status(snap)), 200 if r.get("accepted") else 409
+
+    @bp.post("/api/system/drives/cut-power")
+    def api_cut_xy_drive_power():
+        r = _submit(ctrl, "CUT_XY_DRIVE_POWER", {})
+        snap = ctrl.snapshot()
+        return jsonify(r | _snap_status(snap)), 200 if r.get("accepted") else 409
+
+    @bp.post("/api/system/drives/restore-power")
+    def api_restore_xy_drive_power():
+        r = _submit(ctrl, "RESTORE_XY_DRIVE_POWER", {})
+        snap = ctrl.snapshot()
+        return jsonify(r | _snap_status(snap)), 200 if r.get("accepted") else 409
+
+    # ── Controller-owned Demo Slot Sampling ────────────────────────────────
+
+    @bp.post("/api/demo/configure")
+    def api_demo_configure():
+        r = _submit(ctrl, "CONFIGURE_DEMO", _json_payload())
+        return jsonify(r), 200 if r.get("accepted") else 400
+
+    @bp.post("/api/demo/<action>")
+    def api_demo_action(action: str):
+        command_types = {
+            "validate": "VALIDATE_DEMO", "arm": "ARM_DEMO", "start": "START_DEMO",
+            "pause": "PAUSE_DEMO", "resume": "RESUME_DEMO", "stop": "STOP_DEMO",
+        }
+        if action not in command_types:
+            return jsonify({"ok": False, "error": "Unknown Demo action"}), 404
+        r = _submit(ctrl, command_types[action], _json_payload())
+        return jsonify(r), 200 if r.get("accepted") else 400
+
+    @bp.get("/api/demo/status")
+    def api_demo_status():
+        snap = ctrl.snapshot()
+        return jsonify({"ok": True, **dict(snap.demo_status)})
+
+    @bp.get("/api/demo/history")
+    def api_demo_history():
+        snap = ctrl.snapshot()
+        return jsonify({"ok": True, "current": dict(snap.demo_status), "sessions": ctrl.demo_history(50)})
+
+    @bp.get("/api/demo/export.csv")
+    def api_demo_export():
+        return Response(ctrl.demo_export_csv(), mimetype="text/csv", headers={"Content-Disposition": "attachment; filename=demo-slot-sampling.csv"})
 
     # ── Speed / Timer ─────────────────────────────────────────────────────────
 

@@ -2,10 +2,13 @@ import unittest
 from unittest.mock import MagicMock
 
 from narit_vending.motion import (
+    ActiveLimitError,
+    AxisController,
     AxisConfig,
     MachineConfig,
     MotionController,
     MotionError,
+    TravelBoundaryError,
     SlotPosition,
     _build_half_periods,
     _home_backoff_limit_steps,
@@ -66,8 +69,8 @@ class MotionCharacterizationTests(unittest.TestCase):
         self.assertEqual(len(half_periods), pulse_count)
         self.assertTrue(all(delay > 0 for delay in half_periods))
 
-    def test_home_stops_on_sensor_without_backoff(self) -> None:
-        self.assertEqual(_home_backoff_limit_steps(200.0), 0)
+    def test_home_allows_ten_mm_for_sensor_release_before_precision_latch(self) -> None:
+        self.assertEqual(_home_backoff_limit_steps(200.0), 2000)
 
     def test_axis_rejects_equal_home_and_forward_direction(self) -> None:
         with self.assertRaises(MotionError):
@@ -93,6 +96,70 @@ class MotionCharacterizationTests(unittest.TestCase):
         controller.home_all()
 
         self.assertEqual(order, ["z", "y", "x"])
+
+    def test_continuous_jog_uses_authoritative_remaining_travel(self) -> None:
+        axis = MagicMock()
+        axis.is_homed = True
+        axis.position_mm = 120.465
+        axis.position_steps = 8282
+        axis.config.max_travel_mm = 1590.0
+        axis.mm_to_steps.side_effect = lambda mm: round(mm * 68.75)
+        axis.steps_to_mm.side_effect = lambda steps: steps / 68.75
+        service = MotionService.__new__(MotionService)
+        service.controller = MagicMock()
+        service.controller.axes.return_value = {"y": axis}
+        service._run = lambda _name, fn: {"ok": True, "result": fn()}
+
+        service.jog("y", 1469.535, speed_mm_s=30.0, continuous=True)
+
+        expected = (round(1590.0 * 68.75) - 8282) / 68.75
+        axis.move_mm.assert_called_once_with(expected, speed_mm_s=30.0, time_s=None)
+
+    def test_software_travel_rejection_has_a_distinct_non_hardware_error(self) -> None:
+        config = self._axis_config("z", 160.0)
+        axis = AxisController.__new__(AxisController)
+        axis.config = config
+        axis.position_steps = round(160.0 * config.steps_per_mm)
+        axis.is_homed = True
+        axis.estop = MagicMock(value=False)
+        axis.head_limit = MagicMock(value=False)
+        axis.tail_limit = MagicMock(value=False)
+        axis.stop_requested = lambda: False
+
+        with self.assertRaises(TravelBoundaryError):
+            axis.plan_relative_move(1.0, speed_mm_s=2.0)
+
+    def test_active_limit_rejects_only_direction_into_sensor(self) -> None:
+        config = self._axis_config("z", 160.0)
+        axis = AxisController.__new__(AxisController)
+        axis.config = config
+        axis.position_steps = 0
+        axis.is_homed = True
+        axis.estop = MagicMock(value=False)
+        axis.head_limit = MagicMock(value=True)
+        axis.tail_limit = MagicMock(value=False)
+        axis.stop_requested = lambda: False
+
+        with self.assertRaises(ActiveLimitError):
+            axis.plan_relative_move(-1.0, speed_mm_s=2.0)
+        away = axis.plan_relative_move(1.0, speed_mm_s=2.0)
+        self.assertEqual(away.steps, 80)
+
+    def test_active_max_limit_allows_motion_back_toward_min(self) -> None:
+        config = self._axis_config("x", 1700.0)
+        axis = AxisController.__new__(AxisController)
+        axis.config = config
+        axis.position_steps = axis.mm_to_steps(1700.0)
+        axis.is_homed = True
+        axis.estop = MagicMock(value=False)
+        axis.head_limit = MagicMock(value=False)
+        axis.tail_limit = MagicMock(value=True)
+        axis.stop_requested = lambda: False
+
+        with self.assertRaises(ActiveLimitError):
+            axis.plan_relative_move(1.0, speed_mm_s=5.0)
+        away = axis.plan_relative_move(-1.0, speed_mm_s=5.0)
+        self.assertEqual(away.steps, 80)
 
     def test_move_to_slot_uses_safe_z_then_xy_then_target_z(self) -> None:
         controller, axes = self._mock_controller()

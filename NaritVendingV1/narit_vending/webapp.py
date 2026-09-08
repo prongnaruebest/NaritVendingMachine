@@ -21,11 +21,13 @@ from .config_foundation import (
     validate_configuration_payloads,
 )
 from .motion import (
+    ActiveLimitError,
     ControlledStopError,
     EmergencyStopError,
     LimitTriggeredError,
     MachineConfig,
     MotionError,
+    TravelBoundaryError,
     build_controller,
     build_default_machine_config,
     load_hardware_config,
@@ -34,6 +36,7 @@ from .motion import (
 )
 from .mqtt_service import MQTTService
 from .iriv_io import IRIVIOBackend, IRIVIOError
+from .picontrol_io import PiControlIOBackend
 from .nucleo import NucleoLink
 
 
@@ -101,6 +104,11 @@ class MotionService:
         self.completed_request_ids: dict[str, dict[str, object]] = {}
         self.configuration_restart_required = False
         self.motor_test_armed = False
+        self.motor_test_armed_until: float | None = None
+        self.motion_enabled = True
+        self._safety_trip_latched = False
+        self._safety_monitor_stop = threading.Event()
+        self._safety_monitor_thread: threading.Thread | None = None
 
         if self.config_path.exists():
             config = load_machine_config(self.config_path)
@@ -132,11 +140,20 @@ class MotionService:
             self.io_backend = IRIVIOBackend(iriv_config)
             self.io_backend.start()
 
+        picontrol_config = hw_config.get("picontrol_io", {})
+        self.picontrol_io: PiControlIOBackend | None = None
+        if isinstance(picontrol_config, dict) and picontrol_config.get("enabled"):
+            self.picontrol_io = PiControlIOBackend(picontrol_config)
+            self.picontrol_io.start()
+
         nucleo_config = hw_config.get("nucleo", {})
         self.nucleo_link: NucleoLink | None = None
         if isinstance(nucleo_config, dict) and nucleo_config.get("enabled"):
-            safety_perm = lambda: self.io_backend is None or not any(
-                c["active"] and c["level"] == "fault" for c in self.io_backend.alarm_channels()
+            safety_perm = lambda: not any(
+                c["active"] and c["level"] == "fault"
+                for backend in (self.io_backend, self.picontrol_io)
+                if backend is not None
+                for c in backend.alarm_channels()
             )
             self.nucleo_link = NucleoLink(nucleo_config, safety_permissive_fn=safety_perm)
             self.nucleo_link.start()
@@ -156,8 +173,17 @@ class MotionService:
             io_backend=self.io_backend,
             motion_backend=nucleo_motion,
         )
+        if self.io_backend is not None or self.picontrol_io is not None:
+            self._safety_monitor_thread = threading.Thread(
+                target=self._safety_monitor_loop,
+                name="controller-safety-monitor",
+                daemon=True,
+            )
+            self._safety_monitor_thread.start()
         from .controller.sequence_service import SequenceService
         self.sequence_service = SequenceService(self)
+        from .controller.demo_service import DemoSamplingService
+        self.demo_service = DemoSamplingService(self, self.config_path.parent / "demo_results.sqlite3")
         mqtt_config = hw_config.get("mqtt", {})
         self.mqtt_service = MQTTService(self, mqtt_config)
         self.mqtt_service.start()
@@ -166,8 +192,11 @@ class MotionService:
         with self.lock:
             controller_status = self.controller.status()
             io_status = self.io_backend.status_payload() if self.io_backend else {"enabled": False, "communication_ok": True}
+            picontrol_status = self.picontrol_io.status_payload() if self.picontrol_io else {"enabled": False, "communication_ok": True}
             nucleo_status = self.nucleo_link.status_payload() if self.nucleo_link else {"enabled": False, "communication_ok": True}
             alarm_channels = self.io_backend.alarm_channels() if self.io_backend else []
+            if self.picontrol_io is not None:
+                alarm_channels.extend(self.picontrol_io.alarm_channels())
             if self.nucleo_link is not None:
                 alarm_channels.append(self.nucleo_link.alarm_channel())
             hardware_fault = any(channel["active"] and channel["level"] == "fault" for channel in alarm_channels)
@@ -197,6 +226,7 @@ class MotionService:
                 "machine_state": controller_status["state"],
                 "alarm_channels": alarm_channels,
                 "io": io_status,
+                "picontrol_io": picontrol_status,
                 "nucleo": nucleo_status,
                 "operation": {
                     "phase": self.operation_phase,
@@ -221,12 +251,16 @@ class MotionService:
                 "safety": {
                     "estop_active": controller_status["estop"],
                     "stop_requested": self.controller.stop_requested(),
+                    "motion_enabled": self.motion_enabled,
+                    "di10_all_axis_stop_latched": self._safety_trip_latched,
+                    "z_stop_coverage": "software_step_pulse_only",
                     "controlled_stop_requested": self.controller.controlled_stop_requested(),
                     "configuration_restart_required": self.configuration_restart_required,
                     "motor_test": motor_test,
                 },
                 "status": controller_status,
                 "slots": slots,
+                "demo": self.demo_service.status(),
             }
 
     def _sync_iriv_outputs(self, controller_status: dict[str, object], io_fault: bool) -> None:
@@ -249,34 +283,41 @@ class MotionService:
             or self.controller.stop_requested()
             or self.configuration_restart_required
         )
+        if self.motor_test_armed_until is not None and time.monotonic() >= self.motor_test_armed_until:
+            self.motor_test_armed = False
+            self.motor_test_armed_until = None
         if unsafe:
             self.motor_test_armed = False
+            self.motor_test_armed_until = None
+        expires_in = max(0.0, self.motor_test_armed_until - time.monotonic()) if self.motor_test_armed_until else 0.0
         return {
             "armed": self.motor_test_armed,
-            "expires_in_s": None,
+            "expires_in_s": round(expires_in, 1),
             "max_duration_s": MOTOR_TEST_MAX_DURATION_S,
             "max_frequency_hz": MOTOR_TEST_MAX_FREQUENCY_HZ,
             "max_pulses": MOTOR_TEST_MAX_PULSES,
-            "scope": "motor_test_page_only",
+            "scope": "manual_commissioning_only",
         }
 
     def set_motor_test_mode(self, armed: bool) -> dict[str, object]:
         with self.lock:
             if armed:
-                self.controller.clear_stop()
-                self.controller.set_state("idle")
                 self.last_error = ""
                 errors = self._motion_safety_errors(require_homed=False)
                 if errors:
                     return {"ok": False, "error": "; ".join(errors)}
                 self.armed_move = None
                 self.motor_test_armed = True
-                self.operation_message = "Motor Test Mode armed; raw pulse test permitted"
+                self.motor_test_armed_until = time.monotonic() + 30.0
+                self.operation_message = "Manual Commissioning armed for 30 seconds"
+                _logger.warning("AUDIT manual commissioning ARMED")
                 if self.nucleo_link is not None and getattr(self.nucleo_link, "expected_protocol", 1) >= 2:
                     self.nucleo_link.arm(safety_permissive=True)
             else:
                 self.motor_test_armed = False
-                self.operation_message = "Motor Test Mode cancelled"
+                self.motor_test_armed_until = None
+                self.operation_message = "Manual Commissioning cancelled"
+                _logger.warning("AUDIT manual commissioning DISARMED")
                 if self.nucleo_link is not None and getattr(self.nucleo_link, "expected_protocol", 1) >= 2:
                     self.nucleo_link.disarm()
             return {"ok": True, "motor_test": self._motor_test_status()}
@@ -294,7 +335,8 @@ class MotionService:
         if not motor_test["armed"]:
             return {"ok": False, "error": "Motor Test Mode is not armed"}
         if self.nucleo_link is not None and getattr(self.nucleo_link, "expected_protocol", 1) >= 2:
-            effective_freq = min(max(float(pulse_frequency_hz), 10.0), 1000.0)
+            protocol_cap = 50_000.0 if getattr(self.nucleo_link, "expected_protocol", 1) >= 3 else 1_000.0
+            effective_freq = min(max(float(pulse_frequency_hz), 10.0), protocol_cap)
         else:
             effective_freq = float(pulse_frequency_hz)
         duration_s = pulse_count / effective_freq
@@ -305,6 +347,10 @@ class MotionService:
         if duration_s > MOTOR_TEST_MAX_DURATION_S:
             return {"ok": False, "error": f"Motor test duration is limited to {MOTOR_TEST_MAX_DURATION_S:g} seconds"}
         axis = self.controller.axes()[axis_name]
+        _logger.warning(
+            "AUDIT manual commissioning pulse axis=%s direction=%s pulses=%d frequency_hz=%.1f ignore_limits=%s",
+            axis_name, direction, pulse_count, effective_freq, ignore_limits,
+        )
         return self._run(
             f"motor_test_{axis_name}",
             lambda: axis.test_pulses(pulse_count, effective_freq, direction, ignore_limits=ignore_limits),
@@ -321,9 +367,12 @@ class MotionService:
         estimated_duration_s: float | None = None,
     ):
         is_motor_test = command_name.startswith("motor_test_")
-        if motion_command and not is_motor_test and self.io_backend is not None:
+        if motion_command:
             active_io_faults = [
-                channel["label"] for channel in self.io_backend.alarm_channels()
+                channel["label"]
+                for backend in (self.io_backend, self.picontrol_io)
+                if backend is not None
+                for channel in backend.alarm_channels()
                 if channel["active"] and channel["level"] == "fault"
             ]
             if active_io_faults:
@@ -338,6 +387,11 @@ class MotionService:
             return {"ok": False, "error": "Machine is busy with another command"}
 
         try:
+            if motion_command:
+                # A release request can race with the final response of the
+                # preceding hold-to-run jog. No motion is active after acquiring
+                # command_lock, so any controlled-stop flag here is stale.
+                self.controller.clear_controlled_stop()
             with self.lock:
                 self.busy = True
                 self.active_command = command_name
@@ -370,6 +424,15 @@ class MotionService:
                 self.operation_message = str(exc)
             _logger.info("Controlled stop: %s", exc)
             return {"ok": False, "controlled_stop": True, "error": str(exc)}
+        except (TravelBoundaryError, ActiveLimitError) as exc:
+            with self.lock:
+                self.controller.clear_controlled_stop()
+                self.controller.set_state("idle")
+                self.last_error = str(exc)
+                self.operation_phase = "rejected"
+                self.operation_message = str(exc)
+            _logger.info("Motion command rejected: %s", exc)
+            return {"ok": False, "rejected": True, "error": str(exc)}
         except (MotionError, EmergencyStopError, LimitTriggeredError, IRIVIOError) as exc:
             with self.lock:
                 self.last_error = str(exc)
@@ -398,6 +461,9 @@ class MotionService:
                 self.active_command = ""
                 self.command_started_monotonic = None
                 self.command_estimated_duration_s = None
+                if motion_command:
+                    # Never let a late hold-release poison the next command.
+                    self.controller.clear_controlled_stop()
             self.command_lock.release()
 
     def _armed_move_status(self) -> dict[str, object] | None:
@@ -594,6 +660,239 @@ class MotionService:
             self.operation_message = "Stop requested by operator"
         return {"ok": True, "result": "stop requested"}
 
+    def _safety_monitor_loop(self) -> None:
+        """Latch all-axis stop when DI10 opens or IRIV I/O becomes stale.
+
+        The IRIV backend maps a failed/stale fail-safe input to active, so an
+        I/O communications loss takes the same conservative stop path.
+        """
+        interval = min(0.05, max(0.02, float(self.io_backend.poll_interval_s) / 2))
+        while not self._safety_monitor_stop.wait(interval):
+            try:
+                estop_active = self.io_backend.input_active("estop") if self.io_backend is not None else False
+                drive_alarm = any(
+                    channel["active"] and channel["level"] == "fault"
+                    for channel in (self.picontrol_io.alarm_channels() if self.picontrol_io is not None else [])
+                )
+            except Exception:
+                estop_active = True
+                drive_alarm = True
+            if (estop_active or drive_alarm) and not self._safety_trip_latched:
+                self._latch_emergency_stop()
+
+    def _latch_emergency_stop(self) -> None:
+        self._safety_trip_latched = True
+        self.motion_enabled = False
+        self.controller.request_stop()
+        for axis_name, axis in self.controller.axes().items():
+            axis.is_homed = False
+            self.homing[axis_name] = "not_homed"
+        if self.nucleo_link is not None:
+            try:
+                self.nucleo_link.stop()
+                self.nucleo_link.disarm()
+            except Exception:
+                pass
+        with self.lock:
+            self.armed_move = None
+        self.motor_test_armed = False
+        if hasattr(self, "demo_service"):
+            self.demo_service.stop("DI10 E-Stop or IRIV I/O fail-safe opened", stop_motion=False)
+            self.controller.set_state("alarm")
+            self.last_error = "DI10 E-Stop or IRIV I/O fail-safe opened; all axis pulse output stopped"
+            self.operation_phase = "e_stop"
+            self.operation_message = "All axes stopped; X/Y power removed physically, Z stopped by software pulse inhibit"
+
+    def disable_motion(self) -> dict[str, object]:
+        result = self.stop()
+        self.motion_enabled = False
+        self.operation_message = "Motion disabled by operator; future motion commands are inhibited"
+        return result | {"motion_enabled": False}
+
+    def enable_motion(self) -> dict[str, object]:
+        if self.io_backend is not None:
+            if not self.io_backend.communication_ok:
+                return {"ok": False, "error": "IRIV I/O communication is not healthy"}
+            if self.io_backend.input_active("estop"):
+                return {"ok": False, "error": "Release physical E-Stop on DI10 before enabling motion"}
+            faults = [c["label"] for c in self.io_backend.alarm_channels() if c["active"] and c["level"] == "fault"]
+            if faults:
+                return {"ok": False, "error": "Safety fault active: " + ", ".join(faults)}
+        if self.picontrol_io is not None:
+            faults = [c["label"] for c in self.picontrol_io.alarm_channels() if c["active"] and c["level"] == "fault"]
+            if faults:
+                return {"ok": False, "error": "Drive fault active: " + ", ".join(faults)}
+        if self.nucleo_link is not None and not self.nucleo_link.communication_ok:
+            return {"ok": False, "error": "NUCLEO USB handshake is not healthy"}
+        if self.busy:
+            return {"ok": False, "error": "Cannot enable motion while a command is active"}
+        self.controller.clear_stop()
+        self.motion_enabled = True
+        self._safety_trip_latched = False
+        self.controller.set_state("idle")
+        with self.lock:
+            self.last_error = ""
+            self.operation_phase = "ready"
+            self.operation_message = "Motion enabled for future validated commands; NUCLEO remains disarmed while idle"
+        return {"ok": True, "motion_enabled": True, "nucleo_armed": False}
+
+    def reset_nucleo_link(self) -> dict[str, object]:
+        self.disable_motion()
+        if self.nucleo_link is None:
+            return {"ok": False, "error": "NUCLEO USB link is not configured"}
+        result = self.nucleo_link.reset_connection()
+        with self.lock:
+            self.operation_phase = "stopped"
+            self.operation_message = "NUCLEO USB link reset and handshake completed" if result["ok"] else "NUCLEO USB link reset failed"
+            if not result["ok"]:
+                self.last_error = str(result.get("error") or "NUCLEO handshake failed")
+        return result | {"motion_enabled": False}
+
+    def reset_xy_drive_power(self) -> dict[str, object]:
+        """Power-cycle X/Y drives through PiControl DO0 without enabling motion."""
+        if self.picontrol_io is None or "xy_drive_power" not in self.picontrol_io.outputs:
+            return {"ok": False, "error": "PiControl DO0 XY drive power output is not configured"}
+        # Reset is a recovery action: request an immediate stop first, then
+        # wait briefly for the interrupted motion handler to release ownership.
+        # Physical E-Stop is never bypassed; DI10 must still recover below.
+        self.disable_motion()
+        if not self.command_lock.acquire(timeout=5.0):
+            return {"ok": False, "error": "Motion did not stop within 5 seconds; drive power was not cycled"}
+        try:
+            if self.nucleo_link is not None:
+                nucleo = self.nucleo_link.status_payload()
+                if any(int(value or 0) for value in dict(nucleo.get("moving", {})).values()):
+                    return {"ok": False, "error": "NUCLEO still reports axis motion; drive power reset blocked"}
+
+            output_cfg = self.picontrol_io.outputs["xy_drive_power"]
+            off_seconds = min(15.0, max(1.0, float(output_cfg.get("reset_off_s", 3.0))))
+            recovery_timeout = min(30.0, max(2.0, float(output_cfg.get("recovery_timeout_s", 8.0))))
+            self.picontrol_io.set_output("xy_drive_power", False)
+            with self.lock:
+                self.operation_phase = "drive_power_reset"
+                self.operation_message = "X/Y 60 V drive power removed through PiControl DO0"
+            time.sleep(off_seconds)
+
+            # The physical E-Stop NC contact remains in series. If it is open,
+            # energising DO0 cannot pull in KM1 and DI10 will remain unsafe.
+            self.picontrol_io.set_output("xy_drive_power", True)
+            deadline = time.monotonic() + recovery_timeout
+            while time.monotonic() < deadline:
+                io_clear = (
+                    self.io_backend is not None
+                    and self.io_backend.communication_ok
+                    and not self.io_backend.input_active("estop")
+                )
+                drive_fault = any(
+                    channel["active"] and channel["level"] == "fault"
+                    for channel in self.picontrol_io.alarm_channels()
+                )
+                if io_clear and not drive_fault:
+                    break
+                time.sleep(0.1)
+            else:
+                return {
+                    "ok": False,
+                    "error": "DO0 is ON but KM1/DI10 or X/Y drive alarm did not recover; motion remains locked",
+                    "motion_enabled": False,
+                    "drive_power_on": True,
+                }
+
+            for axis_name in ("x", "y"):
+                self.controller.axes()[axis_name].is_homed = False
+                self.homing[axis_name] = "not_homed"
+            self.controller.clear_stop()
+            self.controller.set_state("idle")
+            self._safety_trip_latched = False
+            with self.lock:
+                self.last_error = ""
+                self.operation_phase = "motion_disabled"
+                self.operation_message = "X/Y drive power reset complete; Home X/Y before enabling motion"
+            return {
+                "ok": True,
+                "motion_enabled": False,
+                "drive_power_on": True,
+                "reset_off_s": off_seconds,
+                "homing_required": ["x", "y"],
+            }
+        except Exception as exc:
+            try:
+                self.picontrol_io.set_output("xy_drive_power", False)
+            except Exception:
+                pass
+            return {"ok": False, "error": f"XY drive power reset failed: {exc}", "drive_power_on": False}
+        finally:
+            self.command_lock.release()
+
+    def cut_xy_drive_power(self) -> dict[str, object]:
+        """Immediately remove X/Y drive power; this is always a stop action."""
+        if self.picontrol_io is None or "xy_drive_power" not in self.picontrol_io.outputs:
+            return {"ok": False, "error": "PiControl DO0 XY drive power output is not configured"}
+        self.disable_motion()
+        try:
+            self.picontrol_io.set_output("xy_drive_power", False)
+        except Exception as exc:
+            return {"ok": False, "error": f"Failed to cut XY drive power: {exc}"}
+        for axis_name in ("x", "y"):
+            self.controller.axes()[axis_name].is_homed = False
+            self.homing[axis_name] = "not_homed"
+        with self.lock:
+            self.operation_phase = "drive_power_off"
+            self.operation_message = "X/Y 60 V drive power is OFF; PiControl DO0 opened"
+        return {"ok": True, "drive_power_on": False, "motion_enabled": False, "homing_required": ["x", "y"]}
+
+    def restore_xy_drive_power(self) -> dict[str, object]:
+        """Restore KM1 through the series E-Stop circuit; never enable motion."""
+        if self.picontrol_io is None or "xy_drive_power" not in self.picontrol_io.outputs:
+            return {"ok": False, "error": "PiControl DO0 XY drive power output is not configured"}
+        if self.busy:
+            return {"ok": False, "error": "Machine is busy; drive power restore is blocked"}
+        if not self.command_lock.acquire(blocking=False):
+            return {"ok": False, "error": "Another controller command is active"}
+        try:
+            self.disable_motion()
+            if self.nucleo_link is not None:
+                nucleo = self.nucleo_link.status_payload()
+                if any(int(value or 0) for value in dict(nucleo.get("moving", {})).values()):
+                    return {"ok": False, "error": "NUCLEO still reports axis motion; drive power restore blocked"}
+            if self.io_backend is None or not self.io_backend.communication_ok:
+                return {"ok": False, "error": "IRIV I/O communication is not healthy; DO0 remains OFF"}
+            self.picontrol_io.set_output("xy_drive_power", True)
+            timeout = min(30.0, max(2.0, float(
+                self.picontrol_io.outputs["xy_drive_power"].get("recovery_timeout_s", 8.0)
+            )))
+            deadline = time.monotonic() + timeout
+            while time.monotonic() < deadline:
+                km1_clear = self.io_backend.communication_ok and not self.io_backend.input_active("estop")
+                drive_fault = any(
+                    channel["active"] and channel["level"] == "fault"
+                    for channel in self.picontrol_io.alarm_channels()
+                )
+                if km1_clear and not drive_fault:
+                    self._safety_trip_latched = False
+                    self.controller.clear_stop()
+                    self.controller.set_state("idle")
+                    with self.lock:
+                        self.last_error = ""
+                        self.operation_phase = "motion_disabled"
+                        self.operation_message = "X/Y drive power restored; Home X/Y before enabling motion"
+                    return {"ok": True, "drive_power_on": True, "motion_enabled": False, "homing_required": ["x", "y"]}
+                time.sleep(0.1)
+            return {
+                "ok": False,
+                "error": "DO0 is ON but E-Stop/KM1 DI10 or X/Y drive alarm did not recover; motion remains locked",
+                "drive_power_on": True,
+                "motion_enabled": False,
+            }
+        except Exception as exc:
+            try:
+                self.picontrol_io.set_output("xy_drive_power", False)
+            except Exception:
+                pass
+            return {"ok": False, "error": f"XY drive power restore failed: {exc}", "drive_power_on": False}
+        finally:
+            self.command_lock.release()
+
     def controlled_stop(self) -> dict[str, object]:
         if not self.busy:
             return {"ok": True, "result": "machine already idle"}
@@ -610,11 +909,16 @@ class MotionService:
             return {"ok": False, "error": "Machine is busy; stop motion before clearing alarms"}
         try:
             with self.lock:
-                self.controller.clear_stop()
-                self.controller.set_state("idle")
+                if self.motion_enabled:
+                    self.controller.clear_stop()
+                    self.controller.set_state("idle")
                 self.last_error = ""
-                self.operation_phase = "ready"
-                self.operation_message = "Alarm cleared; verify safety before continuing"
+                self.operation_phase = "ready" if self.motion_enabled else "motion_disabled"
+                self.operation_message = (
+                    "Alarm cleared; verify safety before continuing"
+                    if self.motion_enabled
+                    else "Alarm display cleared; motion remains disabled until explicitly enabled"
+                )
             return {"ok": True}
         finally:
             self.command_lock.release()
@@ -707,6 +1011,10 @@ class MotionService:
                 self.operation_message = f"Axis {axis_name.upper()} backing off home sensor"
             elif phase == "completed":
                 self.operation_message = f"Axis {axis_name.upper()} home cycle completed"
+            elif phase == "positioning":
+                self.operation_message = f"Axis {axis_name.upper()} moving from Min sensor to configured home position"
+            elif phase == "latching":
+                self.operation_message = f"Axis {axis_name.upper()} approaching Home sensor at precision speed"
             elif phase == "passed":
                 self.operation_message = f"Axis {axis_name.upper()} homed successfully"
 
@@ -717,13 +1025,31 @@ class MotionService:
         speed_mm_s: float | None = None,
         time_s: float | None = None,
         allow_unhomed: bool = False,
+        continuous: bool = False,
     ) -> dict[str, object]:
         axis = self.controller.axes()[axis_name]
         if not axis.is_homed and not allow_unhomed:
             return {"ok": False, "error": f"{axis_name.upper()} axis is not homed; use Motor Test Mode or bypass safety for raw testing"}
+        if continuous and axis.is_homed:
+            # Rebuild endpoint distance from the Controller's exact position.
+            # The HMI status is rounded to 0.001 mm and can otherwise request
+            # one pulse beyond the configured boundary after a prior jog.
+            max_steps = axis.mm_to_steps(axis.config.max_travel_mm)
+            remaining_steps = max_steps - axis.position_steps if distance_mm > 0 else axis.position_steps
+            distance_mm = axis.steps_to_mm(max(0, remaining_steps)) * (1 if distance_mm > 0 else -1)
         return self._run(
             f"jog_{axis_name}",
             lambda: axis.move_mm(distance_mm, speed_mm_s=speed_mm_s, time_s=time_s),
+        )
+
+    def move_to_limit(self, axis_name: str, endpoint: str, speed_mm_s: float | None = None) -> dict[str, object]:
+        if axis_name not in self.controller.axes() or endpoint not in {"min", "max"}:
+            return {"ok": False, "error": "axis and endpoint must identify X/Y/Z and min/max"}
+        axis = self.controller.axes()[axis_name]
+        return self._run(
+            f"seek_{axis_name}_{endpoint}_limit",
+            lambda: axis.seek_limit(endpoint, speed_mm_s=speed_mm_s),
+            estimated_duration_s=axis.config.homing_timeout_s,
         )
 
     def move_to_slot(
@@ -847,13 +1173,18 @@ class MotionService:
         with self.lock:
             controller_status = self.controller.status()
             io_ready = self.io_backend is None or self.io_backend.communication_ok
+            picontrol_ready = self.picontrol_io is None or self.picontrol_io.communication_ok
             nucleo_ready = self.nucleo_link is None or self.nucleo_link.communication_ok
             io_alarms = self.io_backend.alarm_channels() if self.io_backend else []
+            if self.picontrol_io is not None:
+                io_alarms.extend(self.picontrol_io.alarm_channels())
             io_safe = not any(channel["active"] and channel["level"] == "fault" for channel in io_alarms)
             axes_homed = all(bool(controller_status[axis].get("is_homed")) for axis in ("x", "y", "z"))
             machine_ready = (
                 axes_homed
+                and self.motion_enabled
                 and io_ready
+                and picontrol_ready
                 and nucleo_ready
                 and io_safe
                 and not bool(controller_status.get("estop"))
@@ -861,22 +1192,30 @@ class MotionService:
                 and not self.configuration_restart_required
             )
             return {
-                "status": "UP" if self.config_report.valid and io_ready and nucleo_ready else "DOWN",
-                "service_ready": self.config_report.valid and io_ready and nucleo_ready,
+                "status": "UP" if self.config_report.valid and io_ready and picontrol_ready and nucleo_ready else "DOWN",
+                "service_ready": self.config_report.valid and io_ready and picontrol_ready and nucleo_ready,
                 "machine_ready": machine_ready,
                 "machine_state": controller_status.get("state", "unknown"),
                 "axes_homed": axes_homed,
                 "config_revision": self.config_report.revision,
                 "config_valid": self.config_report.valid,
                 "iriv_io_ready": io_ready,
+                "picontrol_io_ready": picontrol_ready,
                 "nucleo_ready": nucleo_ready,
+                "motion_enabled": self.motion_enabled,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
     def close(self) -> None:
+        self.demo_service.stop("Controller shutting down", stop_motion=False)
+        self._safety_monitor_stop.set()
+        if self._safety_monitor_thread is not None:
+            self._safety_monitor_thread.join(timeout=1.0)
         self.mqtt_service.stop()
         if self.io_backend is not None:
             self.io_backend.close()
+        if self.picontrol_io is not None:
+            self.picontrol_io.close()
         if self.nucleo_link is not None:
             self.nucleo_link.close()
 
@@ -904,9 +1243,26 @@ class MotionService:
 
             motor_steps = _config_integer(axis_payload, "motor_steps_per_rev", minimum=1, maximum=10_000)
             microsteps = _config_integer(axis_payload, "driver_microsteps", minimum=1, maximum=256)
-            lead_pitch = _config_number(axis_payload, "lead_screw_pitch_mm", minimum=0.01, maximum=100.0)
+            # This legacy field represents effective linear travel per motor
+            # revolution. Belt/pulley axes can legitimately exceed 100 mm/rev.
+            lead_pitch = _config_number(axis_payload, "lead_screw_pitch_mm", minimum=0.01, maximum=1_000.0)
             steps_per_mm = _config_number(axis_payload, "steps_per_mm", minimum=0.1, maximum=100_000.0)
             max_travel = _config_number(axis_payload, "max_travel_mm", minimum=0.1, maximum=10_000.0)
+            current_axis = getattr(self.controller.config, axis_name)
+            nominal_travel = (
+                _config_number(axis_payload, "nominal_travel_mm", minimum=0.1, maximum=10_000.0)
+                if axis_payload.get("nominal_travel_mm") is not None else float(current_axis.nominal_travel_mm or max_travel)
+            )
+            measured_travel = (
+                _config_number(axis_payload, "measured_travel_mm", minimum=0.1, maximum=10_000.0)
+                if axis_payload.get("measured_travel_mm") is not None else float(current_axis.measured_travel_mm or max_travel)
+            )
+            travel_margin = (
+                _config_number(axis_payload, "travel_safety_margin_mm", minimum=0.0, maximum=1_000.0)
+                if axis_payload.get("travel_safety_margin_mm") is not None else float(current_axis.travel_safety_margin_mm)
+            )
+            if travel_margin >= measured_travel:
+                raise APIInputError(f"{axis_name.upper()}: travel safety margin must be smaller than measured travel")
             max_speed = _config_number(axis_payload, "max_speed_mm_s", minimum=0.01, maximum=500.0)
             default_speed = _config_number(axis_payload, "default_speed_mm_s", minimum=0.01, maximum=500.0)
             acceleration = _config_number(axis_payload, "acceleration", minimum=0.01, maximum=10_000.0)
@@ -914,6 +1270,18 @@ class MotionService:
             jog_step = _config_number(axis_payload, "jog_step_mm", minimum=0.001, maximum=1_000.0)
             settle_delay = _config_number(axis_payload, "settle_delay", minimum=0.0, maximum=10.0)
             home_direction = _config_integer(axis_payload, "home_direction", minimum=0, maximum=1)
+            home_position = _config_number(axis_payload, "home_position_mm", minimum=0.0, maximum=max_travel)
+            max_pulse_hz = _config_number(axis_payload, "max_pulse_hz", minimum=10.0, maximum=50_000.0)
+            commissioned_speed = _config_number(axis_payload, "commissioned_max_speed_mm_s", minimum=0.01, maximum=max_speed)
+            homing_speed_limit = min(max_speed, max_pulse_hz / steps_per_mm)
+            homing_search_speed = _config_number(
+                axis_payload,
+                "homing_search_speed_mm_s",
+                minimum=0.01,
+                maximum=homing_speed_limit,
+            )
+            homing_latch_speed = _config_number(axis_payload, "homing_latch_speed_mm_s", minimum=0.01, maximum=homing_search_speed)
+            homing_timeout = _config_number(axis_payload, "homing_timeout_s", minimum=1.0, maximum=3600.0)
             forward_direction = _config_integer(axis_payload, "forward_direction", minimum=0, maximum=1)
             if home_direction == forward_direction:
                 raise APIInputError(f"{axis_name.upper()}: home and forward directions must be opposite")
@@ -925,16 +1293,27 @@ class MotionService:
                     f"{axis_name.upper()}: maximum pulse frequency {pulse_frequency:.0f} Hz exceeds {MAX_PULSE_FREQUENCY_HZ:.0f} Hz"
                 )
 
-            step_pin = _config_integer(motor_payload, "step_pin", minimum=GPIO_MIN, maximum=GPIO_MAX)
-            dir_pin = _config_integer(motor_payload, "dir_pin", minimum=GPIO_MIN, maximum=GPIO_MAX)
-            enable_pin = _config_integer(motor_payload, "enable_pin", minimum=GPIO_MIN, maximum=GPIO_MAX)
-            active_high = _config_boolean(motor_payload, "active_high")
+            # For IRIV/hardware-locked boards the pin editor is not rendered,
+            # so motor_payload only contains fields the browser can edit.
+            # Merge the existing hardware motor config as a read-only fallback
+            # so absent GPIO fields do not cause a validation error.
+            existing_motor = current_hardware.get("motors", {}).get(axis_name, {})
+            merged_motor_payload = {**existing_motor, **(motor_payload or {})}
+
+            step_pin = _config_integer(merged_motor_payload, "step_pin", minimum=GPIO_MIN, maximum=GPIO_MAX)
+            dir_pin = _config_integer(merged_motor_payload, "dir_pin", minimum=GPIO_MIN, maximum=GPIO_MAX)
+            enable_pin = (
+                _config_integer(merged_motor_payload, "enable_pin", minimum=GPIO_MIN, maximum=GPIO_MAX)
+                if merged_motor_payload.get("enable_pin") is not None
+                else None
+            )
+            active_high = _config_boolean(merged_motor_payload, "active_high")
             enable_active_high = (
-                _config_boolean(motor_payload, "enable_active_high")
-                if "enable_active_high" in motor_payload
+                _config_boolean(merged_motor_payload, "enable_active_high")
+                if "enable_active_high" in merged_motor_payload
                 else active_high
             )
-            current_axis = getattr(self.controller.config, axis_name)
+
             updated_axis = replace(
                 current_axis,
                 pulse_pin=step_pin,
@@ -945,6 +1324,9 @@ class MotionService:
                 lead_screw_pitch_mm=lead_pitch,
                 steps_per_mm=steps_per_mm,
                 max_travel_mm=max_travel,
+                nominal_travel_mm=nominal_travel,
+                measured_travel_mm=measured_travel,
+                travel_safety_margin_mm=travel_margin,
                 max_speed_mm_s=max_speed,
                 default_speed_mm_s=default_speed,
                 acceleration=acceleration,
@@ -953,6 +1335,12 @@ class MotionService:
                 settle_delay=settle_delay,
                 home_direction=home_direction,
                 forward_direction=forward_direction,
+                home_position_mm=home_position,
+                max_pulse_hz=max_pulse_hz,
+                commissioned_max_speed_mm_s=commissioned_speed,
+                homing_search_speed_mm_s=homing_search_speed,
+                homing_latch_speed_mm_s=homing_latch_speed,
+                homing_timeout_s=homing_timeout,
             )
             updated_axes[axis_name] = updated_axis
             updated_hardware["motors"][axis_name] = {
@@ -973,9 +1361,21 @@ class MotionService:
                 "jog_step_mm": jog_step,
                 "home_direction": home_direction,
                 "forward_direction": forward_direction,
+                "home_position_mm": home_position,
+                "max_pulse_hz": max_pulse_hz,
+                "commissioned_max_speed_mm_s": commissioned_speed,
+                "homing_search_speed_mm_s": homing_search_speed,
+                "homing_latch_speed_mm_s": homing_latch_speed,
+                "homing_timeout_s": homing_timeout,
                 "lead_screw_pitch_mm": lead_pitch,
                 "motor_steps_per_rev": motor_steps,
                 "driver_microsteps": microsteps,
+                "drive_type": current_axis.drive_type,
+                "nominal_travel_mm": nominal_travel,
+                "measured_travel_mm": measured_travel,
+                "travel_safety_margin_mm": travel_margin,
+                "pulley_pitch_mm": current_axis.pulley_pitch_mm,
+                "pulley_teeth": current_axis.pulley_teeth,
             }
 
         for group_name in ("digital_inputs", "digital_outputs"):
@@ -1020,7 +1420,8 @@ class MotionService:
         pin_assignments: dict[int, list[str]] = {}
         for axis_name, motor in updated_hardware["motors"].items():
             for key in ("step_pin", "dir_pin", "enable_pin"):
-                pin_assignments.setdefault(int(motor[key]), []).append(f"motor.{axis_name}.{key}")
+                if motor.get(key) is not None:
+                    pin_assignments.setdefault(int(motor[key]), []).append(f"motor.{axis_name}.{key}")
         for group_name in ("digital_inputs", "digital_outputs"):
             for signal_name, signal in updated_hardware[group_name].items():
                 pin_assignments.setdefault(int(signal["pin"]), []).append(f"{group_name}.{signal_name}")
@@ -1384,7 +1785,7 @@ def create_app(config_path: str = "machine_config.json", hw_config_path: str = "
             )
         except (APIInputError, KeyError, TypeError, ValueError) as exc:
             return jsonify({"ok": False, "error": str(exc) or "Invalid motor test parameters"}), 400
-        ignore_limits = bool(payload.get("ignore_limits", True))
+        ignore_limits = bool(payload.get("ignore_limits", False))
         result = service.run_motor_test(
             axis,
             direction,
