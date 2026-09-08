@@ -4563,12 +4563,6 @@
           return;
         }
         const target = limit === "min" ? 0 : maximum;
-        const confirmation = [
-          `Move ${axis.toUpperCase()} axis to configured ${limit.toUpperCase()} position?`,
-          `Target: ${target.toFixed(3)} mm`,
-          "Confirm the travel area is clear before continuing.",
-        ].join("\n");
-        if (!window.confirm(confirmation)) return;
         setText("travel-limit-feedback", `Moving ${axis.toUpperCase()} to ${limit.toUpperCase()} (${target.toFixed(3)} mm).`);
         command(
           `Move ${axis.toUpperCase()} to ${limit.toUpperCase()}`,
@@ -4592,7 +4586,7 @@
           toast(`${axis.toUpperCase()} target must be within 0-${maximum} mm.`, "error");
           return;
         }
-        if (!window.confirm(`Move ${axis.toUpperCase()} to ${target.toFixed(3)} mm?\nConfirm the travel area is clear.`)) return;
+        setText("travel-limit-feedback", `Moving ${axis.toUpperCase()} to ${target.toFixed(3)} mm.`);
         command(
           `Move ${axis.toUpperCase()} to ${target.toFixed(3)} mm`,
           "/api/move",
