@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 from narit_vending.motion import (
+    ActiveLimitError,
     AxisController,
     AxisMovePlan,
     ControlledStopError,
@@ -30,6 +31,7 @@ class MotionUsbChunkingTests(unittest.TestCase):
             homing_timeout_s=30.0,
         )
         axis.direction = SimpleNamespace(value=False)
+        axis.pulse = MagicMock()
         axis.estop = SimpleNamespace(value=False)
         axis.head_limit = SimpleNamespace(value=False)
         axis.tail_limit = SimpleNamespace(value=False)
@@ -135,6 +137,38 @@ class MotionUsbChunkingTests(unittest.TestCase):
             axis._execute_plan(plan)
 
         self.assertEqual(axis.position_steps, 498)
+
+    def test_max_limit_stop_preserves_home_and_allows_reverse_move(self):
+        axis = self.make_axis(name="x", segment_limit=1_000_000)
+
+        def max_limit_stop(**kwargs):
+            axis.tail_limit.value = True
+            self.assertTrue(kwargs["stop_requested"]())
+            return {"steps": 31_500, "stopped": True}
+
+        axis.motion_backend.move.side_effect = max_limit_stop
+        plan = AxisMovePlan("x", 0.0, 160.0, 160.0, 1, 32_000, 5.0, 32.0)
+
+        with self.assertRaises(ActiveLimitError):
+            axis._execute_plan(plan)
+
+        self.assertTrue(axis.is_homed)
+        self.assertEqual(axis.position_steps, axis.mm_to_steps(axis.config.max_travel_mm))
+        reverse = axis.plan_relative_move(-1.0, speed_mm_s=5.0)
+        self.assertEqual(reverse.direction, axis.config.home_direction)
+
+    def test_min_limit_stop_preserves_home_and_allows_forward_move(self):
+        axis = self.make_axis(name="y", segment_limit=1_000_000)
+        axis.position_steps = axis.mm_to_steps(axis.config.max_travel_mm)
+        axis.head_limit.value = True
+
+        with self.assertRaises(ActiveLimitError):
+            axis._guard_during_move(axis.config.home_direction)
+
+        self.assertTrue(axis.is_homed)
+        self.assertEqual(axis.position_steps, 0)
+        forward = axis.plan_relative_move(1.0, speed_mm_s=5.0)
+        self.assertEqual(forward.direction, axis.config.forward_direction)
 
     def test_physical_limit_seek_ignores_software_travel_and_uses_sensor(self):
         axis = self.make_axis(name="z", segment_limit=1_000_000)

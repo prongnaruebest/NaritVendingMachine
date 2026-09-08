@@ -857,8 +857,22 @@ class AxisController:
                     # latched incomplete-segment alarm.
                     raise ControlledStopError(f"{self.config.name}: jog stopped when hold control was released")
                 if stopped and stop_reason in {"Min limit triggered", "Max limit triggered"}:
-                    self.is_homed = False
-                    raise LimitTriggeredError(f"{self.config.name}: {stop_reason}")
+                    # A directional end-stop is a recoverable endpoint, not a
+                    # loss of machine reference.  Snap the logical coordinate
+                    # to the known physical endpoint and reject only further
+                    # motion into that switch.  Raising ActiveLimitError keeps
+                    # MotionService from latching the all-axis software STOP,
+                    # so the operator can move away immediately.
+                    if self.is_homed:
+                        self.position_steps = (
+                            0
+                            if plan.direction == self.config.home_direction
+                            else self.mm_to_steps(self.config.max_travel_mm)
+                        )
+                    away = "positive" if plan.direction == self.config.home_direction else "negative"
+                    raise ActiveLimitError(
+                        f"{self.config.name}: {stop_reason}; move in the {away} direction"
+                    )
                 if stopped and stop_reason == "emergency stop":
                     self.is_homed = False
                     raise EmergencyStopError(f"{self.config.name}: emergency stop triggered")
@@ -931,12 +945,14 @@ class AxisController:
             raise StopRequestedError(f"{self.config.name}: stop requested")
         if direction == self.config.home_direction and self.head_limit.value:
             self.stop()
-            self.is_homed = False
-            raise LimitTriggeredError(f"{self.config.name}: head limit triggered")
+            if self.is_homed:
+                self.position_steps = 0
+            raise ActiveLimitError(f"{self.config.name}: Min limit reached; move in the positive direction")
         if direction != self.config.home_direction and self.tail_limit.value:
             self.stop()
-            self.is_homed = False
-            raise LimitTriggeredError(f"{self.config.name}: tail limit triggered")
+            if self.is_homed:
+                self.position_steps = self.mm_to_steps(self.config.max_travel_mm)
+            raise ActiveLimitError(f"{self.config.name}: Max limit reached; move in the negative direction")
 
 
 class MotionController:
