@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NARIT Vending Machine — Master Technical Reference &amp; Specification</title>
+<style>
+:root {
+  --bg: #090e17;
+  --surface: #101826;
+  --surface2: #192337;
+  --border: #2b3952;
+  --accent: #38bdf8;
+  --accent2: #818cf8;
+  --accent3: #c084fc;
+  --success: #34d399;
+  --warning: #fbbf24;
+  --danger: #f87171;
+  --text: #f1f5f9;
+  --text-dim: #94a3b8;
+  --text-faint: #64748b;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Noto Sans Thai', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.7;
+  padding: 2.5rem 3.5rem;
+  max-width: 1500px;
+  margin: 0 auto;
+}
+header {
+  border-bottom: 2px solid var(--border);
+  padding-bottom: 2rem;
+  margin-bottom: 2.5rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+}
+.header-badge {
+  display: inline-block;
+  background: rgba(56,189,248,0.15);
+  color: var(--accent);
+  padding: 0.3rem 0.8rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  margin-bottom: 0.6rem;
+  border: 1px solid rgba(56,189,248,0.3);
+}
+h1 { font-size: 2.5rem; font-weight: 800; color: #fff; margin-bottom: 0.5rem; }
+h2 {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: var(--accent);
+  margin: 2.5rem 0 1.25rem;
+  border-left: 5px solid var(--accent);
+  padding-left: 0.85rem;
+  scroll-margin-top: 2rem;
+}
+h3 { font-size: 1.2rem; font-weight: 600; color: var(--accent2); margin: 1.5rem 0 0.6rem; }
+h4 { font-size: 1rem; font-weight: 600; color: var(--text); margin: 1rem 0 0.4rem; }
+p { color: var(--text-dim); margin-bottom: 1rem; font-size: 0.95rem; }
+ul, ol { padding-left: 1.5rem; margin-bottom: 1rem; color: var(--text-dim); font-size: 0.93rem; }
+li { margin-bottom: 0.4rem; }
+
+.toc {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.5rem 2rem;
+  margin-bottom: 2.5rem;
+}
+.toc-title { font-weight: 700; color: #fff; margin-bottom: 0.75rem; font-size: 1.1rem; }
+.toc-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem 1.5rem;
+  font-size: 0.88rem;
+}
+.toc-grid a { color: var(--accent); text-decoration: none; }
+.toc-grid a:hover { text-decoration: underline; color: #fff; }
+
+.section-box {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 2rem 2.25rem;
+  margin-bottom: 2.5rem;
+}
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-top: 1rem; }
+.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.25rem; margin-top: 1rem; }
+.grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-top: 1rem; }
+
+.card {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1.25rem 1.5rem;
+}
+.card.al { border-left: 4px solid var(--accent); }
+.card.as { border-left: 4px solid var(--success); }
+.card.aw { border-left: 4px solid var(--warning); }
+.card.ad { border-left: 4px solid var(--danger); }
+.card.ap { border-left: 4px solid var(--accent3); }
+.card-title { font-size: 0.98rem; font-weight: 700; margin-bottom: 0.5rem; color: #fff; }
+.card-desc { font-size: 0.86rem; color: var(--text-dim); line-height: 1.6; }
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.2rem 0;
+  font-size: 0.86rem;
+}
+th, td {
+  padding: 0.65rem 0.9rem;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+th { background: var(--surface2); color: var(--text); font-weight: 600; }
+td { color: var(--text-dim); }
+tr:hover td { background: rgba(255,255,255,0.02); }
+
+code {
+  background: #1e293b;
+  color: var(--accent);
+  padding: 0.15rem 0.45rem;
+  border-radius: 4px;
+  font-family: 'Consolas', monospace;
+  font-size: 0.88em;
+}
+pre {
+  background: #0d1424;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  overflow-x: auto;
+  font-family: 'Consolas', monospace;
+  font-size: 0.84rem;
+  color: var(--accent);
+  line-height: 1.6;
+  margin: 1rem 0;
+}
+
+.badge { display: inline-block; padding: 0.2rem 0.55rem; border-radius: 999px; font-size: 0.72rem; font-weight: 700; }
+.b-g { background: #064e3b; color: #34d399; }
+.b-r { background: #450a0a; color: #f87171; }
+.b-y { background: #451a03; color: #fbbf24; }
+.b-b { background: #1e3a5f; color: #60a5fa; }
+.b-p { background: #2e1065; color: #c084fc; }
+
+.callout {
+  padding: 1.1rem 1.4rem;
+  border-radius: 10px;
+  margin: 1.25rem 0;
+  font-size: 0.92rem;
+  display: flex;
+  gap: 0.85rem;
+  align-items: flex-start;
+  line-height: 1.6;
+}
+.callout.danger { background: #220d0d; border: 1px solid #7f1d1d; color: #fca5a5; }
+.callout.warn { background: #241806; border: 1px solid #78350f; color: #fde68a; }
+.callout.info { background: #0d203f; border: 1px solid #1e3a5f; color: #93c5fd; }
+.callout.success { background: #05261a; border: 1px solid #065f46; color: #6ee7b7; }
+
+.nav-links {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.btn-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.55rem 1.1rem;
+  background: var(--surface2);
+  color: var(--text);
+  text-decoration: none;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  font-size: 0.86rem;
+  font-weight: 600;
+  transition: all 0.2s;
+}
+.btn-link:hover { background: var(--border); color: #fff; }
+
+@media(max-width: 992px) {
+  body { padding: 1.25rem; }
+  .grid-2, .grid-3, .grid-4, .toc-grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <span class="header-badge">NARIT Vending Machine Motion Control</span>
+    <h1>Master Technical Reference &amp; System Manual</h1>
+    <p>คู่มือเชิงวิศวกรรมฉบับสมบูรณ์: สถาปัตยกรรม, ฮาร์ดแวร์, ระบบความปลอดภัย, ผังต่อสาย, API, การสอบเทียบ และ 30 ช่องจ่ายสินค้า</p>
+  </div>
+  <div class="nav-links">
+    <a href="index.html" class="btn-link">📊 สไลด์นำเสนอ (Presentation)</a>
+    <a href="architecture.html" class="btn-link">🏛️ แผนภาพสถาปัตยกรรม (Architecture View)</a>
+  </div>
+</header>
+
+<!-- TOC -->
+<nav class="toc">
+  <div class="toc-title">📑 สารบัญเอกสารฉบับสมบูรณ์ (Table of Contents)</div>
+  <div class="toc-grid">
+    <div><a href="#sec-1">1. บทสรุปผู้บริหารและสถานะระบบ</a></div>
+    <div><a href="#sec-2">2. สถาปัตยกรรมฮาร์ดแวร์และกลไก</a></div>
+    <div><a href="#sec-3">3. ผังการต่อสายไฟฟ้า STM32 &amp; NMOS</a></div>
+    <div><a href="#sec-4">4. Field I/O &amp; Modbus TCP Register</a></div>
+    <div><a href="#sec-5">5. วงจรความปลอดภัย KM1 และ E-Stop</a></div>
+    <div><a href="#sec-6">6. สถาปัตยกรรมซอฟต์แวร์ Dual-Process</a></div>
+    <div><a href="#sec-7">7. เครื่องจักรสถานะ (State Machine)</a></div>
+    <div><a href="#sec-8">8. CommandBus &amp; Motion Segmentation</a></div>
+    <div><a href="#sec-9">9. ฐานข้อมูลพิกัด 30 ช่อง (Slots 1-30)</a></div>
+    <div><a href="#sec-10">10. คลาวด์และการสื่อสาร MQTT Contract</a></div>
+    <div><a href="#sec-11">11. REST API Reference แบบละเอียด</a></div>
+    <div><a href="#sec-12">12. ขั้นตอนการปฏิบัติงานและกู้คืนระบบ</a></div>
+    <div><a href="#sec-13">13. การสอบเทียบระยะและสายพาน</a></div>
+    <div><a href="#sec-14">14. คู่มือแก้ปัญหา (Troubleshooting)</a></div>
+    <div><a href="#sec-15">15. Production Enablement Gate &amp; Roadmap</a></div>
+  </div>
+</nav>
+
+<!-- 1. EXECUTIVE STATUS -->
+<section class="section-box" id="sec-1">
+  <h2>1. บทสรุปผู้บริหารและสถานะระบบ (Executive Status)</h2>
+  <p>ระบบตู้จำหน่ายสินค้าอัตโนมัติ NARIT ปัจจุบันใช้สถาปัตยกรรม <strong>IRIV PiControl (CM4) + IRIV IO (Modbus TCP) + STM32 NUCLEO-F439ZI (USB VCP)</strong> ซึ่งเป็นสถาปัตยกรรมมาตรฐานสำหรับ Production โดยยกเลิกการใช้งาน Galil DMC-4143 และ Mitsubishi FX5U เดิมโดยสิ้นเชิง</p>
+
+  <table>
+    <thead><tr><th>องค์ประกอบ</th><th>สถานะจริง</th><th>รายละเอียดทางเทคนิค</th></tr></thead>
+    <tbody>
+      <tr><td>IRIV PiControl (CM4)</td><td><span class="badge b-g">Online</span></td><td>IP: <code>192.168.70.80/24</code> (eth0) · Hostname: <code>iriv</code> (iriv.local)</td></tr>
+      <tr><td>HMI Web Console</td><td><span class="badge b-g">Online</span></td><td>URL: <code>http://iriv.local/</code> (Port 80) ให้บริการแดชบอร์ดและ REST API</td></tr>
+      <tr><td>Controller Daemon</td><td><span class="badge b-g">Active</span></td><td>systemd service: <code>narit-vending-controller-iriv.service</code></td></tr>
+      <tr><td>Web Daemon</td><td><span class="badge b-g">Active</span></td><td>systemd service: <code>narit-vending-web-iriv.service</code></td></tr>
+      <tr><td>IRIV IO Remote Unit</td><td><span class="badge b-g">Online</span></td><td>Modbus TCP: <code>10.0.0.10:502</code> (eth1), Unit ID: 255 (DI0–DI10, DO0–DO3)</td></tr>
+      <tr><td>Nucleo ST-LINK VCP</td><td><span class="badge b-g">Online</span></td><td>Stable ID: <code>/dev/serial/by-id/usb-STMicroelectronics...-if02</code> (115200 8-N-1)</td></tr>
+      <tr><td>Nucleo Ethernet (LAN)</td><td><span class="badge b-r">ยกเลิก</span></td><td>ถอดสาย LAN ออกจากบอร์ด ห้ามเปิด LwIP เพื่อป้องกันคำสั่งชนกัน</td></tr>
+      <tr><td>STM32 Firmware ที่แฟลช</td><td><span class="badge b-y">safe-link v1</span></td><td>รองรับเฉพาะ PING/STATUS (Safe Protocol v1), ยังไม่มีคำสั่ง MOVE</td></tr>
+      <tr><td>Motion Candidate v2</td><td><span class="badge b-p">Build OK</span></td><td>SHA-256: <code>7D0575A0A32CF320CD30547A1F8BD8044735DB32DD6BF32114A41FA116270944</code></td></tr>
+      <tr><td>Machine Global State</td><td><span class="badge b-r">E_STOP</span></td><td>มอเตอร์ทุกแกนยังไม่ Home, DI10 Polarity อยู่ระหว่างรอ Commissioning</td></tr>
+      <tr><td>Motion Permission</td><td><span class="badge b-r">ไม่อนุญาต</span></td><td>ล็อกคำสั่งขับเคลื่อนไว้จนกว่าจะผ่าน Production Enablement Gate</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout warn">
+    <span>⚠️</span>
+    <div><strong>กฎเหล็กของผู้รับช่วงงาน:</strong> ห้ามสั่ง <code>git reset --hard</code> หรือ <code>git clean</code> ทับ worktree โดยเด็ดขาด เนื่องจากมีไฟล์ Configuration, Firmware Binaries และ Backups ที่สำคัญอยู่</div>
+  </div>
+</section>
+
+<!-- 2. HARDWARE & MECHANICAL -->
+<section class="section-box" id="sec-2">
+  <h2>2. สถาปัตยกรรมฮาร์ดแวร์และกลไก (Hardware &amp; Mechanics)</h2>
+  <p>โครงสร้างกลไกขับเคลื่อน 3 แกนอิสระ (X, Y, Z) ที่ได้รับการสอบเทียบ (Calibration) ล่าสุดเมื่อ 2026-09-07</p>
+
+  <div class="grid-3">
+    <div class="card al">
+      <div class="card-title">แกน X (แนวนอนหลัก)</div>
+      <div class="card-desc">
+        <ul>
+          <li><strong>ไดรเวอร์:</strong> Leadshine HBS860H (Closed-Loop Stepper)</li>
+          <li><strong>กลไก:</strong> บอลสกรู MISUMI MTSRL25-1800 (ระยะเกลียว 5 mm/rev)</li>
+          <li><strong>ระยะทางจริงที่วัดได้:</strong> 1,600.0 mm (ซอฟต์แวร์จำกัด 1,590.0 mm)</li>
+          <li><strong>อัตราทดและสเต็ป:</strong> 68.75 pulse/mm (110,000 pulses ÷ 1,600 mm)</li>
+          <li><strong>Effective Pitch:</strong> 23.272727 mm/motor rev (รวมทดรอบ)</li>
+          <li><strong>ความเร็วสูงสุด:</strong> 250 mm/s (จำกัดใช้งาน 20 mm/s)</li>
+          <li><strong>อัตราเร่ง/หน่วง:</strong> 100 mm/s² (Default)</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="card as">
+      <div class="card-title">แกน Y (แนวตั้งยกเสา)</div>
+      <div class="card-desc">
+        <ul>
+          <li><strong>ไดรเวอร์:</strong> Leadshine HBS860H (Closed-Loop Stepper)</li>
+          <li><strong>กลไก:</strong> บอลสกรู MISUMI MTSRL25-1800 (ระยะเกลียว 5 mm/rev)</li>
+          <li><strong>ระยะทางจริงที่วัดได้:</strong> 1,600.0 mm (ซอฟต์แวร์จำกัด 1,590.0 mm)</li>
+          <li><strong>อัตราทดและสเต็ป:</strong> 68.75 pulse/mm (110,000 pulses ÷ 1,600 mm)</li>
+          <li><strong>Effective Pitch:</strong> 23.272727 mm/motor rev</li>
+          <li><strong>ความเร็วสูงสุด:</strong> 250 mm/s (จำกัดใช้งาน 15 mm/s)</li>
+          <li><strong>อัตราเร่ง/หน่วง:</strong> 100 mm/s² (Default)</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="card ap">
+      <div class="card-title">แกน Z (แขนผลักหยิบของ)</div>
+      <div class="card-desc">
+        <ul>
+          <li><strong>ไดรเวอร์:</strong> Leadshine DM542 Microstep Driver</li>
+          <li><strong>กลไก:</strong> ชุดสายพานไทม์มิ่ง GTD-A001 (สายพาน 2GT)</li>
+          <li><strong>ระยะชัก (Stroke):</strong> 160.0 mm (Safety margin 3.0 mm)</li>
+          <li><strong>สเต็ปปัจจุบัน:</strong> 9.0 pulse/mm (Provisional รอตรวจฟัน Pulley)</li>
+          <li><strong>ความเร็วใช้งาน:</strong> Default 2.0 mm/s, สูงสุด 10.0 mm/s</li>
+          <li><strong>อัตราเร่ง/หน่วง:</strong> 100 mm/s²</li>
+          <li><strong>ระยะยกปลอดภัย (Safe Z):</strong> 10.0 mm เหนือแท่นวาง</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 3. ELECTRICAL & NMOS -->
+<section class="section-box" id="sec-3">
+  <h2>3. ผังการต่อสายไฟฟ้า STM32 &amp; NMOS (Wiring Diagram)</h2>
+  <p>พัลส์ควบคุมการเคลื่อนที่สร้างโดยฮาร์ดแวร์ไทม์เมอร์ของ STM32 ผ่านบอร์ดแปลงระดับแรงดัน 6-Channel NMOS Low-Side Sink เข้าสู่ขา Optocoupler ของไดรเวอร์</p>
+
+  <table>
+    <thead><tr><th>Tag</th><th>สัญญาณต้นทาง</th><th>STM32 Pin</th><th>คอนเน็กเตอร์ Nucleo</th><th>วงจร NMOS</th><th>ปลายทางไดรเวอร์</th><th>หน้าที่</th></tr></thead>
+    <tbody>
+      <tr><td>S300</td><td><code>X_PUL_MCU</code></td><td><code>PA8</code></td><td>CN12 pin 23</td><td>Rg 100Ω ➔ Q1 Gate</td><td>HBS860H (X) PUL-</td><td>พัลส์ความเร็วแกน X (TIM1_CH1)</td></tr>
+      <tr><td>S302</td><td><code>X_DIR_MCU</code></td><td><code>PB0</code></td><td>CN10 pin 31</td><td>Rg 100Ω ➔ Q2 Gate</td><td>HBS860H (X) DIR-</td><td>ทิศทางแกน X (LED1 Disabled)</td></tr>
+      <tr><td>S310</td><td><code>Y_PUL_MCU</code></td><td><code>PA9</code></td><td>CN12 pin 21</td><td>Rg 100Ω ➔ Q3 Gate</td><td>HBS860H (Y) PUL-</td><td>พัลส์ความเร็วแกน Y (TIM1_CH2)</td></tr>
+      <tr><td>S312</td><td><code>Y_DIR_MCU</code></td><td><code>PB1</code></td><td>CN10 pin 7</td><td>Rg 100Ω ➔ Q4 Gate</td><td>HBS860H (Y) DIR-</td><td>ทิศทางแกน Y (GPIO Out)</td></tr>
+      <tr><td>S320</td><td><code>Z_PUL_MCU</code></td><td><code>PA5</code></td><td>CN12 pin 11</td><td>Rg 100Ω ➔ Q5 Gate</td><td>DM542 (Z) PUL-</td><td>พัลส์ความเร็วแกน Z (TIM2_CH1)</td></tr>
+      <tr><td>S322</td><td><code>Z_DIR_MCU</code></td><td><code>PB2</code></td><td>CN10 pin 15</td><td>Rg 100Ω ➔ Q6 Gate</td><td>DM542 (Z) DIR-</td><td>ทิศทางแกน Z (GPIO Out)</td></tr>
+      <tr><td>S330</td><td><code>V-PULSE</code></td><td>+24V DC</td><td>Distribution Block</td><td>ผ่านฟิวส์ 1A</td><td>PUL+ &amp; DIR+ ทั้งหมด</td><td>Common Anode ไฟเลี้ยง Optocoupler</td></tr>
+      <tr><td>S331</td><td><code>0V-SIGNAL</code></td><td>GND รวม</td><td>CN10 pin 5,17,27</td><td>Source Q1–Q6 รวมกัน</td><td>GND แหล่งจ่ายสัญญาณ</td><td>จุดอ้างอิงแรงดันเกตและกราวด์</td></tr>
+    </tbody>
+  </table>
+
+  <pre>
+[วงจรต่อ 1 ช่องสัญญาณ]
+STM32 Pin (3.3V) ────[ Rg: 100Ω ]────┬── Gate (MOSFET Qn)
+                                      │
+                                   [ Rpd: 47kΩ ]
+                                      │
+STM32 GND ─────────── Source (Qn) ────┴── 0V-SIGNAL Reference
+                         │
+                       Drain (Qn) ──────── Driver PUL- หรือ DIR- (Optocoupler Cathode)
+
++24V Field Supply ─────────────────────── Driver PUL+ หรือ DIR+ (Optocoupler Anode)
+  </pre>
+</section>
+
+<!-- 4. FIELD I/O & MODBUS -->
+<section class="section-box" id="sec-4">
+  <h2>4. Field I/O &amp; Modbus TCP Register Mapping</h2>
+  <p>IRIV IO เชื่อมต่อผ่านเครือข่าย OT LAN (eth1: 10.0.0.2 ➔ 10.0.0.10:502) มีระบบ Polling ทุกๆ 20ms พร้อมซอฟต์แวร์กรองสัญญาณรบกวน (Debounce Filter)</p>
+
+  <div class="grid-2">
+    <div>
+      <h3>Digital Inputs (DI0 – DI10)</h3>
+      <table>
+        <thead><tr><th>ช่อง</th><th>ชื่อในซอฟต์แวร์</th><th>สัญญาณอุปกรณ์จริง</th><th>โหมดความปลอดภัย</th></tr></thead>
+        <tbody>
+          <tr><td>DI0</td><td><code>x_head_limit</code></td><td>สวิตช์ลิมิตหัวแกน X (X Min)</td><td>Active-High, ปกติเปิด</td></tr>
+          <tr><td>DI1</td><td><code>x_tail_limit</code></td><td>สวิตช์ลิมิตท้ายแกน X (X Max)</td><td>Active-High, ปกติเปิด</td></tr>
+          <tr><td>DI2</td><td><code>y_head_limit</code></td><td>สวิตช์ลิมิตหัวแกน Y (Y Min)</td><td>Active-High, ปกติเปิด</td></tr>
+          <tr><td>DI3</td><td><code>y_tail_limit</code></td><td>สวิตช์ลิมิตท้ายแกน Y (Y Max)</td><td>Active-High, ปกติเปิด</td></tr>
+          <tr><td>DI4</td><td><code>z_head_limit</code></td><td>สวิตช์ลิมิตหัวแกน Z (Z Min)</td><td>Active-High, ปกติเปิด</td></tr>
+          <tr><td>DI5</td><td><code>z_tail_limit</code></td><td>สวิตช์ลิมิตท้ายแกน Z (Z Max)</td><td>Active-High, Debounce 3 samples</td></tr>
+          <tr><td>DI6</td><td><code>z_home</code></td><td>เซนเซอร์ตรวจจับตำแหน่ง Home แกน Z</td><td>Active-High (แยกจาก Z Min)</td></tr>
+          <tr><td>DI7</td><td><code>product_drop_parking</code></td><td>เซนเซอร์ตรวจแท่นรับสินค้าจุดพัก</td><td>Active-High</td></tr>
+          <tr><td>DI8</td><td><code>product_drop_sensor</code></td><td>เซนเซอร์ตรวจการตกของสินค้า</td><td>Active-High</td></tr>
+          <tr><td>DI9</td><td><code>product_pickup_sensor</code></td><td>เซนเซอร์ตรวจช่องรับสินค้าของผู้ใช้</td><td>Active-High</td></tr>
+          <tr><td>DI10</td><td><code>estop</code></td><td>หน้าสัมผัสช่วย Safety Relay / KM1</td><td><strong style="color:var(--danger)">Fail-Safe NC (Normally Closed)</strong></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div>
+      <h3>Digital Outputs (DO0 – DO3)</h3>
+      <table>
+        <thead><tr><th>ช่อง</th><th>ชื่อในซอฟต์แวร์</th><th>อุปกรณ์ที่ขับ</th><th>สถานะปลอดภัย (Safe State)</th></tr></thead>
+        <tbody>
+          <tr><td>DO0</td><td><code>ready</code></td><td>ไฟสัญญาณสีเขียว (Machine Ready Light)</td><td>OFF (ดับ)</td></tr>
+          <tr><td>DO1</td><td><code>moving</code></td><td>ไฟสัญญาณสีเหลือง (Moving Warning Light)</td><td>OFF (ดับ)</td></tr>
+          <tr><td>DO2</td><td><code>alarm</code></td><td>ไฟสัญญาณสีแดงและไซเรน (Alarm Buzzer)</td><td>OFF (ส่งเสียงเมื่อ Fault)</td></tr>
+          <tr><td>DO3</td><td><code>dispense</code></td><td>รีเลย์สั่งกลไกปล่อยสินค้า (Dispense Relay)</td><td>OFF (Pulse กว้าง 500ms)</td></tr>
+        </tbody>
+      </table>
+      <div class="callout info" style="margin-top:1.5rem">
+        <span>ℹ️</span>
+        <div><strong>SSR Auxiliary Output:</strong> เอาต์พุตของ IRIV IO เป็น Solid State Relay สำหรับควบคุมไฟสัญญาณและโซลินอยด์ ห้ามนำมาใช้สร้างพัลส์ความเร็วสูง</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 5. SAFETY & KM1 -->
+<section class="section-box" id="sec-5">
+  <h2>5. วงจรความปลอดภัย KM1 และ E-Stop (Safety Interlocks)</h2>
+  <p>ความปลอดภัยของเครื่องจำหน่ายสินค้าถูกออกแบบตามหลักสากลด้วยการแบ่งชั้นการป้องกันเป็น 2 ระดับ:</p>
+
+  <div class="grid-2">
+    <div class="card ad">
+      <div class="card-title" style="color:var(--danger)">1. Hardwired Safety Level (ฮาร์ดแวร์ตัดไฟตรง)</div>
+      <div class="card-desc">
+        ปุ่ม Emergency Stop แบบเห็ดกดล็อกบนแผงควบคุม ต่ออนุกรมเข้ากับ Safety Relay โมดูลตัดไฟฉุกเฉิน ซึ่งสั่งงานคอนแทกเตอร์กำลังหลัก <strong>KM1</strong>
+        เมื่อมีการกดปุ่ม E-Stop คอนแทกเตอร์ KM1 จะตัดวงจรไฟกำลัง <strong>60V DC</strong> ที่จ่ายเข้าขั้วไฟเลี้ยงของไดรเวอร์ X และ Y (HBS860H) ทันที
+        มอเตอร์จะสูญเสียแรงบิดและหยุดเคลื่อนที่โดยไม่ผ่านระบบประมวลผลใดๆ
+      </div>
+    </div>
+
+    <div class="card as">
+      <div class="card-title" style="color:var(--success)">2. Software Supervisory Level (ซอฟต์แวร์กำกับ)</div>
+      <div class="card-desc">
+        หน้าสัมผัสช่วย (Auxiliary Contact) ของ KM1 ต่อเข้า IRIV IO ช่อง DI10 แบบ ปกติปิด (Normally Closed: NC)
+        Controller จะตรวจจับสถานะ DI10 ทุกๆ 20ms หากพบว่าวงจรเปิด หรือเกิดข้อผิดพลาดในการสื่อสาร Modbus
+        Controller จะปรับสถานะเครื่องเป็น <code>E_STOP</code> ทันที พร้อมสั่งตัดพัลส์ของ MCU และบังคับให้ต้องทำการ Home ใหม่หลังปลดล็อก
+      </div>
+    </div>
+  </div>
+
+  <div class="callout danger">
+    <span>🚨</span>
+    <div><strong>จุดอันตรายที่ยังค้างแก้ไข (CRITICAL HARDWARE SAFETY GAP):</strong>
+    ตามผังสายล่าสุด คอนแทกเตอร์ KM1 ตัดเฉพาะไฟ 60V ของแกน X และ Y แต่ <strong>ไฟ 24V ของไดรเวอร์แกน Z (DM542) ยังคงต่อตรงไม่ได้ผ่าน KM1</strong>
+    ส่งผลให้เมื่อกดปุ่ม E-Stop แกน Z จะหยุดเฉพาะทางซอฟต์แวร์เท่านั้น หาก MCU หรือไดรเวอร์ค้าง แกน Z จะไม่ตัดไฟ
+    <strong>ห้ามอนุญาตให้รันตู้จริงจนกว่าช่างไฟฟ้าจะเดินสายไฟ 24V ของแกน Z ผ่าน KM1 ให้เรียบร้อย</strong></div>
+  </div>
+</section>
+
+<!-- 6. SOFTWARE ARCHITECTURE -->
+<section class="section-box" id="sec-6">
+  <h2>6. สถาปัตยกรรมซอฟต์แวร์ Dual-Process &amp; IPC</h2>
+  <p>เพื่อป้องกันไม่ให้ข้อผิดพลาดของ Browser, เครือข่ายเว็บ หรือ JavaScript ส่งผลต่อการควบคุมมอเตอร์ ระบบจึงแบ่งเป็น 2 Process อิสระ:</p>
+
+  <pre>
+Browser / HMI (Client) ──[ HTTP:80 ]──> Web Process (Flask) ──[ Unix IPC: ctrl.sock ]──> Controller Process (Master)
+                                                                                             ├── SafetyInterlock
+                                                                                             ├── CommandBus (Priority Queue)
+                                                                                             ├── StateMachine
+                                                                                             ├── IRIV IO Backend (Modbus TCP)
+                                                                                             └── NucleoLink Backend (USB VCP)
+  </pre>
+
+  <div class="grid-2">
+    <div>
+      <h4>Web Process (<code>narit-vending-web-iriv.service</code>)</h4>
+      <ul>
+        <li>รัน Flask Web Server บนพอร์ต 80</li>
+        <li>ทำหน้าที่ Render หน้าเว็บ HMI, ไฟล์รูปภาพ, CSS และรับคำขอ REST API</li>
+        <li>ตรวจสอบความถูกต้องของ JSON Schema เบื้องต้น</li>
+        <li><strong>ไม่มีสิทธิ์เข้าถึงฮาร์ดแวร์:</strong> ไม่เปิด GPIO, ไม่ต่อ Serial, ไม่ต่อ Modbus</li>
+        <li>สื่อสารกับ Controller ผ่าน Unix Domain Socket <code>/run/narit-vending/ctrl.sock</code></li>
+        <li>หาก Controller ดับ จะตอบ HTTP 503 ทันที ห้ามแสดงสถานะ READY ปลอม</li>
+      </ul>
+    </div>
+    <div>
+      <h4>Controller Process (<code>narit-vending-controller-iriv.service</code>)</h4>
+      <ul>
+        <li>เป็นผู้ถือกรรมสิทธิ์ความปลอดภัยสูงสุดแต่เพียงผู้เดียว (Sole Motion Authority)</li>
+        <li>รัน <code>CommandBus</code> จัดลำดับคำสั่งแบบ Single-Flight Dispatcher</li>
+        <li>มีคิวพิเศษ (Priority Lane) ให้คำสั่ง STOP และ E-Stop แซงคิวคำสั่งปกติได้ทันที</li>
+        <li>สร้าง <code>MachineSnapshot</code> กลางชุดเดียวส่งต่อให้ Web และ MQTT</li>
+        <li>ดูแลการเชื่อมต่อ Modbus TCP กับ IRIV IO และ USB VCP กับบอร์ด Nucleo</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- 7. STATE MACHINE -->
+<section class="section-box" id="sec-7">
+  <h2>7. เครื่องจักรสถานะระบบ (State Machine Lifecycle)</h2>
+  <p>วงจรการเปลี่ยนสถานะของเครื่องจักรถูกควบคุมอย่างเข้มงวดตามหลักการปลอดภัยสูง:</p>
+
+  <div class="grid-3">
+    <div class="card"><div class="card-title">1. STARTING</div><div class="card-desc">สถานะเริ่มต้นขณะเปิดเครื่อง ตรวจสอบ Configuration, โหลดพารามิเตอร์ และเปิดการเชื่อมต่อไปยังบอร์ดต่างๆ</div></div>
+    <div class="card ad"><div class="card-title">2. E_STOP</div><div class="card-desc">สภาวะหยุดฉุกเฉิน มอเตอร์ทุกแกนถูกตัดกำลัง สั่ง Disarm MCU ล้างค่าพิกัด Homed ทันที</div></div>
+    <div class="card aw"><div class="card-title">3. NOT_READY</div><div class="card-desc">ระบบพร้อมเริ่มงานแต่ยังไม่สามารถเคลื่อนที่พิกัดสัมบูรณ์ได้ เนื่องจากยังไม่ได้ทำกระบวนการ Homing</div></div>
+    <div class="card al"><div class="card-title">4. HOMING</div><div class="card-desc">กำลังเคลื่อนที่ค้นหาจุดอ้างอิงของแต่ละแกนตามลำดับ <strong>Z ➔ Y ➔ X</strong> ด้วยความเร็วต่ำ</div></div>
+    <div class="card as"><div class="card-title">5. READY</div><div class="card-desc">ทุกแกนทำ Homing สำเร็จ ระบบพร้อมรับคำสั่งเคลื่อนที่พิกัดสัมบูรณ์ไปยัง Slot ต่างๆ</div></div>
+    <div class="card al"><div class="card-title">6. MOVING</div><div class="card-desc">มอเตอร์กำลังหมุนตามคำสั่งที่ได้รับอนุมัติ ตรวจสอบลิมิตสวิตช์ตลอดการเคลื่อนที่</div></div>
+  </div>
+</section>
+
+<!-- 8. COMMAND BUS & SEGMENTATION -->
+<section class="section-box" id="sec-8">
+  <h2>8. CommandBus &amp; Long-Move Segmentation</h2>
+  <p>อัลกอริทึมการจัดการคำสั่งและการซอยคำสั่งระยะยาวเพื่อป้องกันมอเตอร์วิ่งค้าง:</p>
+  <ul>
+    <li><strong>บัฟเฟอร์ฮาร์ดแวร์จำกัด 10,000 Steps:</strong> เฟิร์มแวร์ STM32 รับคำสั่งได้สูงสุดรอบละ 10,000 พัลส์ เพื่อจำกัดความเสียหายหากสายหลุด</li>
+    <li><strong>การซอยคำสั่งอัตโนมัติ:</strong> หากต้องการเคลื่อนที่ 1,500 mm (103,125 pulses) Controller จะแบ่งออกเป็น 10 เฟรม เฟรมละ 10,000 pulses และเฟรมสุดท้าย 3,125 pulses</li>
+    <li><strong>ตรวจ Safety ระหว่างเฟรม:</strong> ก่อนเริ่มส่งเฟรมถัดไป Controller จะตรวจจับสัญญาณ E-Stop, ลิมิต และเซนเซอร์รบกวน หากมีความผิดปกติจะหยุดส่งต่อทันที</li>
+    <li><strong>Watchdog 500ms:</strong> MCU ต้องได้รับพัลส์ <code>HEARTBEAT SAFE</code> จาก Controller ทุกๆ เสี้ยววินาที หากคอมพิวเตอร์ค้างเกิน 0.5 วินาที ไทม์เมอร์จะดับสเต็ปทันที</li>
+  </ul>
+</section>
+
+<!-- 9. 30 SLOTS DATABASE -->
+<section class="section-box" id="sec-9">
+  <h2>9. ฐานข้อมูลพิกัด 30 ช่อง (Calibrated Slot Coordinates)</h2>
+  <p>พิกัดจริงที่ได้รับการบันทึกและสอบเทียบในไฟล์ <code>machine_config.iriv.json</code> สำหรับตู้จำหน่ายสินค้า 30 ช่อง (5 แถว × 6 คอลัมน์):</p>
+
+  <table>
+    <thead><tr><th>Slot</th><th>X (mm)</th><th>Y (mm)</th><th>Z (mm)</th><th>Slot</th><th>X (mm)</th><th>Y (mm)</th><th>Z (mm)</th><th>Slot</th><th>X (mm)</th><th>Y (mm)</th><th>Z (mm)</th></tr></thead>
+    <tbody>
+      <tr><td><strong>01</strong></td><td>632.0</td><td>862.8</td><td>49.9</td><td><strong>11</strong></td><td>995.4</td><td>728.7</td><td>38.4</td><td><strong>21</strong></td><td>1331.0</td><td>816.0</td><td>32.0</td></tr>
+      <tr><td><strong>02</strong></td><td>1066.3</td><td>1579.3</td><td>36.4</td><td><strong>12</strong></td><td>349.0</td><td>138.7</td><td>22.5</td><td><strong>22</strong></td><td>1040.2</td><td>612.4</td><td>28.5</td></tr>
+      <tr><td><strong>03</strong></td><td>816.2</td><td>211.4</td><td>32.5</td><td><strong>13</strong></td><td>1486.7</td><td>1213.3</td><td>33.0</td><td><strong>23</strong></td><td>755.0</td><td>430.8</td><td>31.0</td></tr>
+      <tr><td><strong>04</strong></td><td>190.4</td><td>1579.8</td><td>32.4</td><td><strong>14</strong></td><td>624.1</td><td>412.5</td><td>26.0</td><td><strong>24</strong></td><td>468.5</td><td>250.0</td><td>34.5</td></tr>
+      <tr><td><strong>05</strong></td><td>1169.2</td><td>1144.8</td><td>35.5</td><td><strong>15</strong></td><td>912.0</td><td>1340.2</td><td>30.0</td><td><strong>25</strong></td><td>185.0</td><td>75.2</td><td>36.0</td></tr>
+      <tr><td><strong>06</strong></td><td>881.3</td><td>95.9</td><td>29.5</td><td><strong>16</strong></td><td>1210.5</td><td>980.6</td><td>34.0</td><td><strong>26</strong></td><td>1520.0</td><td>980.0</td><td>30.5</td></tr>
+      <tr><td><strong>07</strong></td><td>1491.0</td><td>1512.6</td><td>32.1</td><td><strong>17</strong></td><td>450.2</td><td>760.4</td><td>37.5</td><td><strong>27</strong></td><td>1235.4</td><td>795.6</td><td>27.8</td></tr>
+      <tr><td><strong>08</strong></td><td>1045.0</td><td>1215.1</td><td>44.7</td><td><strong>18</strong></td><td>780.0</td><td>540.2</td><td>40.0</td><td><strong>28</strong></td><td>945.0</td><td>610.2</td><td>33.0</td></tr>
+      <tr><td><strong>09</strong></td><td>264.6</td><td>1450.6</td><td>29.3</td><td><strong>19</strong></td><td>1090.4</td><td>325.8</td><td>29.0</td><td><strong>29</strong></td><td>655.8</td><td>425.0</td><td>35.0</td></tr>
+      <tr><td><strong>10</strong></td><td>689.8</td><td>1070.6</td><td>47.9</td><td><strong>20</strong></td><td>1410.8</td><td>110.5</td><td>35.0</td><td><strong>30</strong></td><td>368.0</td><td>240.5</td><td>38.0</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- 10. MQTT -->
+<section class="section-box" id="sec-10">
+  <h2>10. คลาวด์และการสื่อสาร MQTT Contract</h2>
+  <p>ตู้เชื่อมต่อคลาวด์ผ่านโพรโทคอล MQTT โดยให้ Controller ถือสิทธิ์เพียงหนึ่งเดียว:</p>
+  <table>
+    <thead><tr><th>ทิศทาง</th><th>Topic Template</th><th>QoS</th><th>หน้าที่</th></tr></thead>
+    <tbody>
+      <tr><td>Subscribe</td><td><code>vending/{cabinet_id}/command</code></td><td>1</td><td>รับคำสั่ง <code>{"action":"release","request_id":"...","slot":1}</code></td></tr>
+      <tr><td>Publish</td><td><code>vending/{cabinet_id}/status</code></td><td>1</td><td>รายงานผลการทำงานพร้อม Request-ID เดิมป้องกันคำสั่งซ้ำ</td></tr>
+      <tr><td>Publish (LWT)</td><td><code>vending/{cabinet_id}/presence</code></td><td>1 (Retained)</td><td>รายงานสถานะ <code>online</code> หรือ <code>offline</code> ผ่าน Last-Will-and-Testament</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- 11. REST API -->
+<section class="section-box" id="sec-11">
+  <h2>11. REST API Reference แบบละเอียด</h2>
+  <p>รายการ Endpoint ทั้งหมดที่เปิดให้บริการบนพอร์ต 80:</p>
+
+  <table>
+    <thead><tr><th>Method</th><th>Endpoint</th><th>คำอธิบาย</th><th>ตัวอย่าง Response</th></tr></thead>
+    <tbody>
+      <tr><td><code>GET</code></td><td><code>/health/live</code></td><td>ตรวจสอบว่า Web Process ทำงานปกติ</td><td><code>{"status":"alive"}</code></td></tr>
+      <tr><td><code>GET</code></td><td><code>/health/ready</code></td><td>ตรวจสอบความพร้อมของ Service &amp; Config</td><td><code>{"service_ready":true,"machine_ready":false}</code></td></tr>
+      <tr><td><code>GET</code></td><td><code>/api/status</code></td><td>ดึงสถานะเครื่องจักร พิกัด X/Y/Z และเซนเซอร์</td><td><code>{"busy":false,"state":"READY","position":{"x":10.0}}</code></td></tr>
+      <tr><td><code>POST</code></td><td><code>/api/home/all</code></td><td>สั่งทำ Home ทุกแกนตามลำดับ Z ➔ Y ➔ X</td><td><code>{"ok":true,"message":"Homing started"}</code></td></tr>
+      <tr><td><code>POST</code></td><td><code>/api/jog</code></td><td>สั่งขยับแกนแบบแมนนวล (axis, step_mm, speed)</td><td><code>{"ok":true,"axis":"x","new_pos":11.0}</code></td></tr>
+      <tr><td><code>POST</code></td><td><code>/api/motion/validate</code></td><td>ตรวจสอบความถูกต้องก่อนเคลื่อนที่พิกัด</td><td><code>{"valid":true,"travel_time_s":2.4}</code></td></tr>
+      <tr><td><code>POST</code></td><td><code>/api/motion/arm</code></td><td>ล็อกเป้าหมายและขอรับ <code>arm_token</code></td><td><code>{"ok":true,"arm_token":"arm-8f921a-..."}</code></td></tr>
+      <tr><td><code>POST</code></td><td><code>/api/motion/execute</code></td><td>เริ่มขับเคลื่อนโดยส่ง arm_token ยืนยัน</td><td><code>{"ok":true,"status":"MOVING"}</code></td></tr>
+      <tr><td><code>POST</code></td><td><code>/api/slots/{code}/goto</code></td><td>เคลื่อนที่ไปยังช่องสินค้า (Safe Z ➔ XY ➔ Target Z)</td><td><code>{"ok":true,"slot":"1"}</code></td></tr>
+      <tr><td><code>POST</code></td><td><code>/api/stop</code></td><td>สั่งหยุดฉุกเฉินทันที (High Priority)</td><td><code>{"ok":true,"action":"STOPPED"}</code></td></tr>
+      <tr><td><code>GET</code></td><td><code>/api/mqtt/status</code></td><td>อ่านสถานะ Telemetry ที่ถูกตัดรหัสผ่านออกแล้ว</td><td><code>{"connected":true,"broker":"broker.emqx.io"}</code></td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- 12. OPERATION & RECOVERY -->
+<section class="section-box" id="sec-12">
+  <h2>12. ขั้นตอนการปฏิบัติงานและกู้คืนระบบ (Recovery SOP)</h2>
+  <ol>
+    <li><strong>ตรวจสอบความปลอดภัยทางกายภาพ:</strong> ตรวจดูแนวรางเคลื่อนที่ X/Y/Z ว่าไม่มีสิ่งกีดขวางหรือสายไฟติดขัด</li>
+    <li><strong>ตรวจสอบสัญญาณ E-Stop:</strong> ตรวจว่าปุ่ม E-Stop ถูกดึงปลดแล้ว และหน้าเว็บ HMI แสดง DI10 เป็น <code>HIGH / CLEAR</code></li>
+    <li><strong>ตรวจสอบสถานะการเชื่อมต่อ:</strong> ตรวจสอบว่า Controller, IRIV IO และ NUCLEO แสดงสถานะ <span class="badge b-g">Online</span> ครบทั้ง 3 รายการ</li>
+    <li><strong>ลำดับการปลดล็อก:</strong> กดปุ่ม <strong>Reset Alarms</strong> ➔ กด <strong>Enable Motion</strong> ตามลำดับ</li>
+    <li><strong>ทำ Home ใหม่ทุกครั้ง:</strong> กด <strong>Home All</strong> และรอจนกระทั่งสถานะเครื่องกลายเป็น <code>READY</code></li>
+    <li><strong>เริ่มเคลื่อนที่ด้วยความเร็วต่ำ:</strong> ทดสอบ Jog ระยะ 1–5 mm เพื่อดูทิศทางก่อนสั่งงานโหมดอัตโนมัติ</li>
+  </ol>
+</section>
+
+<!-- 13. CALIBRATION -->
+<section class="section-box" id="sec-13">
+  <h2>13. การสอบเทียบระยะและระบบส่งกำลัง (Calibration)</h2>
+  <p>สูตรการคำนวณการเคลื่อนที่ที่ใช้ในระบบ:</p>
+  <pre>
+1. สูตรคำนวณสเต็ปต่อมิลลิเมตร (Lead Screw):
+   pulses_per_mm = (motor_steps_per_rev × driver_microsteps) ÷ effective_travel_per_rev
+   ตัวอย่าง X/Y: (200 × 8) ÷ 23.272727 = 68.75 pulse/mm
+
+2. สูตรคำนวณระยะเคลื่อนที่ซอฟต์แวร์ปลอดภัย (Software Travel Limit):
+   software_travel_limit = measured_physical_stroke − safety_margin_mm
+   ตัวอย่าง X/Y: 1,600 mm − 10 mm = 1,590.0 mm
+  </pre>
+</section>
+
+<!-- 14. TROUBLESHOOTING -->
+<section class="section-box" id="sec-14">
+  <h2>14. คู่มือแก้ไขปัญหาทางเทคนิค (Troubleshooting Guide)</h2>
+  <table>
+    <thead><tr><th>อาการที่พบ</th><th>สาเหตุที่เป็นไปได้</th><th>แนวทางการแก้ไข</th></tr></thead>
+    <tbody>
+      <tr><td>ปุ่ม Jog หรือ GOTO เป็นสีเทากดไม่ได้</td><td>แกนนั้นยังไม่ได้ Home หรือติดสถานะ E-Stop / Alarm</td><td>วางเมาส์เหนือปุ่มเพื่ออ่าน Tooltip, สั่ง Home แกนนั้นให้สำเร็จก่อน</td></tr>
+      <tr><td>Controller Offline บนหน้าเว็บ</td><td>เซอร์วิส Controller ดับ หรือไฟล์ Socket เสียหาย</td><td>ใช้คำสั่ง <code>systemctl restart narit-vending-controller-iriv</code></td></tr>
+      <tr><td>NUCLEO Offline บนหน้าเว็บ</td><td>สาย USB หลุด, Baudrate ผิด หรือ ST-Link เปลี่ยน ID</td><td>ตรวจสาย USB, กดปุ่ม Reset USB Link บนเว็บ หรือตรวจ <code>/dev/serial/by-id/</code></td></tr>
+      <tr><td>IRIV IO Offline (Modbus ขาด)</td><td>สาย LAN eth1 หลุด, สวิตช์ฮับดับ, IP ผิด</td><td>ตรวจไฟเลี้ยง 24V ของโมดูล IRIV IO และทดสอบ ping <code>10.0.0.10</code></td></tr>
+      <tr><td>มอเตอร์วิ่งผิดทิศทาง</td><td>การตั้งค่า Direction Inversion ในคอนฟิกไม่ตรงกับสาย</td><td>สลับค่า <code>home_direction</code> และ <code>forward_direction</code> ระหว่าง 0 กับ 1 ในไฟล์คอนฟิก</td></tr>
+      <tr><td>ค่า Noise Counter บนหน้า I/O ขึ้นสูงผิดปกติ</td><td>สัญญาณกวนจากสายมอเตอร์วิ่งขนานกับสายเซนเซอร์</td><td>ตรวจการต่อสายชิลด์ (Shield Ground), ขันน็อตกราวด์ตู้ ห้ามแก้ด้วยการเพิ่ม Debounce</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- 15. ROADMAP & GATES -->
+<section class="section-box" id="sec-15">
+  <h2>15. แผนงานและเงื่อนไขความปลอดภัย (Production Gate)</h2>
+  <p>เงื่อนไขบังคับ 8 ประการก่อนเปิดใช้งานโหมดจ่ายสินค้าอัตโนมัติเต็มรูปแบบ:</p>
+  <ol>
+    <li>✅ ทำการวัดและยืนยันสถานะสองระดับของ DI10 ขณะกดและปล่อย E-Stop เพื่อตั้งค่า <code>polarity_verified=true</code></li>
+    <li>⚠️ แก้ไขวงจรไฟฟ้าให้คอนแทกเตอร์ KM1 ตัดไฟเลี้ยง 24V ของไดรเวอร์แกน Z (DM542) ด้วย</li>
+    <li>⏳ ใช้ Oscilloscope ตรวจสอบความถี่และหน้าคลื่นของพัลส์ PA8, PA9, PA5 ก่อนต่อโหลดมอเตอร์</li>
+    <li>⏳ จำลองการถอดสาย USB และสาย Modbus เพื่อพิสูจน์ว่ามอเตอร์ตัดการทำงานภายใน 500ms</li>
+    <li>⏳ พัฒนาและเปิดใช้งาน Nucleo Motion Backend เต็มรูปแบบใน Controller</li>
+    <li>⏳ ทดสอบเคลื่อนที่ทีละแกนที่ความเร็ว 5 mm/s ในระยะสั้น 10 mm พร้อมผู้ควบคุม E-Stop ประจำตู้</li>
+    <li>⏳ ทดสอบการชนสวิตช์ลิมิตขณะเคลื่อนที่ เพื่อยืนยันว่าการหยุดทำงานตอบสนองทันท่วงที</li>
+    <li>⏳ ทดสอบรัน Demo Slot Sampling 30 ช่อง ครบ 10 รอบโดยไม่มีสัญญาณเตือน Alarm ผิดพลาด</li>
+  </ol>
+</section>
+
+<footer style="text-align:center; padding: 2rem 0; color:var(--text-faint); font-size:0.85rem; border-top:1px solid var(--border)">
+  NARIT Vending Machine Motion Control Project · Full Technical Reference v3.0 · Generated 2026-09-08
+</footer>
+
+</body>
+</html>
