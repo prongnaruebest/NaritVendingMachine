@@ -26,8 +26,8 @@ Exit criterion: baseline can be identified and recovery inputs exist without tou
 - [x] Add architecture dependency tests.
 - [x] Move shared motion/config/transport errors into a dependency-neutral domain module.
 - [x] Add canonical enums for axis, direction, command outcome and axis state.
-- [ ] Characterize limit recovery, zero-distance moves, stale stop flags, speed invalidation and PEND semantics.
-- [ ] Define structured error response while preserving legacy fields.
+- [x] Characterize limit recovery, zero-distance moves, stale stop flags, speed invalidation and PEND semantics.
+- [x] Define structured error response while preserving legacy fields.
 
 Exit criterion: existing behavior is protected, domain package has no infrastructure imports, and the full suite remains green.
 

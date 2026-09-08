@@ -65,3 +65,21 @@ These are corrected in Phase 1 with distinct Controller-owned handlers and regre
 - Existing HTTP status behavior remains characterized until a versioned API is introduced.
 - Command names cannot be removed until route, MQTT and IPC consumers have migrated.
 - STOP and E-STOP must remain dispatchable without waiting for a normal motion command.
+
+## Structured command errors
+
+Rejected or failed Controller commands retain the legacy `ok`, `accepted`,
+`state` and `reason` fields and additionally expose an `error` object:
+
+```json
+{
+  "code": "SAFETY_INTERLOCK",
+  "message": "Emergency stop is active",
+  "details": {},
+  "retryable": false
+}
+```
+
+Initial stable codes are `COMMAND_REJECTED`, `SAFETY_INTERLOCK`,
+`UNKNOWN_COMMAND`, `MACHINE_BUSY` and `INTERNAL_HANDLER_ERROR`. Consumers must
+use `code` for branching and treat `message` as operator-facing text.

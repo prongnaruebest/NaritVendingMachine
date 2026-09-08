@@ -71,13 +71,22 @@ class CommandBus:
         decision = self._safety.evaluate(envelope, snapshot)
         if not decision.allowed:
             _log.warning("Command %s rejected: %s", cmd, decision.reason)
-            return CommandResult.rejected(envelope.command_id, decision.reason)
+            return CommandResult.rejected(
+                envelope.command_id,
+                decision.reason,
+                code="SAFETY_INTERLOCK",
+            )
 
         # ── Handler lookup ─────────────────────────────────────────────────────
         handler = self._handlers.get(cmd)
         if handler is None:
             _log.error("No handler registered for command type %s", cmd)
-            return CommandResult.rejected(envelope.command_id, f"Unknown command type: {cmd}")
+            return CommandResult.rejected(
+                envelope.command_id,
+                f"Unknown command type: {cmd}",
+                code="UNKNOWN_COMMAND",
+                details={"command_type": cmd},
+            )
 
         # ── Priority commands bypass motion lock ───────────────────────────────
         is_priority = cmd in {
@@ -120,4 +129,10 @@ class CommandBus:
                 reason=f"Internal handler error: {exc}",
                 started_at=started,
                 completed_at=_now(),
+                error={
+                    "code": "INTERNAL_HANDLER_ERROR",
+                    "message": "The controller could not complete the command",
+                    "details": {"command_type": envelope.command_type},
+                    "retryable": False,
+                },
             )

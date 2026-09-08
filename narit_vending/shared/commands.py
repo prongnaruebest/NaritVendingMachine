@@ -109,6 +109,7 @@ class CommandResult:
     result: Any = None  # arbitrary result payload
     started_at: str | None = None
     completed_at: str | None = None
+    error: dict[str, Any] | None = None
 
     def ok(self) -> bool:
         return self.accepted and self.state in ("ACCEPTED", "COMPLETED")
@@ -123,16 +124,31 @@ class CommandResult:
             "result": self.result,
             "started_at": self.started_at,
             "completed_at": self.completed_at,
+            "error": self.error,
         }
 
     @classmethod
-    def rejected(cls, command_id: str, reason: str) -> "CommandResult":
+    def rejected(
+        cls,
+        command_id: str,
+        reason: str,
+        *,
+        code: str = "COMMAND_REJECTED",
+        details: dict[str, Any] | None = None,
+        retryable: bool = False,
+    ) -> "CommandResult":
         return cls(
             accepted=False,
             command_id=command_id,
             state="REJECTED",
             reason=reason,
             completed_at=_now_iso(),
+            error={
+                "code": code,
+                "message": reason,
+                "details": details or {},
+                "retryable": retryable,
+            },
         )
 
     @classmethod
@@ -142,6 +158,12 @@ class CommandResult:
             command_id=command_id,
             state="BUSY",
             reason="Machine is busy with another command",
+            error={
+                "code": "MACHINE_BUSY",
+                "message": "Machine is busy with another command",
+                "details": {},
+                "retryable": True,
+            },
         )
 
     @classmethod
@@ -164,4 +186,5 @@ class CommandResult:
             result=data.get("result"),
             started_at=data.get("started_at"),
             completed_at=data.get("completed_at"),
+            error=data.get("error"),
         )
