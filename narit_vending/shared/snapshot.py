@@ -75,6 +75,7 @@ class MachineSnapshot:
     controlled_stop_requested: bool
     speed_override: float | None
     motion_enabled: bool = True
+    io_registry: list[dict[str, Any]] = field(default_factory=list)
     slots: dict[str, dict[str, Any]] = field(default_factory=dict)
     io_status: dict[str, Any] = field(default_factory=dict)
     picontrol_io_status: dict[str, Any] = field(default_factory=dict)
@@ -115,6 +116,7 @@ class MachineSnapshot:
             controlled_stop_requested=bool(data.get("controlled_stop_requested", False)),
             speed_override=data.get("speed_override"),
             motion_enabled=bool(data.get("motion_enabled", True)),
+            io_registry=[dict(channel) for channel in data.get("io_registry", [])],
             slots={str(code): dict(slot) for code, slot in dict(data.get("slots", {})).items()},
             io_status=dict(data.get("io_status", {})),
             picontrol_io_status=dict(data.get("picontrol_io_status", {})),

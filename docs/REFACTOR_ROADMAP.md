@@ -44,7 +44,7 @@ Exit criterion: all HTTP/MQTT/system motion requests traverse one tested decisio
 ## Phase 3 — Hardware adapter boundaries
 
 - [x] Introduce interfaces for clock, NUCLEO transport, IRIV I/O and PiControl I/O.
-- [ ] Move I/O metadata to a Controller-provided registry.
+- [x] Move I/O metadata to a Controller-provided registry.
 - [ ] Remove frontend hard-coded channel semantics.
 - [ ] Add PEND commissioning fields and transition diagnostics.
 - [ ] Add fault-injection tests for transport loss and stale inputs.

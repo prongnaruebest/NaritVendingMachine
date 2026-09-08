@@ -51,6 +51,7 @@ def _normalize_machine_state(
 def _build_snapshot(service: Any) -> MachineSnapshot:
     """Convert MotionService state into a MachineSnapshot."""
     from narit_vending.shared.snapshot import AxisSnapshot, MachineSnapshot
+    from narit_vending.controller.io_registry import build_io_registry
 
     status = service.status_payload()
     ctrl_status = status.get("status", {})
@@ -81,6 +82,9 @@ def _build_snapshot(service: Any) -> MachineSnapshot:
         axes_homed=axes_homed,
     )
 
+    io_status = dict(status.get("io", {}))
+    picontrol_io_status = dict(status.get("picontrol_io", {}))
+
     return MachineSnapshot(
         state=machine_state,
         estop=bool(ctrl_status.get("estop", False)),
@@ -104,8 +108,9 @@ def _build_snapshot(service: Any) -> MachineSnapshot:
         speed_override=getattr(service.controller, "speed_override", None),
         motion_enabled=bool(safety.get("motion_enabled", True)),
         slots={str(code): dict(slot) for code, slot in dict(status.get("slots", {})).items()},
-        io_status=dict(status.get("io", {})),
-        picontrol_io_status=dict(status.get("picontrol_io", {})),
+        io_status=io_status,
+        picontrol_io_status=picontrol_io_status,
+        io_registry=build_io_registry(io_status, picontrol_io_status),
         nucleo_status=dict(status.get("nucleo", {})),
         demo_status=dict(status.get("demo", {})),
     )
