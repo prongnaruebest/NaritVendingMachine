@@ -68,6 +68,18 @@ class MotionUsbChunkingTests(unittest.TestCase):
         self.assertEqual(axis.motion_backend.move.call_count, 1)
         self.assertEqual(axis.motion_backend.move.call_args.kwargs["steps"], 4_000)
 
+    def test_successful_axis_move_runs_completion_verifier_once(self):
+        axis = self.make_axis()
+        axis.completion_verifier = MagicMock()
+        axis.completion_verifier.begin.return_value = "pend-token"
+        plan = AxisMovePlan("x", 0.0, 20.0, 20.0, 1, 4_000, 5.0, 4.0)
+
+        axis._execute_plan(plan)
+
+        axis.completion_verifier.begin.assert_called_once_with("x")
+        axis.completion_verifier.verify.assert_called_once()
+        self.assertEqual(axis.completion_verifier.verify.call_args.args[0], "pend-token")
+
     def test_segmentation_is_generic_for_every_axis_and_distance(self):
         for axis_name, total_steps, expected in (
             ("x", 10_001, [10_000, 1]),

@@ -25,6 +25,7 @@ from .domain.errors import (
     MotionError,
     NotHomedError,
     NucleoError,
+    PositionVerificationError,
     StopRequestedError,
     TravelBoundaryError,
 )
@@ -254,6 +255,7 @@ class AxisController:
         controlled_stop_requested: Callable[[], bool],
         enable: OutputDevice | None = None,
         motion_backend: Any | None = None,
+        completion_verifier: Any | None = None,
     ) -> None:
         self.config = config
         self.pulse = pulse
@@ -265,6 +267,7 @@ class AxisController:
         self.controlled_stop_requested = controlled_stop_requested
         self.enable = enable
         self.motion_backend = motion_backend
+        self.completion_verifier = completion_verifier
         self.position_steps = 0
         self.is_homed = False
         if self.enable is not None:
@@ -728,6 +731,9 @@ class AxisController:
         if plan.steps == 0:
             return 0
 
+        completion_verifier = getattr(self, "completion_verifier", None)
+        completion_token = completion_verifier.begin(self.config.name) if completion_verifier else None
+
         self.direction.value = bool(plan.direction)
 
         if self.motion_backend is not None and getattr(self.motion_backend, "expected_protocol", 1) >= 2:
@@ -830,6 +836,11 @@ class AxisController:
                         + (f"; stop reason: {stop_reason}" if stop_reason else "")
                     )
             sleep(self.config.settle_delay)
+            if completion_verifier:
+                completion_verifier.verify(
+                    completion_token,
+                    abort_requested=lambda: bool(self.estop.value or self.stop_requested()),
+                )
             return moved
 
         half_periods = _build_half_periods(plan.steps, plan.duration_s, ramp_ratio=1.6)
@@ -854,6 +865,11 @@ class AxisController:
                     self.stop()
                     raise ControlledStopError(f"{self.config.name}: controlled stop completed")
         sleep(self.config.settle_delay)
+        if completion_verifier:
+            completion_verifier.verify(
+                completion_token,
+                abort_requested=lambda: bool(self.estop.value or self.stop_requested()),
+            )
         return moved
 
     def _pulse_once(self, half_period_s: float) -> None:
@@ -1220,6 +1236,8 @@ class MotionController:
             axes[axis_name]._guard_before_move(axis_plan.direction, delta_steps)
             axes[axis_name].direction.value = bool(axis_plan.direction)
 
+        completion_tokens = self._begin_completion_verification(axes, plan)
+
         # Production NUCLEO protocol v3 owns all STEP generation. Never fall
         # through to Raspberry Pi placeholder GPIO for a coordinated move.
         backends = {id(axis.motion_backend): axis.motion_backend for axis in axes.values() if axis.motion_backend is not None}
@@ -1269,6 +1287,7 @@ class MotionController:
                     axis.is_homed = False
                 raise LimitTriggeredError("physical limit triggered during coordinated move")
             sleep(max(axis.config.settle_delay for axis in axes.values()))
+            self._verify_completion(completion_tokens)
             return
 
         accumulators = {name: 0 for name in plan.axes}
@@ -1315,6 +1334,29 @@ class MotionController:
             raise
 
         sleep(max(axis.config.settle_delay for axis in axes.values()))
+        self._verify_completion(completion_tokens)
+
+    @staticmethod
+    def _begin_completion_verification(
+        axes: dict[str, AxisController],
+        plan: CoordinatedMovePlan,
+    ) -> dict[str, tuple[object, object]]:
+        tokens: dict[str, tuple[object, object]] = {}
+        for name, axis in axes.items():
+            verifier = getattr(axis, "completion_verifier", None)
+            if verifier is None or plan.axes[name].steps <= 0:
+                continue
+            token = verifier.begin(name)
+            if token is not None:
+                tokens[name] = (verifier, token)
+        return tokens
+
+    def _verify_completion(self, tokens: dict[str, tuple[object, object]]) -> None:
+        for verifier, token in tokens.values():
+            verifier.verify(
+                token,
+                abort_requested=lambda: bool(self.emergency_stop_active() or self.stop_requested()),
+            )
 
 
 def build_default_slots(slot_count: int = 30) -> dict[str, SlotPosition]:
@@ -1542,6 +1584,7 @@ def build_controller(
     hw_config_path: str = "hardware_config.json",
     io_backend: object | None = None,
     motion_backend: object | None = None,
+    completion_verifier: object | None = None,
 ) -> MotionController:
     hw_config = load_hardware_config(hw_config_path)
     motion_placeholder_factory = MockFactory() if motion_backend is not None else None
@@ -1638,6 +1681,7 @@ def build_controller(
             controlled_stop_requested=controlled_stop_requested,
             enable=enable_dev,
             motion_backend=motion_backend,
+            completion_verifier=completion_verifier,
         )
 
     x_axis = make_axis(config.x)

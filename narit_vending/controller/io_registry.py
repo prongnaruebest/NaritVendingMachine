@@ -63,6 +63,7 @@ def _channels(source: str, status: dict[str, Any], direction: str) -> list[dict[
                 "fail_safe": bool(detail.get("fail_safe", False)),
                 "commissioned": bool(detail.get("commissioned", False)),
                 "settle_timeout_ms": detail.get("settle_timeout_ms"),
+                "require_transition": bool(detail.get("require_transition", False)),
                 "transitions": int(detail.get("transitions", 0)),
                 "active_events": int(detail.get("active_events", 0)),
                 "last_change_at": detail.get("last_change_at"),

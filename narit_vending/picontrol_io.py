@@ -169,6 +169,7 @@ class PiControlIOBackend:
                     "commissioned": bool(self.inputs[name].get("commissioned", False)),
                     "expected_active_state": bool(self.inputs[name].get("active_state", True)),
                     "settle_timeout_ms": int(self.inputs[name].get("settle_timeout_ms", 1000)),
+                    "require_transition": bool(self.inputs[name].get("require_transition", False)),
                     **{
                         key: value
                         for key, value in self._input_diagnostics[name].items()
@@ -205,6 +206,7 @@ class PiControlIOBackend:
                 "axis": name[0] if name[:2] in {"x_", "y_", "z_"} else None,
                 "commissioned": bool(info.get("commissioned", False)),
                 "settle_timeout_ms": int(info.get("settle_timeout_ms", 1000)),
+                "require_transition": bool(info.get("require_transition", False)),
                 **diagnostics,
             }
         return {

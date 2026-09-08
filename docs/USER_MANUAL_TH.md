@@ -76,6 +76,14 @@ Home search อาศัย sensor จริงและ time watchdog ไม่
 - หน้า Event Log กรองตาม Severity/Category/Outcome/Search แล้วกด **Export CSV** เพื่อบันทึกรายการที่กรองอยู่ได้
 - Event history ฝั่งหน้าเว็บเป็น in-memory ล่าสุด 200 รายการ จึงไม่ใช่ audit log ถาวรและจะเริ่มใหม่เมื่อ reload หน้า
 
+## PEND ของไดรฟ์ X/Y
+
+- `X_PEND` ที่ PiControl DI2 และ `Y_PEND` ที่ DI3 เป็นสัญญาณยืนยันว่าไดรฟ์เข้าเป้าหมาย ไม่ใช่ Drive Alarm
+- ค่าเริ่มต้น `commissioned=false` ทำให้ระบบแสดงสถานะเพื่อวินิจฉัยเท่านั้น และไม่ใช้ตัดสินผลคำสั่ง motion
+- หลังตรวจ polarity, การเปลี่ยนสถานะระหว่างวิ่ง และเวลาที่ใช้ settle กับเครื่องจริงแล้ว จึงตั้ง `commissioned=true` แยกแต่ละช่อง
+- `settle_timeout_ms` คือเวลาสูงสุดที่ Controller รอ PEND หลังส่ง pulse ครบ หากหมดเวลาคำสั่งจะ Failed แต่ห้ามนำไป bypass E-Stop หรือ Drive Alarm
+- `require_transition=true` ใช้เมื่อยืนยันแล้วว่าระบบ polling มองเห็น PEND เปลี่ยนสถานะทุกคำสั่ง หากยังไม่ยืนยันให้คง `false`
+
 ## GOTO XYZ
 
 1. กรอก X/Y/Z หรือ Load current/selected slot

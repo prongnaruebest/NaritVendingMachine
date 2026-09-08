@@ -99,6 +99,25 @@ class MotionCharacterizationTests(unittest.TestCase):
 
         self.assertEqual(order, ["z", "y", "x"])
 
+    def test_coordinated_move_verifies_commissioned_position_feedback(self) -> None:
+        controller, axes = self._mock_controller()
+        verifier = MagicMock()
+        verifier.begin.side_effect = lambda name: f"token-{name}" if name in {"x", "y"} else None
+        for axis in axes.values():
+            axis.completion_verifier = verifier
+        plan = CoordinatedMovePlan(
+            axes={
+                "x": AxisMovePlan("x", 0, 10, 10, 1, 800, 10, 1),
+                "y": AxisMovePlan("y", 0, 5, 5, 1, 400, 5, 1),
+            },
+            duration_s=1,
+            mode="speed",
+        )
+        controller._execute_coordinated_plan(plan)
+
+        self.assertEqual(verifier.begin.call_count, 2)
+        self.assertEqual(verifier.verify.call_count, 2)
+
     def test_continuous_jog_uses_authoritative_remaining_travel(self) -> None:
         axis = MagicMock()
         axis.is_homed = True

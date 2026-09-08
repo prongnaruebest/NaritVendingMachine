@@ -35,3 +35,7 @@ class TravelBoundaryError(MotionError):
 
 class NucleoError(MotionError):
     """NUCLEO transport, protocol or firmware execution failed."""
+
+
+class PositionVerificationError(MotionError):
+    """Commissioned drive in-position feedback did not verify completion."""

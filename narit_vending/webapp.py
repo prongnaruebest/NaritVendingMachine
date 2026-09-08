@@ -16,6 +16,7 @@ from pathlib import Path
 from flask import Flask, jsonify, redirect, render_template, request
 
 from .controller.ports import IRIVIOPort, NucleoTransportPort, PiControlIOPort
+from .controller.position_completion import PendCompletionVerifier
 from .config_foundation import (
     create_config_backup,
     validate_configuration_files,
@@ -173,6 +174,7 @@ class MotionService:
             hw_config_path=str(self.hw_config_path),
             io_backend=self.io_backend,
             motion_backend=nucleo_motion,
+            completion_verifier=PendCompletionVerifier(self.picontrol_io) if self.picontrol_io is not None else None,
         )
         if self.io_backend is not None or self.picontrol_io is not None:
             self._safety_monitor_thread = threading.Thread(
