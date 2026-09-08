@@ -206,6 +206,15 @@ class FrontendAcceptanceTests(unittest.TestCase):
         self.assertNotIn("📦", APP_JS)
         self.assertIn("<details", TEMPLATE)
 
+    def test_io_rendering_uses_controller_registry_not_channel_definition_arrays(self) -> None:
+        self.assertIn("function irivChannelDefinitions(direction)", APP_JS)
+        self.assertIn("controllerIORegistry({ source: \"iriv_modbus\"", APP_JS)
+        self.assertNotIn("const DI_CHANNEL_DEFS", APP_JS)
+        self.assertNotIn("const DO_CHANNEL_DEFS", APP_JS)
+        self.assertNotIn("const IO_PAGE_DI_CHANNELS", APP_JS)
+        self.assertNotIn("const IO_PAGE_DO_CHANNELS", APP_JS)
+        self.assertNotIn("DI0 / TB-1", APP_JS)
+
     def test_diagnostics_expose_noise_homing_recovery_and_export(self) -> None:
         self.assertIn('id="io-summary-noise-count"', TEMPLATE)
         self.assertIn("detail.filtered_spikes", APP_JS)

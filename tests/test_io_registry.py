@@ -51,6 +51,23 @@ def test_registry_describes_iriv_and_picontrol_channels() -> None:
     assert pend["settle_timeout_ms"] == 750
 
 
+def test_registry_assigns_position_and_operation_roles() -> None:
+    channels = build_io_registry(
+        {
+            "communication_ok": True,
+            "input_details": {"x_head_limit": {"channel": 0, "raw_channel": "DI0"}},
+            "output_details": {"dispense": {"channel": 3, "raw_channel": "DO3"}},
+        },
+        {},
+    )
+    position = next(channel for channel in channels if channel["key"] == "x_head_limit")
+    output = next(channel for channel in channels if channel["key"] == "dispense")
+    assert position["position_role"] == "min"
+    assert position["axis"] == "x"
+    assert output["operation_role"] == "dispense"
+    assert output["protocol_address"] == "0x0103"
+
+
 def test_registry_marks_channels_stale_when_source_is_offline() -> None:
     channels = build_io_registry(
         {"communication_ok": False, "input_details": {"door": {"channel": 1}}},

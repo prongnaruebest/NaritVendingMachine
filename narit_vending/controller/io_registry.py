@@ -20,10 +20,19 @@ def _semantics(key: str, direction: str, detail: dict[str, Any]) -> dict[str, An
         kind, safety_class = "command_output", "control"
     else:
         kind, safety_class = "process_sensor", "process"
+    position_role = None
+    if key_lower.endswith("_head_limit"):
+        position_role = "min"
+    elif key_lower.endswith("_tail_limit"):
+        position_role = "max"
+    elif key_lower.endswith("_home"):
+        position_role = "home"
     return {
         "kind": str(detail.get("kind", kind)),
         "safety_class": str(detail.get("safety_class", safety_class)),
         "axis": detail.get("axis", axis),
+        "position_role": detail.get("position_role", position_role),
+        "operation_role": detail.get("operation_role", key_lower),
     }
 
 
@@ -41,6 +50,11 @@ def _channels(source: str, status: dict[str, Any], direction: str) -> list[dict[
                 "label": str(detail.get("label", key)),
                 "channel": detail.get("channel"),
                 "address": detail.get("raw_channel"),
+                "protocol_address": (
+                    f"0x{0x0100 + int(detail['channel']):04X}"
+                    if source == "iriv_modbus" and direction == "output" and detail.get("channel") is not None
+                    else None
+                ),
                 "pin": detail.get("pin"),
                 "active": bool(detail.get("active", detail.get("value", False))),
                 "raw_value": detail.get("raw_value"),

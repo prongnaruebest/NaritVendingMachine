@@ -45,7 +45,7 @@ Exit criterion: all HTTP/MQTT/system motion requests traverse one tested decisio
 
 - [x] Introduce interfaces for clock, NUCLEO transport, IRIV I/O and PiControl I/O.
 - [x] Move I/O metadata to a Controller-provided registry.
-- [ ] Remove frontend hard-coded channel semantics.
+- [x] Remove frontend hard-coded channel semantics.
 - [x] Add PEND commissioning fields and transition diagnostics.
 - [x] Add fault-injection tests for transport loss and stale inputs.
 

@@ -3221,26 +3221,41 @@
     return channels.filter((channel) => Object.entries(filters).every(([key, value]) => channel?.[key] === value));
   }
 
-  const DI_CHANNEL_DEFS = [
-    { channel: 0, key: "x_head_limit", label: "X Min Limit", role: "Head Limit" },
-    { channel: 1, key: "x_tail_limit", label: "X Max Limit", role: "Tail Limit" },
-    { channel: 2, key: "y_head_limit", label: "Y Min Limit", role: "Head Limit" },
-    { channel: 3, key: "y_tail_limit", label: "Y Max Limit", role: "Tail Limit" },
-    { channel: 4, key: "z_head_limit", label: "Z Min Limit", role: "Head Limit" },
-    { channel: 5, key: "z_tail_limit", label: "Z Max Limit", role: "Tail Limit" },
-    { channel: 6, key: "z_home", label: "Z Home Switch", role: "Homing Sensor", highlight: true },
-    { channel: 7, key: "product_drop_parking", label: "Drop Parking", role: "Product Detection" },
-    { channel: 8, key: "product_drop_sensor", label: "Drop Sensor", role: "Product Detection" },
-    { channel: 9, key: "product_pickup_sensor", label: "Pickup Sensor", role: "Product Detection" },
-    { channel: 10, key: "estop", label: "E-Stop / KM1", role: "Safety Interlock", isSafety: true },
-  ];
+  function controllerIOChannel(filters = {}) {
+    return controllerIORegistry(filters)[0] || null;
+  }
 
-  const DO_CHANNEL_DEFS = [
-    { channel: 0, key: "ready", label: "Ready Lamp", role: "Green Indicator" },
-    { channel: 1, key: "moving", label: "Moving Lamp", role: "Yellow Indicator" },
-    { channel: 2, key: "alarm", label: "Alarm / Buzzer", role: "Red Alarm Output" },
-    { channel: 3, key: "dispense", label: "Dispense Relay", role: "Interposing Relay" },
-  ];
+  const IO_KIND_LABELS = {
+    safety_interlock: "Safety Interlock",
+    drive_alarm: "Drive Alarm Feedback",
+    position_feedback: "Position Feedback",
+    position_switch: "Position / Limit Switch",
+    process_sensor: "Process Sensor",
+    command_output: "Controller Output",
+  };
+
+  function ioDefinition(channel) {
+    const category = channel.safety_class === "safety" ? "safety"
+      : channel.kind === "position_switch" ? "limits"
+      : channel.kind === "process_sensor" ? "sensors"
+      : channel.kind === "drive_alarm" ? "drive-alarms"
+      : channel.direction === "output" ? "outputs" : "inputs";
+    return {
+      ...channel,
+      role: IO_KIND_LABELS[channel.kind] || "Digital I/O",
+      category,
+      terminal: channel.address || "--",
+      coil: channel.protocol_address || channel.address || "--",
+      desc: `${channel.source === "iriv_modbus" ? "IRIV Modbus" : "PiControl local"} · ${channel.stale ? "stale data" : "live Controller data"}`,
+      highlight: channel.kind === "position_switch" && String(channel.key).endsWith("_home"),
+      isSafety: channel.safety_class === "safety",
+      isAlarm: channel.kind === "drive_alarm" || channel.key === "alarm",
+    };
+  }
+
+  function irivChannelDefinitions(direction) {
+    return controllerIORegistry({ source: "iriv_modbus", direction }).map(ioDefinition);
+  }
 
   function renderIOMatrix() {
     const diContainer = el("io-di-cards");
@@ -3255,11 +3270,11 @@
     const polarityVerified = MS.payload?.io?.polarity_verified;
 
     if (diContainer) {
-      diContainer.innerHTML = DI_CHANNEL_DEFS.map((def) => {
+      diContainer.innerHTML = irivChannelDefinitions("input").map((def) => {
         const detail = inputDetails[def.key] || {};
-        const rawBit = rawInputs[`DI${def.channel}`] ?? false;
-        const isActive = logicalInputs[def.key] ?? false;
-        const label = detail.label || def.label;
+        const rawBit = def.raw_value;
+        const isActive = def.active;
+        const label = def.label;
 
         let statusClass = "inactive";
         let stateText = "INACTIVE";
@@ -3288,7 +3303,7 @@
         return `
           <div class="io-card ${statusClass} ${def.highlight ? "highlight" : ""}">
             <div class="io-card-head">
-              <span class="io-channel-tag">DI${def.channel}</span>
+              <span class="io-channel-tag">${esc(def.address || `DI${def.channel}`)}</span>
               <span class="io-channel-badge ${badgeClass}">${badgeText}</span>
             </div>
             <div class="io-signal-name">${esc(label)}</div>
@@ -3303,22 +3318,22 @@
     }
 
     if (doContainer) {
-      doContainer.innerHTML = DO_CHANNEL_DEFS.map((def) => {
+      doContainer.innerHTML = irivChannelDefinitions("output").map((def) => {
         const detail = outputDetails[def.key] || {};
-        const isOn = Boolean(outputs[def.key]);
-        const label = detail.label || def.label;
-        const statusClass = isOn ? (def.key === "alarm" ? "fault" : "active") : "inactive";
+        const isOn = Boolean(def.active);
+        const label = def.label;
+        const statusClass = isOn ? (def.isAlarm ? "fault" : "active") : "inactive";
 
         return `
           <div class="io-card ${statusClass}">
             <div class="io-card-head">
-              <span class="io-channel-tag">DO${def.channel}</span>
-              <span class="io-channel-badge ${isOn ? (def.key === "alarm" ? "fault" : "warn") : ""}">${isOn ? "ENERGIZED" : "OFF"}</span>
+              <span class="io-channel-tag">${esc(def.address || `DO${def.channel}`)}</span>
+              <span class="io-channel-badge ${isOn ? (def.isAlarm ? "fault" : "warn") : ""}">${isOn ? "ENERGIZED" : "OFF"}</span>
             </div>
             <div class="io-signal-name">${esc(label)}</div>
             <div class="io-signal-role">${esc(def.role)}</div>
             <div class="io-card-footer">
-              <span class="io-card-raw">COIL: <b>0x010${def.channel}</b></span>
+              <span class="io-card-raw">COIL: <b>${esc(def.coil)}</b></span>
               <span class="io-card-state ${statusClass}"><i class="io-dot ${statusClass}"></i> ${isOn ? "ON" : "OFF"}</span>
             </div>
           </div>
@@ -3381,28 +3396,9 @@
   }
 
   /* ── RENDER: DEDICATED I/O STATUS PAGE ─────────────────────── */
-  const IO_PAGE_DI_CHANNELS = [
-    { channel: 0, key: "x_head_limit", label: "X Min Limit", role: "Head Limit", category: "limits", axis: "x", terminal: "DI0 / TB-1", desc: "X Axis minimum travel limit switch" },
-    { channel: 1, key: "x_tail_limit", label: "X Max Limit", role: "Tail Limit", category: "limits", axis: "x", terminal: "DI1 / TB-2", desc: "X Axis maximum travel limit switch" },
-    { channel: 2, key: "y_head_limit", label: "Y Min Limit", role: "Head Limit", category: "limits", axis: "y", terminal: "DI2 / TB-3", desc: "Y Axis minimum travel limit switch" },
-    { channel: 3, key: "y_tail_limit", label: "Y Max Limit", role: "Tail Limit", category: "limits", axis: "y", terminal: "DI3 / TB-4", desc: "Y Axis maximum travel limit switch" },
-    { channel: 4, key: "z_head_limit", label: "Z Min Limit", role: "Head Limit", category: "limits", axis: "z", terminal: "DI4 / TB-5", desc: "Z Axis minimum travel limit switch" },
-    { channel: 5, key: "z_tail_limit", label: "Z Max Limit", role: "Tail Limit", category: "limits", axis: "z", terminal: "DI5 / TB-6", desc: "Z Axis maximum travel limit switch" },
-    { channel: 6, key: "z_home", label: "Z Home Switch", role: "Homing Sensor", category: "limits", axis: "z", terminal: "DI6 / TB-7", desc: "Z Axis optical home position switch", highlight: true },
-    { channel: 7, key: "product_drop_parking", label: "Drop Parking", role: "Elevator Floor", category: "sensors", terminal: "DI7 / TB-8", desc: "Product elevator delivery base position" },
-    { channel: 8, key: "product_drop_sensor", label: "Drop Sensor", role: "Drop Chute Beam", category: "sensors", terminal: "DI8 / TB-9", desc: "Through-beam sensor verifying item has fallen" },
-    { channel: 9, key: "product_pickup_sensor", label: "Pickup Sensor", role: "Box Retrieval Beam", category: "sensors", terminal: "DI9 / TB-10", desc: "Optical sensor detecting customer retrieval" },
-    { channel: 10, key: "estop", label: "E-Stop / KM1", role: "Safety Interlock", category: "safety", terminal: "DI10 / TB-11", desc: "Hardware emergency stop & safety relay contact", isSafety: true },
-  ];
-
-  const IO_PAGE_DO_CHANNELS = [
-    { channel: 0, key: "ready", label: "Machine Ready Lamp", role: "Green Indicator", coil: "0x0100", terminal: "DO0 / TB-21", desc: "Indicates machine idle and ready for motion" },
-    { channel: 1, key: "moving", label: "Moving Lamp", role: "Yellow Indicator", coil: "0x0101", terminal: "DO1 / TB-22", desc: "Indicates gantry motion currently in progress" },
-    { channel: 2, key: "alarm", label: "Alarm / Buzzer", role: "Red Alarm Output", coil: "0x0102", terminal: "DO2 / TB-23", desc: "Active during fault, E-stop, or limit trip", isAlarm: true },
-    { channel: 3, key: "dispense", label: "Dispense Relay", role: "Interposing Relay", coil: "0x0103", terminal: "DO3 / TB-24", desc: "Trigger pulse for item drop mechanism" },
-  ];
-
   function renderIOStatusPage() {
+    const ioPageDiChannels = irivChannelDefinitions("input");
+    const ioPageDoChannels = irivChannelDefinitions("output");
     const rawInputs = MS.payload?.io?.raw_inputs || {};
     const logicalInputs = MS.payload?.io?.inputs || {};
     const outputs = MS.payload?.io?.outputs || {};
@@ -3437,12 +3433,12 @@
     }
 
     let activeDiCount = 0;
-    IO_PAGE_DI_CHANNELS.forEach((def) => {
-      if (logicalInputs[def.key]) activeDiCount++;
+    ioPageDiChannels.forEach((def) => {
+      if (def.active) activeDiCount++;
     });
     let activeDoCount = 0;
-    IO_PAGE_DO_CHANNELS.forEach((def) => {
-      if (outputs[def.key]) activeDoCount++;
+    ioPageDoChannels.forEach((def) => {
+      if (def.active) activeDoCount++;
     });
 
     const diCountNode = el("io-summary-di-count");
@@ -3489,14 +3485,14 @@
 
     let limitsCount = 0;
     let sensorsCount = 0;
-    IO_PAGE_DI_CHANNELS.forEach((def) => {
+    ioPageDiChannels.forEach((def) => {
       if (def.category === "limits") limitsCount++;
       if (def.category === "sensors") sensorsCount++;
     });
     const piInputCount = Object.keys(piInputs).length;
-    setText("io-filter-cnt-all", String(IO_PAGE_DI_CHANNELS.length + IO_PAGE_DO_CHANNELS.length + piInputCount));
-    setText("io-filter-cnt-inputs", String(IO_PAGE_DI_CHANNELS.length + piInputCount));
-    setText("io-filter-cnt-outputs", String(IO_PAGE_DO_CHANNELS.length));
+    setText("io-filter-cnt-all", String(ioPageDiChannels.length + ioPageDoChannels.length + piInputCount));
+    setText("io-filter-cnt-inputs", String(ioPageDiChannels.length + piInputCount));
+    setText("io-filter-cnt-outputs", String(ioPageDoChannels.length));
     setText("io-filter-cnt-limits", String(limitsCount));
     setText("io-filter-cnt-sensors", String(sensorsCount));
     setText("io-filter-cnt-active", String(activeDiCount + activeDoCount + driveFaults.length));
@@ -3523,7 +3519,7 @@
       if (currentFilter === "safety" && (isOutput || item.category !== "safety")) return false;
       if (currentFilter === "drive-alarms") return false;
       if (currentFilter === "active-only") {
-        const active = isOutput ? Boolean(outputs[item.key]) : Boolean(logicalInputs[item.key]);
+        const active = Boolean(item.active);
         if (!active) return false;
       }
       if (searchQuery) {
@@ -3575,14 +3571,14 @@
 
     const diContainer = el("io-page-di-cards");
     if (diContainer) {
-      const visibleDis = IO_PAGE_DI_CHANNELS.filter((def) => matchFilter(def, false));
+      const visibleDis = ioPageDiChannels.filter((def) => matchFilter(def, false));
       if (visibleDis.length === 0) {
         diContainer.innerHTML = `<div class="io-empty-hint">No input signals match the current filters.</div>`;
       } else {
         diContainer.innerHTML = visibleDis.map((def) => {
           const detail = inputDetails[def.key] || {};
-          const rawBit = rawInputs[`DI${def.channel}`] ?? false;
-          const isActive = logicalInputs[def.key] ?? false;
+          const rawBit = def.raw_value;
+          const isActive = def.active;
           const label = def.label;
           const logicalTransitions = Number(detail.logical_transitions || 0);
           const rawTransitions = Number(detail.raw_transitions || 0);
@@ -3617,7 +3613,7 @@
             <div class="io-card io-card-enhanced ${statusClass} ${def.highlight ? "highlight" : ""}">
               <div class="io-card-head">
                 <div class="io-head-left">
-                  <span class="io-channel-tag">DI${def.channel}</span>
+                  <span class="io-channel-tag">${esc(def.address || `DI${def.channel}`)}</span>
                   <span class="io-wire-tag">${esc(def.terminal)}</span>
                 </div>
                 <span class="io-channel-badge ${badgeClass}">${badgeText}</span>
@@ -3632,7 +3628,7 @@
                 </span>
               </div>
               <dl class="io-diagnostic-meta">
-                <div><dt>Polarity</dt><dd>${detail.active_low ? "ACTIVE LOW" : "ACTIVE HIGH"}</dd></div>
+                <div><dt>Polarity</dt><dd>${detail.active_state === false ? "ACTIVE LOW" : "ACTIVE HIGH"}</dd></div>
                 <div><dt>Debounce</dt><dd>${Number(detail.debounce_samples || 1)} samples</dd></div>
                 <div><dt>Transitions</dt><dd>${logicalTransitions} / ${rawTransitions} logical/raw</dd></div>
                 <div class="${filteredSpikes ? "warn" : ""}"><dt>Filtered noise</dt><dd>${filteredSpikes}</dd></div>
@@ -3647,24 +3643,24 @@
 
     const doContainer = el("io-page-do-cards");
     if (doContainer) {
-      const visibleDos = IO_PAGE_DO_CHANNELS.filter((def) => matchFilter(def, true));
+      const visibleDos = ioPageDoChannels.filter((def) => matchFilter(def, true));
       if (visibleDos.length === 0) {
         doContainer.innerHTML = `<div class="io-empty-hint">No output signals match the current filters.</div>`;
       } else {
         doContainer.innerHTML = visibleDos.map((def) => {
           const detail = outputDetails[def.key] || {};
-          const isOn = Boolean(outputs[def.key]);
+          const isOn = Boolean(def.active);
           const label = def.label;
-          const statusClass = isOn ? (def.key === "alarm" ? "fault" : "active") : "inactive";
+          const statusClass = isOn ? (def.isAlarm ? "fault" : "active") : "inactive";
 
           return `
             <div class="io-card io-card-enhanced ${statusClass}">
               <div class="io-card-head">
                 <div class="io-head-left">
-                  <span class="io-channel-tag">DO${def.channel}</span>
+                  <span class="io-channel-tag">${esc(def.address || `DO${def.channel}`)}</span>
                   <span class="io-wire-tag">${esc(def.coil)}</span>
                 </div>
-                <span class="io-channel-badge ${isOn ? (def.key === "alarm" ? "fault" : "warn") : ""}">${isOn ? "ENERGIZED" : "OFF"}</span>
+                <span class="io-channel-badge ${isOn ? (def.isAlarm ? "fault" : "warn") : ""}">${isOn ? "ENERGIZED" : "OFF"}</span>
               </div>
               <div class="io-signal-name">${esc(label)}</div>
               <div class="io-signal-role">${esc(def.role)}</div>
@@ -3688,50 +3684,54 @@
       const yStatus = status.y || {};
       const zStatus = status.z || {};
 
-      const xMinActive = Boolean(logicalInputs.x_head_limit || xStatus.head_limit);
-      const xMaxActive = Boolean(logicalInputs.x_tail_limit || xStatus.tail_limit);
-      const yMinActive = Boolean(logicalInputs.y_head_limit || yStatus.head_limit);
-      const yMaxActive = Boolean(logicalInputs.y_tail_limit || yStatus.tail_limit);
-      const zMinActive = Boolean(logicalInputs.z_head_limit || zStatus.head_limit);
-      const zMaxActive = Boolean(logicalInputs.z_tail_limit || zStatus.tail_limit);
-      const zHomeActive = Boolean(logicalInputs.z_home);
-
-      const dropParkActive = Boolean(logicalInputs.product_drop_parking);
-      const dropSensActive = Boolean(logicalInputs.product_drop_sensor);
-      const pickupSensActive = Boolean(logicalInputs.product_pickup_sensor);
-      const dispenseActive = Boolean(outputs.dispense);
+      const axisSignal = (axis, positionRole) => controllerIOChannel({ source: "iriv_modbus", direction: "input", axis, position_role: positionRole });
+      const signalPill = (signal, fallback, activeFallback = false) => {
+        const active = signal ? Boolean(signal.active) : Boolean(activeFallback);
+        const address = signal?.address || "--";
+        const label = signal?.label || fallback;
+        return `<span class="limit-status-pill ${active ? "triggered" : "normal"}">${esc(address)}: ${esc(label)} ${active ? "ACTIVE" : "Normal"}</span>`;
+      };
+      const xMin = axisSignal("x", "min");
+      const xMax = axisSignal("x", "max");
+      const yMin = axisSignal("y", "min");
+      const yMax = axisSignal("y", "max");
+      const zMin = axisSignal("z", "min");
+      const zMax = axisSignal("z", "max");
+      const zHome = axisSignal("z", "home");
+      const processSignals = controllerIORegistry({ source: "iriv_modbus", direction: "input", kind: "process_sensor" });
+      const dispenseSignal = controllerIOChannel({ source: "iriv_modbus", direction: "output", operation_role: "dispense" });
 
       tableBody.innerHTML = `
         <tr>
           <td><strong class="axis-badge">X Axis</strong><div class="axis-sub">Horizontal Gantry</div></td>
-          <td><span class="limit-status-pill ${xMinActive ? "triggered" : "normal"}">DI0: X Min ${xMinActive ? "ACTIVE" : "Normal"}</span></td>
-          <td><span class="limit-status-pill ${xMaxActive ? "triggered" : "normal"}">DI1: X Max ${xMaxActive ? "ACTIVE" : "Normal"}</span></td>
+          <td>${signalPill(xMin, "X Min", xStatus.head_limit)}</td>
+          <td>${signalPill(xMax, "X Max", xStatus.tail_limit)}</td>
           <td><span class="limit-status-pill normal">--</span></td>
           <td><code>PA8 (PUL) / PB0 (DIR)</code><br><small>Driver: HBS860H X</small></td>
           <td>Stop X gantry instantly; inhibit negative / positive jogging accordingly.</td>
         </tr>
         <tr>
           <td><strong class="axis-badge">Y Axis</strong><div class="axis-sub">Depth Gantry</div></td>
-          <td><span class="limit-status-pill ${yMinActive ? "triggered" : "normal"}">DI2: Y Min ${yMinActive ? "ACTIVE" : "Normal"}</span></td>
-          <td><span class="limit-status-pill ${yMaxActive ? "triggered" : "normal"}">DI3: Y Max ${yMaxActive ? "ACTIVE" : "Normal"}</span></td>
+          <td>${signalPill(yMin, "Y Min", yStatus.head_limit)}</td>
+          <td>${signalPill(yMax, "Y Max", yStatus.tail_limit)}</td>
           <td><span class="limit-status-pill normal">--</span></td>
           <td><code>PA9 (PUL) / PB1 (DIR)</code><br><small>Driver: HBS860H Y</small></td>
           <td>Stop Y gantry instantly; inhibit negative / positive jogging accordingly.</td>
         </tr>
         <tr>
           <td><strong class="axis-badge">Z Axis</strong><div class="axis-sub">Vertical Elevator</div></td>
-          <td><span class="limit-status-pill ${zMinActive ? "triggered" : "normal"}">DI4: Z Min ${zMinActive ? "ACTIVE" : "Normal"}</span></td>
-          <td><span class="limit-status-pill ${zMaxActive ? "triggered" : "normal"}">DI5: Z Max ${zMaxActive ? "ACTIVE" : "Normal"}</span></td>
-          <td><span class="limit-status-pill ${zHomeActive ? "home-active" : "normal"}">DI6: Z Home ${zHomeActive ? "HOMED" : "Clear"}</span></td>
+          <td>${signalPill(zMin, "Z Min", zStatus.head_limit)}</td>
+          <td>${signalPill(zMax, "Z Max", zStatus.tail_limit)}</td>
+          <td>${signalPill(zHome, "Z Home")}</td>
           <td><code>PA5 (PUL) / PB2 (DIR)</code><br><small>Driver: DM542 Z</small></td>
           <td>Stop Z carriage; Z Home registers gantry zero reference position.</td>
         </tr>
         <tr class="product-row">
           <td><strong class="axis-badge product">Product Delivery</strong><div class="axis-sub">Chute &amp; Dispenser</div></td>
-          <td><span class="limit-status-pill ${dropParkActive ? "triggered" : "normal"}">DI7: Drop Parking ${dropParkActive ? "PARKED" : "Clear"}</span></td>
-          <td><span class="limit-status-pill ${dropSensActive ? "triggered" : "normal"}">DI8: Drop Sensor ${dropSensActive ? "ITEM DETECTED" : "Clear"}</span></td>
-          <td><span class="limit-status-pill ${pickupSensActive ? "triggered" : "normal"}">DI9: Pickup Sensor ${pickupSensActive ? "RETRIEVED" : "Clear"}</span></td>
-          <td><span class="limit-status-pill ${dispenseActive ? "triggered" : "normal"}">DO3: Dispense Relay ${dispenseActive ? "PULSED" : "OFF"}</span></td>
+          <td>${signalPill(processSignals[0], "Process Sensor 1")}</td>
+          <td>${signalPill(processSignals[1], "Process Sensor 2")}</td>
+          <td>${signalPill(processSignals[2], "Process Sensor 3")}</td>
+          <td>${signalPill(dispenseSignal, "Dispense Output")}</td>
           <td>Interlocked dispensing sequence; optical confirmation before slot release.</td>
         </tr>
       `;
@@ -3787,22 +3787,23 @@
 
     const diStream = el("io-raw-di-bitstream");
     if (diStream) {
-      diStream.innerHTML = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((ch) => {
-        const val = rawInputs[`DI${ch}`];
+      diStream.innerHTML = ioPageDiChannels.map((channel) => {
+        const val = channel.raw_value;
         const bitVal = val ? "1" : "0";
         const cls = val ? "bit-on" : "bit-off";
-        return `<span class="io-bit-pill ${cls}" title="DI${ch} (Bit ${ch})"><b>DI${ch}</b><code>${bitVal}</code></span>`;
+        const address = channel.address || `DI${channel.channel}`;
+        return `<span class="io-bit-pill ${cls}" title="${esc(channel.label)}"><b>${esc(address)}</b><code>${bitVal}</code></span>`;
       }).join("");
     }
 
     const doStream = el("io-raw-do-bitstream");
     if (doStream) {
-      doStream.innerHTML = [0, 1, 2, 3].map((ch) => {
-        const key = ["ready", "moving", "alarm", "dispense"][ch];
-        const val = Boolean(outputs[key]);
+      doStream.innerHTML = ioPageDoChannels.map((channel) => {
+        const val = Boolean(channel.active);
         const bitVal = val ? "1" : "0";
         const cls = val ? "bit-on" : "bit-off";
-        return `<span class="io-bit-pill ${cls}" title="DO${ch} (Coil 0x010${ch})"><b>DO${ch}</b><code>${bitVal}</code></span>`;
+        const address = channel.address || `DO${channel.channel}`;
+        return `<span class="io-bit-pill ${cls}" title="${esc(channel.label)} (${esc(channel.coil)})"><b>${esc(address)}</b><code>${bitVal}</code></span>`;
       }).join("");
     }
 
@@ -3825,27 +3826,17 @@
     const summaryGrid = el("dashboard-io-summary");
     if (!summaryGrid) return;
 
-    const rawInputs = MS.payload?.io?.raw_inputs || {};
-    const logicalInputs = MS.payload?.io?.inputs || {};
-    const outputs = MS.payload?.io?.outputs || {};
-
-    const items = [
-      { tag: "DI0", name: "X Min", active: logicalInputs.x_head_limit, type: "di" },
-      { tag: "DI1", name: "X Max", active: logicalInputs.x_tail_limit, type: "di" },
-      { tag: "DI2", name: "Y Min", active: logicalInputs.y_head_limit, type: "di" },
-      { tag: "DI3", name: "Y Max", active: logicalInputs.y_tail_limit, type: "di" },
-      { tag: "DI4", name: "Z Min", active: logicalInputs.z_head_limit, type: "di" },
-      { tag: "DI5", name: "Z Max", active: logicalInputs.z_tail_limit, type: "di" },
-      { tag: "DI6", name: "Z Home", active: logicalInputs.z_home, type: "di", highlight: true },
-      { tag: "DI7", name: "Drop Park", active: logicalInputs.product_drop_parking, type: "di" },
-      { tag: "DI8", name: "Drop Sens", active: logicalInputs.product_drop_sensor, type: "di" },
-      { tag: "DI9", name: "Pickup Sens", active: logicalInputs.product_pickup_sensor, type: "di" },
-      { tag: "DI10", name: "E-Stop/KM1", active: logicalInputs.estop, type: "di", isSafety: true },
-      { tag: "DO0", name: "Ready", active: outputs.ready, type: "do" },
-      { tag: "DO1", name: "Moving", active: outputs.moving, type: "do" },
-      { tag: "DO2", name: "Alarm", active: outputs.alarm, type: "do", isAlarm: true },
-      { tag: "DO3", name: "Dispense", active: outputs.dispense, type: "do" },
-    ];
+    const items = controllerIORegistry({ source: "iriv_modbus" }).map((channel) => {
+      const def = ioDefinition(channel);
+      return {
+        tag: def.address || `${def.direction === "input" ? "DI" : "DO"}${def.channel}`,
+        name: def.label,
+        active: def.active,
+        isSafety: def.isSafety,
+        isAlarm: def.isAlarm,
+        highlight: def.highlight,
+      };
+    });
 
     summaryGrid.innerHTML = items.map((item) => {
       let cls = item.active ? (item.isSafety || item.isAlarm ? "fault" : (item.highlight ? "safe" : "active")) : "inactive";
