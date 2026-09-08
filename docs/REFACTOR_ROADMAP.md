@@ -22,10 +22,10 @@ Exit criterion: baseline can be identified and recovery inputs exist without tou
 
 ## Phase 1 — Characterization and domain vocabulary
 
-- [ ] Inventory every REST and IPC contract.
-- [ ] Add architecture dependency tests.
-- [ ] Move shared motion/config/transport errors into a dependency-neutral domain module.
-- [ ] Add canonical enums for axis, direction, command outcome and axis state.
+- [x] Inventory every REST and IPC contract.
+- [x] Add architecture dependency tests.
+- [x] Move shared motion/config/transport errors into a dependency-neutral domain module.
+- [x] Add canonical enums for axis, direction, command outcome and axis state.
 - [ ] Characterize limit recovery, zero-distance moves, stale stop flags, speed invalidation and PEND semantics.
 - [ ] Define structured error response while preserving legacy fields.
 
