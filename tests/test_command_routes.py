@@ -1,4 +1,6 @@
+import re
 import unittest
+from pathlib import Path
 from unittest.mock import MagicMock
 
 from narit_vending.shared.commands import CommandResult
@@ -151,6 +153,31 @@ class CommandRouteTests(unittest.TestCase):
                 response = self.client.post(path, json=payload)
                 self.assertEqual(response.status_code, 200)
                 self.assertEqual(self.controller.submit_command.call_args.args[0].command_type, command_type)
+
+    def test_runtime_speed_and_timer_use_distinct_controller_commands(self) -> None:
+        self.controller.submit_command.return_value = CommandResult(
+            accepted=True, command_id="setting-1", state="COMPLETED", result={"ok": True}
+        )
+        speed_response = self.client.post("/api/speed", json={"speed_mm_s": 12.5})
+        self.assertEqual(speed_response.status_code, 200)
+        speed_envelope = self.controller.submit_command.call_args.args[0]
+        self.assertEqual(speed_envelope.command_type, "SET_SPEED")
+        self.assertEqual(speed_envelope.parameters, {"speed_mm_s": 12.5})
+
+        timer_response = self.client.post("/api/timer", json={"duration_s": 7})
+        self.assertEqual(timer_response.status_code, 200)
+        timer_envelope = self.controller.submit_command.call_args.args[0]
+        self.assertEqual(timer_envelope.command_type, "SET_TIMER")
+        self.assertEqual(timer_envelope.parameters, {"duration_s": 7.0})
+
+    def test_every_submitted_route_command_is_declared_in_shared_contract(self) -> None:
+        from typing import get_args
+        from narit_vending.shared.commands import CommandType
+
+        declared = set(get_args(CommandType))
+        source = (Path(__file__).resolve().parents[1] / "narit_vending" / "web" / "routes" / "commands.py").read_text(encoding="utf-8")
+        submitted = set(re.findall(r'_submit\(ctrl,\s*"([A-Z_]+)"', source))
+        self.assertFalse(submitted - declared)
 
 
 if __name__ == "__main__":

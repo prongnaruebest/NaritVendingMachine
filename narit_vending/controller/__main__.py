@@ -149,6 +149,7 @@ def _register_handlers(bus: Any, service: Any) -> None:
         make_validate_target_handler,
     )
     from narit_vending.controller.handlers.sequence import make_run_slot_sequence_handler
+    from narit_vending.controller.handlers.settings import make_set_speed_handler, make_set_timer_handler
     from narit_vending.controller.handlers.demo import make_demo_handler
     from narit_vending.controller.handlers.stop import (
         make_clear_alarm_handler,
@@ -196,6 +197,8 @@ def _register_handlers(bus: Any, service: Any) -> None:
     bus.register("ARM_MOTOR_TEST", make_arm_motor_test_handler(service))
     bus.register("DISARM_MOTOR_TEST", make_disarm_motor_test_handler(service))
     bus.register("RUN_MOTOR_TEST", make_run_motor_test_handler(service))
+    bus.register("SET_SPEED", make_set_speed_handler(service))
+    bus.register("SET_TIMER", make_set_timer_handler(service))
     from narit_vending.controller.handlers.slots import (
         make_save_slot_handler,
         make_save_slot_from_current_handler,

@@ -358,7 +358,7 @@ def make_commands_bp(ctrl: "ControllerClient") -> Blueprint:
         if duration is None:
             return jsonify({"ok": False, "error": "Field 'duration_s' is required"}), 400
         try:
-            r = _submit(ctrl, "SET_SPEED", {"timer_seconds": float(duration)})
+            r = _submit(ctrl, "SET_TIMER", {"duration_s": float(duration)})
         except (TypeError, ValueError):
             return jsonify({"ok": False, "error": "duration_s must be a number"}), 400
         snap = ctrl.snapshot()
