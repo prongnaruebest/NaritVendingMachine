@@ -21,6 +21,17 @@ class PiControlIOBackend:
         self._devices: dict[str, DigitalInputDevice] = {}
         self._output_devices: dict[str, DigitalOutputDevice] = {}
         self._raw: dict[str, bool] = {}
+        self._input_diagnostics: dict[str, dict[str, Any]] = {
+            name: {
+                "transitions": 0,
+                "active_events": 0,
+                "last_change_at": None,
+                "active_since_at": None,
+                "last_active_duration_ms": None,
+                "_active_since_monotonic": None,
+            }
+            for name in self.inputs
+        }
         self._error = ""
         self._last_success_at: str | None = None
         self._poll_latency_ms: float | None = None
@@ -74,6 +85,7 @@ class PiControlIOBackend:
 
     def _poll_once(self) -> None:
         started = time.monotonic()
+        now_iso = datetime.now(timezone.utc).isoformat()
         try:
             values = {name: bool(device.value) for name, device in self._devices.items()}
         except Exception as exc:
@@ -81,6 +93,28 @@ class PiControlIOBackend:
                 self._error = str(exc)
             return
         with self._lock:
+            for name, raw_value in values.items():
+                previous = self._raw.get(name)
+                if previous is None or previous == raw_value:
+                    continue
+                info = self.inputs[name]
+                active_state = bool(info.get("active_state", True))
+                diagnostic = self._input_diagnostics[name]
+                diagnostic["transitions"] += 1
+                diagnostic["last_change_at"] = now_iso
+                if raw_value == active_state:
+                    diagnostic["active_events"] += 1
+                    diagnostic["active_since_at"] = now_iso
+                    diagnostic["_active_since_monotonic"] = started
+                elif previous == active_state:
+                    active_since = diagnostic.get("_active_since_monotonic")
+                    if active_since is not None:
+                        diagnostic["last_active_duration_ms"] = round(
+                            (started - float(active_since)) * 1000.0,
+                            1,
+                        )
+                    diagnostic["active_since_at"] = None
+                    diagnostic["_active_since_monotonic"] = None
             self._raw = values
             self._error = ""
             self._poll_latency_ms = round((time.monotonic() - started) * 1000.0, 3)
@@ -132,6 +166,14 @@ class PiControlIOBackend:
                     "active": active,
                     "state": "in_position" if active else "tracking",
                     "blocking": False,
+                    "commissioned": bool(self.inputs[name].get("commissioned", False)),
+                    "expected_active_state": bool(self.inputs[name].get("active_state", True)),
+                    "settle_timeout_ms": int(self.inputs[name].get("settle_timeout_ms", 1000)),
+                    **{
+                        key: value
+                        for key, value in self._input_diagnostics[name].items()
+                        if not key.startswith("_")
+                    },
                     "detail": f"PiControl DI{self.inputs[name].get('channel')} / GPIO{self.inputs[name].get('pin')}",
                 })
         return result
@@ -144,6 +186,11 @@ class PiControlIOBackend:
             error = self._error
         input_details = {}
         for name, info in self.inputs.items():
+            diagnostics = {
+                key: value
+                for key, value in self._input_diagnostics[name].items()
+                if not key.startswith("_")
+            }
             input_details[name] = {
                 "channel": info.get("channel"),
                 "pin": info.get("pin"),
@@ -153,6 +200,12 @@ class PiControlIOBackend:
                 "raw_channel": f"DI{info.get('channel')}",
                 "raw_value": raw.get(name),
                 "active": self.input_active(name),
+                "kind": "position_feedback" if name.endswith("_pend") else "drive_alarm" if name.endswith("_alarm") else "digital_input",
+                "safety_class": "advisory" if name.endswith("_pend") else "fault" if name.endswith("_alarm") else "process",
+                "axis": name[0] if name[:2] in {"x_", "y_", "z_"} else None,
+                "commissioned": bool(info.get("commissioned", False)),
+                "settle_timeout_ms": int(info.get("settle_timeout_ms", 1000)),
+                **diagnostics,
             }
         return {
             "enabled": True,

@@ -20,6 +20,12 @@ class FakeInput:
         pass
 
 
+class FaultingInput(FakeInput):
+    @property
+    def value(self) -> bool:
+        raise OSError("local GPIO read failed")
+
+
 def config() -> dict:
     return {
         "poll_interval_s": 0.02,
@@ -33,6 +39,16 @@ def config() -> dict:
 
 
 class PiControlIOBackendTests(unittest.TestCase):
+    @patch("narit_vending.picontrol_io.DigitalInputDevice", FaultingInput)
+    def test_gpio_read_failure_is_fail_safe_for_drive_alarms(self) -> None:
+        backend = PiControlIOBackend(config())
+        backend._poll_once()
+
+        self.assertFalse(backend.communication_ok)
+        self.assertTrue(backend.input_active("x_alarm"))
+        self.assertTrue(next(item for item in backend.alarm_channels() if item["code"] == "PICTRL-DI")["active"])
+        self.assertIn("GPIO read failed", backend.status_payload()["last_error"])
+
     @patch("narit_vending.picontrol_io.DigitalInputDevice", FakeInput)
     def test_status_identifies_local_channels_and_poll_timing(self) -> None:
         backend = PiControlIOBackend(config())
@@ -66,7 +82,30 @@ class PiControlIOBackendTests(unittest.TestCase):
             self.assertTrue(status["inputs"]["x_pend"])
             self.assertEqual(status["position_channels"][0]["state"], "in_position")
             self.assertFalse(status["position_channels"][0]["blocking"])
+            self.assertFalse(status["position_channels"][0]["commissioned"])
+            self.assertEqual(status["input_details"]["x_pend"]["safety_class"], "advisory")
             self.assertNotIn("PEND-X", {item["code"] for item in backend.alarm_channels()})
+        finally:
+            FakeInput.values[27] = False
+
+    @patch("narit_vending.picontrol_io.DigitalInputDevice", FakeInput)
+    def test_pend_transition_diagnostics_are_recorded(self) -> None:
+        payload = config()
+        payload["inputs"]["x_pend"]["commissioned"] = True
+        payload["inputs"]["x_pend"]["settle_timeout_ms"] = 750
+        backend = PiControlIOBackend(payload)
+        FakeInput.values[27] = False
+        try:
+            backend._poll_once()
+            FakeInput.values[27] = True
+            backend._poll_once()
+            channel = backend.position_channels()[0]
+            self.assertTrue(channel["commissioned"])
+            self.assertEqual(channel["settle_timeout_ms"], 750)
+            self.assertEqual(channel["transitions"], 1)
+            self.assertEqual(channel["active_events"], 1)
+            self.assertIsNotNone(channel["last_change_at"])
+            self.assertIsNotNone(channel["active_since_at"])
         finally:
             FakeInput.values[27] = False
 

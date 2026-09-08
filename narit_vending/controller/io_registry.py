@@ -47,6 +47,11 @@ def _channels(source: str, status: dict[str, Any], direction: str) -> list[dict[
                 "active_state": detail.get("active_state"),
                 "active_high": detail.get("active_high"),
                 "fail_safe": bool(detail.get("fail_safe", False)),
+                "commissioned": bool(detail.get("commissioned", False)),
+                "settle_timeout_ms": detail.get("settle_timeout_ms"),
+                "transitions": int(detail.get("transitions", 0)),
+                "active_events": int(detail.get("active_events", 0)),
+                "last_change_at": detail.get("last_change_at"),
                 "stale": not bool(status.get("communication_ok", False)),
                 **_semantics(key, direction, detail),
             }

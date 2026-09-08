@@ -29,6 +29,8 @@ def test_registry_describes_iriv_and_picontrol_channels() -> None:
                 "active": True,
                 "raw_value": True,
                 "active_state": True,
+                "commissioned": True,
+                "settle_timeout_ms": 750,
             }
         },
         "output_details": {},
@@ -45,6 +47,8 @@ def test_registry_describes_iriv_and_picontrol_channels() -> None:
     assert pend["kind"] == "position_feedback"
     assert pend["safety_class"] == "advisory"
     assert pend["axis"] == "x"
+    assert pend["commissioned"] is True
+    assert pend["settle_timeout_ms"] == 750
 
 
 def test_registry_marks_channels_stale_when_source_is_offline() -> None:

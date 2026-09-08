@@ -106,6 +106,17 @@ class NucleoMotionTests(unittest.TestCase):
         self.assertEqual(payload["max_move_steps"], NUCLEO_LEGACY_MAX_STEPS)
         self.assertFalse(payload["armed"])
 
+    def test_usb_open_failure_publishes_communication_fault(self):
+        def fail_serial(**kwargs):
+            raise OSError("USB device unavailable")
+
+        link = NucleoLink(self.config(), serial_factory=fail_serial)
+        link._poll_once()
+
+        self.assertFalse(link.communication_ok)
+        self.assertTrue(link.alarm_channel()["active"])
+        self.assertIn("USB device unavailable", link.status_payload()["last_error"])
+
     def test_arm_and_disarm(self):
         mock_serial = MockSerialProtocolV2()
         link = NucleoLink(self.config(), serial_factory=lambda **kwargs: mock_serial)
