@@ -15,6 +15,7 @@ from .errors import (
     StopRequestedError,
     TravelBoundaryError,
 )
+from .enums import AxisName, AxisState, CommandOutcome, Direction
 
 __all__ = [
     "ActiveLimitError",
@@ -26,4 +27,8 @@ __all__ = [
     "NucleoError",
     "StopRequestedError",
     "TravelBoundaryError",
+    "AxisName",
+    "AxisState",
+    "CommandOutcome",
+    "Direction",
 ]
