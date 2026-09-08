@@ -196,6 +196,12 @@ def _register_handlers(bus: Any, service: Any) -> None:
     bus.register("ARM_MOTOR_TEST", make_arm_motor_test_handler(service))
     bus.register("DISARM_MOTOR_TEST", make_disarm_motor_test_handler(service))
     bus.register("RUN_MOTOR_TEST", make_run_motor_test_handler(service))
+    from narit_vending.controller.handlers.slots import (
+        make_save_slot_handler,
+        make_save_slot_from_current_handler,
+    )
+    bus.register("SAVE_SLOT", make_save_slot_handler(service))
+    bus.register("SAVE_SLOT_FROM_CURRENT", make_save_slot_from_current_handler(service))
     _log.info("Registered %d command handlers", len(bus._handlers))
 
 
