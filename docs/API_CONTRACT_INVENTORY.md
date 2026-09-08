@@ -83,3 +83,11 @@ Rejected or failed Controller commands retain the legacy `ok`, `accepted`,
 Initial stable codes are `COMMAND_REJECTED`, `SAFETY_INTERLOCK`,
 `UNKNOWN_COMMAND`, `MACHINE_BUSY` and `INTERNAL_HANDLER_ERROR`. Consumers must
 use `code` for branching and treat `message` as operator-facing text.
+
+## Command metadata
+
+`CommandEnvelope.metadata` is an optional, versioned object containing
+`schema_version`, `correlation_id`, `actor` and `client_revision`. Missing
+metadata is interpreted as schema version 1 with empty context, so commands
+from older Web/MQTT clients remain valid. Unknown schema versions are rejected
+at the transport boundary before command dispatch.
