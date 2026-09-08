@@ -82,6 +82,16 @@ class DemoSamplingTests(unittest.TestCase):
         self.assertFalse(result["ok"])
         self.assertEqual(self.motion.moves, [])
 
+    def test_demo_duration_is_read_only_and_calculated_by_frontend(self):
+        root = Path(__file__).resolve().parents[1]
+        template = (root / "narit_vending" / "templates" / "index.html").read_text(encoding="utf-8")
+        script = (root / "narit_vending" / "static" / "app.js").read_text(encoding="utf-8")
+
+        duration_field = template.split('id="demo-max-duration"', 1)[1].split(">", 1)[0]
+        self.assertIn("readonly", duration_field)
+        self.assertIn("function calculateDemoMaxDuration()", script)
+        self.assertIn("max_duration_s: maxDuration", script)
+
 
 if __name__ == "__main__":
     unittest.main()

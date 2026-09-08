@@ -3908,6 +3908,41 @@
     setDisabled("demo-pause", !["STARTING", "RUNNING", "MOVING_TO_SLOT"].includes(state));
     setDisabled("demo-resume", !paused);
     setDisabled("demo-stop", !active);
+    const durationInput = el("demo-max-duration");
+    if (durationInput) {
+      const configuredDuration = Number(demo.configuration?.max_duration_s || 0);
+      durationInput.value = String(active && configuredDuration > 0 ? Math.ceil(configuredDuration) : calculateDemoMaxDuration());
+    }
+  }
+
+  function calculateDemoMaxDuration() {
+    const count = Math.max(1, Math.min(10000, Math.floor(Number(el("demo-max-cycles")?.value) || 1)));
+    const dwell = Math.max(0, Number(el("demo-dwell")?.value) || 0);
+    const speed = Math.max(0.1, effectiveMotionSpeed());
+    const mode = el("demo-mode")?.value || "random";
+    const selected = MS.visualTargetSlot || MS.selectedSlotCode || "1";
+    const candidates = (mode === "selected" ? [MS.slots?.[selected]] : Object.values(MS.slots || {}))
+      .filter((slot) => slot && [slot.x_mm, slot.y_mm, slot.z_mm].every((value) => Number.isFinite(Number(value))))
+      .map((slot) => ({x: Number(slot.x_mm), y: Number(slot.y_mm), z: Number(slot.z_mm)}));
+    if (!candidates.length) return Math.ceil((count * (dwell + 10)) + 10);
+
+    const safeZ = Math.max(0, Number(MS.config?.safe_z_mm ?? MS.payload?.config?.safe_z_mm ?? 10) || 10);
+    const tripSeconds = (from, to) => {
+      const startZ = from.z < safeZ ? safeZ : from.z;
+      const clearZ = Math.max(0, safeZ - from.z);
+      const xy = Math.max(Math.abs(to.x - from.x), Math.abs(to.y - from.y));
+      const targetZ = Math.abs(to.z - startZ);
+      return (clearZ + xy + targetZ) / speed;
+    };
+    const current = {x: Number(getAxis("x").position_mm || 0), y: Number(getAxis("y").position_mm || 0), z: Number(getAxis("z").position_mm || 0)};
+    const firstMove = Math.max(...candidates.map((target) => tripSeconds(current, target)));
+    let laterMove = 0;
+    for (const from of candidates) for (const to of candidates) laterMove = Math.max(laterMove, tripSeconds(from, to));
+
+    // 25% timing reserve plus three seconds per sample covers command setup,
+    // USB acknowledgements and settling without turning the watchdog unbounded.
+    const estimated = firstMove + (Math.max(0, count - 1) * laterMove) + (count * (dwell + 3));
+    return Math.max(10, Math.ceil((estimated * 1.25) + 10));
   }
 
   function renderWorkspacePages() {
@@ -4265,7 +4300,10 @@
     const demoPayload = () => {
       const selected = MS.visualTargetSlot || MS.selectedSlotCode || "1";
       const mode = el("demo-mode")?.value || "sequential";
-      return {mode, slots: mode === "selected" ? [selected] : Object.keys(MS.slots), sample_count: Number(el("demo-max-cycles")?.value || 0), max_duration_s: Number(el("demo-max-duration")?.value || 0), dwell_s: Number(el("demo-dwell")?.value || 0), speed_mm_s: effectiveMotionSpeed(), stop_on_failure: true};
+      const maxDuration = calculateDemoMaxDuration();
+      const durationInput = el("demo-max-duration");
+      if (durationInput) durationInput.value = String(maxDuration);
+      return {mode, slots: mode === "selected" ? [selected] : Object.keys(MS.slots), sample_count: Number(el("demo-max-cycles")?.value || 0), max_duration_s: maxDuration, dwell_s: Number(el("demo-dwell")?.value || 0), speed_mm_s: effectiveMotionSpeed(), stop_on_failure: true};
     };
     const demoAction = async (action, payload = {}) => {
       try {
@@ -4286,7 +4324,7 @@
     el("demo-pause")?.addEventListener("click", () => demoAction("pause"));
     el("demo-resume")?.addEventListener("click", () => demoAction("resume"));
     el("demo-stop")?.addEventListener("click", () => demoAction("stop"));
-    ["demo-mode", "demo-max-cycles", "demo-max-duration", "demo-dwell"].forEach((id) => el(id)?.addEventListener("change", () => { MS.demoArmToken = ""; setText("demo-feedback", "Demo parameters changed — Configure, Validate and Arm again."); renderDemoSampling(); }));
+    ["demo-mode", "demo-max-cycles", "demo-dwell"].forEach((id) => el(id)?.addEventListener("input", () => { MS.demoArmToken = ""; setText("demo-feedback", "Demo parameters changed — Configure, Validate and Arm again."); renderDemoSampling(); }));
 
     $$(".flow-node").forEach((node) => node.addEventListener("click", () => {
       const detail = el("flow-step-detail");

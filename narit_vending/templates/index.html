@@ -492,7 +492,7 @@
             <div class="demo-config-grid">
               <label><span>Sampling Mode</span><select class="hmi-select" id="demo-mode"><option value="random" selected>Random Slot</option><option value="sequential">Sequential</option><option value="balanced">Balanced</option><option value="selected">Selected Slot Only</option></select></label>
               <label><span>Number of Slot Moves</span><input class="hmi-input" id="demo-max-cycles" type="number" min="1" max="10000" step="1" value="10"></label>
-              <label><span>Maximum Duration</span><div class="field-input-wrap"><input class="hmi-input" id="demo-max-duration" type="number" min="0" step="1" value="0"><span class="unit-tag">s</span></div></label>
+              <label><span>Maximum Duration (Auto)</span><div class="field-input-wrap"><input class="hmi-input" id="demo-max-duration" type="number" min="1" step="1" value="0" readonly aria-readonly="true" aria-label="Automatically calculated maximum demo duration"><span class="unit-tag">s</span></div></label>
               <label><span>Dwell per Slot</span><div class="field-input-wrap"><input class="hmi-input" id="demo-dwell" type="number" min="0" step="0.1" value="0.5"><span class="unit-tag">s</span></div></label>
             </div>
             <p class="demo-safety-note">One sample equals one move to one target Slot. Random mode selects a new Slot for each requested move. Dispense is always disabled. Start requires all axes homed and every safety link healthy.</p>
