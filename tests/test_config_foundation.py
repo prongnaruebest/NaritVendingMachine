@@ -46,6 +46,8 @@ class ConfigFoundationTests(unittest.TestCase):
         self.assertAlmostEqual(report.effective_axes["z"]["steps_per_mm"], 9.0)
         self.assertAlmostEqual(report.effective_axes["z"]["max_travel_mm"], 160.0)
         self.assertAlmostEqual(report.effective_axes["z"]["lead_screw_pitch_mm"], 1600 / 9, places=5)
+        self.assertAlmostEqual(report.effective_axes["z"]["homing_search_speed_mm_s"], 20.0)
+        self.assertAlmostEqual(report.effective_axes["z"]["homing_latch_speed_mm_s"], 5.0)
 
     def test_all_test_slots_are_configured_inside_axis_limits(self) -> None:
         slots = self.machine["slots"]
