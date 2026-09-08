@@ -202,6 +202,32 @@ class MotionCharacterizationTests(unittest.TestCase):
         self.assertEqual(axes["x"].position_steps, 800)
         self.assertEqual(axes["y"].position_steps, 400)
 
+    def test_same_row_slot_move_does_not_send_zero_step_axis_to_nucleo(self) -> None:
+        controller, axes = self._mock_controller()
+        backend = MagicMock(expected_protocol=3)
+        backend.move_parallel.return_value = {"ok": True, "steps": {"x": 800}}
+        for axis in axes.values():
+            axis.motion_backend = backend
+            axis.position_steps = 0
+            axis.head_limit.value = False
+            axis.tail_limit.value = False
+
+        plan = CoordinatedMovePlan(
+            axes={
+                "x": AxisMovePlan("x", 0.0, 10.0, 10.0, 1, 800, 10.0, 1.0),
+                "y": AxisMovePlan("y", 5.0, 5.0, 0.0, 1, 0, 0.0, 1.0),
+            },
+            duration_s=1.0,
+            mode="speed",
+        )
+
+        controller._execute_coordinated_plan(plan)
+
+        sent_plans = backend.move_parallel.call_args.args[0]
+        self.assertEqual(set(sent_plans), {"x"})
+        self.assertEqual(axes["x"].position_steps, 800)
+        self.assertEqual(axes["y"].position_steps, 0)
+
     def test_motion_service_move_to_slot_returns_json_safe_slot(self) -> None:
         slot = SlotPosition("1", 21.9, 22.0, 35.0)
 

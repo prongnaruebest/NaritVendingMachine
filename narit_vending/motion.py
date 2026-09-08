@@ -1298,6 +1298,7 @@ class MotionController:
                     "speed_hz": max(10.0, axis_plan.steps / max(plan.duration_s, 0.001)),
                 }
                 for axis_name, axis_plan in plan.axes.items()
+                if axis_plan.steps > 0
             }
 
             def coordinated_stop() -> bool:
