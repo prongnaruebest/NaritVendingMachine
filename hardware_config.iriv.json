@@ -325,7 +325,7 @@
         "pulley_teeth": null
       },
       "z": {
-        "steps_per_mm": 200.0,
+        "steps_per_mm": 9.0,
         "max_travel_mm": 160.0,
         "max_speed_mm_s": 250.0,
         "default_speed_mm_s": 2.0,
@@ -341,7 +341,7 @@
         "homing_search_speed_mm_s": 2.0,
         "homing_latch_speed_mm_s": 1.0,
         "homing_timeout_s": 180.0,
-        "lead_screw_pitch_mm": 8.0,
+        "lead_screw_pitch_mm": 177.777778,
         "motor_steps_per_rev": 200,
         "driver_microsteps": 8,
         "drive_type": "timing_belt",

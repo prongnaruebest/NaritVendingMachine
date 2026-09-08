@@ -1098,7 +1098,9 @@ class MotionService:
 
             motor_steps = _config_integer(axis_payload, "motor_steps_per_rev", minimum=1, maximum=10_000)
             microsteps = _config_integer(axis_payload, "driver_microsteps", minimum=1, maximum=256)
-            lead_pitch = _config_number(axis_payload, "lead_screw_pitch_mm", minimum=0.01, maximum=100.0)
+            # This legacy field represents effective linear travel per motor
+            # revolution. Belt/pulley axes can legitimately exceed 100 mm/rev.
+            lead_pitch = _config_number(axis_payload, "lead_screw_pitch_mm", minimum=0.01, maximum=1_000.0)
             steps_per_mm = _config_number(axis_payload, "steps_per_mm", minimum=0.1, maximum=100_000.0)
             max_travel = _config_number(axis_payload, "max_travel_mm", minimum=0.1, maximum=10_000.0)
             max_speed = _config_number(axis_payload, "max_speed_mm_s", minimum=0.01, maximum=500.0)

@@ -35,6 +35,18 @@ class ConfigFoundationTests(unittest.TestCase):
         self.assertEqual(self.machine["home_order"], expected)
         self.assertEqual(self.hardware["machine_parameters"]["home_order"], expected)
 
+    def test_z_uses_measured_pulley_calibration(self) -> None:
+        """Z is direct pulley drive: 1,440 pulses measured over 160 mm."""
+        machine = json.loads((ROOT / "machine_config.iriv.json").read_text(encoding="utf-8"))
+        hardware = json.loads((ROOT / "hardware_config.iriv.json").read_text(encoding="utf-8"))
+        report = validate_configuration_payloads(machine, hardware)
+
+        self.assertTrue(report.valid)
+        self.assertEqual(report.effective_axes["z"]["drive_type"], "timing_belt")
+        self.assertAlmostEqual(report.effective_axes["z"]["steps_per_mm"], 9.0)
+        self.assertAlmostEqual(report.effective_axes["z"]["max_travel_mm"], 160.0)
+        self.assertAlmostEqual(report.effective_axes["z"]["lead_screw_pitch_mm"], 1600 / 9, places=5)
+
     def test_all_test_slots_are_configured_inside_axis_limits(self) -> None:
         slots = self.machine["slots"]
         limits = {"x": 220.0, "y": 260.0, "z": 200.0}
