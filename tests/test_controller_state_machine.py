@@ -5,9 +5,27 @@ from narit_vending.controller.state_machine import (
     StateMachine,
     StateMachineError,
 )
+from narit_vending.domain.enums import MachineState as DomainMachineState
+from narit_vending.domain.machine_state import normalize_machine_state
 
 
 class TestStateMachine(unittest.TestCase):
+    def test_controller_reexports_canonical_machine_state(self):
+        self.assertIs(MachineState, DomainMachineState)
+
+    def test_normalization_uses_authoritative_motion_facts(self):
+        self.assertEqual(
+            normalize_machine_state("idle", estop=False, busy=False, active_command=None, axes_homed=True),
+            MachineState.READY,
+        )
+        self.assertEqual(
+            normalize_machine_state("ready", estop=False, busy=True, active_command="home_all", axes_homed=False),
+            MachineState.HOMING,
+        )
+        self.assertEqual(
+            normalize_machine_state("ready", estop=True, busy=False, active_command=None, axes_homed=True),
+            MachineState.E_STOP,
+        )
     def test_initial_state(self):
         sm = StateMachine()
         self.assertEqual(sm.state, MachineState.STARTING)

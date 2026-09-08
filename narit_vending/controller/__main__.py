@@ -37,30 +37,15 @@ def _normalize_machine_state(
     active_command: str | None,
     axes_homed: bool,
 ) -> str:
-    if estop:
-        return "E_STOP"
-    if busy:
-        command = str(active_command or "").lower()
-        if command.startswith("home"):
-            return "HOMING"
-        if command.startswith("dispense"):
-            return "DISPENSING"
-        return "MOVING"
+    from narit_vending.domain.machine_state import normalize_machine_state
 
-    normalized = {
-        "success": "READY",
-        "ready": "READY",
-        "idle": "READY" if axes_homed else "NOT_READY",
-        "not_ready": "NOT_READY",
-        "homing": "HOMING",
-        "moving": "MOVING",
-        "alarm": "ALARM",
-        "e_stop": "E_STOP",
-        "stopped": "STOPPED",
-    }.get(raw_state.lower(), raw_state.upper())
-    if normalized == "READY" and not axes_homed:
-        return "NOT_READY"
-    return normalized
+    return normalize_machine_state(
+        raw_state,
+        estop=estop,
+        busy=busy,
+        active_command=active_command,
+        axes_homed=axes_homed,
+    ).value
 
 
 def _build_snapshot(service: Any) -> MachineSnapshot:

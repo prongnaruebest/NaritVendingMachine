@@ -15,7 +15,8 @@ from .errors import (
     StopRequestedError,
     TravelBoundaryError,
 )
-from .enums import AxisName, AxisState, CommandOutcome, Direction
+from .enums import AxisName, AxisState, CommandOutcome, Direction, MachineState
+from .machine_state import normalize_machine_state
 from .safety import AxisSafetySnapshot, SafetyReasonCode, SafetySnapshot
 
 __all__ = [
@@ -35,4 +36,6 @@ __all__ = [
     "AxisSafetySnapshot",
     "SafetyReasonCode",
     "SafetySnapshot",
+    "MachineState",
+    "normalize_machine_state",
 ]

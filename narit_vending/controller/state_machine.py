@@ -10,26 +10,11 @@ from __future__ import annotations
 
 import logging
 import threading
-from enum import Enum
 from typing import FrozenSet
 
+from narit_vending.domain.enums import MachineState
+
 _log = logging.getLogger(__name__)
-
-
-class MachineState(str, Enum):
-    """All valid machine states."""
-
-    STARTING = "STARTING"
-    CONFIG_REQUIRED = "CONFIG_REQUIRED"
-    NOT_READY = "NOT_READY"
-    HOMING = "HOMING"
-    READY = "READY"
-    MOVING = "MOVING"
-    DISPENSING = "DISPENSING"
-    MOTOR_TEST = "MOTOR_TEST"
-    ALARM = "ALARM"
-    E_STOP = "E_STOP"
-    STOPPED = "STOPPED"
 
 
 class StateMachineError(RuntimeError):

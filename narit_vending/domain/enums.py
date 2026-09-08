@@ -22,6 +22,21 @@ class CommandOutcome(str, Enum):
     BUSY = "BUSY"
 
 
+class MachineState(str, Enum):
+    STARTING = "STARTING"
+    CONFIG_REQUIRED = "CONFIG_REQUIRED"
+    NOT_READY = "NOT_READY"
+    HOMING = "HOMING"
+    READY = "READY"
+    MOVING = "MOVING"
+    DISPENSING = "DISPENSING"
+    MOTOR_TEST = "MOTOR_TEST"
+    ALARM = "ALARM"
+    E_STOP = "E_STOP"
+    STOPPED = "STOPPED"
+    CONTROLLER_OFFLINE = "CONTROLLER_OFFLINE"
+
+
 class AxisState(str, Enum):
     UNREFERENCED = "UNREFERENCED"
     IDLE = "IDLE"
