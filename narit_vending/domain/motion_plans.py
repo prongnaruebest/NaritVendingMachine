@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 
 
 @dataclass(frozen=True)
@@ -58,3 +59,54 @@ class CoordinatedMovePlan:
             "total_distance_mm": round(self.total_distance_mm, 3),
             "axes": {name: plan.to_dict() for name, plan in self.axes.items()},
         }
+
+
+def build_axis_move_plan(
+    *,
+    axis: str,
+    current_mm: float,
+    distance_mm: float,
+    forward_direction: int,
+    home_direction: int,
+    pulses_per_mm: float,
+    duration_s: float,
+) -> AxisMovePlan:
+    """Build an immutable axis plan from already-authorized inputs.
+
+    Safety checks and target-boundary authorization intentionally happen before
+    this function is called.  The function only performs deterministic plan
+    construction and rejects malformed numeric input.
+    """
+
+    numeric_values = {
+        "current_mm": current_mm,
+        "distance_mm": distance_mm,
+        "pulses_per_mm": pulses_per_mm,
+        "duration_s": duration_s,
+    }
+    for name, value in numeric_values.items():
+        if not math.isfinite(float(value)):
+            raise ValueError(f"{name} must be finite")
+    if pulses_per_mm <= 0:
+        raise ValueError("pulses_per_mm must be greater than 0")
+    if duration_s < 0:
+        raise ValueError("duration_s cannot be negative")
+
+    distance = float(distance_mm)
+    current = float(current_mm)
+    if distance == 0:
+        return AxisMovePlan(axis, current, current, 0.0, forward_direction, 0, 0.0, 0.0)
+
+    steps = abs(round(distance * pulses_per_mm))
+    direction = forward_direction if distance > 0 else home_direction
+    speed = 0.0 if duration_s == 0 else abs(distance) / duration_s
+    return AxisMovePlan(
+        axis=axis,
+        current_mm=current,
+        target_mm=current + distance,
+        distance_mm=distance,
+        direction=direction,
+        steps=steps,
+        speed_mm_s=speed,
+        duration_s=float(duration_s),
+    )

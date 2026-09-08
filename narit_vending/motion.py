@@ -35,7 +35,7 @@ from .domain.motion_math import (
     pulse_hz_to_rpm,
     pulses_per_revolution,
 )
-from .domain.motion_plans import AxisMovePlan, CoordinatedMovePlan
+from .domain.motion_plans import AxisMovePlan, CoordinatedMovePlan, build_axis_move_plan
 
 
 _logger = logging.getLogger(__name__)
@@ -290,31 +290,27 @@ class AxisController:
         if not math.isfinite(float(distance_mm)):
             raise MotionError(f"{self.config.name}: distance_mm must be finite")
         if distance_mm == 0:
-            return AxisMovePlan(
+            return build_axis_move_plan(
                 axis=self.config.name,
                 current_mm=self.position_mm,
-                target_mm=self.position_mm,
                 distance_mm=0.0,
-                direction=self.config.forward_direction,
-                steps=0,
-                speed_mm_s=0.0,
+                forward_direction=self.config.forward_direction,
+                home_direction=self.config.home_direction,
+                pulses_per_mm=self.config.steps_per_mm,
                 duration_s=0.0,
             )
 
         steps = abs(self.mm_to_steps(distance_mm))
         direction = self.config.forward_direction if distance_mm > 0 else self.config.home_direction
-        target_mm = self.position_mm + distance_mm
         self._guard_before_move(direction, steps if direction == self.config.forward_direction else -steps)
         duration_s = self._resolve_duration(abs(distance_mm), steps, speed_mm_s, time_s)
-        planned_speed = 0.0 if duration_s == 0 else abs(distance_mm) / duration_s
-        return AxisMovePlan(
+        return build_axis_move_plan(
             axis=self.config.name,
             current_mm=self.position_mm,
-            target_mm=target_mm,
             distance_mm=distance_mm,
-            direction=direction,
-            steps=steps,
-            speed_mm_s=planned_speed,
+            forward_direction=self.config.forward_direction,
+            home_direction=self.config.home_direction,
+            pulses_per_mm=self.config.steps_per_mm,
             duration_s=duration_s,
         )
 
