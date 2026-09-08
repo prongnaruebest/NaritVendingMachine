@@ -8403,7 +8403,13 @@ body { font-size: 14px; }
   width: 100%;
   min-height: 0;
   max-height: none;
-  overflow-x: auto !important;
+  overflow-x: visible !important;
   overflow-y: visible !important;
-  overscroll-behavior-inline: contain;
+  overscroll-behavior: auto !important;
+}
+@media (max-width: 720px) {
+  .workspace-view[data-view-page="slots"] .slot-table {
+    width: 100%;
+    min-width: 0;
+  }
 }

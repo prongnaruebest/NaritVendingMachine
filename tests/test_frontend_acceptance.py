@@ -60,6 +60,7 @@ class FrontendAcceptanceTests(unittest.TestCase):
         self.assertIn('height: auto !important', STYLE)
         self.assertIn("max-height: none", STYLE)
         self.assertIn("overflow-y: visible !important", STYLE)
+        self.assertIn("overscroll-behavior: auto !important", STYLE)
 
     def test_live_axis_positions_are_persistent_across_workspaces(self) -> None:
         for axis in ("x", "y", "z"):
