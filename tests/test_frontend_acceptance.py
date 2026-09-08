@@ -54,6 +54,13 @@ class FrontendAcceptanceTests(unittest.TestCase):
         self.assertIn(".sidebar { display: block !important", STYLE)
         self.assertIn("overflow-x: auto", STYLE)
 
+    def test_slots_table_has_a_bounded_vertical_scroll_area(self) -> None:
+        self.assertIn('data-view-page="slots"', TEMPLATE)
+        self.assertIn('.workspace-view[data-view-page="slots"] .slot-table-wrap', STYLE)
+        self.assertIn("overflow-y: scroll !important", STYLE)
+        self.assertIn("scrollbar-gutter: stable both-edges", STYLE)
+        self.assertIn('.workspace-view[data-view-page="slots"] .slot-table thead', STYLE)
+
     def test_live_axis_positions_are_persistent_across_workspaces(self) -> None:
         for axis in ("x", "y", "z"):
             self.assertEqual(TEMPLATE.count(f'id="footer-axis-{axis}"'), 1)
