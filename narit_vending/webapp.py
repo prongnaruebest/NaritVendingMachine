@@ -15,6 +15,7 @@ from pathlib import Path
 
 from flask import Flask, jsonify, redirect, render_template, request
 
+from .controller.ports import IRIVIOPort, NucleoTransportPort, PiControlIOPort
 from .config_foundation import (
     create_config_backup,
     validate_configuration_files,
@@ -135,19 +136,19 @@ class MotionService:
 
         hw_config = load_hardware_config(str(self.hw_config_path))
         iriv_config = hw_config.get("iriv_io", {})
-        self.io_backend: IRIVIOBackend | None = None
+        self.io_backend: IRIVIOPort | None = None
         if isinstance(iriv_config, dict) and iriv_config.get("enabled"):
             self.io_backend = IRIVIOBackend(iriv_config)
             self.io_backend.start()
 
         picontrol_config = hw_config.get("picontrol_io", {})
-        self.picontrol_io: PiControlIOBackend | None = None
+        self.picontrol_io: PiControlIOPort | None = None
         if isinstance(picontrol_config, dict) and picontrol_config.get("enabled"):
             self.picontrol_io = PiControlIOBackend(picontrol_config)
             self.picontrol_io.start()
 
         nucleo_config = hw_config.get("nucleo", {})
-        self.nucleo_link: NucleoLink | None = None
+        self.nucleo_link: NucleoTransportPort | None = None
         if isinstance(nucleo_config, dict) and nucleo_config.get("enabled"):
             safety_perm = lambda: not any(
                 c["active"] and c["level"] == "fault"
