@@ -540,7 +540,8 @@ code { background:var(--surface2); border:1px solid var(--border); border-radius
     <span class="topbar-breadcrumb" id="breadcrumb"><strong>ภาพรวมโปรเจค</strong></span>
     <span class="topbar-tag" id="topSection">Project Overview</span>
     <span class="topbar-spacer"></span>
-    <a href="master_reference.html" style="font-size:.72rem; color:var(--accent); text-decoration:none; background:var(--surface2); border:1px solid var(--border); padding:.25rem .6rem; border-radius:5px; font-weight:600;">📑 คู่มือเชิงลึกฉบับเต็ม (Full Reference)</a>
+    <a href="javascript:void(0)" onclick="goTo(35)" style="font-size:.72rem; color:var(--success); text-decoration:none; background:var(--surface2); border:1px solid var(--border); padding:.25rem .6rem; border-radius:5px; font-weight:600;">📖 อ่านคู่มือเต็มในหน้านี้ (Slide 36)</a>
+    <a href="master_reference.html" style="font-size:.72rem; color:var(--accent); text-decoration:none; background:var(--surface2); border:1px solid var(--border); padding:.25rem .6rem; border-radius:5px; font-weight:600;">📑 เปิดแท็บใหม่ Master Ref</a>
     <a href="architecture.html" style="font-size:.72rem; color:var(--accent2); text-decoration:none; background:var(--surface2); border:1px solid var(--border); padding:.25rem .6rem; border-radius:5px; font-weight:600;">🏛️ แผนภาพ Architecture</a>
     <span class="topbar-hint">← → หรือ Arrow Keys เพื่อเปลี่ยนหน้า</span>
   </div>
@@ -1980,15 +1981,28 @@ function nextSlide() { goTo(current + 1); }
 function prevSlide() { goTo(current - 1); }
 
 document.addEventListener('keydown', e => {
-  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') nextSlide();
-  if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')   prevSlide();
+  if (e.target && e.target.tagName === 'INPUT') return;
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === 'PageDown' || e.key === ' ') {
+    e.preventDefault();
+    nextSlide();
+  } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'PageUp') {
+    e.preventDefault();
+    prevSlide();
+  } else if (e.key === 'Home') {
+    e.preventDefault();
+    goTo(0);
+  } else if (e.key === 'End') {
+    e.preventDefault();
+    goTo(slides.length - 1);
+  }
 });
 
 function filterNav(q) {
   q = q.trim().toLowerCase();
   navBtns.forEach(btn => {
     const label = btn.querySelector('.nb-label');
-    const text = label ? label.textContent.toLowerCase() : '';
+    const num = btn.querySelector('.nb-num');
+    const text = ((num ? num.textContent : '') + ' ' + (label ? label.textContent : '')).toLowerCase();
     btn.classList.toggle('hidden-search', q.length > 0 && !text.includes(q));
   });
 }
