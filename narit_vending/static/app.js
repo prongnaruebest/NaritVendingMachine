@@ -4265,7 +4265,7 @@
     const demoPayload = () => {
       const selected = MS.visualTargetSlot || MS.selectedSlotCode || "1";
       const mode = el("demo-mode")?.value || "sequential";
-      return {mode, slots: mode === "selected" ? [selected] : Object.keys(MS.slots), max_cycles: Number(el("demo-max-cycles")?.value || 0), max_duration_s: Number(el("demo-max-duration")?.value || 0), dwell_s: Number(el("demo-dwell")?.value || 0), speed_mm_s: effectiveMotionSpeed(), stop_on_failure: true};
+      return {mode, slots: mode === "selected" ? [selected] : Object.keys(MS.slots), sample_count: Number(el("demo-max-cycles")?.value || 0), max_duration_s: Number(el("demo-max-duration")?.value || 0), dwell_s: Number(el("demo-dwell")?.value || 0), speed_mm_s: effectiveMotionSpeed(), stop_on_failure: true};
     };
     const demoAction = async (action, payload = {}) => {
       try {

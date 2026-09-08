@@ -1,4 +1,14 @@
-﻿<!doctype html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="NARIT Vending Machine Industrial Gantry Motion Control HMI">
+  <title>NARIT VENDING — Industrial Gantry HMI</title>
+  <link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='favicon-transparent-large.png') }}?v=20260721_v12">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -15,7 +25,7 @@
     <!-- ── SIDEBAR ─────────────────────────────────────────────── -->
     <aside class="sidebar">
       <div class="sidebar-brand">
-        <div class="brand-mark">NV</div>
+        <img src="{{ url_for('static', filename='favicon-transparent.png') }}" class="brand-mark" style="object-fit:contain; padding:2px; background:rgba(40,120,208,0.15); border:1px solid rgba(80,130,190,0.35); box-shadow:0 0 10px rgba(90,170,248,0.25);" alt="NARIT Logo">
         <div class="sidebar-brand-text">
           NARIT VENDING
           <span id="sidebar-device-label">Checking device...</span>
@@ -490,12 +500,12 @@
           <div class="panel-head"><div><p class="panel-label">Controller-owned bounded sequence</p><h2 class="panel-title" id="demo-title">Demo Slot Sampling</h2></div><span class="page-status-chip" id="demo-state">IDLE</span></div>
           <div class="demo-layout">
             <div class="demo-config-grid">
-              <label><span>Sampling Mode</span><select class="hmi-select" id="demo-mode"><option value="sequential">Sequential</option><option value="random">Random</option><option value="balanced">Balanced</option><option value="selected">Selected Slot Only</option></select></label>
-              <label><span>Maximum Cycles</span><input class="hmi-input" id="demo-max-cycles" type="number" min="0" step="1" value="1"></label>
+              <label><span>Sampling Mode</span><select class="hmi-select" id="demo-mode"><option value="random" selected>Random Slot</option><option value="sequential">Sequential</option><option value="balanced">Balanced</option><option value="selected">Selected Slot Only</option></select></label>
+              <label><span>Number of Slot Moves</span><input class="hmi-input" id="demo-max-cycles" type="number" min="1" max="10000" step="1" value="10"></label>
               <label><span>Maximum Duration</span><div class="field-input-wrap"><input class="hmi-input" id="demo-max-duration" type="number" min="0" step="1" value="0"><span class="unit-tag">s</span></div></label>
               <label><span>Dwell per Slot</span><div class="field-input-wrap"><input class="hmi-input" id="demo-dwell" type="number" min="0" step="0.1" value="0.5"><span class="unit-tag">s</span></div></label>
             </div>
-            <p class="demo-safety-note">Motion-only test. Dispense is always disabled. At least one cycle or duration limit is required. Start requires all axes homed and every safety link healthy.</p>
+            <p class="demo-safety-note">One sample equals one move to one target Slot. Random mode selects a new Slot for each requested move. Dispense is always disabled. Start requires all axes homed and every safety link healthy.</p>
             <div class="demo-actions">
               <button class="btn-secondary" id="demo-configure" type="button">1 CONFIGURE</button><button class="btn-secondary" id="demo-validate" type="button">2 VALIDATE</button><button class="btn-arm" id="demo-arm" type="button">3 ARM</button><button class="btn-execute" id="demo-start" type="button">4 START</button><button class="btn-secondary" id="demo-pause" type="button">PAUSE AFTER SLOT</button><button class="btn-secondary" id="demo-resume" type="button">RESUME</button><button class="btn-estop" id="demo-stop" type="button">STOP DEMO</button><a class="btn-secondary demo-export" href="/api/demo/export.csv" download>EXPORT CSV</a>
             </div>

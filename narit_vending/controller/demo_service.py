@@ -76,7 +76,10 @@ class DemoSamplingService:
         config = {
             "mode": str(payload.get("mode", "sequential")).lower(),
             "slots": slots,
-            "max_cycles": int(payload.get("max_cycles", 1) or 0),
+            # One sample equals one slot target move. ``max_cycles`` remains
+            # accepted as a legacy API alias, but no longer multiplies by the
+            # number of configured slots.
+            "sample_count": int(payload.get("sample_count", payload.get("max_cycles", 1)) or 0),
             "max_duration_s": float(payload.get("max_duration_s", 0) or 0),
             "dwell_s": max(0.0, float(payload.get("dwell_s", 0) or 0)),
             "speed_mm_s": float(payload.get("speed_mm_s", 5) or 5),
@@ -86,8 +89,8 @@ class DemoSamplingService:
         }
         if config["mode"] not in {"sequential", "random", "balanced", "selected"}:
             raise ValueError("mode must be sequential, random, balanced, or selected")
-        if config["max_cycles"] <= 0 and config["max_duration_s"] <= 0:
-            raise ValueError("Demo requires max_cycles or max_duration_s")
+        if config["sample_count"] <= 0 and config["max_duration_s"] <= 0:
+            raise ValueError("Demo requires sample_count or max_duration_s")
         if config["speed_mm_s"] <= 0:
             raise ValueError("speed_mm_s must be greater than zero")
         return config
@@ -146,7 +149,7 @@ class DemoSamplingService:
             self._pause_requested = False
             self._cycle = 0
             self._counters = {key: 0 for key in self._counters}
-            requested = max(0, self._config["max_cycles"]) * len(self._config["slots"])
+            requested = max(0, self._config["sample_count"])
             self._counters["requested"] = requested
             with closing(self._connect()) as db, db:
                 db.execute("INSERT INTO demo_sessions(session_id,started_at,state,configuration_json,requested) VALUES(?,?,?,?,?)", (self._session_id, self._started_at, self._state, json.dumps(self._config, sort_keys=True), requested))
@@ -164,46 +167,76 @@ class DemoSamplingService:
             slots.sort(key=lambda slot: (counts.get(slot, 0), slot))
         return slots
 
+    def _sample_plan(self, rng: random.Random) -> list[str]:
+        """Build the bounded list of target slots, one entry per requested move."""
+        slots = list(self._config["slots"])
+        count = max(0, int(self._config["sample_count"]))
+        if count == 0:
+            return []
+        mode = self._config["mode"]
+        if mode == "selected":
+            return [slots[0]] * count
+        if mode == "sequential":
+            return [slots[index % len(slots)] for index in range(count)]
+        if mode == "balanced":
+            ordered = self._ordered_slots(rng)
+            return [ordered[index % len(ordered)] for index in range(count)]
+
+        # Random sampling avoids an immediate duplicate when alternatives
+        # exist so each observed movement is useful for target verification.
+        plan: list[str] = []
+        for _ in range(count):
+            candidates = [slot for slot in slots if not plan or slot != plan[-1]] or slots
+            plan.append(rng.choice(candidates))
+        return plan
+
     def _run(self) -> None:
         rng = random.Random(self._config["random_seed"])
         started = time.monotonic()
         reason = ""
         try:
+            plan = self._sample_plan(rng)
+            plan_index = 0
             while not self._stop.is_set():
-                if self._config["max_cycles"] > 0 and self._cycle >= self._config["max_cycles"]:
+                if self._config["sample_count"] > 0 and plan_index >= len(plan):
                     break
                 if self._config["max_duration_s"] > 0 and time.monotonic() - started >= self._config["max_duration_s"]:
                     break
+                if plan:
+                    slot = plan[plan_index]
+                    next_slot = plan[plan_index + 1] if plan_index + 1 < len(plan) else None
+                    plan_index += 1
+                else:
+                    # Duration-only mode remains bounded by its watchdog.
+                    candidates = [item for item in self._config["slots"] if item != self._current_slot] or list(self._config["slots"])
+                    slot = rng.choice(candidates) if self._config["mode"] == "random" else candidates[self._cycle % len(candidates)]
+                    next_slot = None
                 self._cycle += 1
-                slots = self._ordered_slots(rng)
-                for index, slot in enumerate(slots):
-                    if self._stop.is_set():
-                        break
-                    self._current_slot = slot
-                    self._next_slot = slots[index + 1] if index + 1 < len(slots) else None
-                    self._state = "MOVING_TO_SLOT"
-                    sample_id, sample_started, t0 = uuid.uuid4().hex, _now(), time.monotonic()
-                    self._counters["attempted"] += 1
-                    result = self.motion.move_to_slot(slot, speed_mm_s=self._config["speed_mm_s"])
-                    stopped = self._stop.is_set()
-                    passed = bool(result.get("ok")) and not stopped
-                    outcome = "STOPPED" if stopped else ("PASSED" if passed else "FAILED")
-                    reason = str(result.get("error") or "")
-                    if not stopped:
-                        self._counters["passed" if passed else "failed"] += 1
-                    self._last_result = outcome if passed or stopped else f"FAILED: {reason}"
-                    with closing(self._connect()) as db, db:
-                        db.execute("INSERT INTO demo_samples VALUES(?,?,?,?,?,?,?,?,?)", (sample_id, self._session_id, self._cycle, slot, sample_started, _now(), round(time.monotonic()-t0, 3), outcome, reason))
-                    if stopped:
-                        break
-                    if not passed and self._config["stop_on_failure"]:
-                        raise RuntimeError(reason or "Slot move failed")
-                    if self._pause_requested:
-                        self._state = "PAUSED"
-                        while self._pause_requested and not self._stop.wait(0.1):
-                            pass
-                    if self._config["dwell_s"] and self._stop.wait(self._config["dwell_s"]):
-                        break
+                self._current_slot = slot
+                self._next_slot = next_slot
+                self._state = "MOVING_TO_SLOT"
+                sample_id, sample_started, t0 = uuid.uuid4().hex, _now(), time.monotonic()
+                self._counters["attempted"] += 1
+                result = self.motion.move_to_slot(slot, speed_mm_s=self._config["speed_mm_s"])
+                stopped = self._stop.is_set()
+                passed = bool(result.get("ok")) and not stopped
+                outcome = "STOPPED" if stopped else ("PASSED" if passed else "FAILED")
+                reason = str(result.get("error") or "")
+                if not stopped:
+                    self._counters["passed" if passed else "failed"] += 1
+                self._last_result = outcome if passed or stopped else f"FAILED: {reason}"
+                with closing(self._connect()) as db, db:
+                    db.execute("INSERT INTO demo_samples VALUES(?,?,?,?,?,?,?,?,?)", (sample_id, self._session_id, self._cycle, slot, sample_started, _now(), round(time.monotonic()-t0, 3), outcome, reason))
+                if stopped:
+                    break
+                if not passed and self._config["stop_on_failure"]:
+                    raise RuntimeError(reason or "Slot move failed")
+                if self._pause_requested:
+                    self._state = "PAUSED"
+                    while self._pause_requested and not self._stop.wait(0.1):
+                        pass
+                if self._config["dwell_s"] and self._stop.wait(self._config["dwell_s"]):
+                    break
             self._state = "STOPPED" if self._stop.is_set() else "COMPLETED"
         except Exception as exc:
             reason = str(exc)
