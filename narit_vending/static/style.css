@@ -4869,6 +4869,12 @@ select.slot-filter {
   .footer-axis-position small { display: none; }
 }
 
+/* Visualization hierarchy: machine position first, bounded demo last. */
+.workspace-view[data-view-page="visualization"] > .linked-speed-panel { order: 0; }
+.workspace-view[data-view-page="visualization"] > .visual-state-strip { order: 10; }
+.workspace-view[data-view-page="visualization"] > .visualization-panel { order: 20; }
+.workspace-view[data-view-page="visualization"] > .demo-sampling-panel { order: 100; }
+
 @media (max-width: 420px) {
   .status-time { display: none; }
   .status-bar { grid-template-columns: 1fr; grid-template-areas: "positions" "message"; }

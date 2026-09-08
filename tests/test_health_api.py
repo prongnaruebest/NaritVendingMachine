@@ -127,7 +127,7 @@ class HealthApiTests(unittest.TestCase):
 
         self.assertIn('id="operator-stop"', html)
         self.assertEqual(html.count('data-travel-axis='), 6)
-        self.assertIn('class="panel target-panel">', html)
+        self.assertIn('class="panel target-panel" hidden aria-hidden="true">', html)
         self.assertIn('command("Stop motion", "/api/stop"', app_js)
         self.assertIn('{ requiredAxes: [axis], timeoutMs: 650000 }', app_js)
         self.assertIn("if (!window.confirm(confirmation)) return;", app_js)

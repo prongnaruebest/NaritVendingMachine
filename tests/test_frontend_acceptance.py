@@ -142,6 +142,7 @@ class FrontendAcceptanceTests(unittest.TestCase):
         self.assertIn("The axis is ready for the next Min/Max or Jog command", APP_JS)
 
     def test_target_positioning_has_one_speed_authority(self) -> None:
+        self.assertIn('class="panel target-panel" hidden aria-hidden="true"', TEMPLATE)
         for removed_id in (
             "target-speed", "target-duration", "move-timeout",
             "move-acceleration", "move-deceleration",
@@ -150,6 +151,12 @@ class FrontendAcceptanceTests(unittest.TestCase):
         self.assertIn("body.speed_mm_s = effectiveMotionSpeed(participatingAxes)", APP_JS)
         self.assertNotIn('el("target-duration")', APP_JS)
         self.assertNotIn('el("move-timeout")', APP_JS)
+
+    def test_visualization_places_machine_plane_before_demo_sampling(self) -> None:
+        visualization = TEMPLATE.split('data-view-page="visualization"', 1)[1]
+        self.assertLess(visualization.index('class="panel page-panel demo-sampling-panel"'), visualization.index('class="panel page-panel visualization-panel'))
+        self.assertIn('.workspace-view[data-view-page="visualization"] > .visualization-panel { order: 20; }', STYLE)
+        self.assertIn('.workspace-view[data-view-page="visualization"] > .demo-sampling-panel { order: 100; }', STYLE)
 
     def test_advanced_diagnostics_are_read_only_and_use_live_state(self) -> None:
         self.assertNotIn('id="io-open-homing"', TEMPLATE)
