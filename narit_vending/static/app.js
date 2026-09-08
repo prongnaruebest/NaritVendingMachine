@@ -3867,6 +3867,10 @@
     setClass("system-drive-power-state", `page-status-chip ${drivePowerOn ? "ok" : "fault"}`);
     const driveReset = el("system-drive-power-reset");
     if (driveReset) driveReset.disabled = !MS.online || Boolean(MS.payload?.busy) || picontrol.communication_ok === false;
+    const driveCut = el("system-drive-power-cut");
+    if (driveCut) driveCut.disabled = !MS.online || !drivePowerOn;
+    const driveRestore = el("system-drive-power-restore");
+    if (driveRestore) driveRestore.disabled = !MS.online || drivePowerOn || Boolean(MS.payload?.busy) || picontrol.communication_ok === false;
     const history = el("system-action-history");
     if (history) {
       const entries = MS.events.filter((event) => ["SYSTEM", "SAFETY", "INTERLOCK", "CONFIG"].includes(eventCategory(event))).slice(0, 8);
@@ -4238,6 +4242,16 @@
     el("system-drive-power-reset")?.addEventListener("click", () => {
       const warning = "Reset X/Y drive power now? All axes will stop, NUCLEO will disarm, KM1 will remove 60 V for 3 seconds, and X/Y homing references will be cleared.";
       if (window.confirm(warning)) runSystemAction("/api/system/drives/reset-power", "X/Y drive power reset complete. Motion remains disabled; Home X/Y before use.");
+    });
+    el("system-drive-power-cut")?.addEventListener("click", () => {
+      if (window.confirm("Cut 60 V power to X/Y drives and keep it OFF? All axes will stop and X/Y homing references will be cleared.")) {
+        runSystemAction("/api/system/drives/cut-power", "X/Y drive power is OFF. Motion remains disabled.");
+      }
+    });
+    el("system-drive-power-restore")?.addEventListener("click", () => {
+      if (window.confirm("Restore 60 V power to X/Y drives through KM1? Motion will remain disabled and X/Y must be homed before use.")) {
+        runSystemAction("/api/system/drives/restore-power", "X/Y drive power restored. Motion remains disabled; Home X/Y before use.");
+      }
     });
 
     const demoPayload = () => {

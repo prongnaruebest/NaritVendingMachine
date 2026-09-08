@@ -49,6 +49,14 @@ class ConfigFoundationTests(unittest.TestCase):
         self.assertAlmostEqual(report.effective_axes["z"]["homing_search_speed_mm_s"], 20.0)
         self.assertAlmostEqual(report.effective_axes["z"]["homing_latch_speed_mm_s"], 5.0)
 
+    def test_picontrol_xy_drive_power_defaults_on_through_series_estop(self) -> None:
+        hardware = json.loads((ROOT / "hardware_config.iriv.json").read_text(encoding="utf-8"))
+        output = hardware["picontrol_io"]["outputs"]["xy_drive_power"]
+
+        self.assertEqual(output["channel"], 0)
+        self.assertEqual(output["pin"], 23)
+        self.assertTrue(output["initial_value"])
+
     def test_all_test_slots_are_configured_inside_axis_limits(self) -> None:
         slots = self.machine["slots"]
         limits = {"x": 220.0, "y": 260.0, "z": 200.0}

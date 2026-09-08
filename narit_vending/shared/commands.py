@@ -49,6 +49,8 @@ CommandType = Literal[
     "ENABLE_MOTION",
     "RESET_NUCLEO_LINK",
     "RESET_XY_DRIVE_POWER",
+    "CUT_XY_DRIVE_POWER",
+    "RESTORE_XY_DRIVE_POWER",
     "CONFIGURE_DEMO",
     "VALIDATE_DEMO",
     "ARM_DEMO",

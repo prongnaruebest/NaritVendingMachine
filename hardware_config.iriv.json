@@ -147,7 +147,7 @@
         "channel": 0,
         "pin": 23,
         "active_high": true,
-        "initial_value": false,
+        "initial_value": true,
         "label": "XY_DRIVE_POWER_KM1",
         "reset_off_s": 3.0,
         "recovery_timeout_s": 8.0

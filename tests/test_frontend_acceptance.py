@@ -163,6 +163,8 @@ class FrontendAcceptanceTests(unittest.TestCase):
     def test_system_control_exposes_controller_owned_xy_drive_power_reset(self) -> None:
         self.assertIn('id="system-drive-power-reset"', TEMPLATE)
         self.assertIn('/api/system/drives/reset-power', APP_JS)
+        self.assertIn('/api/system/drives/cut-power', APP_JS)
+        self.assertIn('/api/system/drives/restore-power', APP_JS)
         self.assertIn('picontrol.outputs?.xy_drive_power', APP_JS)
 
     def test_io_status_separates_picontrol_from_iriv_modbus(self) -> None:

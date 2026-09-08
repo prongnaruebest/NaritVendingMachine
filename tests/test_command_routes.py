@@ -123,6 +123,8 @@ class CommandRouteTests(unittest.TestCase):
             ("/api/system/motion/enable", "ENABLE_MOTION"),
             ("/api/system/nucleo/reset-link", "RESET_NUCLEO_LINK"),
             ("/api/system/drives/reset-power", "RESET_XY_DRIVE_POWER"),
+            ("/api/system/drives/cut-power", "CUT_XY_DRIVE_POWER"),
+            ("/api/system/drives/restore-power", "RESTORE_XY_DRIVE_POWER"),
         )
         for path, command_type in cases:
             with self.subTest(path=path):

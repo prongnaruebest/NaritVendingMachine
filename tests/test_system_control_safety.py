@@ -92,6 +92,26 @@ class SystemControlSafetyTests(unittest.TestCase):
         self.assertFalse(service.controller.axes()["y"].is_homed)
         self.assertTrue(service.controller.axes()["z"].is_homed)
 
+    def test_cut_xy_drive_power_is_fail_safe_and_clears_xy_home(self):
+        service = self.service()
+
+        result = service.cut_xy_drive_power()
+
+        self.assertTrue(result["ok"])
+        service.picontrol_io.set_output.assert_called_once_with("xy_drive_power", False)
+        self.assertFalse(service.motion_enabled)
+        self.assertFalse(service.controller.axes()["x"].is_homed)
+        self.assertFalse(service.controller.axes()["y"].is_homed)
+
+    def test_restore_xy_drive_power_keeps_motion_disabled(self):
+        service = self.service()
+
+        result = service.restore_xy_drive_power()
+
+        self.assertTrue(result["ok"])
+        service.picontrol_io.set_output.assert_called_once_with("xy_drive_power", True)
+        self.assertFalse(result["motion_enabled"])
+
 
 if __name__ == "__main__":
     unittest.main()

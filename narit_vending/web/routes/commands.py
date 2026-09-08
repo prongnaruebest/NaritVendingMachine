@@ -292,6 +292,18 @@ def make_commands_bp(ctrl: "ControllerClient") -> Blueprint:
         snap = ctrl.snapshot()
         return jsonify(r | _snap_status(snap)), 200 if r.get("accepted") else 409
 
+    @bp.post("/api/system/drives/cut-power")
+    def api_cut_xy_drive_power():
+        r = _submit(ctrl, "CUT_XY_DRIVE_POWER", {})
+        snap = ctrl.snapshot()
+        return jsonify(r | _snap_status(snap)), 200 if r.get("accepted") else 409
+
+    @bp.post("/api/system/drives/restore-power")
+    def api_restore_xy_drive_power():
+        r = _submit(ctrl, "RESTORE_XY_DRIVE_POWER", {})
+        snap = ctrl.snapshot()
+        return jsonify(r | _snap_status(snap)), 200 if r.get("accepted") else 409
+
     # ── Controller-owned Demo Slot Sampling ────────────────────────────────
 
     @bp.post("/api/demo/configure")
