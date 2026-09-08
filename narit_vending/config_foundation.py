@@ -41,6 +41,22 @@ MOTION_OVERRIDE_FIELDS = (
 )
 
 
+def load_hardware_payload(path: str | Path = "hardware_config.json") -> dict:
+    """Load hardware JSON without importing motion or hardware modules."""
+    config_path = Path(path)
+    if not config_path.exists():
+        config_path = Path(__file__).parent.parent / "hardware_config.json"
+    if not config_path.exists():
+        return {}
+    try:
+        payload = json.loads(config_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"Failed to parse hardware config '{config_path}': {exc}") from exc
+    if not isinstance(payload, dict):
+        raise ValueError(f"Hardware config '{config_path}' must contain a JSON object")
+    return payload
+
+
 @dataclass(frozen=True)
 class ConfigIssue:
     severity: str

@@ -15,6 +15,19 @@ if os.name != "posix" and "GPIOZERO_PIN_FACTORY" not in os.environ:
 from gpiozero import DigitalInputDevice, OutputDevice
 from gpiozero.pins.mock import MockFactory
 
+from .config_foundation import load_hardware_payload
+from .domain.errors import (
+    ActiveLimitError,
+    ControlledStopError,
+    EmergencyStopError,
+    LimitTriggeredError,
+    MotionError,
+    NotHomedError,
+    NucleoError,
+    StopRequestedError,
+    TravelBoundaryError,
+)
+
 
 _logger = logging.getLogger(__name__)
 
@@ -37,47 +50,6 @@ def _home_backoff_limit_steps(steps_per_mm: float) -> int:
     move distance.
     """
     return max(1, int(round(10.0 * steps_per_mm)))
-
-
-class MotionError(RuntimeError):
-    pass
-
-
-class LimitTriggeredError(MotionError):
-    pass
-
-
-class ActiveLimitError(MotionError):
-    """Requested direction is already blocked by an active endpoint sensor."""
-
-    pass
-
-
-class EmergencyStopError(MotionError):
-    pass
-
-
-class NotHomedError(MotionError):
-    pass
-
-
-class StopRequestedError(MotionError):
-    pass
-
-
-class ControlledStopError(MotionError):
-    pass
-
-
-class TravelBoundaryError(MotionError):
-    """Command rejected before motion because it exceeds software travel."""
-
-    pass
-
-
-class NucleoError(MotionError):
-    pass
-
 
 
 @dataclass(frozen=True)
@@ -1611,15 +1583,11 @@ def save_machine_config(config: MachineConfig, path: str | Path) -> None:
 
 
 def load_hardware_config(path: str | Path = "hardware_config.json") -> dict:
-    p = Path(path)
-    if not p.exists():
-        p = Path(__file__).parent.parent / "hardware_config.json"
-    if p.exists():
-        try:
-            return json.loads(p.read_text(encoding="utf-8"))
-        except Exception as exc:
-            raise MotionError(f"Failed to parse hardware config '{p}': {exc}") from exc
-    return {}
+    """Compatibility wrapper retained for existing motion consumers."""
+    try:
+        return load_hardware_payload(path)
+    except ValueError as exc:
+        raise MotionError(str(exc)) from exc
 
 
 def build_controller(

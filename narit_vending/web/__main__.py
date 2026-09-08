@@ -41,8 +41,8 @@ def main() -> int:
 
     # Load hardware config for communication settings
     try:
-        from narit_vending.motion import load_hardware_config
-        hw_config = load_hardware_config(args.hw_config)
+        from narit_vending.config_foundation import load_hardware_payload
+        hw_config = load_hardware_payload(args.hw_config)
         comm = hw_config.get("communication", {})
         host = comm.get("host", args.host)
         port = int(comm.get("port", args.port))

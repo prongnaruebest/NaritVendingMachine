@@ -9,7 +9,7 @@ from __future__ import annotations
 import time
 from typing import Any, Callable
 
-from narit_vending.motion import ControlledStopError, EmergencyStopError, MotionError
+from narit_vending.domain.errors import ControlledStopError, EmergencyStopError, MotionError
 
 
 PhaseCallback = Callable[[str, dict[str, object]], None]

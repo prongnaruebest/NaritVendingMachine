@@ -9,7 +9,7 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Callable
 
-from narit_vending.motion import MotionError, NucleoError
+from narit_vending.domain.errors import MotionError, NucleoError
 
 _log = logging.getLogger(__name__)
 
