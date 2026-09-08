@@ -1278,15 +1278,23 @@ class MotionService:
                     f"{axis_name.upper()}: maximum pulse frequency {pulse_frequency:.0f} Hz exceeds {MAX_PULSE_FREQUENCY_HZ:.0f} Hz"
                 )
 
-            step_pin = _config_integer(motor_payload, "step_pin", minimum=GPIO_MIN, maximum=GPIO_MAX)
-            dir_pin = _config_integer(motor_payload, "dir_pin", minimum=GPIO_MIN, maximum=GPIO_MAX)
-            enable_pin = _config_integer(motor_payload, "enable_pin", minimum=GPIO_MIN, maximum=GPIO_MAX)
-            active_high = _config_boolean(motor_payload, "active_high")
+            # For IRIV/hardware-locked boards the pin editor is not rendered,
+            # so motor_payload only contains fields the browser can edit.
+            # Merge the existing hardware motor config as a read-only fallback
+            # so absent GPIO fields do not cause a validation error.
+            existing_motor = current_hardware.get("motors", {}).get(axis_name, {})
+            merged_motor_payload = {**existing_motor, **(motor_payload or {})}
+
+            step_pin = _config_integer(merged_motor_payload, "step_pin", minimum=GPIO_MIN, maximum=GPIO_MAX)
+            dir_pin = _config_integer(merged_motor_payload, "dir_pin", minimum=GPIO_MIN, maximum=GPIO_MAX)
+            enable_pin = _config_integer(merged_motor_payload, "enable_pin", minimum=GPIO_MIN, maximum=GPIO_MAX)
+            active_high = _config_boolean(merged_motor_payload, "active_high")
             enable_active_high = (
-                _config_boolean(motor_payload, "enable_active_high")
-                if "enable_active_high" in motor_payload
+                _config_boolean(merged_motor_payload, "enable_active_high")
+                if "enable_active_high" in merged_motor_payload
                 else active_high
             )
+
             current_axis = getattr(self.controller.config, axis_name)
             updated_axis = replace(
                 current_axis,
