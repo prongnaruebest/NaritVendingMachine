@@ -3216,6 +3216,11 @@
   }
 
   /* ── RENDER: INDUSTRIAL I/O MATRIX & COMMISSIONING ────────── */
+  function controllerIORegistry(filters = {}) {
+    const channels = Array.isArray(MS.payload?.io_registry) ? MS.payload.io_registry : [];
+    return channels.filter((channel) => Object.entries(filters).every(([key, value]) => channel?.[key] === value));
+  }
+
   const DI_CHANNEL_DEFS = [
     { channel: 0, key: "x_head_limit", label: "X Min Limit", role: "Head Limit" },
     { channel: 1, key: "x_tail_limit", label: "X Max Limit", role: "Tail Limit" },
@@ -3409,7 +3414,6 @@
     const piControl = MS.payload?.picontrol_io || {};
     const piCommOk = piControl.communication_ok;
     const piInputs = piControl.inputs || {};
-    const piRawInputs = piControl.raw_inputs || {};
     const snapshotAgeMs = MS.lastStatusAt ? Date.now() - MS.lastStatusAt : Infinity;
     const snapshotStale = snapshotAgeMs > 3000;
 
@@ -3465,14 +3469,18 @@
       piSummary.className = `io-summary-value ${piCommOk === true ? "ok" : "fault"}`;
     }
     setText("io-summary-picontrol-sub", piControl.last_success_at ? `Last poll ${fmtTimestamp(piControl.last_success_at)}` : (piControl.last_error || "No successful local-input poll"));
-    const driveFaults = ["x_alarm", "y_alarm"].filter((key) => piInputs[key] === true);
+    const piRegistry = controllerIORegistry({ source: "picontrol_local", direction: "input" });
+    const driveFaults = piRegistry.filter((channel) => channel.kind === "drive_alarm" && channel.active === true);
     const driveSummary = el("io-summary-drive-state");
     if (driveSummary) {
       driveSummary.textContent = driveFaults.length ? `${driveFaults.length} ALARM` : piCommOk === true ? "CLEAR" : "UNKNOWN";
       driveSummary.className = `io-summary-value ${driveFaults.length || piCommOk !== true ? "fault" : "ok"}`;
     }
-    const pendSummary = ["x_pend", "y_pend"].map((key) => `${key.startsWith("x") ? "X" : "Y"} ${piInputs[key] === true ? "IN POSITION" : "TRACKING"}`).join(" · ");
-    setText("io-summary-drive-sub", driveFaults.length ? driveFaults.map((key) => key.startsWith("x") ? "X_DRIVE_ALM" : "Y_DRIVE_ALM").join(" · ") : `Alarm clear · ${pendSummary}`);
+    const pendSummary = piRegistry
+      .filter((channel) => channel.kind === "position_feedback")
+      .map((channel) => `${String(channel.axis || "?").toUpperCase()} ${channel.active ? "IN POSITION" : "TRACKING"}`)
+      .join(" · ");
+    setText("io-summary-drive-sub", driveFaults.length ? driveFaults.map((channel) => channel.label).join(" · ") : `Alarm clear${pendSummary ? ` · ${pendSummary}` : ""}`);
     setText("io-summary-age", snapshotStale ? "STALE" : `${Math.round(snapshotAgeMs)} ms`);
     setText("io-summary-latency", `IRIV ${MS.payload?.io?.poll_latency_ms ?? "--"} ms · PiControl ${piControl.poll_latency_ms ?? "--"} ms`);
     const filteredNoise = Object.values(inputDetails).reduce((total, detail) => total + Number(detail?.filtered_spikes || 0), 0);
@@ -3535,23 +3543,21 @@
     }
     const piCards = el("io-page-picontrol-cards");
     if (piCards) {
-      const definitions = [
-        { key: "x_alarm", channel: 0, pin: 13, label: "X_DRIVE_ALM", driver: "HBS860H X", kind: "alarm" },
-        { key: "y_alarm", channel: 1, pin: 17, label: "Y_DRIVE_ALM", driver: "HBS860H Y", kind: "alarm" },
-        { key: "x_pend", channel: 2, pin: 27, label: "X_PEND", driver: "HBS860H X", kind: "pend" },
-        { key: "y_pend", channel: 3, pin: 22, label: "Y_PEND", driver: "HBS860H Y", kind: "pend" },
-      ].filter((def) => currentFilter !== "active-only" || piInputs[def.key] === true)
-       .filter((def) => !searchQuery || `${def.label} DI${def.channel} GPIO${def.pin} ${def.driver}`.toLowerCase().includes(searchQuery));
+      const definitions = piRegistry
+       .filter((def) => currentFilter !== "active-only" || def.active === true)
+       .filter((def) => currentFilter !== "drive-alarms" || def.kind === "drive_alarm")
+       .filter((def) => !searchQuery || `${def.label} ${def.address || ""} GPIO${def.pin ?? "--"} ${def.axis || ""} ${def.kind}`.toLowerCase().includes(searchQuery));
       piCards.innerHTML = definitions.length ? definitions.map((def) => {
-        const active = piInputs[def.key] === true;
-        const raw = piRawInputs[`DI${def.channel}`];
-        const fault = def.kind === "alarm" && active;
-        const badge = def.kind === "pend" ? (active ? "IN POSITION" : "TRACKING") : (active ? "ALARM" : "CLEAR");
+        const active = def.active === true;
+        const raw = def.raw_value;
+        const isPend = def.kind === "position_feedback";
+        const fault = def.kind === "drive_alarm" && active;
+        const badge = isPend ? (active ? "IN POSITION" : "TRACKING") : (active ? "ALARM" : "CLEAR");
         return `<article class="io-card io-card-enhanced ${fault ? "fault" : "safe"}">
-          <div class="io-card-head"><div class="io-head-left"><span class="io-channel-tag">PiControl DI${def.channel}</span><span class="io-wire-tag">GPIO${def.pin}</span></div><span class="io-channel-badge ${fault ? "fault" : (active ? "ok" : "warn")}">${badge}</span></div>
-          <div class="io-signal-name">${def.label}</div><div class="io-signal-role">${def.driver} ${def.kind === "pend" ? "position-complete feedback" : "alarm feedback"}</div>
-          <div class="io-signal-desc">Separate local input bank; this is not IRIV Modbus DI${def.channel}.</div>
-          <div class="io-card-footer"><span class="io-card-raw">RAW: <b>${raw === true ? "1" : raw === false ? "0" : "--"}</b></span><span class="io-card-state ${fault ? "fault" : "safe"}">${def.kind === "pend" ? badge : (active ? "FAULT ACTIVE" : "NORMAL")}</span></div>
+          <div class="io-card-head"><div class="io-head-left"><span class="io-channel-tag">PiControl ${esc(def.address || `DI${def.channel}`)}</span><span class="io-wire-tag">GPIO${esc(def.pin ?? "--")}</span></div><span class="io-channel-badge ${fault ? "fault" : (active ? "ok" : "warn")}">${badge}</span></div>
+          <div class="io-signal-name">${esc(def.label)}</div><div class="io-signal-role">${esc(String(def.axis || "").toUpperCase())} ${isPend ? "position-complete feedback" : "drive alarm feedback"}</div>
+          <div class="io-signal-desc">Controller registry · ${def.commissioned ? "commissioned" : "advisory / not commissioned"}${def.stale ? " · STALE" : ""}</div>
+          <div class="io-card-footer"><span class="io-card-raw">RAW: <b>${raw === true ? "1" : raw === false ? "0" : "--"}</b></span><span class="io-card-state ${fault ? "fault" : "safe"}">${isPend ? badge : (active ? "FAULT ACTIVE" : "NORMAL")}</span></div>
         </article>`;
       }).join("") : '<div class="io-empty-hint">No PiControl driver-alarm inputs match the current filters.</div>';
     }
