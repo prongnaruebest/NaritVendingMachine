@@ -27,6 +27,15 @@ from .domain.errors import (
     StopRequestedError,
     TravelBoundaryError,
 )
+from .domain.motion_math import (
+    clamp_axis_speed_mm_s,
+    effective_speed_limit_mm_s,
+    mm_s_to_pulse_hz,
+    pulse_hz_to_mm_s,
+    pulse_hz_to_rpm,
+    pulses_per_revolution,
+)
+from .domain.motion_plans import AxisMovePlan, CoordinatedMovePlan
 
 
 _logger = logging.getLogger(__name__)
@@ -145,16 +154,16 @@ class AxisConfig:
 
     @property
     def pulses_per_rev(self) -> int:
-        return self.motor_steps_per_rev * self.driver_microsteps
+        return int(pulses_per_revolution(self.motor_steps_per_rev, self.driver_microsteps))
 
     def pulse_hz_to_rpm(self, pulse_hz: float) -> float:
-        return float(pulse_hz) * 60.0 / self.pulses_per_rev
+        return pulse_hz_to_rpm(pulse_hz, self.pulses_per_rev)
 
     def pulse_hz_to_mm_s(self, pulse_hz: float) -> float:
-        return float(pulse_hz) / self.steps_per_mm
+        return pulse_hz_to_mm_s(pulse_hz, self.steps_per_mm)
 
     def mm_s_to_pulse_hz(self, speed_mm_s: float) -> float:
-        return float(speed_mm_s) * self.steps_per_mm
+        return mm_s_to_pulse_hz(speed_mm_s, self.steps_per_mm)
 
 
 @dataclass(frozen=True)
@@ -174,61 +183,6 @@ class SlotPosition:
             "z_mm": self.z_mm,
             "product_name": self.product_name,
             "dispense_delay_ms": self.dispense_delay_ms,
-        }
-
-
-@dataclass(frozen=True)
-class AxisMovePlan:
-    axis: str
-    current_mm: float
-    target_mm: float
-    distance_mm: float
-    direction: int
-    steps: int
-    speed_mm_s: float
-    duration_s: float
-
-    @property
-    def pulse_hz(self) -> float:
-        if self.duration_s <= 0:
-            return 0.0
-        return self.steps / self.duration_s
-
-    def to_dict(self) -> dict[str, float | int | str]:
-        return {
-            "axis": self.axis,
-            "current_mm": round(self.current_mm, 3),
-            "target_mm": round(self.target_mm, 3),
-            "distance_mm": round(self.distance_mm, 3),
-            "direction": self.direction,
-            "steps": self.steps,
-            "speed_mm_s": round(self.speed_mm_s, 3),
-            "duration_s": round(self.duration_s, 3),
-            "pulse_hz": round(self.pulse_hz, 3),
-        }
-
-
-@dataclass(frozen=True)
-class CoordinatedMovePlan:
-    axes: dict[str, AxisMovePlan]
-    duration_s: float
-    mode: str
-
-    @property
-    def total_distance_mm(self) -> float:
-        return max((abs(plan.distance_mm) for plan in self.axes.values()), default=0.0)
-
-    @property
-    def master_steps(self) -> int:
-        return max((plan.steps for plan in self.axes.values()), default=0)
-
-    def to_dict(self) -> dict[str, object]:
-        return {
-            "mode": self.mode,
-            "duration_s": round(self.duration_s, 3),
-            "master_steps": self.master_steps,
-            "total_distance_mm": round(self.total_distance_mm, 3),
-            "axes": {name: plan.to_dict() for name, plan in self.axes.items()},
         }
 
 
@@ -322,7 +276,15 @@ class AxisController:
         requested = self.config.default_speed_mm_s if speed_mm_s is None else float(speed_mm_s)
         if not math.isfinite(requested) or requested <= 0:
             raise MotionError(f"{self.config.name}: speed_mm_s must be a finite number greater than 0")
-        return min(requested, self.config.max_speed_mm_s, self.config.commissioned_max_speed_mm_s, self.config.max_pulse_hz / self.config.steps_per_mm)
+        return clamp_axis_speed_mm_s(requested, speed_limit_mm_s=self._effective_speed_limit())
+
+    def _effective_speed_limit(self) -> float:
+        return effective_speed_limit_mm_s(
+            max_speed_mm_s=self.config.max_speed_mm_s,
+            commissioned_max_speed_mm_s=self.config.commissioned_max_speed_mm_s,
+            max_pulse_hz=self.config.max_pulse_hz,
+            pulses_per_mm=self.config.steps_per_mm,
+        )
 
     def plan_relative_move(self, distance_mm: float, speed_mm_s: float | None = None, time_s: float | None = None) -> AxisMovePlan:
         if not math.isfinite(float(distance_mm)):
@@ -748,7 +710,7 @@ class AxisController:
             if not math.isfinite(duration_s) or duration_s <= 0:
                 raise MotionError(f"{self.config.name}: time_s must be a finite number greater than 0")
             required_speed = distance_mm / duration_s
-            effective_max = min(self.config.max_speed_mm_s, self.config.commissioned_max_speed_mm_s, self.config.max_pulse_hz / self.config.steps_per_mm)
+            effective_max = self._effective_speed_limit()
             if required_speed > effective_max:
                 raise MotionError(
                     f"{self.config.name}: requested {required_speed:.2f} mm/s exceeds commissioned limit {effective_max:.2f} mm/s"
