@@ -283,7 +283,7 @@
     "axes": {
       "x": {
         "steps_per_mm": 68.75,
-        "max_travel_mm": 1600.0,
+        "max_travel_mm": 1700.0,
         "max_speed_mm_s": 250.0,
         "default_speed_mm_s": 5.0,
         "acceleration": 100.0,
@@ -303,14 +303,14 @@
         "driver_microsteps": 8,
         "drive_type": "lead_screw",
         "nominal_travel_mm": 1800.0,
-        "measured_travel_mm": 1600.0,
+        "measured_travel_mm": 1700.0,
         "travel_safety_margin_mm": 10.0,
         "pulley_pitch_mm": null,
         "pulley_teeth": null
       },
       "y": {
         "steps_per_mm": 68.75,
-        "max_travel_mm": 1590.0,
+        "max_travel_mm": 1700.0,
         "max_speed_mm_s": 250.0,
         "default_speed_mm_s": 5.0,
         "acceleration": 100.0,
@@ -330,7 +330,7 @@
         "driver_microsteps": 8,
         "drive_type": "lead_screw",
         "nominal_travel_mm": 1800.0,
-        "measured_travel_mm": 1600.0,
+        "measured_travel_mm": 1700.0,
         "travel_safety_margin_mm": 10.0,
         "pulley_pitch_mm": null,
         "pulley_teeth": null

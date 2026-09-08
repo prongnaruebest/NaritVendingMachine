@@ -8087,7 +8087,10 @@ body { font-size: 14px; }
 .travel-result { display:flex; justify-content:space-between; gap:12px; padding:11px; border:1px solid var(--accent-cyan); border-radius:6px; background:rgba(14,165,233,.08); }
 .travel-result strong { color:var(--accent-cyan); font-variant-numeric:tabular-nums; }
 .travel-calibration-card button { min-height:44px; }
-@media(max-width:520px){.travel-calibration-fields label{grid-template-columns:1fr}.travel-calibration-fields label small{grid-column:1}}
+.travel-direct-label { display:grid; grid-template-columns:minmax(0,1fr) minmax(100px,140px); gap:6px 10px; align-items:center; padding:10px 12px; border:1px solid var(--accent-cyan); border-radius:7px; background:rgba(14,165,233,.07); margin-bottom:4px; }
+.travel-direct-label span { font-weight:600; color:var(--text); }
+.travel-direct-label small { grid-column:2; color:var(--text-muted); font-size:.8em; }
+@media(max-width:520px){.travel-calibration-fields label{grid-template-columns:1fr}.travel-calibration-fields label small{grid-column:1}.travel-direct-label{grid-template-columns:1fr}.travel-direct-label small{grid-column:1}}
 
 /* Configuration uses the workspace as its only vertical scroll owner. This
    avoids a trapped nested scroller and keeps SAVE/APPLY reachable. */

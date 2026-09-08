@@ -2677,6 +2677,7 @@
       return `<article class="travel-calibration-card" data-travel-axis="${axis}">
         <div class="motor-config-head"><strong>AXIS ${axis.toUpperCase()}</strong><span>${drive === "timing_belt" ? "TIMING BELT" : "LEAD SCREW"}</span></div>
         <div class="travel-source-note">${axis === "z" ? "GTD-A001 · 2GT belt · requested nominal stroke 180 mm" : "MISUMI MTSRL25-1800 · physical screw pitch 5 mm · calibrated effective travel 23.2727 mm/motor rev"}</div>
+        <label class="travel-direct-label"><span><strong>Maximum Travel</strong></span>${configurationNumberInput(axis, "max_travel_mm", cfg.max_travel_mm)}<small>mm (แก้ไขได้โดยตรง)</small></label>
         <div class="travel-calibration-fields">
           <label><span>Nominal / Spec</span><input class="config-input" type="number" min="0.1" step="0.1" value="${nominal}" data-travel-field="nominal"><small>mm</small></label>
           <label><span>Measured Min → Max</span><input class="config-input" type="number" min="0.1" step="0.1" value="${measured}" data-travel-field="measured"><small>mm measured by operator</small></label>
