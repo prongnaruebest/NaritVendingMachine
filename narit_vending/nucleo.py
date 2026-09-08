@@ -510,6 +510,88 @@ class NucleoLink:
                 self.stop()
                 raise
 
+    def move_parallel(
+        self,
+        plans: dict[str, dict[str, Any]],
+        *,
+        timeout_s: float,
+        stop_requested: Callable[[], bool] | None = None,
+    ) -> dict[str, Any]:
+        """Start finite X/Y/Z moves together using Protocol v3 timer channels."""
+        if self.expected_protocol < 3:
+            raise NucleoError("Parallel coordinated motion requires Nucleo protocol v3")
+        if not plans:
+            return {"ok": True, "steps": {}}
+
+        normalised: dict[str, dict[str, Any]] = {}
+        for axis, plan in plans.items():
+            axis_key = str(axis).lower()
+            if axis_key not in {"x", "y", "z"}:
+                raise NucleoError(f"Invalid coordinated axis '{axis}'")
+            steps = int(plan["steps"])
+            speed_hz = float(plan["speed_hz"])
+            if not 1 <= steps <= self.max_move_steps:
+                raise NucleoError(f"{axis_key.upper()} coordinated steps outside 1-{self.max_move_steps}")
+            if not NUCLEO_MOTION_MIN_SPEED_HZ <= speed_hz <= NUCLEO_MOTION_MAX_SPEED_HZ:
+                raise NucleoError(f"{axis_key.upper()} coordinated speed outside firmware pulse limits")
+            normalised[axis_key] = {
+                "direction": 1 if int(plan["direction"]) else 0,
+                "steps": steps,
+                "speed_hz": speed_hz,
+            }
+
+        with self._lock:
+            if not self.communication_ok or not self.arm(safety_permissive=True):
+                raise NucleoError("Nucleo is not online or could not be armed")
+            serial_port = self._open_serial()
+            started = time.monotonic()
+            try:
+                try:
+                    serial_port.reset_input_buffer()
+                except Exception:
+                    pass
+                for axis, plan in normalised.items():
+                    cmd = f"MOVE {axis.upper()} {plan['direction']} {plan['steps']} {int(round(plan['speed_hz']))}\n"
+                    _log.info("Nucleo TX coordinated: %s", cmd.strip())
+                    serial_port.write(cmd.encode("ascii")); serial_port.flush()
+                    ack = self._read_json_response(serial_port, time.monotonic() + self.timeout_s, expected_types={"ack"})
+                    if not ack or ack.get("status") != "moving":
+                        raise NucleoError(f"Coordinated move rejected on {axis.upper()}: {(ack or {}).get('error', 'no ack')}")
+
+                deadline = started + max(1.0, float(timeout_s))
+                while time.monotonic() < deadline:
+                    time.sleep(0.08)
+                    if stop_requested is not None and stop_requested():
+                        self.stop(); self.disarm()
+                        elapsed = max(0.0, time.monotonic() - started)
+                        completed = {
+                            axis: min(plan["steps"], max(0, int(round(elapsed * plan["speed_hz"]))))
+                            for axis, plan in normalised.items()
+                        }
+                        return {"ok": True, "steps": completed, "stopped": True, "duration_s": elapsed}
+                    serial_port.write(b"HEARTBEAT SAFE\n"); serial_port.flush()
+                    hb = self._read_json_response(serial_port, time.monotonic() + 0.2, expected_types={"heartbeat"})
+                    if hb:
+                        self._last_success_monotonic = time.monotonic()
+                        self._last_payload = dict(hb)
+                        moving = hb.get("moving", {})
+                        if isinstance(moving, dict) and all(not moving.get(axis, 0) for axis in normalised):
+                            break
+                else:
+                    raise NucleoError(f"Coordinated move timed out after {timeout_s:.1f} seconds")
+
+                if not self.disarm():
+                    raise NucleoError("Coordinated move completed but Nucleo failed to disarm")
+                return {
+                    "ok": True,
+                    "steps": {axis: plan["steps"] for axis, plan in normalised.items()},
+                    "duration_s": time.monotonic() - started,
+                }
+            except Exception:
+                self.stop()
+                self.disarm()
+                raise
+
     def alarm_channel(self) -> dict[str, Any]:
         return {
             "code": "NUCLEO-COMM",

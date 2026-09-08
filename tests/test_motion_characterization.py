@@ -5,6 +5,8 @@ from narit_vending.motion import (
     ActiveLimitError,
     AxisController,
     AxisConfig,
+    AxisMovePlan,
+    CoordinatedMovePlan,
     MachineConfig,
     MotionController,
     MotionError,
@@ -172,6 +174,33 @@ class MotionCharacterizationTests(unittest.TestCase):
         controller.move_to_slot("1", speed_mm_s=10.0)
 
         self.assertEqual(events, [("z", 10.0), ("xy", 50.0, 75.0), ("z", 25.0)])
+
+    def test_coordinated_move_uses_shared_nucleo_backend_not_gpio_pulses(self) -> None:
+        controller, axes = self._mock_controller()
+        backend = MagicMock(expected_protocol=3)
+        backend.move_parallel.return_value = {"ok": True, "steps": {"x": 800, "y": 400}}
+        for axis in axes.values():
+            axis.motion_backend = backend
+            axis.position_steps = 0
+            axis.head_limit.value = False
+            axis.tail_limit.value = False
+
+        plan = CoordinatedMovePlan(
+            axes={
+                "x": AxisMovePlan("x", 0.0, 10.0, 10.0, 1, 800, 10.0, 1.0),
+                "y": AxisMovePlan("y", 0.0, 5.0, 5.0, 1, 400, 5.0, 1.0),
+            },
+            duration_s=1.0,
+            mode="speed",
+        )
+
+        controller._execute_coordinated_plan(plan)
+
+        backend.move_parallel.assert_called_once()
+        axes["x"].pulse.on.assert_not_called()
+        axes["y"].pulse.on.assert_not_called()
+        self.assertEqual(axes["x"].position_steps, 800)
+        self.assertEqual(axes["y"].position_steps, 400)
 
     def test_motion_service_move_to_slot_returns_json_safe_slot(self) -> None:
         slot = SlotPosition("1", 21.9, 22.0, 35.0)

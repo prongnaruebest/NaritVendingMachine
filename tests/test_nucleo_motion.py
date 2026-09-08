@@ -16,8 +16,9 @@ from narit_vending.nucleo import (
 
 
 class MockSerialProtocolV2:
-    def __init__(self, script: list[dict | str] | None = None) -> None:
+    def __init__(self, script: list[dict | str] | None = None, protocol: int = 2) -> None:
         self.script = list(script or [])
+        self.protocol = protocol
         self.writes: list[bytes] = []
         self.closed = False
 
@@ -33,7 +34,7 @@ class MockSerialProtocolV2:
             self.script.append({
                 "type": "heartbeat",
                 "device": "NUCLEO-F439ZI",
-                "protocol": 2,
+                "protocol": self.protocol,
                 "safe": False,
                 "armed": True,
                 "watchdog": True,
@@ -43,7 +44,7 @@ class MockSerialProtocolV2:
             self.script.append({
                 "type": "pong",
                 "device": "NUCLEO-F439ZI",
-                "protocol": 2,
+                "protocol": self.protocol,
                 "safe": True,
                 "armed": False,
                 "watchdog": False,
@@ -54,7 +55,7 @@ class MockSerialProtocolV2:
             self.script.append({
                 "type": "heartbeat",
                 "device": "NUCLEO-F439ZI",
-                "protocol": 2,
+                "protocol": self.protocol,
                 "safe": False,
                 "armed": True,
                 "watchdog": True,
@@ -164,6 +165,29 @@ class NucleoMotionTests(unittest.TestCase):
         self.assertLessEqual(result["steps"], 500)
         commands = [w.decode("ascii", errors="replace").strip() for w in mock_serial.writes]
         self.assertIn("STOP", commands)
+
+    def test_protocol_v3_parallel_move_starts_every_axis_on_nucleo(self):
+        mock_serial = MockSerialProtocolV2(protocol=3)
+        config = self.config()
+        config["protocol_version"] = 3
+        link = NucleoLink(config, serial_factory=lambda **kwargs: mock_serial)
+        link._poll_once()
+
+        result = link.move_parallel(
+            {
+                "x": {"direction": 0, "steps": 200, "speed_hz": 400},
+                "y": {"direction": 1, "steps": 100, "speed_hz": 200},
+            },
+            timeout_s=2.0,
+        )
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["steps"], {"x": 200, "y": 100})
+        commands = [w.decode("ascii", errors="replace").strip() for w in mock_serial.writes]
+        self.assertIn("MOVE X 0 200 400", commands)
+        self.assertIn("MOVE Y 1 100 200", commands)
+        self.assertIn("HEARTBEAT SAFE", commands)
+        self.assertIn("DISARM", commands)
 
     def test_nucleo_error_is_motion_error(self):
         from narit_vending.motion import MotionError

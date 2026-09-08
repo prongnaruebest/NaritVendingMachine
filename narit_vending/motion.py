@@ -1286,6 +1286,51 @@ class MotionController:
             axes[axis_name]._guard_before_move(axis_plan.direction, delta_steps)
             axes[axis_name].direction.value = bool(axis_plan.direction)
 
+        # Production NUCLEO protocol v3 owns all STEP generation. Never fall
+        # through to Raspberry Pi placeholder GPIO for a coordinated move.
+        backends = {id(axis.motion_backend): axis.motion_backend for axis in axes.values() if axis.motion_backend is not None}
+        backend = next(iter(backends.values())) if len(backends) == 1 else None
+        if backend is not None and getattr(backend, "expected_protocol", 1) >= 3 and hasattr(backend, "move_parallel"):
+            backend_plans = {
+                axis_name: {
+                    "direction": axis_plan.direction,
+                    "steps": axis_plan.steps,
+                    "speed_hz": max(10.0, axis_plan.steps / max(plan.duration_s, 0.001)),
+                }
+                for axis_name, axis_plan in plan.axes.items()
+            }
+
+            def coordinated_stop() -> bool:
+                if self.emergency_stop_active() or self.stop_requested() or self.controlled_stop_requested():
+                    return True
+                return any(
+                    (axis_plan.direction == axes[name].config.home_direction and axes[name].head_limit.value)
+                    or (axis_plan.direction != axes[name].config.home_direction and axes[name].tail_limit.value)
+                    for name, axis_plan in plan.axes.items()
+                )
+
+            result = backend.move_parallel(
+                backend_plans,
+                timeout_s=plan.duration_s + 4.0,
+                stop_requested=coordinated_stop,
+            )
+            completed = dict(result.get("steps", {}))
+            for axis_name, axis_plan in plan.axes.items():
+                count = int(completed.get(axis_name, axis_plan.steps))
+                axes[axis_name].position_steps += count if axis_plan.direction == axes[axis_name].config.forward_direction else -count
+            if result.get("stopped"):
+                if self.emergency_stop_active():
+                    raise EmergencyStopError("emergency stop during coordinated move")
+                if self.stop_requested():
+                    raise StopRequestedError("stop requested during coordinated move")
+                if self.controlled_stop_requested():
+                    raise ControlledStopError("coordinated controlled stop completed")
+                for axis in axes.values():
+                    axis.is_homed = False
+                raise LimitTriggeredError("physical limit triggered during coordinated move")
+            sleep(max(axis.config.settle_delay for axis in axes.values()))
+            return
+
         accumulators = {name: 0 for name in plan.axes}
         half_periods = _build_half_periods(master_steps, plan.duration_s, ramp_ratio=1.6)
         controlled_remaining: int | None = None
