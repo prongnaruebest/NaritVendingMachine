@@ -283,7 +283,29 @@ class DemoSamplingService:
 
     def history(self, limit: int = 50) -> list[dict[str, Any]]:
         with closing(self._connect()) as db, db:
-            return [dict(row) for row in db.execute("SELECT * FROM demo_sessions ORDER BY started_at DESC LIMIT ?", (max(1, min(500, limit)),))]
+            sessions = [
+                dict(row)
+                for row in db.execute(
+                    "SELECT * FROM demo_sessions ORDER BY started_at DESC LIMIT ?",
+                    (max(1, min(500, limit)),),
+                )
+            ]
+            for session in sessions:
+                try:
+                    session["configuration"] = json.loads(session.pop("configuration_json"))
+                except (TypeError, ValueError, json.JSONDecodeError):
+                    session["configuration"] = {}
+                    session.pop("configuration_json", None)
+                session["samples"] = [
+                    dict(row)
+                    for row in db.execute(
+                        """SELECT sample_id,cycle_no,slot_code,started_at,completed_at,
+                                  duration_s,result,reason
+                           FROM demo_samples WHERE session_id=? ORDER BY cycle_no""",
+                        (session["session_id"],),
+                    )
+                ]
+            return sessions
 
     def export_csv(self) -> str:
         output = io.StringIO()

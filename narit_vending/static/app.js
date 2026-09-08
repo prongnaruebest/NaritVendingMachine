@@ -67,6 +67,9 @@
     currentView: "motion",
     currentSetupTab: "motor",
     demoArmToken: "",
+    demoHistory: [],
+    demoHistoryPending: false,
+    demoHistoryFetchedAt: 0,
   };
 
   /* ── DOM HELPERS ────────────────────────────────────────────── */
@@ -3940,6 +3943,55 @@
       const configuredDuration = Number(demo.configuration?.max_duration_s || 0);
       durationInput.value = String(active && configuredDuration > 0 ? Math.ceil(configuredDuration) : calculateDemoMaxDuration());
     }
+    renderDemoHistory();
+    if (MS.currentView === "visualization" && Date.now() - MS.demoHistoryFetchedAt > 5000) loadDemoHistory();
+  }
+
+  async function loadDemoHistory(force = false) {
+    if (MS.demoHistoryPending || (!force && Date.now() - MS.demoHistoryFetchedAt < 5000)) return;
+    MS.demoHistoryPending = true;
+    const refreshButton = el("demo-history-refresh");
+    if (refreshButton) refreshButton.disabled = true;
+    try {
+      const data = await apiCall("/api/demo/history", "GET", undefined, 8000);
+      MS.demoHistory = Array.isArray(data.sessions) ? data.sessions : [];
+      MS.demoHistoryFetchedAt = Date.now();
+    } catch (error) {
+      const list = el("demo-history-list");
+      if (list) list.innerHTML = `<p class="demo-history-empty fault">History unavailable: ${esc(error.message)}</p>`;
+    } finally {
+      MS.demoHistoryPending = false;
+      if (refreshButton) refreshButton.disabled = false;
+      renderDemoHistory();
+    }
+  }
+
+  function renderDemoHistory() {
+    const list = el("demo-history-list");
+    if (!list) return;
+    if (!MS.demoHistory.length) {
+      if (!MS.demoHistoryPending) list.innerHTML = '<p class="demo-history-empty">No completed Demo Sampling sessions recorded yet.</p>';
+      return;
+    }
+    list.innerHTML = MS.demoHistory.map((session, index) => {
+      const samples = Array.isArray(session.samples) ? session.samples : [];
+      const attempted = Number(session.attempted || 0);
+      const passed = Number(session.passed || 0);
+      const rate = attempted ? Math.round((passed / attempted) * 1000) / 10 : 0;
+      const state = String(session.state || "UNKNOWN").toUpperCase();
+      const stateClass = state === "COMPLETED" && Number(session.failed || 0) === 0 ? "ok" : (state === "RUNNING" ? "warn" : "fault");
+      const config = session.configuration || {};
+      const rows = samples.map((sample) => {
+        const result = String(sample.result || "UNKNOWN").toUpperCase();
+        const resultClass = result === "PASSED" ? "ok" : result === "SKIPPED" ? "warn" : "fault";
+        return `<tr><td>${esc(sample.cycle_no)}</td><td>${esc(sample.slot_code)}</td><td><span class="demo-result ${resultClass}">${esc(result)}</span></td><td>${esc(fmtTime(sample.duration_s))} s</td><td>${esc(fmtTimestamp(sample.started_at))}</td><td>${esc(sample.reason || "—")}</td></tr>`;
+      }).join("");
+      return `<details class="demo-history-session" ${index === 0 ? "open" : ""}>
+        <summary><span><b>${esc(fmtTimestamp(session.started_at))}</b><small>Session ${esc(String(session.session_id || "").slice(0, 12))}</small></span><span class="demo-result ${stateClass}">${esc(state)}</span><span>${passed}/${attempted} passed</span><span>${rate}%</span></summary>
+        <div class="demo-history-meta"><span>Mode <b>${esc(config.mode || "—")}</b></span><span>Requested <b>${esc(session.requested || 0)}</b></span><span>Failed <b>${esc(session.failed || 0)}</b></span><span>Stopped <b>${esc(session.stopped || 0)}</b></span><span>Reason <b>${esc(session.final_reason || "—")}</b></span></div>
+        <div class="demo-history-table-wrap"><table><thead><tr><th>Move</th><th>Slot</th><th>Result</th><th>Duration</th><th>Started</th><th>Reason</th></tr></thead><tbody>${rows || '<tr><td colspan="6">No sample rows recorded.</td></tr>'}</tbody></table></div>
+      </details>`;
+    }).join("");
   }
 
   function calculateDemoMaxDuration() {
@@ -4343,6 +4395,7 @@
         }
         setText("demo-feedback", result.error || `Demo ${action}: ${result.state || "accepted"}`);
         await refresh();
+        if (["start", "stop"].includes(action)) loadDemoHistory(true);
       } catch (err) { setText("demo-feedback", err.message); toast(`DEMO ${action.toUpperCase()} FAILED — ${err.message}`, "error"); }
     };
     el("demo-configure")?.addEventListener("click", () => demoAction("configure", demoPayload()));
@@ -4352,6 +4405,7 @@
     el("demo-pause")?.addEventListener("click", () => demoAction("pause"));
     el("demo-resume")?.addEventListener("click", () => demoAction("resume"));
     el("demo-stop")?.addEventListener("click", () => demoAction("stop"));
+    el("demo-history-refresh")?.addEventListener("click", () => loadDemoHistory(true));
     ["demo-mode", "demo-max-cycles", "demo-dwell"].forEach((id) => el(id)?.addEventListener("input", () => { MS.demoArmToken = ""; setText("demo-feedback", "Demo parameters changed — Configure, Validate and Arm again."); renderDemoSampling(); }));
 
     $$(".flow-node").forEach((node) => node.addEventListener("click", () => {

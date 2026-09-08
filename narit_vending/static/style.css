@@ -7897,6 +7897,25 @@ body { font-size: 14px; }
 .demo-session-strip span,.demo-counter-grid span { color:var(--text-muted); font-size:11px; }
 .demo-session-strip strong,.demo-counter-grid strong { overflow-wrap:anywhere; font-variant-numeric:tabular-nums; }
 .demo-feedback { margin:0; color:var(--text-muted); }
+.demo-history { display:grid; gap:10px; padding-top:12px; border-top:1px solid var(--border); min-width:0; }
+.demo-history-head { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.demo-history-head h3,.demo-history-head p { margin:0; }
+.demo-history-help,.demo-history-empty { margin:0; color:var(--text-muted); line-height:1.5; }
+.demo-history-empty { padding:14px; border:1px dashed var(--border); border-radius:7px; }
+.demo-history-list { display:grid; gap:8px; min-width:0; }
+.demo-history-session { border:1px solid var(--border); border-radius:7px; background:var(--surf-2); min-width:0; overflow:hidden; }
+.demo-history-session>summary { display:grid; grid-template-columns:minmax(190px,2fr) repeat(3,minmax(90px,.6fr)); align-items:center; gap:10px; min-height:48px; padding:10px 12px; cursor:pointer; }
+.demo-history-session>summary span:first-child { display:grid; gap:3px; }
+.demo-history-session>summary small { color:var(--text-muted); }
+.demo-result { display:inline-flex; width:max-content; padding:3px 7px; border:1px solid currentColor; border-radius:999px; font-size:11px; font-weight:700; }
+.demo-result.ok { color:var(--green); }.demo-result.warn { color:var(--yellow); }.demo-result.fault { color:var(--red); }
+.demo-history-meta { display:flex; flex-wrap:wrap; gap:8px 16px; padding:10px 12px; border-top:1px solid var(--border); color:var(--text-muted); }
+.demo-history-meta b { color:var(--text); }
+.demo-history-table-wrap { max-width:100%; overflow-x:auto; border-top:1px solid var(--border); }
+.demo-history-table-wrap table { width:100%; min-width:760px; border-collapse:collapse; }
+.demo-history-table-wrap th,.demo-history-table-wrap td { padding:9px 12px; border-bottom:1px solid var(--border); text-align:left; vertical-align:top; }
+.demo-history-table-wrap th { color:var(--text-muted); font-size:11px; }
+@media(max-width:720px){.demo-history-head{align-items:stretch;flex-direction:column}.demo-history-session>summary{grid-template-columns:1fr 1fr}.demo-history-session>summary span:first-child{grid-column:1/-1}}
 @media(max-width:900px){.demo-config-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:560px){.demo-config-grid{grid-template-columns:1fr}.demo-actions>*{flex-basis:100%}}
 

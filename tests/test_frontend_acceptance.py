@@ -158,6 +158,12 @@ class FrontendAcceptanceTests(unittest.TestCase):
         self.assertIn('.workspace-view[data-view-page="visualization"] > .visualization-panel { order: 20; }', STYLE)
         self.assertIn('.workspace-view[data-view-page="visualization"] > .demo-sampling-panel { order: 100; }', STYLE)
 
+    def test_demo_sampling_has_persistent_expandable_history(self) -> None:
+        self.assertIn('id="demo-history-list"', TEMPLATE)
+        self.assertIn('id="demo-history-refresh"', TEMPLATE)
+        self.assertIn('apiCall("/api/demo/history", "GET"', APP_JS)
+        self.assertIn('class="demo-history-session"', APP_JS)
+
     def test_advanced_diagnostics_are_read_only_and_use_live_state(self) -> None:
         self.assertNotIn('id="io-open-homing"', TEMPLATE)
         self.assertIn('id="architecture-health"', TEMPLATE)

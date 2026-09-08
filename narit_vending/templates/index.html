@@ -8,7 +8,7 @@
   <link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='favicon-transparent-large.png') }}?v=20260721_v12">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=20260908_drive_power_v38">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=20260908_demo_history_v39">
 </head>
 <body>
   <div class="hmi-shell">
@@ -502,6 +502,14 @@
             <div class="demo-session-strip"><div><span>Session</span><strong id="demo-session">--</strong></div><div><span>Cycle</span><strong id="demo-cycle">0</strong></div><div><span>Current / Next</span><strong id="demo-slots">-- / --</strong></div><div><span>Last Result</span><strong id="demo-last-result">--</strong></div></div>
             <div class="demo-counter-grid" id="demo-counter-grid"></div>
             <p class="demo-feedback" id="demo-feedback" role="status">Configure the bounded test, then Validate and Arm.</p>
+            <section class="demo-history" aria-labelledby="demo-history-title">
+              <div class="demo-history-head">
+                <div><p class="panel-label">Persistent Test Log</p><h3 id="demo-history-title">Demo Sampling History</h3></div>
+                <button class="btn-secondary" id="demo-history-refresh" type="button" aria-label="Refresh demo sampling history">REFRESH LOG</button>
+              </div>
+              <p class="demo-history-help">Recent sessions are stored by the Controller. Expand a session to inspect every Slot move and failure reason.</p>
+              <div class="demo-history-list" id="demo-history-list" aria-live="polite"><p class="demo-history-empty">Loading test history…</p></div>
+            </section>
           </div>
         </section>
         <div class="visual-state-strip">
@@ -1684,6 +1692,6 @@
   <!-- Toast notification -->
   <div class="toast" id="toast" role="status"></div>
 
-  <script src="{{ url_for('static', filename='app.js') }}?v=20260908_drive_power_v38"></script>
+  <script src="{{ url_for('static', filename='app.js') }}?v=20260908_demo_history_v39"></script>
 </body>
 </html>

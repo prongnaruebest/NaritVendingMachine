@@ -55,6 +55,10 @@ class DemoSamplingTests(unittest.TestCase):
         self.assertEqual(self.motion.moves, [("1", 5.0), ("2", 5.0)])
         self.assertEqual(status["counters"]["passed"], 2)
         self.assertEqual(len(self.demo.history()), 1)
+        history = self.demo.history()[0]
+        self.assertEqual(history["configuration"]["mode"], "sequential")
+        self.assertEqual([row["slot_code"] for row in history["samples"]], ["1", "2"])
+        self.assertTrue(all(row["result"] == "PASSED" for row in history["samples"]))
         self.assertIn("session_id,cycle,slot", self.demo.export_csv())
 
     def test_random_sample_count_equals_number_of_target_moves(self):
