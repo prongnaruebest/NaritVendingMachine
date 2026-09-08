@@ -36,7 +36,11 @@ def make_config_bp(ctrl: "ControllerClient") -> Blueprint:
     @bp.put("/api/config")
     def api_save_config():
         payload = _json_payload()
-        result = ctrl.save_config(payload)
+        try:
+            result = ctrl.save_config(payload)
+        except Exception as exc:
+            _log.warning("api_save_config failed: %s", exc)
+            return jsonify({"ok": False, "error": str(exc)}), 400
         ok = result.get("ok", False)
         # Handle error from controller
         if not ok and "error" in result:

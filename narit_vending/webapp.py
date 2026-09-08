@@ -1287,7 +1287,11 @@ class MotionService:
 
             step_pin = _config_integer(merged_motor_payload, "step_pin", minimum=GPIO_MIN, maximum=GPIO_MAX)
             dir_pin = _config_integer(merged_motor_payload, "dir_pin", minimum=GPIO_MIN, maximum=GPIO_MAX)
-            enable_pin = _config_integer(merged_motor_payload, "enable_pin", minimum=GPIO_MIN, maximum=GPIO_MAX)
+            enable_pin = (
+                _config_integer(merged_motor_payload, "enable_pin", minimum=GPIO_MIN, maximum=GPIO_MAX)
+                if merged_motor_payload.get("enable_pin") is not None
+                else None
+            )
             active_high = _config_boolean(merged_motor_payload, "active_high")
             enable_active_high = (
                 _config_boolean(merged_motor_payload, "enable_active_high")
@@ -1399,7 +1403,8 @@ class MotionService:
         pin_assignments: dict[int, list[str]] = {}
         for axis_name, motor in updated_hardware["motors"].items():
             for key in ("step_pin", "dir_pin", "enable_pin"):
-                pin_assignments.setdefault(int(motor[key]), []).append(f"motor.{axis_name}.{key}")
+                if motor.get(key) is not None:
+                    pin_assignments.setdefault(int(motor[key]), []).append(f"motor.{axis_name}.{key}")
         for group_name in ("digital_inputs", "digital_outputs"):
             for signal_name, signal in updated_hardware[group_name].items():
                 pin_assignments.setdefault(int(signal["pin"]), []).append(f"{group_name}.{signal_name}")
