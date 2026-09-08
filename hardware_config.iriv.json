@@ -141,6 +141,17 @@
         "fail_safe": true,
         "label": "Y_DRIVE_ALM"
       }
+    },
+    "outputs": {
+      "xy_drive_power": {
+        "channel": 0,
+        "pin": 23,
+        "active_high": true,
+        "initial_value": false,
+        "label": "XY_DRIVE_POWER_KM1",
+        "reset_off_s": 3.0,
+        "recovery_timeout_s": 8.0
+      }
     }
   },
   "iriv_io": {

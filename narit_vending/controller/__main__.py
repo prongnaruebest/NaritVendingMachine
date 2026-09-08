@@ -158,6 +158,7 @@ def _register_handlers(bus: Any, service: Any) -> None:
         make_disable_motion_handler,
         make_enable_motion_handler,
         make_reset_nucleo_link_handler,
+        make_reset_xy_drive_power_handler,
     )
 
     bus.register("STOP", make_stop_handler(service))
@@ -168,6 +169,7 @@ def _register_handlers(bus: Any, service: Any) -> None:
     bus.register("DISABLE_MOTION", make_disable_motion_handler(service))
     bus.register("ENABLE_MOTION", make_enable_motion_handler(service))
     bus.register("RESET_NUCLEO_LINK", make_reset_nucleo_link_handler(service))
+    bus.register("RESET_XY_DRIVE_POWER", make_reset_xy_drive_power_handler(service))
     for command_type, action in (
         ("CONFIGURE_DEMO", "configure"), ("VALIDATE_DEMO", "validate"),
         ("ARM_DEMO", "arm"), ("START_DEMO", "start"),

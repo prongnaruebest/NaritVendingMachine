@@ -13,6 +13,7 @@ if os.name != "posix" and "GPIOZERO_PIN_FACTORY" not in os.environ:
     os.environ["GPIOZERO_PIN_FACTORY"] = "mock"
 
 from gpiozero import DigitalInputDevice, OutputDevice
+from gpiozero.pins.mock import MockFactory
 
 
 _logger = logging.getLogger(__name__)
@@ -1550,6 +1551,7 @@ def build_controller(
     motion_backend: object | None = None,
 ) -> MotionController:
     hw_config = load_hardware_config(hw_config_path)
+    motion_placeholder_factory = MockFactory() if motion_backend is not None else None
     di_config = hw_config.get("digital_inputs", {})
 
     def make_input(pin: int, info: dict[str, object], iriv_name: str | None = None):
@@ -1621,10 +1623,11 @@ def build_controller(
         motor_info = motors_config.get(cfg.name, {})
         motor_active_high = bool(motor_info.get("active_high", True))
         enable_active_high = bool(motor_info.get("enable_active_high", motor_active_high))
-        pulse_dev = OutputDevice(cfg.pulse_pin, active_high=motor_active_high, initial_value=False)
-        dir_dev = OutputDevice(cfg.direction_pin, active_high=motor_active_high, initial_value=False)
+        placeholder_args = {"pin_factory": motion_placeholder_factory} if motion_placeholder_factory is not None else {}
+        pulse_dev = OutputDevice(cfg.pulse_pin, active_high=motor_active_high, initial_value=False, **placeholder_args)
+        dir_dev = OutputDevice(cfg.direction_pin, active_high=motor_active_high, initial_value=False, **placeholder_args)
         enable_dev = (
-            OutputDevice(cfg.enable_pin, active_high=enable_active_high, initial_value=True)
+            OutputDevice(cfg.enable_pin, active_high=enable_active_high, initial_value=True, **placeholder_args)
             if cfg.enable_pin is not None
             else None
         )

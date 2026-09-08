@@ -160,6 +160,11 @@ class FrontendAcceptanceTests(unittest.TestCase):
         self.assertIn("open System Control & Health and press ENABLE MOTION", APP_JS)
         self.assertIn('homeAllButton.setAttribute("aria-disabled"', APP_JS)
 
+    def test_system_control_exposes_controller_owned_xy_drive_power_reset(self) -> None:
+        self.assertIn('id="system-drive-power-reset"', TEMPLATE)
+        self.assertIn('/api/system/drives/reset-power', APP_JS)
+        self.assertIn('picontrol.outputs?.xy_drive_power', APP_JS)
+
     def test_io_status_separates_picontrol_from_iriv_modbus(self) -> None:
         self.assertIn('id="io-section-picontrol"', TEMPLATE)
         self.assertIn('id="io-page-picontrol-cards"', TEMPLATE)

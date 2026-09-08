@@ -1,4 +1,4 @@
-"""Local isolated digital inputs on the IRIV PiControl CM4."""
+"""Local isolated digital I/O on the IRIV PiControl CM4."""
 
 from __future__ import annotations
 
@@ -7,17 +7,19 @@ import time
 from datetime import datetime, timezone
 from typing import Any
 
-from gpiozero import DigitalInputDevice
+from gpiozero import DigitalInputDevice, DigitalOutputDevice
 
 
 class PiControlIOBackend:
-    """Poll PiControl DI0-DI3 without mixing them with the Modbus IRIV I/O."""
+    """Own PiControl DI0-DI3 and DO0-DO3 separately from Modbus IRIV I/O."""
 
     def __init__(self, config: dict[str, Any]) -> None:
         self.config = config
         self.inputs = dict(config.get("inputs", {}))
+        self.outputs = dict(config.get("outputs", {}))
         self.poll_interval_s = max(0.01, float(config.get("poll_interval_s", 0.02)))
         self._devices: dict[str, DigitalInputDevice] = {}
+        self._output_devices: dict[str, DigitalOutputDevice] = {}
         self._raw: dict[str, bool] = {}
         self._error = ""
         self._last_success_at: str | None = None
@@ -27,6 +29,12 @@ class PiControlIOBackend:
         self._thread: threading.Thread | None = None
         for name, info in self.inputs.items():
             self._devices[name] = DigitalInputDevice(int(info["pin"]), pull_up=False)
+        for name, info in self.outputs.items():
+            self._output_devices[name] = DigitalOutputDevice(
+                int(info["pin"]),
+                active_high=bool(info.get("active_high", True)),
+                initial_value=bool(info.get("initial_value", False)),
+            )
 
     @property
     def communication_ok(self) -> bool:
@@ -45,6 +53,20 @@ class PiControlIOBackend:
             self._thread.join(timeout=1.0)
         for device in self._devices.values():
             device.close()
+        for device in self._output_devices.values():
+            device.off()
+            device.close()
+
+    def set_output(self, name: str, active: bool) -> None:
+        if name not in self._output_devices:
+            raise KeyError(f"PiControl output '{name}' is not configured")
+        device = self._output_devices[name]
+        device.on() if active else device.off()
+
+    def output_active(self, name: str) -> bool:
+        if name not in self._output_devices:
+            return False
+        return bool(self._output_devices[name].value)
 
     def _poll_loop(self) -> None:
         while not self._stop.wait(self.poll_interval_s):
@@ -117,6 +139,17 @@ class PiControlIOBackend:
                 for name, info in self.inputs.items()
             },
             "inputs": {name: self.input_active(name) for name in self.inputs},
+            "outputs": {name: self.output_active(name) for name in self.outputs},
+            "output_details": {
+                name: {
+                    "channel": info.get("channel"),
+                    "pin": info.get("pin"),
+                    "label": info.get("label", name),
+                    "active_high": bool(info.get("active_high", True)),
+                    "value": self.output_active(name),
+                }
+                for name, info in self.outputs.items()
+            },
             "input_details": input_details,
             "last_success_at": last_success_at,
             "poll_latency_ms": poll_latency_ms,

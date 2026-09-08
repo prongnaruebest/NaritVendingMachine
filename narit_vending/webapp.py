@@ -748,6 +748,82 @@ class MotionService:
                 self.last_error = str(result.get("error") or "NUCLEO handshake failed")
         return result | {"motion_enabled": False}
 
+    def reset_xy_drive_power(self) -> dict[str, object]:
+        """Power-cycle X/Y drives through PiControl DO0 without enabling motion."""
+        if self.picontrol_io is None or "xy_drive_power" not in self.picontrol_io.outputs:
+            return {"ok": False, "error": "PiControl DO0 XY drive power output is not configured"}
+        if self.busy:
+            return {"ok": False, "error": "Machine is busy; stop all motion before resetting drive power"}
+        if not self.command_lock.acquire(blocking=False):
+            return {"ok": False, "error": "Another controller command is active"}
+        try:
+            self.disable_motion()
+            if self.nucleo_link is not None:
+                nucleo = self.nucleo_link.status_payload()
+                if any(int(value or 0) for value in dict(nucleo.get("moving", {})).values()):
+                    return {"ok": False, "error": "NUCLEO still reports axis motion; drive power reset blocked"}
+
+            output_cfg = self.picontrol_io.outputs["xy_drive_power"]
+            off_seconds = min(15.0, max(1.0, float(output_cfg.get("reset_off_s", 3.0))))
+            recovery_timeout = min(30.0, max(2.0, float(output_cfg.get("recovery_timeout_s", 8.0))))
+            self.picontrol_io.set_output("xy_drive_power", False)
+            with self.lock:
+                self.operation_phase = "drive_power_reset"
+                self.operation_message = "X/Y 60 V drive power removed through PiControl DO0"
+            time.sleep(off_seconds)
+
+            # The physical E-Stop NC contact remains in series. If it is open,
+            # energising DO0 cannot pull in KM1 and DI10 will remain unsafe.
+            self.picontrol_io.set_output("xy_drive_power", True)
+            deadline = time.monotonic() + recovery_timeout
+            while time.monotonic() < deadline:
+                io_clear = (
+                    self.io_backend is not None
+                    and self.io_backend.communication_ok
+                    and not self.io_backend.input_active("estop")
+                )
+                drive_fault = any(
+                    channel["active"] and channel["level"] == "fault"
+                    for channel in self.picontrol_io.alarm_channels()
+                )
+                if io_clear and not drive_fault:
+                    break
+                time.sleep(0.1)
+            else:
+                self.picontrol_io.set_output("xy_drive_power", False)
+                return {
+                    "ok": False,
+                    "error": "KM1/DI10 or X/Y drive alarm did not recover; DO0 returned OFF",
+                    "motion_enabled": False,
+                    "drive_power_on": False,
+                }
+
+            for axis_name in ("x", "y"):
+                self.controller.axes()[axis_name].is_homed = False
+                self.homing[axis_name] = "not_homed"
+            self.controller.clear_stop()
+            self.controller.set_state("idle")
+            self._safety_trip_latched = False
+            with self.lock:
+                self.last_error = ""
+                self.operation_phase = "motion_disabled"
+                self.operation_message = "X/Y drive power reset complete; Home X/Y before enabling motion"
+            return {
+                "ok": True,
+                "motion_enabled": False,
+                "drive_power_on": True,
+                "reset_off_s": off_seconds,
+                "homing_required": ["x", "y"],
+            }
+        except Exception as exc:
+            try:
+                self.picontrol_io.set_output("xy_drive_power", False)
+            except Exception:
+                pass
+            return {"ok": False, "error": f"XY drive power reset failed: {exc}", "drive_power_on": False}
+        finally:
+            self.command_lock.release()
+
     def controlled_stop(self) -> dict[str, object]:
         if not self.busy:
             return {"ok": True, "result": "machine already idle"}

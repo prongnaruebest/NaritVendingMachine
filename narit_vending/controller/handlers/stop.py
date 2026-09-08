@@ -113,3 +113,7 @@ def make_enable_motion_handler(motion_service: Any):
 
 def make_reset_nucleo_link_handler(motion_service: Any):
     return _service_action_handler(motion_service, "reset_nucleo_link")
+
+
+def make_reset_xy_drive_power_handler(motion_service: Any):
+    return _service_action_handler(motion_service, "reset_xy_drive_power")

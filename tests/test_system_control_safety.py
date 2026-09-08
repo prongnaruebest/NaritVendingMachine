@@ -10,16 +10,23 @@ class SystemControlSafetyTests(unittest.TestCase):
     def service(self):
         service = MotionService.__new__(MotionService)
         service.lock = threading.RLock()
+        service.command_lock = threading.Lock()
         service.controller = MagicMock()
         service.controller.axes.return_value = {
             name: SimpleNamespace(is_homed=True) for name in ("x", "y", "z")
         }
         service.nucleo_link = MagicMock()
+        service.nucleo_link.status_payload.return_value = {"moving": {"x": 0, "y": 0, "z": 0}}
         service.io_backend = MagicMock()
         service.io_backend.communication_ok = True
         service.io_backend.input_active.return_value = False
         service.io_backend.alarm_channels.return_value = []
         service.nucleo_link.communication_ok = True
+        service.picontrol_io = MagicMock()
+        service.picontrol_io.outputs = {
+            "xy_drive_power": {"reset_off_s": 1.0, "recovery_timeout_s": 2.0}
+        }
+        service.picontrol_io.alarm_channels.return_value = []
         service.homing = {name: "passed" for name in ("x", "y", "z")}
         service.motion_enabled = True
         service._safety_trip_latched = False
@@ -68,6 +75,22 @@ class SystemControlSafetyTests(unittest.TestCase):
         self.assertTrue(result["ok"])
         self.assertFalse(result["motion_enabled"])
         self.assertFalse(result["physical_nrst"])
+
+    def test_reset_xy_drive_power_cycles_do0_and_invalidates_xy_home(self):
+        service = self.service()
+
+        with unittest.mock.patch("narit_vending.webapp.time.sleep"):
+            result = service.reset_xy_drive_power()
+
+        self.assertTrue(result["ok"])
+        self.assertFalse(result["motion_enabled"])
+        self.assertEqual(
+            service.picontrol_io.set_output.call_args_list,
+            [unittest.mock.call("xy_drive_power", False), unittest.mock.call("xy_drive_power", True)],
+        )
+        self.assertFalse(service.controller.axes()["x"].is_homed)
+        self.assertFalse(service.controller.axes()["y"].is_homed)
+        self.assertTrue(service.controller.axes()["z"].is_homed)
 
 
 if __name__ == "__main__":

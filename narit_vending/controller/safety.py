@@ -29,6 +29,7 @@ _PRIORITY_COMMANDS = frozenset({
     "DISABLE_MOTION",
     "ENABLE_MOTION",
     "RESET_NUCLEO_LINK",
+    "RESET_XY_DRIVE_POWER",
     "STOP_DEMO",
 })
 

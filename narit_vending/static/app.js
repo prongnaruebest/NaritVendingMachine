@@ -3832,6 +3832,7 @@
 
   function renderSystemControl() {
     const io = MS.payload?.io || {};
+    const picontrol = MS.payload?.picontrol_io || {};
     const nucleo = MS.payload?.nucleo || {};
     const safety = MS.payload?.safety || {};
     const estop = Boolean(safety.estop_active || getStatus().estop);
@@ -3861,6 +3862,11 @@
     if (disable) disable.disabled = !MS.online || !motionEnabled;
     const reset = el("system-nucleo-reset");
     if (reset) reset.disabled = !MS.online || Boolean(MS.payload?.busy);
+    const drivePowerOn = picontrol.outputs?.xy_drive_power === true;
+    setText("system-drive-power-state", drivePowerOn ? "POWER ON" : "POWER OFF");
+    setClass("system-drive-power-state", `page-status-chip ${drivePowerOn ? "ok" : "fault"}`);
+    const driveReset = el("system-drive-power-reset");
+    if (driveReset) driveReset.disabled = !MS.online || Boolean(MS.payload?.busy) || picontrol.communication_ok === false;
     const history = el("system-action-history");
     if (history) {
       const entries = MS.events.filter((event) => ["SYSTEM", "SAFETY", "INTERLOCK", "CONFIG"].includes(eventCategory(event))).slice(0, 8);
@@ -4228,6 +4234,10 @@
     el("system-motion-enable")?.addEventListener("click", () => runSystemAction("/api/system/motion/enable", "Motion enabled for future validated commands."));
     el("system-nucleo-reset")?.addEventListener("click", () => {
       if (window.confirm("Stop and disarm all axes, then reset the NUCLEO USB link and handshake? This is not a physical NRST reset.")) runSystemAction("/api/system/nucleo/reset-link", "NUCLEO USB link reset; motion remains disabled.");
+    });
+    el("system-drive-power-reset")?.addEventListener("click", () => {
+      const warning = "Reset X/Y drive power now? All axes will stop, NUCLEO will disarm, KM1 will remove 60 V for 3 seconds, and X/Y homing references will be cleared.";
+      if (window.confirm(warning)) runSystemAction("/api/system/drives/reset-power", "X/Y drive power reset complete. Motion remains disabled; Home X/Y before use.");
     });
 
     const demoPayload = () => {
