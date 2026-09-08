@@ -36,8 +36,8 @@ Exit criterion: existing behavior is protected, domain package has no infrastruc
 - [x] Extend `CommandEnvelope` with validated versioned metadata compatibly.
 - [x] Define typed SafetySnapshot and reason codes.
 - [x] Reconcile Motion state strings, Controller state machine and snapshot normalization.
-- [ ] Add transition-table and concurrency tests.
-- [ ] Add bounded idempotency storage.
+- [x] Add transition-table and concurrency tests.
+- [x] Add bounded idempotency storage.
 
 Exit criterion: all HTTP/MQTT/system motion requests traverse one tested decision path.
 

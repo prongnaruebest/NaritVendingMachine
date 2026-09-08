@@ -14,8 +14,10 @@ and are handled immediately.
 
 from __future__ import annotations
 
+import json
 import logging
 import threading
+from collections import OrderedDict
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Callable
 
@@ -40,13 +42,22 @@ class CommandBus:
     or motion objects — those are owned by the registered handler callables.
     """
 
-    def __init__(self, state_machine: StateMachine, snapshot_fn: Callable[[], "MachineSnapshot"]) -> None:
+    def __init__(
+        self,
+        state_machine: StateMachine,
+        snapshot_fn: Callable[[], "MachineSnapshot"],
+        *,
+        idempotency_capacity: int = 256,
+    ) -> None:
         self._state_machine = state_machine
         self._snapshot_fn = snapshot_fn
         self._safety = SafetyInterlock()
         self._motion_lock = threading.Lock()
         self._handlers: dict[str, Callable[["CommandEnvelope"], "CommandResult"]] = {}
         self._lock = threading.RLock()
+        self._idempotency_capacity = max(1, int(idempotency_capacity))
+        self._idempotency: OrderedDict[str, tuple[str, "CommandResult"]] = OrderedDict()
+        self._idempotency_inflight: dict[str, str] = {}
 
     def register(self, command_type: str, handler: Callable[["CommandEnvelope"], "CommandResult"]) -> None:
         """Register a handler callable for a command type."""
@@ -55,6 +66,67 @@ class CommandBus:
             _log.debug("Registered handler for %s", command_type)
 
     def submit(self, envelope: "CommandEnvelope") -> "CommandResult":
+        """Deduplicate one logical request, then execute it through the safety gate."""
+        from narit_vending.shared.commands import CommandResult
+
+        key = envelope.idempotency_key
+        fingerprint = self._fingerprint(envelope)
+        with self._lock:
+            cached = self._idempotency.get(key)
+            if cached is not None:
+                cached_fingerprint, cached_result = cached
+                if cached_fingerprint != fingerprint:
+                    return CommandResult.rejected(
+                        envelope.command_id,
+                        "Idempotency key was already used for a different command",
+                        code="IDEMPOTENCY_CONFLICT",
+                    )
+                self._idempotency.move_to_end(key)
+                return CommandResult.from_dict(cached_result.to_dict())
+            inflight_fingerprint = self._idempotency_inflight.get(key)
+            if inflight_fingerprint is not None:
+                if inflight_fingerprint != fingerprint:
+                    return CommandResult.rejected(
+                        envelope.command_id,
+                        "Idempotency key is in use by a different command",
+                        code="IDEMPOTENCY_CONFLICT",
+                    )
+                return CommandResult.rejected(
+                    envelope.command_id,
+                    "Command with this idempotency key is already in progress",
+                    code="COMMAND_IN_PROGRESS",
+                    retryable=True,
+                )
+            self._idempotency_inflight[key] = fingerprint
+
+        try:
+            result = self._submit_once(envelope)
+            if result.state != "BUSY":
+                with self._lock:
+                    self._idempotency[key] = (fingerprint, CommandResult.from_dict(result.to_dict()))
+                    self._idempotency.move_to_end(key)
+                    while len(self._idempotency) > self._idempotency_capacity:
+                        self._idempotency.popitem(last=False)
+            return result
+        finally:
+            with self._lock:
+                self._idempotency_inflight.pop(key, None)
+
+    @staticmethod
+    def _fingerprint(envelope: "CommandEnvelope") -> str:
+        return json.dumps(
+            {
+                "command_type": envelope.command_type,
+                "source": envelope.source,
+                "parameters": envelope.parameters,
+                "config_revision": envelope.config_revision,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+            default=str,
+        )
+
+    def _submit_once(self, envelope: "CommandEnvelope") -> "CommandResult":
         """Submit a command envelope and return the result synchronously.
 
         This method blocks the calling thread until the command completes.

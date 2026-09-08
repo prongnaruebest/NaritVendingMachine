@@ -83,6 +83,9 @@ Rejected or failed Controller commands retain the legacy `ok`, `accepted`,
 Initial stable codes are `COMMAND_REJECTED`, `SAFETY_INTERLOCK`,
 `UNKNOWN_COMMAND`, `MACHINE_BUSY` and `INTERNAL_HANDLER_ERROR`. Consumers must
 use `code` for branching and treat `message` as operator-facing text.
+Idempotent retries may also return `COMMAND_IN_PROGRESS` or
+`IDEMPOTENCY_CONFLICT`; completed results are cached in a bounded in-memory
+least-recently-used store.
 
 ## Command metadata
 

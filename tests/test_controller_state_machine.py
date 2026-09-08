@@ -68,6 +68,12 @@ class TestStateMachine(unittest.TestCase):
         sm.force(MachineState.E_STOP)
         self.assertEqual(sm.state, MachineState.E_STOP)
 
+    def test_every_runtime_state_has_an_explicit_transition_policy(self):
+        from narit_vending.controller.state_machine import _TRANSITIONS
+
+        controller_states = set(MachineState) - {MachineState.CONTROLLER_OFFLINE}
+        self.assertEqual(set(_TRANSITIONS), controller_states)
+
 
 if __name__ == "__main__":
     unittest.main()
