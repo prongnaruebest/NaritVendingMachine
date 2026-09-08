@@ -63,7 +63,7 @@ Exit criterion: plans are pure/testable and hardware execution consumes validate
 
 ## Phase 5 — Persistence and observability
 
-- [ ] Add SQLite migration/version framework.
+- [x] Add SQLite migration/version framework.
 - [ ] Add repositories for slots, demo sessions/samples, audit and idempotency.
 - [ ] Introduce structured event codes and correlation IDs.
 - [ ] Add retention, backup and restore tests.

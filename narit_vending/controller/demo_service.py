@@ -15,6 +15,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from ..persistence.demo_schema import DEMO_MIGRATIONS
+from ..persistence.sqlite_migrations import SQLiteMigrator
+
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -46,28 +49,11 @@ class DemoSamplingService:
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.database_path, timeout=5)
         connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA foreign_keys = ON")
         return connection
 
     def _init_db(self) -> None:
-        self.database_path.parent.mkdir(parents=True, exist_ok=True)
-        with closing(self._connect()) as db, db:
-            db.executescript("""
-            CREATE TABLE IF NOT EXISTS demo_sessions (
-              session_id TEXT PRIMARY KEY, started_at TEXT NOT NULL, ended_at TEXT,
-              state TEXT NOT NULL, configuration_json TEXT NOT NULL,
-              requested INTEGER NOT NULL DEFAULT 0, attempted INTEGER NOT NULL DEFAULT 0,
-              passed INTEGER NOT NULL DEFAULT 0, failed INTEGER NOT NULL DEFAULT 0,
-              skipped INTEGER NOT NULL DEFAULT 0, stopped INTEGER NOT NULL DEFAULT 0,
-              final_reason TEXT NOT NULL DEFAULT ''
-            );
-            CREATE TABLE IF NOT EXISTS demo_samples (
-              sample_id TEXT PRIMARY KEY, session_id TEXT NOT NULL, cycle_no INTEGER NOT NULL,
-              slot_code TEXT NOT NULL, started_at TEXT NOT NULL, completed_at TEXT,
-              duration_s REAL, result TEXT NOT NULL, reason TEXT NOT NULL DEFAULT '',
-              FOREIGN KEY(session_id) REFERENCES demo_sessions(session_id)
-            );
-            CREATE INDEX IF NOT EXISTS idx_demo_samples_session ON demo_samples(session_id);
-            """)
+        self.schema_version = SQLiteMigrator(self.database_path, DEMO_MIGRATIONS).migrate()
 
     def _normalise(self, payload: dict[str, Any]) -> dict[str, Any]:
         slots = [str(value) for value in payload.get("slots", []) if str(value) in self.motion.controller.config.slots]
@@ -279,7 +265,7 @@ class DemoSamplingService:
     def status(self) -> dict[str, Any]:
         with self._lock:
             attempted = self._counters["attempted"]
-            return {"state": self._state, "session_id": self._session_id, "started_at": self._started_at, "ended_at": self._ended_at, "cycle": self._cycle, "current_slot": self._current_slot, "next_slot": self._next_slot, "configuration": dict(self._config), "counters": dict(self._counters) | {"success_rate": round(100*self._counters["passed"]/attempted, 1) if attempted else 0.0}, "last_result": self._last_result, "pause_requested": self._pause_requested}
+            return {"state": self._state, "session_id": self._session_id, "started_at": self._started_at, "ended_at": self._ended_at, "cycle": self._cycle, "current_slot": self._current_slot, "next_slot": self._next_slot, "configuration": dict(self._config), "counters": dict(self._counters) | {"success_rate": round(100*self._counters["passed"]/attempted, 1) if attempted else 0.0}, "last_result": self._last_result, "pause_requested": self._pause_requested, "schema_version": self.schema_version}
 
     def history(self, limit: int = 50) -> list[dict[str, Any]]:
         with closing(self._connect()) as db, db:

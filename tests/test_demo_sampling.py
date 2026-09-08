@@ -39,6 +39,7 @@ class DemoSamplingTests(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_unbounded_demo_is_rejected(self):
+        self.assertEqual(self.demo.status()["schema_version"], 1)
         result = self.demo.configure({"sample_count": 0, "max_duration_s": 0})
         self.assertFalse(result["ok"])
         self.assertIn("requires", result["error"])
