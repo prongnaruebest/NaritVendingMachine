@@ -436,6 +436,14 @@ class AxisController:
         if self.motion_backend is not None and getattr(self.motion_backend, "expected_protocol", 1) >= 2:
             segment_limit = max(1, int(getattr(self.motion_backend, "max_move_steps", NUCLEO_MOVE_CHUNK_STEPS)))
             while not sensor.value:
+                # A STOP/E-STOP may arrive after the previous firmware frame
+                # returned.  Never arm and submit another frame while the stop
+                # latch is active; doing so used to leave seek_limit spinning
+                # forever and kept the Controller busy.
+                if self.estop.value:
+                    raise EmergencyStopError(f"{self.config.name}: emergency stop active during limit seek")
+                if self.stop_requested():
+                    raise StopRequestedError(f"{self.config.name}: stop requested during limit seek")
                 if monotonic() >= deadline:
                     raise LimitTriggeredError(
                         f"{self.config.name}: {endpoint} physical limit not reached within {seek_watchdog_s:.1f} seconds"
@@ -450,6 +458,10 @@ class AxisController:
                         stop_requested=lambda: bool(self.estop.value or self.stop_requested() or sensor.value),
                     )
                     moved += int(result.get("steps", segment_limit))
+                    if result.get("stopped") and not sensor.value:
+                        if self.estop.value:
+                            raise EmergencyStopError(f"{self.config.name}: emergency stop active during limit seek")
+                        raise StopRequestedError(f"{self.config.name}: stop requested during limit seek")
                 except NucleoError:
                     if sensor.value:
                         break

@@ -752,12 +752,13 @@ class MotionService:
         """Power-cycle X/Y drives through PiControl DO0 without enabling motion."""
         if self.picontrol_io is None or "xy_drive_power" not in self.picontrol_io.outputs:
             return {"ok": False, "error": "PiControl DO0 XY drive power output is not configured"}
-        if self.busy:
-            return {"ok": False, "error": "Machine is busy; stop all motion before resetting drive power"}
-        if not self.command_lock.acquire(blocking=False):
-            return {"ok": False, "error": "Another controller command is active"}
+        # Reset is a recovery action: request an immediate stop first, then
+        # wait briefly for the interrupted motion handler to release ownership.
+        # Physical E-Stop is never bypassed; DI10 must still recover below.
+        self.disable_motion()
+        if not self.command_lock.acquire(timeout=5.0):
+            return {"ok": False, "error": "Motion did not stop within 5 seconds; drive power was not cycled"}
         try:
-            self.disable_motion()
             if self.nucleo_link is not None:
                 nucleo = self.nucleo_link.status_payload()
                 if any(int(value or 0) for value in dict(nucleo.get("moving", {})).values()):

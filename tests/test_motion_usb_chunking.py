@@ -9,6 +9,7 @@ from narit_vending.motion import (
     AxisMovePlan,
     ControlledStopError,
     NUCLEO_MOVE_CHUNK_STEPS,
+    StopRequestedError,
 )
 
 
@@ -155,6 +156,20 @@ class MotionUsbChunkingTests(unittest.TestCase):
         self.assertEqual(result["steps"], 600)
         self.assertEqual(axis.position_steps, axis.mm_to_steps(160.0))
         self.assertTrue(axis.is_homed)
+
+    def test_limit_seek_does_not_submit_another_frame_after_stop(self):
+        axis = self.make_axis(name="x", segment_limit=1_000_000)
+
+        def stopped_move(**kwargs):
+            axis.controlled_stop_requested = lambda: True
+            return {"steps": 250, "stopped": True}
+
+        axis.motion_backend.move.side_effect = stopped_move
+
+        with self.assertRaises(StopRequestedError):
+            axis.seek_limit("max", speed_mm_s=5.0)
+
+        self.assertEqual(axis.motion_backend.move.call_count, 1)
 
 
 if __name__ == "__main__":
