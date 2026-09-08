@@ -95,6 +95,7 @@ def _status_from_snapshot(snap) -> dict:
             **axes_data,
         },
         "alarm_channels": snap.alarm_channels,
+        "io_registry": snap.io_registry,
         "io": snap.io_status,
         "picontrol_io": snap.picontrol_io_status,
         "nucleo": snap.nucleo_status,
@@ -119,6 +120,7 @@ def make_status_bp(ctrl: "ControllerClient") -> Blueprint:
             "ok": True,
             "io": status.get("io", {}),
             "picontrol_io": status.get("picontrol_io", {}),
+            "io_registry": status.get("io_registry", []),
             "safety": {
                 "estop": status.get("status", {}).get("estop", False),
                 "stop_requested": snap.stop_requested,

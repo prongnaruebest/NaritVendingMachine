@@ -223,6 +223,29 @@ class WebAppNewProcessTests(unittest.TestCase):
         self.assertIn("io", data)
         self.assertIn("safety", data)
 
+    def test_status_exposes_controller_io_registry(self) -> None:
+        from dataclasses import replace
+        from unittest.mock import MagicMock
+        from narit_vending.web.app import create_web_app
+        from narit_vending.shared.snapshot import MachineSnapshot
+
+        mock_ctrl = MagicMock()
+        mock_ctrl.snapshot.return_value = replace(
+            MachineSnapshot.offline(),
+            io_registry=[
+                {"id": "iriv_modbus:input:estop", "source": "iriv_modbus", "direction": "input"}
+            ],
+        )
+        app = create_web_app(mock_ctrl)
+        app.testing = True
+        client = app.test_client()
+
+        status = client.get("/api/status").get_json()
+        io_status = client.get("/api/io/status").get_json()
+
+        self.assertEqual(status["io_registry"][0]["id"], "iriv_modbus:input:estop")
+        self.assertEqual(io_status["io_registry"], status["io_registry"])
+
 
 
 
