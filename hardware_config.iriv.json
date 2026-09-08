@@ -140,6 +140,20 @@
                                                         "active_state":  true,
                                                         "fail_safe":  true,
                                                         "label":  "Y_DRIVE_ALM"
+                                                    },
+                                        "x_pend":  {
+                                                       "channel":  2,
+                                                       "pin":  27,
+                                                       "active_state":  true,
+                                                       "fail_safe":  false,
+                                                       "label":  "X_PEND"
+                                                   },
+                                        "y_pend":  {
+                                                       "channel":  3,
+                                                       "pin":  22,
+                                                       "active_state":  true,
+                                                       "fail_safe":  false,
+                                                       "label":  "Y_PEND"
                                                     }
                                     },
                          "outputs":  {

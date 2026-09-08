@@ -3468,7 +3468,8 @@
       driveSummary.textContent = driveFaults.length ? `${driveFaults.length} ALARM` : piCommOk === true ? "CLEAR" : "UNKNOWN";
       driveSummary.className = `io-summary-value ${driveFaults.length || piCommOk !== true ? "fault" : "ok"}`;
     }
-    setText("io-summary-drive-sub", driveFaults.length ? driveFaults.map((key) => key.startsWith("x") ? "X_DRIVE_ALM" : "Y_DRIVE_ALM").join(" · ") : "X/Y HBS860H feedback clear");
+    const pendSummary = ["x_pend", "y_pend"].map((key) => `${key.startsWith("x") ? "X" : "Y"} ${piInputs[key] === true ? "IN POSITION" : "TRACKING"}`).join(" · ");
+    setText("io-summary-drive-sub", driveFaults.length ? driveFaults.map((key) => key.startsWith("x") ? "X_DRIVE_ALM" : "Y_DRIVE_ALM").join(" · ") : `Alarm clear · ${pendSummary}`);
     setText("io-summary-age", snapshotStale ? "STALE" : `${Math.round(snapshotAgeMs)} ms`);
     setText("io-summary-latency", `IRIV ${MS.payload?.io?.poll_latency_ms ?? "--"} ms · PiControl ${piControl.poll_latency_ms ?? "--"} ms`);
     const filteredNoise = Object.values(inputDetails).reduce((total, detail) => total + Number(detail?.filtered_spikes || 0), 0);
@@ -3481,8 +3482,9 @@
       if (def.category === "limits") limitsCount++;
       if (def.category === "sensors") sensorsCount++;
     });
-    setText("io-filter-cnt-all", String(IO_PAGE_DI_CHANNELS.length + IO_PAGE_DO_CHANNELS.length + 2));
-    setText("io-filter-cnt-inputs", String(IO_PAGE_DI_CHANNELS.length + 2));
+    const piInputCount = Object.keys(piInputs).length;
+    setText("io-filter-cnt-all", String(IO_PAGE_DI_CHANNELS.length + IO_PAGE_DO_CHANNELS.length + piInputCount));
+    setText("io-filter-cnt-inputs", String(IO_PAGE_DI_CHANNELS.length + piInputCount));
     setText("io-filter-cnt-outputs", String(IO_PAGE_DO_CHANNELS.length));
     setText("io-filter-cnt-limits", String(limitsCount));
     setText("io-filter-cnt-sensors", String(sensorsCount));
@@ -3531,18 +3533,22 @@
     const piCards = el("io-page-picontrol-cards");
     if (piCards) {
       const definitions = [
-        { key: "x_alarm", channel: 0, pin: 13, label: "X_DRIVE_ALM", driver: "HBS860H X" },
-        { key: "y_alarm", channel: 1, pin: 17, label: "Y_DRIVE_ALM", driver: "HBS860H Y" },
+        { key: "x_alarm", channel: 0, pin: 13, label: "X_DRIVE_ALM", driver: "HBS860H X", kind: "alarm" },
+        { key: "y_alarm", channel: 1, pin: 17, label: "Y_DRIVE_ALM", driver: "HBS860H Y", kind: "alarm" },
+        { key: "x_pend", channel: 2, pin: 27, label: "X_PEND", driver: "HBS860H X", kind: "pend" },
+        { key: "y_pend", channel: 3, pin: 22, label: "Y_PEND", driver: "HBS860H Y", kind: "pend" },
       ].filter((def) => currentFilter !== "active-only" || piInputs[def.key] === true)
        .filter((def) => !searchQuery || `${def.label} DI${def.channel} GPIO${def.pin} ${def.driver}`.toLowerCase().includes(searchQuery));
       piCards.innerHTML = definitions.length ? definitions.map((def) => {
         const active = piInputs[def.key] === true;
         const raw = piRawInputs[`DI${def.channel}`];
-        return `<article class="io-card io-card-enhanced ${active ? "fault" : "safe"}">
-          <div class="io-card-head"><div class="io-head-left"><span class="io-channel-tag">PiControl DI${def.channel}</span><span class="io-wire-tag">GPIO${def.pin}</span></div><span class="io-channel-badge ${active ? "fault" : "ok"}">${active ? "ALARM" : "CLEAR"}</span></div>
-          <div class="io-signal-name">${def.label}</div><div class="io-signal-role">${def.driver} alarm feedback</div>
+        const fault = def.kind === "alarm" && active;
+        const badge = def.kind === "pend" ? (active ? "IN POSITION" : "TRACKING") : (active ? "ALARM" : "CLEAR");
+        return `<article class="io-card io-card-enhanced ${fault ? "fault" : "safe"}">
+          <div class="io-card-head"><div class="io-head-left"><span class="io-channel-tag">PiControl DI${def.channel}</span><span class="io-wire-tag">GPIO${def.pin}</span></div><span class="io-channel-badge ${fault ? "fault" : (active ? "ok" : "warn")}">${badge}</span></div>
+          <div class="io-signal-name">${def.label}</div><div class="io-signal-role">${def.driver} ${def.kind === "pend" ? "position-complete feedback" : "alarm feedback"}</div>
           <div class="io-signal-desc">Separate local input bank; this is not IRIV Modbus DI${def.channel}.</div>
-          <div class="io-card-footer"><span class="io-card-raw">RAW: <b>${raw === true ? "1" : raw === false ? "0" : "--"}</b></span><span class="io-card-state ${active ? "fault" : "safe"}">${active ? "FAULT ACTIVE" : "NORMAL"}</span></div>
+          <div class="io-card-footer"><span class="io-card-raw">RAW: <b>${raw === true ? "1" : raw === false ? "0" : "--"}</b></span><span class="io-card-state ${fault ? "fault" : "safe"}">${def.kind === "pend" ? badge : (active ? "FAULT ACTIVE" : "NORMAL")}</span></div>
         </article>`;
       }).join("") : '<div class="io-empty-hint">No PiControl driver-alarm inputs match the current filters.</div>';
     }
@@ -4026,7 +4032,8 @@
       architectureHealth.textContent = !MS.online ? "CONTROLLER OFFLINE" : !nucleoOk ? "NUCLEO OFFLINE" : !ioOk ? "IRIV I/O OFFLINE" : "ALL LINKS ONLINE";
       architectureHealth.className = `page-status-chip ${healthy ? "ok" : "fault"}`;
       const motionEnabled = MS.payload?.safety?.motion_enabled === true;
-      const driveAlarm = Object.values(MS.payload?.picontrol_io?.inputs || {}).some((active) => active === true);
+      const piInputs = MS.payload?.picontrol_io?.inputs || {};
+      const driveAlarm = piInputs.x_alarm === true || piInputs.y_alarm === true;
       const safetyClear = MS.online && nucleoOk && ioOk && !status.estop && !MS.payload?.safety?.stop_requested && !driveAlarm;
       const setArchitectureLive = (id, value, ok) => {
         const node = el(id);

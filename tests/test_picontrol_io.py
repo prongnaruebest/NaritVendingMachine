@@ -7,7 +7,7 @@ from narit_vending.picontrol_io import PiControlIOBackend
 
 
 class FakeInput:
-    values = {13: False, 17: False}
+    values = {13: False, 17: False, 27: False, 22: False}
 
     def __init__(self, pin: int, pull_up: bool = False) -> None:
         self.pin = pin
@@ -26,6 +26,8 @@ def config() -> dict:
         "inputs": {
             "x_alarm": {"channel": 0, "pin": 13, "active_state": True, "fail_safe": True, "label": "X_DRIVE_ALM"},
             "y_alarm": {"channel": 1, "pin": 17, "active_state": True, "fail_safe": True, "label": "Y_DRIVE_ALM"},
+            "x_pend": {"channel": 2, "pin": 27, "active_state": True, "fail_safe": False, "label": "X_PEND"},
+            "y_pend": {"channel": 3, "pin": 22, "active_state": True, "fail_safe": False, "label": "Y_PEND"},
         },
     }
 
@@ -41,6 +43,7 @@ class PiControlIOBackendTests(unittest.TestCase):
         self.assertIsInstance(status["poll_latency_ms"], float)
         self.assertEqual(status["input_details"]["x_alarm"]["raw_channel"], "DI0")
         self.assertEqual(status["input_details"]["x_alarm"]["pin"], 13)
+        self.assertEqual(status["input_details"]["x_pend"]["raw_channel"], "DI2")
 
     @patch("narit_vending.picontrol_io.DigitalInputDevice", FakeInput)
     def test_drive_alarm_logical_state_is_separate_and_fail_safe(self) -> None:
@@ -52,6 +55,20 @@ class PiControlIOBackendTests(unittest.TestCase):
             self.assertTrue(next(item for item in backend.alarm_channels() if item["code"] == "DRV-X")["active"])
         finally:
             FakeInput.values[13] = False
+
+    @patch("narit_vending.picontrol_io.DigitalInputDevice", FakeInput)
+    def test_pend_is_position_feedback_and_never_a_drive_alarm(self) -> None:
+        backend = PiControlIOBackend(config())
+        FakeInput.values[27] = True
+        try:
+            backend._poll_once()
+            status = backend.status_payload()
+            self.assertTrue(status["inputs"]["x_pend"])
+            self.assertEqual(status["position_channels"][0]["state"], "in_position")
+            self.assertFalse(status["position_channels"][0]["blocking"])
+            self.assertNotIn("PEND-X", {item["code"] for item in backend.alarm_channels()})
+        finally:
+            FakeInput.values[27] = False
 
 
 if __name__ == "__main__":

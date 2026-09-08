@@ -95,6 +95,12 @@ class PiControlIOBackend:
         return raw == bool(info.get("active_state", True))
 
     def alarm_channels(self) -> list[dict[str, Any]]:
+        """Return only blocking communication/drive-alarm inputs.
+
+        PEND is positive in-position feedback.  It intentionally remains in
+        status_payload() and must never be promoted to a safety alarm merely
+        because the signal is active.
+        """
         result = [{
             "code": "PICTRL-DI",
             "label": "PiControl local digital inputs",
@@ -109,6 +115,23 @@ class PiControlIOBackend:
                     "label": str(self.inputs[name].get("label", name)),
                     "active": self.input_active(name),
                     "level": "fault",
+                    "detail": f"PiControl DI{self.inputs[name].get('channel')} / GPIO{self.inputs[name].get('pin')}",
+                })
+        return result
+
+    def position_channels(self) -> list[dict[str, Any]]:
+        """Expose non-blocking HBS860H positioning-complete feedback."""
+        result = []
+        for name, code, axis in (("x_pend", "PEND-X", "x"), ("y_pend", "PEND-Y", "y")):
+            if name in self.inputs:
+                active = self.input_active(name)
+                result.append({
+                    "code": code,
+                    "axis": axis,
+                    "label": str(self.inputs[name].get("label", name)),
+                    "active": active,
+                    "state": "in_position" if active else "tracking",
+                    "blocking": False,
                     "detail": f"PiControl DI{self.inputs[name].get('channel')} / GPIO{self.inputs[name].get('pin')}",
                 })
         return result
@@ -139,6 +162,7 @@ class PiControlIOBackend:
                 for name, info in self.inputs.items()
             },
             "inputs": {name: self.input_active(name) for name in self.inputs},
+            "position_channels": self.position_channels(),
             "outputs": {name: self.output_active(name) for name in self.outputs},
             "output_details": {
                 name: {
