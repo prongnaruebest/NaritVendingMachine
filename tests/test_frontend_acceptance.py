@@ -70,6 +70,12 @@ class FrontendAcceptanceTests(unittest.TestCase):
         self.assertIn('readinessNode.textContent = ready ? "READY" : "INHIBITED"', APP_JS)
         self.assertIn('id="strip-motion-reason" role="status" aria-atomic="true"', TEMPLATE)
 
+    def test_header_uses_full_width_without_empty_logo_column(self) -> None:
+        self.assertIn("Header v36: one full-width authority", STYLE)
+        self.assertIn(".hmi-header .header-title { display:none !important; }", STYLE)
+        self.assertIn("grid-template-columns:repeat(6,minmax(0,1fr)) !important", STYLE)
+        self.assertIn("grid-template-columns:minmax(220px,265px) minmax(0,1fr) !important", STYLE)
+
     def test_motion_places_compact_home_left_and_jog_right(self) -> None:
         self.assertIn('primaryControls.className = "motion-primary-controls"', APP_JS)
         self.assertIn('primaryControls.append(homeZone)', APP_JS)
