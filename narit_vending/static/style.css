@@ -8386,30 +8386,24 @@ body { font-size: 14px; }
   .workspace-view[data-view-page="motion"] .target-actions { grid-column: 1; }
 }
 
-/* Slots: keep the 30-row editor inside a clearly scrollable viewport. */
+/* Slots: use the workspace/page scrollbar, matching Machine Visualization. */
+.workspace-view[data-view-page="slots"] {
+  height: auto !important;
+  min-height: 100% !important;
+  overflow: visible !important;
+}
+.workspace-view[data-view-page="slots"] > * { min-height: max-content; }
 .workspace-view[data-view-page="slots"] .slot-panel {
   min-height: 0;
   height: auto;
-  grid-template-rows: auto auto auto minmax(300px, 1fr);
+  grid-template-rows: auto auto auto auto;
+  overflow: visible;
 }
 .workspace-view[data-view-page="slots"] .slot-table-wrap {
   width: 100%;
-  min-height: 300px;
-  max-height: clamp(360px, calc(100dvh - 420px), 720px);
+  min-height: 0;
+  max-height: none;
   overflow-x: auto !important;
-  overflow-y: scroll !important;
-  overscroll-behavior: contain;
-  scrollbar-gutter: stable both-edges;
-  scrollbar-width: auto;
-}
-.workspace-view[data-view-page="slots"] .slot-table thead {
-  position: sticky;
-  top: 0;
-  z-index: 3;
-}
-@media (max-width: 680px) {
-  .workspace-view[data-view-page="slots"] .slot-table-wrap {
-    min-height: 320px;
-    max-height: 62dvh;
-  }
+  overflow-y: visible !important;
+  overscroll-behavior-inline: contain;
 }
