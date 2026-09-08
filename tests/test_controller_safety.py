@@ -1,9 +1,11 @@
 import unittest
+from dataclasses import FrozenInstanceError
 
 from narit_vending.controller.safety import SafetyInterlock
 from narit_vending.controller.__main__ import _normalize_machine_state
 from narit_vending.shared.commands import CommandEnvelope
 from narit_vending.shared.snapshot import AxisSnapshot, MachineSnapshot
+from narit_vending.domain.safety import SafetySnapshot
 
 
 def _make_snapshot(**kwargs) -> MachineSnapshot:
@@ -48,6 +50,17 @@ class TestControllerSafety(unittest.TestCase):
             env = CommandEnvelope(command_type=cmd, source="http", parameters={})
             dec = self.safety.evaluate(env, snap)
             self.assertTrue(dec.allowed, f"Priority command {cmd} should be allowed even in E_STOP")
+
+    def test_typed_safety_snapshot_contains_only_policy_inputs(self):
+        safety = SafetySnapshot.from_machine_snapshot(_make_snapshot())
+
+        self.assertEqual(safety.state, "READY")
+        self.assertTrue(safety.axes["x"].is_homed)
+        self.assertFalse(hasattr(safety, "operation_message"))
+        with self.assertRaises(FrozenInstanceError):
+            safety.state = "MOVING"  # type: ignore[misc]
+        with self.assertRaises(TypeError):
+            safety.axes["x"] = safety.axes["x"]  # type: ignore[index]
 
     def test_configuration_restart_command_breaks_restart_required_lock(self):
         snap = _make_snapshot(configuration_restart_required=True, state="NOT_READY")

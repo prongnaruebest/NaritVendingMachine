@@ -34,7 +34,7 @@ Exit criterion: existing behavior is protected, domain package has no infrastruc
 ## Phase 2 — Canonical safety and command state
 
 - [x] Extend `CommandEnvelope` with validated versioned metadata compatibly.
-- [ ] Define typed SafetySnapshot and reason codes.
+- [x] Define typed SafetySnapshot and reason codes.
 - [ ] Reconcile Motion state strings, Controller state machine and snapshot normalization.
 - [ ] Add transition-table and concurrency tests.
 - [ ] Add bounded idempotency storage.

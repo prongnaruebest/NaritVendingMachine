@@ -11,6 +11,13 @@ import logging
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from narit_vending.domain.safety import (
+    SafetyReasonCode,
+    SafetySnapshot,
+    axis_not_homed_code,
+    limit_conflict_code,
+)
+
 from .state_machine import MachineState
 
 if TYPE_CHECKING:
@@ -100,6 +107,7 @@ class SafetyInterlock:
     def evaluate(self, envelope: "CommandEnvelope", snapshot: "MachineSnapshot") -> SafetyDecision:
         """Return a SafetyDecision.  If not allowed, reason_codes explains why."""
         cmd = envelope.command_type
+        safety = SafetySnapshot.from_machine_snapshot(snapshot)
 
         # Priority commands always pass (STOP/E-STOP cannot be blocked)
         if cmd in _PRIORITY_COMMANDS:
@@ -109,46 +117,46 @@ class SafetyInterlock:
         reasons: list[str] = []
         actions: list[str] = []
 
-        demo_active = str(snapshot.demo_status.get("state", "")).upper() in {
+        demo_active = safety.demo_state in {
             "STARTING", "RUNNING", "MOVING_TO_SLOT", "PAUSE_REQUESTED", "PAUSED", "STOPPING"
         }
         demo_commands = {"CONFIGURE_DEMO", "VALIDATE_DEMO", "ARM_DEMO", "START_DEMO", "PAUSE_DEMO", "RESUME_DEMO", "STOP_DEMO"}
         if demo_active and cmd not in demo_commands and cmd not in _PRIORITY_COMMANDS:
-            reasons.append("DEMO_ACTIVE")
+            reasons.append(SafetyReasonCode.DEMO_ACTIVE.value)
             actions.append("Pause or stop Demo Slot Sampling before issuing another command")
 
         # ── 1. E-Stop ──────────────────────────────────────────────────────────
-        if snapshot.estop:
-            reasons.append("ESTOP_ACTIVE")
+        if safety.estop:
+            reasons.append(SafetyReasonCode.ESTOP_ACTIVE.value)
             actions.append("Release physical E-Stop button")
 
         # ── 2. Stop latch ──────────────────────────────────────────────────────
         is_motor_test_cmd = cmd in _MOTOR_TEST_COMMANDS or cmd in ("ARM_MOTOR_TEST", "DISARM_MOTOR_TEST")
-        if snapshot.stop_requested and not is_motor_test_cmd:
-            reasons.append("STOP_LATCH_ACTIVE")
+        if safety.stop_requested and not is_motor_test_cmd:
+            reasons.append(SafetyReasonCode.STOP_LATCH_ACTIVE.value)
             actions.append("Clear alarms before issuing motion commands")
 
         # ── 3. Config restart required ─────────────────────────────────────────
-        if snapshot.configuration_restart_required and cmd not in (
+        if safety.configuration_restart_required and cmd not in (
             "ARM_MOTOR_TEST",
             "DISARM_MOTOR_TEST",
             "SCHEDULE_RESTART",
         ):
-            reasons.append("CONFIG_RESTART_REQUIRED")
+            reasons.append(SafetyReasonCode.CONFIG_RESTART_REQUIRED.value)
             actions.append("Apply configuration changes and restart the controller")
 
         # ── 4. Busy with another motion command ────────────────────────────────
-        if snapshot.busy and cmd not in _PRIORITY_COMMANDS:
-            reasons.append("MACHINE_BUSY")
+        if safety.busy and cmd not in _PRIORITY_COMMANDS:
+            reasons.append(SafetyReasonCode.MACHINE_BUSY.value)
             actions.append("Wait for current command to complete or issue STOP")
 
         # ── 5. Motor test armed blocks normal motion ───────────────────────────
-        if snapshot.motor_test_armed and cmd in _MOTION_COMMANDS | _HOME_COMMANDS:
-            reasons.append("MOTOR_TEST_ARMED")
+        if safety.motor_test_armed and cmd in _MOTION_COMMANDS | _HOME_COMMANDS:
+            reasons.append(SafetyReasonCode.MOTOR_TEST_ARMED.value)
             actions.append("Disarm Motor Test Mode before issuing normal motion commands")
 
         # ── 6. State-specific checks ───────────────────────────────────────────
-        state = snapshot.state
+        state = safety.state
         if cmd in _MOTION_COMMANDS:
             allow_unhomed = bool(envelope.parameters.get("allow_unhomed", False))
             required_axes = _required_motion_axes(cmd, envelope.parameters)
@@ -166,10 +174,10 @@ class SafetyInterlock:
                     if not (cmd == "JOG" and allow_unhomed):
                         unhomed = [
                             axis for axis in sorted(required_axes)
-                            if not snapshot.axes.get(axis) or not snapshot.axes[axis].is_homed
+                            if not safety.axes.get(axis) or not safety.axes[axis].is_homed
                         ]
                         for axis in unhomed:
-                            reasons.append(f"AXIS_{axis.upper()}_NOT_HOMED")
+                            reasons.append(axis_not_homed_code(axis))
                             actions.append(f"Home {axis.upper()} axis before moving it")
                 else:
                     if not (cmd == "JOG" and allow_unhomed):
@@ -177,9 +185,9 @@ class SafetyInterlock:
 
             # Check individual axis limits
             for axis_name in ("x", "y", "z"):
-                axis = snapshot.axes.get(axis_name)
-                if axis and axis.head_limit and axis.tail_limit:
-                    reasons.append(f"LIMIT_CONFLICT_{axis_name.upper()}")
+                axis = safety.axes.get(axis_name)
+                if axis and axis.min_limit and axis.max_limit:
+                    reasons.append(limit_conflict_code(axis_name))
                     actions.append(f"{axis_name.upper()} axis has conflicting limit inputs — hardware fault")
 
         if cmd in _HOME_COMMANDS:
@@ -188,11 +196,11 @@ class SafetyInterlock:
                 actions.append("Clear alarm before homing")
 
         if cmd in _MOTOR_TEST_COMMANDS:
-            if not snapshot.motor_test_armed:
-                reasons.append("MOTOR_TEST_NOT_ARMED")
+            if not safety.motor_test_armed:
+                reasons.append(SafetyReasonCode.MOTOR_TEST_NOT_ARMED.value)
                 actions.append("Arm Motor Test Mode first")
-            if snapshot.estop:
-                reasons.append("ESTOP_ACTIVE")
+            if safety.estop:
+                reasons.append(SafetyReasonCode.ESTOP_ACTIVE.value)
 
         allowed = len(reasons) == 0
         if not allowed:
