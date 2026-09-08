@@ -1,0 +1,1018 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NARIT Vending Machine — Project Presentation</title>
+<style>
+  :root {
+    --bg: #0a0e1a;
+    --surface: #111827;
+    --surface2: #1c2333;
+    --border: #2a3347;
+    --accent: #3b82f6;
+    --accent2: #06b6d4;
+    --accent3: #8b5cf6;
+    --success: #10b981;
+    --warning: #f59e0b;
+    --danger: #ef4444;
+    --text: #e2e8f0;
+    --text-dim: #94a3b8;
+    --text-faint: #475569;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Segoe UI', 'Noto Sans Thai', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── Navigation bar ── */
+  .nav {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 1.5rem;
+    height: 54px;
+    gap: 1rem;
+    flex-shrink: 0;
+    z-index: 100;
+  }
+  .nav-logo {
+    font-weight: 700;
+    font-size: 1rem;
+    color: var(--accent2);
+    letter-spacing: .5px;
+    white-space: nowrap;
+  }
+  .nav-logo span { color: var(--text-dim); font-weight: 400; }
+  .nav-slides {
+    display: flex;
+    gap: .35rem;
+    overflow-x: auto;
+    flex: 1;
+    scrollbar-width: none;
+  }
+  .nav-slides::-webkit-scrollbar { display: none; }
+  .nav-btn {
+    background: none;
+    border: 1px solid transparent;
+    color: var(--text-dim);
+    padding: .3rem .7rem;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: .75rem;
+    white-space: nowrap;
+    transition: all .2s;
+  }
+  .nav-btn:hover { border-color: var(--border); color: var(--text); }
+  .nav-btn.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+    font-weight: 600;
+  }
+  .nav-controls {
+    display: flex;
+    gap: .5rem;
+    align-items: center;
+    flex-shrink: 0;
+  }
+  .nav-controls button {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    width: 32px; height: 32px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 1rem;
+    transition: background .2s;
+  }
+  .nav-controls button:hover { background: var(--border); }
+  .slide-counter {
+    font-size: .75rem;
+    color: var(--text-dim);
+    min-width: 52px;
+    text-align: center;
+  }
+
+  /* ── Slide viewport ── */
+  .viewport {
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+  }
+  .slide {
+    position: absolute;
+    inset: 0;
+    padding: 2rem 3rem;
+    overflow-y: auto;
+    display: none;
+    flex-direction: column;
+    gap: 1.25rem;
+    animation: fadeIn .3s ease;
+  }
+  .slide.active { display: flex; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+  /* ── Progress bar ── */
+  .progress {
+    height: 3px;
+    background: var(--border);
+    flex-shrink: 0;
+  }
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    transition: width .3s ease;
+  }
+
+  /* ── Typography ── */
+  h1 { font-size: 2.4rem; font-weight: 800; line-height: 1.2; }
+  h2 { font-size: 1.6rem; font-weight: 700; color: var(--accent2); }
+  h3 { font-size: 1.1rem; font-weight: 600; color: var(--text); }
+  p  { font-size: .92rem; color: var(--text-dim); line-height: 1.7; }
+
+  .slide-label {
+    font-size: .7rem;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  .hero-sub {
+    font-size: 1rem;
+    color: var(--text-dim);
+    max-width: 600px;
+    line-height: 1.7;
+  }
+
+  /* ── Cards ── */
+  .card-grid {
+    display: grid;
+    gap: 1rem;
+  }
+  .card-grid.col2 { grid-template-columns: 1fr 1fr; }
+  .card-grid.col3 { grid-template-columns: 1fr 1fr 1fr; }
+  .card-grid.col4 { grid-template-columns: repeat(4, 1fr); }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.1rem 1.25rem;
+  }
+  .card.accent-left { border-left: 3px solid var(--accent); }
+  .card.accent-success { border-left: 3px solid var(--success); }
+  .card.accent-warning { border-left: 3px solid var(--warning); }
+  .card.accent-danger { border-left: 3px solid var(--danger); }
+  .card.accent-purple { border-left: 3px solid var(--accent3); }
+  .card .card-icon { font-size: 1.6rem; margin-bottom: .5rem; }
+  .card .card-title { font-size: .85rem; font-weight: 600; color: var(--text); margin-bottom: .3rem; }
+  .card .card-body  { font-size: .78rem; color: var(--text-dim); line-height: 1.55; }
+
+  /* ── Status badges ── */
+  .badge {
+    display: inline-block;
+    padding: .18rem .55rem;
+    border-radius: 999px;
+    font-size: .7rem;
+    font-weight: 700;
+  }
+  .badge.green  { background: #064e3b; color: #34d399; }
+  .badge.yellow { background: #451a03; color: #fbbf24; }
+  .badge.red    { background: #450a0a; color: #f87171; }
+  .badge.blue   { background: #1e3a5f; color: #60a5fa; }
+  .badge.purple { background: #2e1065; color: #c084fc; }
+
+  /* ── Table ── */
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: .78rem;
+  }
+  .data-table th {
+    background: var(--surface2);
+    color: var(--text-dim);
+    font-weight: 600;
+    text-align: left;
+    padding: .55rem .8rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .data-table td {
+    padding: .48rem .8rem;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+    vertical-align: top;
+  }
+  .data-table tr:hover td { background: rgba(255,255,255,.02); }
+  code {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: .05rem .35rem;
+    font-family: 'Consolas', monospace;
+    font-size: .8em;
+    color: var(--accent2);
+  }
+
+  /* ── Flow diagram ── */
+  .flow {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    flex-wrap: wrap;
+  }
+  .flow-node {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: .5rem .9rem;
+    font-size: .78rem;
+    font-weight: 600;
+    text-align: center;
+    white-space: nowrap;
+  }
+  .flow-node.blue   { border-color: var(--accent);  color: var(--accent); }
+  .flow-node.cyan   { border-color: var(--accent2); color: var(--accent2); }
+  .flow-node.green  { border-color: var(--success); color: var(--success); }
+  .flow-node.yellow { border-color: var(--warning); color: var(--warning); }
+  .flow-node.red    { border-color: var(--danger);  color: var(--danger); }
+  .flow-node.purple { border-color: var(--accent3); color: var(--accent3); }
+  .flow-arrow { color: var(--text-faint); font-size: 1rem; }
+  .flow-arrow.dashed { opacity: .5; }
+
+  /* ── Gate checklist ── */
+  .gate-list { display: flex; flex-direction: column; gap: .35rem; }
+  .gate-item {
+    display: flex;
+    align-items: flex-start;
+    gap: .55rem;
+    font-size: .8rem;
+    color: var(--text-dim);
+    padding: .35rem .6rem;
+    background: var(--surface);
+    border-radius: 6px;
+    border: 1px solid var(--border);
+  }
+  .gate-item .g-icon { font-size: .9rem; flex-shrink: 0; padding-top: .05rem; }
+  .gate-item.done { color: var(--success); border-color: #065f46; background: #022c22; }
+  .gate-item.pending { color: var(--warning); border-color: #78350f; background: #1c0a00; }
+  .gate-item.blocked { color: var(--danger);  border-color: #7f1d1d; background: #1f0808; }
+
+  /* ── State machine ── */
+  .state-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: .6rem;
+  }
+  .state-node {
+    border-radius: 8px;
+    padding: .7rem;
+    font-size: .75rem;
+    font-weight: 700;
+    text-align: center;
+    border: 2px solid;
+  }
+  .state-node.current { background: #1f2a4a; border-color: var(--accent); color: var(--accent); }
+  .state-node.normal  { background: var(--surface); border-color: var(--border); color: var(--text-dim); }
+  .state-node.fault   { background: #1f0808; border-color: var(--danger); color: var(--danger); }
+  .state-node.warn    { background: #1c1000; border-color: var(--warning); color: var(--warning); }
+
+  /* ── Axis specs ── */
+  .axis-block {
+    display: flex;
+    flex-direction: column;
+    gap: .4rem;
+  }
+  .axis-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: .78rem;
+    padding: .2rem 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .axis-row .lbl { color: var(--text-dim); }
+  .axis-row .val { color: var(--text); font-weight: 500; }
+
+  /* ── Layer row ── */
+  .layer-stack { display: flex; flex-direction: column; gap: .4rem; }
+  .layer {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: .7rem 1rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: .8rem;
+  }
+  .layer-icon { font-size: 1.3rem; width: 36px; text-align: center; }
+  .layer-name { font-weight: 700; min-width: 130px; }
+  .layer-desc { color: var(--text-dim); flex: 1; }
+  .layer-tag  { flex-shrink: 0; }
+
+  /* ── Timeline ── */
+  .timeline { display: flex; flex-direction: column; gap: .6rem; position: relative; }
+  .timeline::before {
+    content: '';
+    position: absolute;
+    left: 16px;
+    top: 8px; bottom: 8px;
+    width: 2px;
+    background: var(--border);
+  }
+  .tl-item { display: flex; gap: 1rem; align-items: flex-start; position: relative; }
+  .tl-dot {
+    width: 34px; height: 34px; border-radius: 50%;
+    border: 2px solid var(--border);
+    background: var(--surface);
+    display: flex; align-items: center; justify-content: center;
+    font-size: .75rem;
+    flex-shrink: 0;
+    position: relative;
+    z-index: 1;
+  }
+  .tl-dot.done   { border-color: var(--success); color: var(--success); }
+  .tl-dot.active { border-color: var(--accent);  color: var(--accent); background: #1e3a5f; }
+  .tl-dot.future { border-color: var(--text-faint); color: var(--text-faint); }
+  .tl-content { flex: 1; padding-top: .35rem; }
+  .tl-content .tl-title { font-size: .85rem; font-weight: 600; margin-bottom: .2rem; }
+  .tl-content .tl-desc  { font-size: .76rem; color: var(--text-dim); line-height: 1.5; }
+
+  /* ── Hero gradient ── */
+  .hero-glow {
+    position: absolute;
+    top: -60px; right: -60px;
+    width: 380px; height: 380px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(59,130,246,.15) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  /* ── Scrollbar ── */
+  .slide::-webkit-scrollbar { width: 5px; }
+  .slide::-webkit-scrollbar-track { background: transparent; }
+  .slide::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  /* ── Responsive ── */
+  @media (max-width: 900px) {
+    .slide { padding: 1.25rem 1.25rem; }
+    .card-grid.col4 { grid-template-columns: 1fr 1fr; }
+    .card-grid.col3 { grid-template-columns: 1fr 1fr; }
+    h1 { font-size: 1.7rem; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Navigation -->
+<nav class="nav">
+  <div class="nav-logo">NARIT <span>Vending</span></div>
+  <div class="nav-slides" id="navSlides"></div>
+  <div class="nav-controls">
+    <button onclick="prevSlide()">&#8592;</button>
+    <span class="slide-counter" id="counter">1 / 10</span>
+    <button onclick="nextSlide()">&#8594;</button>
+  </div>
+</nav>
+
+<!-- Progress bar -->
+<div class="progress"><div class="progress-fill" id="progressFill"></div></div>
+
+<!-- Slides viewport -->
+<div class="viewport">
+
+  <!-- ──────────────── SLIDE 1: HERO ──────────────── -->
+  <section class="slide active" data-title="Overview">
+    <div class="hero-glow"></div>
+    <div class="slide-label">Project Presentation · Sep 2026</div>
+    <h1>NARIT<br><span style="color:var(--accent2)">Vending Machine</span><br>Motion Control</h1>
+    <p class="hero-sub">
+      ระบบควบคุม motion 3 แกน (X/Y/Z) ด้วย <strong>IRIV PiControl</strong> +
+      <strong>IRIV IO</strong> + <strong>NUCLEO-F439ZI</strong>
+      สำหรับตู้จ่ายสินค้าอัตโนมัติโครงการ NARIT
+    </p>
+    <div class="card-grid col4" style="margin-top:.5rem">
+      <div class="card accent-left">
+        <div class="card-icon">🎯</div>
+        <div class="card-title">30 Slots</div>
+        <div class="card-body">พิกัด X/Y/Z ครบ 30 ช่อง Calibrated</div>
+      </div>
+      <div class="card accent-success">
+        <div class="card-icon">🌐</div>
+        <div class="card-title">Web HMI</div>
+        <div class="card-body">Flask REST API + realtime dashboard</div>
+      </div>
+      <div class="card accent-purple">
+        <div class="card-icon">🔒</div>
+        <div class="card-title">Safety-First</div>
+        <div class="card-body">Hardwired E-Stop + SafetyInterlock software layer</div>
+      </div>
+      <div class="card accent-warning">
+        <div class="card-icon">⚡</div>
+        <div class="card-title">Status</div>
+        <div class="card-body">Online · E_STOP · Pre-production commissioning</div>
+      </div>
+    </div>
+
+    <div class="flow" style="margin-top:.5rem">
+      <div class="flow-node blue">Operator<br>Browser</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node cyan">Flask Web<br>:80</div>
+      <div class="flow-arrow">→ Unix IPC →</div>
+      <div class="flow-node blue">Controller<br>Process</div>
+      <div class="flow-arrow">→ Modbus TCP →</div>
+      <div class="flow-node green">IRIV IO<br>10.0.0.10</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node green">DI / DO<br>11 inputs · 4 outputs</div>
+    </div>
+    <div class="flow">
+      <div class="flow-node blue">Controller</div>
+      <div class="flow-arrow">→ USB VCP →</div>
+      <div class="flow-node purple">NUCLEO<br>F439ZI</div>
+      <div class="flow-arrow dashed">- - STEP/DIR - -></div>
+      <div class="flow-node yellow">6-ch NMOS</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node green">HBS860H X/Y<br>DM542 Z</div>
+    </div>
+    <p style="font-size:.73rem; color: var(--text-faint)">เส้นประ = ยังไม่อนุญาต motion จริง · Nucleo ทำหน้าที่ health gate เท่านั้น</p>
+  </section>
+
+  <!-- ──────────────── SLIDE 2: SYSTEM STATUS ──────────────── -->
+  <section class="slide" data-title="สถานะระบบ">
+    <div class="slide-label">Executive Status</div>
+    <h2>สถานะระบบ ณ ปัจจุบัน</h2>
+    <p>อัปเดต 3 กันยายน 2026 — ข้อมูลจาก ARCHITECTURE_TH.md (แหล่งอ้างอิงหลัก)</p>
+
+    <table class="data-table">
+      <thead>
+        <tr><th>ส่วนประกอบ</th><th>สถานะ</th><th>รายละเอียด</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>IRIV PiControl</td><td><span class="badge green">Online</span></td><td><code>192.168.70.80</code> · hostname <code>iriv</code></td></tr>
+        <tr><td>HMI / API</td><td><span class="badge green">Online</span></td><td><code>http://iriv.local/</code></td></tr>
+        <tr><td>Controller Service</td><td><span class="badge green">Active</span></td><td><code>narit-vending-controller-iriv.service</code></td></tr>
+        <tr><td>Web Service</td><td><span class="badge green">Active</span></td><td><code>narit-vending-web-iriv.service</code></td></tr>
+        <tr><td>IRIV IO</td><td><span class="badge green">Online</span></td><td>Modbus TCP <code>10.0.0.10:502</code> · Unit ID 255</td></tr>
+        <tr><td>Nucleo USB</td><td><span class="badge green">Online</span></td><td>ST-LINK VCP · 115200 baud · safe-link v1</td></tr>
+        <tr><td>Nucleo LAN</td><td><span class="badge red">ยกเลิก</span></td><td>ถอดออกจากแบบ · ห้ามใช้</td></tr>
+        <tr><td>Firmware บน Nucleo</td><td><span class="badge yellow">safe-link v1</span></td><td>PING/STATUS only · ยังไม่ขับ motion</td></tr>
+        <tr><td>Motion Candidate v2</td><td><span class="badge purple">Build OK · ไม่ flash</span></td><td>SHA-256 ยืนยันแล้ว รอ gate ผ่าน</td></tr>
+        <tr><td>Machine State</td><td><span class="badge red">E_STOP</span></td><td>ยังไม่ Home · polarity DI10 ยังไม่ยืนยัน</td></tr>
+        <tr><td>Motion Permit</td><td><span class="badge red">ไม่อนุญาต</span></td><td>รอผ่าน Production Enablement Gate</td></tr>
+      </tbody>
+    </table>
+
+    <div class="card-grid col2">
+      <div class="card accent-success">
+        <div class="card-title">✅ Unit Tests ล่าสุด</div>
+        <div class="card-body">16 tests ผ่าน (test_iriv_io, test_config_foundation, test_nucleo)<br>STM32 Release build สำเร็จ — text=59452, data=136, bss=71128</div>
+      </div>
+      <div class="card accent-warning">
+        <div class="card-title">⚠️ Safety Gap ที่ยังค้าง</div>
+        <div class="card-body">KM1 ตัด 60V ของ X/Y แล้ว<br><strong>แต่ 24V ของ Z/DM542 ยังไม่ผ่าน KM1</strong> → ยังไม่ production-ready</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ──────────────── SLIDE 3: ARCHITECTURE ──────────────── -->
+  <section class="slide" data-title="สถาปัตยกรรม">
+    <div class="slide-label">Application Architecture</div>
+    <h2>โครงสร้างระบบ Software</h2>
+    <p>แบ่งเป็นสอง process บน IRIV Pi สื่อสารผ่าน Unix IPC socket</p>
+
+    <div class="layer-stack">
+      <div class="layer">
+        <div class="layer-icon">🌐</div>
+        <div class="layer-name" style="color:var(--accent2)">Web Process</div>
+        <div class="layer-desc">ให้บริการ HMI, Static files, REST API · ไม่เป็นเจ้าของ GPIO/Modbus/serial/MQTT · ส่งคำสั่งผ่าน Unix IPC เท่านั้น</div>
+        <div class="layer-tag"><span class="badge blue">Flask :80</span></div>
+      </div>
+      <div class="layer" style="padding-left: 3rem">
+        <div class="layer-icon">🔗</div>
+        <div class="layer-name" style="color:var(--text-dim)">Unix IPC Socket</div>
+        <div class="layer-desc"><code>/run/narit-vending/ctrl.sock</code> · Controller offline → ตอบ 503</div>
+        <div class="layer-tag"><span class="badge blue">IPC</span></div>
+      </div>
+      <div class="layer">
+        <div class="layer-icon">⚙️</div>
+        <div class="layer-name" style="color:var(--accent)">Controller Process</div>
+        <div class="layer-desc">เจ้าของ CommandBus · SafetyInterlock · StateMachine · IRIV IO backend · Nucleo health link · MQTT</div>
+        <div class="layer-tag"><span class="badge green">Single Owner</span></div>
+      </div>
+      <div class="layer" style="padding-left: 3rem">
+        <div class="layer-icon">🛡️</div>
+        <div class="layer-name" style="color:var(--success)">SafetyInterlock</div>
+        <div class="layer-desc">ทุกคำสั่งจาก HMI/API/MQTT ต้องผ่านที่นี่ · STOP/E-STOP ไม่รอ queue</div>
+        <div class="layer-tag"><span class="badge green">Gatekeeper</span></div>
+      </div>
+      <div class="layer" style="padding-left: 3rem">
+        <div class="layer-icon">📡</div>
+        <div class="layer-name" style="color:var(--accent2)">IRIV IO · Nucleo</div>
+        <div class="layer-desc">Modbus TCP → DI0–DI10 limits, E-stop, product sensors · USB VCP → heartbeat/STATUS</div>
+        <div class="layer-tag"><span class="badge purple">Hardware</span></div>
+      </div>
+    </div>
+
+    <div class="card-grid col3" style="margin-top:.5rem">
+      <div class="card accent-left">
+        <div class="card-title">CommandBus</div>
+        <div class="card-body">Single-flight execution · STOP/E-STOP priority lane</div>
+      </div>
+      <div class="card accent-left">
+        <div class="card-title">Snapshot Model</div>
+        <div class="card-body">Controller สร้าง snapshot เดียว ให้ Web + MQTT อ่าน</div>
+      </div>
+      <div class="card accent-left">
+        <div class="card-title">MQTT Monitor</div>
+        <div class="card-body">Telemetry/command bus · ไม่เป็นเจ้าของ motion execution</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ──────────────── SLIDE 4: HARDWARE ──────────────── -->
+  <section class="slide" data-title="Hardware">
+    <div class="slide-label">Hardware Mapping</div>
+    <h2>Hardware — STM32 · IRIV IO · Motor Drivers</h2>
+
+    <div class="card-grid col2">
+      <div>
+        <h3 style="margin-bottom:.6rem; color:var(--accent2)">Nucleo STEP/DIR → NMOS → Driver</h3>
+        <table class="data-table">
+          <thead><tr><th>Axis</th><th>STEP/PULSE</th><th>DIR</th><th>Driver</th></tr></thead>
+          <tbody>
+            <tr><td><strong>X</strong></td><td><code>PA8 / TIM1_CH1</code></td><td><code>PB0</code></td><td>HBS860H X</td></tr>
+            <tr><td><strong>Y</strong></td><td><code>PA9 / TIM1_CH2</code></td><td><code>PB1</code></td><td>HBS860H Y</td></tr>
+            <tr><td><strong>Z</strong></td><td><code>PA5 / TIM2_CH1</code></td><td><code>PB2</code></td><td>DM542 Z</td></tr>
+          </tbody>
+        </table>
+        <p style="font-size:.72rem; margin-top:.5rem; color:var(--text-faint)">
+          ⚠️ PB0 ชนกับ LED1 → firmware ปิด BSP LED init ทั้งหมด
+        </p>
+
+        <h3 style="margin:.9rem 0 .5rem; color:var(--accent2)">NMOS Topology (Q1-Q6)</h3>
+        <div class="card" style="font-family:monospace; font-size:.72rem; color:var(--accent2); line-height:1.8">
+          STM32 3.3V → Rg → Gate Q<br>
+          MCU GND ────────── Source Q → 0V-SIGNAL<br>
+          Driver PUL-/DIR- ── Drain Q<br>
+          V-PULSE (5/24V) ─── Driver PUL+/DIR+
+        </div>
+      </div>
+
+      <div>
+        <h3 style="margin-bottom:.6rem; color:var(--accent2)">IRIV IO Digital Inputs (DI0–DI10)</h3>
+        <table class="data-table">
+          <thead><tr><th>DI</th><th>Software Name</th><th>Field Signal</th></tr></thead>
+          <tbody>
+            <tr><td>0</td><td><code>x_head_limit</code></td><td>X Min</td></tr>
+            <tr><td>1</td><td><code>x_tail_limit</code></td><td>X Max</td></tr>
+            <tr><td>2</td><td><code>y_head_limit</code></td><td>Y Min</td></tr>
+            <tr><td>3</td><td><code>y_tail_limit</code></td><td>Y Max</td></tr>
+            <tr><td>4</td><td><code>z_head_limit</code></td><td>Z Min</td></tr>
+            <tr><td>5</td><td><code>z_tail_limit</code></td><td>Z Max</td></tr>
+            <tr><td>6</td><td><code>z_home</code></td><td>Z Home sensor</td></tr>
+            <tr><td>7</td><td><code>product_drop_parking</code></td><td>Drop Parking</td></tr>
+            <tr><td>8</td><td><code>product_drop_sensor</code></td><td>Drop Sensor</td></tr>
+            <tr><td>9</td><td><code>product_pickup_sensor</code></td><td>Pickup Sensor</td></tr>
+            <tr><td>10</td><td><code>estop</code></td><td><strong style="color:var(--danger)">E-Stop / KM1 feedback</strong></td></tr>
+          </tbody>
+        </table>
+
+        <h3 style="margin:.9rem 0 .5rem; color:var(--accent2)">IRIV IO Digital Outputs</h3>
+        <table class="data-table">
+          <thead><tr><th>DO</th><th>หน้าที่</th><th>Safe State</th></tr></thead>
+          <tbody>
+            <tr><td>0</td><td>Machine Ready</td><td>OFF</td></tr>
+            <tr><td>1</td><td>Moving</td><td>OFF</td></tr>
+            <tr><td>2</td><td>Alarm</td><td>OFF</td></tr>
+            <tr><td>3</td><td>Dispense relay</td><td>OFF</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ──────────────── SLIDE 5: NETWORK ──────────────── -->
+  <section class="slide" data-title="Network">
+    <div class="slide-label">Network &amp; Transport</div>
+    <h2>เครือข่ายและการสื่อสาร</h2>
+
+    <div class="card-grid col3">
+      <div class="card accent-left">
+        <div class="card-icon">🌐</div>
+        <div class="card-title">Management Network</div>
+        <div class="card-body">
+          IRIV Pi <code>eth0</code><br>
+          <strong>192.168.70.80/24</strong><br>
+          HMI · SSH · Deploy · MQTT
+        </div>
+      </div>
+      <div class="card accent-success">
+        <div class="card-icon">🏭</div>
+        <div class="card-title">OT Network (Modbus)</div>
+        <div class="card-body">
+          IRIV Pi <code>eth1</code> → <strong>10.0.0.2/24</strong><br>
+          IRIV IO → <strong>10.0.0.10/24</strong><br>
+          Unit ID 255
+        </div>
+      </div>
+      <div class="card accent-purple">
+        <div class="card-icon">🔌</div>
+        <div class="card-title">USB Serial (Nucleo)</div>
+        <div class="card-body">
+          ST-LINK VCP<br>
+          <code>/dev/serial/by-id/...if02</code><br>
+          115200 8-N-1 · control/heartbeat
+        </div>
+      </div>
+    </div>
+
+    <h3 style="margin-top:.5rem">หลักการเลือก Transport</h3>
+    <div class="gate-list">
+      <div class="gate-item done">
+        <span class="g-icon">✅</span>
+        ใช้ USB serial เป็น control/heartbeat เพียงช่องเดียว — ผูก device identity ได้แน่นอน
+      </div>
+      <div class="gate-item done">
+        <span class="g-icon">✅</span>
+        ถอด Nucleo LAN เมื่อ deploy USB-only firmware — source ใหม่ไม่ initialize Ethernet/LwIP
+      </div>
+      <div class="gate-item done">
+        <span class="g-icon">✅</span>
+        ต้องมี control owner เพียงหนึ่งเดียว — ห้าม USB และ LAN ส่ง motion command แข่งกัน
+      </div>
+      <div class="gate-item done">
+        <span class="g-icon">✅</span>
+        ขาด IRIV IO หรือ Nucleo heartbeat → motion reject/stop แบบ fail-safe ทันที
+      </div>
+    </div>
+
+    <div class="card-grid col2" style="margin-top:.5rem">
+      <div class="card accent-warning">
+        <div class="card-title">⚠️ DI10 Polarity — ยังไม่ verified</div>
+        <div class="card-body">
+          ค่าที่อ่านล่าสุด: DI0–DI9 = OFF, DI10 = ON<br>
+          <code>polarity_verified=false</code> → backend บังคับ E-stop active เสมอ<br>
+          ต้องอ่าน raw DI10 ขณะ E-stop ปล่อยและกดสองสถานะก่อนแก้
+        </div>
+      </div>
+      <div class="card accent-left">
+        <div class="card-title">MQTT Monitor</div>
+        <div class="card-body">
+          <code>GET /api/mqtt/status</code> → sanitized telemetry<br>
+          Credential และ password field ถูก redact ทุกครั้ง<br>
+          เปิดดูผ่าน <code>/#mqtt</code> บน HMI
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ──────────────── SLIDE 6: AXIS SPECS ──────────────── -->
+  <section class="slide" data-title="Axis Specs">
+    <div class="slide-label">Motion Configuration</div>
+    <h2>Axis Specifications &amp; Machine Config</h2>
+
+    <div class="card-grid col3">
+      <div class="card accent-left">
+        <h3 style="margin-bottom:.7rem; color:var(--accent)">Axis X — HBS860H</h3>
+        <div class="axis-block">
+          <div class="axis-row"><span class="lbl">Steps/mm</span><span class="val">80.0</span></div>
+          <div class="axis-row"><span class="lbl">Max Travel</span><span class="val">220 mm</span></div>
+          <div class="axis-row"><span class="lbl">Max Speed</span><span class="val">20 mm/s</span></div>
+          <div class="axis-row"><span class="lbl">Default Speed</span><span class="val">10 mm/s</span></div>
+          <div class="axis-row"><span class="lbl">Jog Step</span><span class="val">1.0 mm</span></div>
+          <div class="axis-row"><span class="lbl">Accel/Decel</span><span class="val">40 mm/s²</span></div>
+          <div class="axis-row"><span class="lbl">Lead Screw Pitch</span><span class="val">5.0 mm</span></div>
+          <div class="axis-row"><span class="lbl">Microsteps</span><span class="val">2x (400 pulse/rev)</span></div>
+        </div>
+      </div>
+      <div class="card accent-success">
+        <h3 style="margin-bottom:.7rem; color:var(--success)">Axis Y — HBS860H</h3>
+        <div class="axis-block">
+          <div class="axis-row"><span class="lbl">Steps/mm</span><span class="val">80.0</span></div>
+          <div class="axis-row"><span class="lbl">Max Travel</span><span class="val">260 mm</span></div>
+          <div class="axis-row"><span class="lbl">Max Speed</span><span class="val">15 mm/s</span></div>
+          <div class="axis-row"><span class="lbl">Default Speed</span><span class="val">8 mm/s</span></div>
+          <div class="axis-row"><span class="lbl">Jog Step</span><span class="val">1.0 mm</span></div>
+          <div class="axis-row"><span class="lbl">Accel/Decel</span><span class="val">30 mm/s²</span></div>
+          <div class="axis-row"><span class="lbl">Lead Screw Pitch</span><span class="val">5.0 mm</span></div>
+          <div class="axis-row"><span class="lbl">Microsteps</span><span class="val">2x (400 pulse/rev)</span></div>
+        </div>
+      </div>
+      <div class="card accent-purple">
+        <h3 style="margin-bottom:.7rem; color:var(--accent3)">Axis Z — DM542</h3>
+        <div class="axis-block">
+          <div class="axis-row"><span class="lbl">Steps/mm</span><span class="val">80.0</span></div>
+          <div class="axis-row"><span class="lbl">Max Travel</span><span class="val">200 mm</span></div>
+          <div class="axis-row"><span class="lbl">Max Speed</span><span class="val">20 mm/s</span></div>
+          <div class="axis-row"><span class="lbl">Default Speed</span><span class="val">10 mm/s</span></div>
+          <div class="axis-row"><span class="lbl">Jog Step</span><span class="val">2.0 mm</span></div>
+          <div class="axis-row"><span class="lbl">Accel/Decel</span><span class="val">80 mm/s²</span></div>
+          <div class="axis-row"><span class="lbl">Lead Screw Pitch</span><span class="val">5.0 mm</span></div>
+          <div class="axis-row"><span class="lbl">Microsteps</span><span class="val">2x (400 pulse/rev)</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card-grid col2" style="margin-top:.5rem">
+      <div class="card accent-warning">
+        <div class="card-title">⚙️ Home Order &amp; Safe Z</div>
+        <div class="card-body">
+          Home order: <strong>Z → Y → X</strong><br>
+          Safe Z height: <strong>10 mm</strong> (ใช้ก่อน XY travel ทุกครั้ง)<br>
+          Firmware watchdog: 500 ms · 10–1000 Hz · max 10,000 steps/cmd
+        </div>
+      </div>
+      <div class="card accent-left">
+        <div class="card-title">📍 30 Slot Positions</div>
+        <div class="card-body">
+          5 แถว × 6 คอลัมน์ (Row 1–5, Col 1–6)<br>
+          X range: ~20–196 mm · Y range: ~18–241 mm<br>
+          Z range: 15–45 mm ต่างกันตาม product height
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ──────────────── SLIDE 7: STATE MACHINE ──────────────── -->
+  <section class="slide" data-title="State Machine">
+    <div class="slide-label">Controller State Machine</div>
+    <h2>Machine State &amp; Command Flow</h2>
+
+    <div class="card-grid col2">
+      <div>
+        <h3 style="margin-bottom:.7rem">State Diagram</h3>
+        <div class="state-grid">
+          <div class="state-node normal">STARTING</div>
+          <div class="state-node fault">E_STOP <span style="display:block;font-size:.65rem;opacity:.7">⬅ ปัจจุบัน</span></div>
+          <div class="state-node normal">NOT_READY</div>
+          <div class="state-node normal">HOMING</div>
+          <div class="state-node normal">READY</div>
+          <div class="state-node normal">MOVING</div>
+          <div class="state-node warn" style="grid-column:span 3">ALARM</div>
+        </div>
+        <p style="font-size:.72rem; margin-top:.6rem; color:var(--text-faint)">
+          STARTING → E_STOP (polarity unverified/unsafe) หรือ NOT_READY (safety verified)<br>
+          E_STOP → NOT_READY : ปล่อย E-stop + verified + reset<br>
+          ALARM → NOT_READY : clear + safe
+        </p>
+      </div>
+
+      <div>
+        <h3 style="margin-bottom:.7rem">Command Path</h3>
+        <div class="flow" style="flex-direction:column; align-items:flex-start; gap:.4rem">
+          <div class="flow-node blue" style="width:100%">HMI / REST API / MQTT</div>
+          <div class="flow-arrow">↓ CommandEnvelope</div>
+          <div class="flow-node cyan" style="width:100%">CommandBus</div>
+          <div class="flow-arrow">↓ validate + queue</div>
+          <div class="flow-node green" style="width:100%">SafetyInterlock</div>
+          <div class="flow-arrow">↓ pass / reject</div>
+          <div class="flow-node purple" style="width:100%">StateMachine + Motion Backend</div>
+        </div>
+
+        <div class="card accent-danger" style="margin-top:.7rem">
+          <div class="card-title">🔴 STOP / E-STOP Priority</div>
+          <div class="card-body">ไม่รอท้าย normal command queue · override ทันที · disarm Nucleo · ล้าง Homed status</div>
+        </div>
+
+        <p style="font-size:.73rem; margin-top:.5rem; color:var(--text-dim)">
+          <strong>service_ready</strong> = software process ตอบได้<br>
+          ≠ machine_ready (ต้องดู E-stop, alarms, homed ด้วย)
+        </p>
+      </div>
+    </div>
+
+    <div class="card-grid col3" style="margin-top:.3rem">
+      <div class="card accent-danger">
+        <div class="card-title">Fail-Safe Rules</div>
+        <div class="card-body">DI10 active หรือ Modbus stale → Stop all · Disarm · ยกเลิก Arm · ล้าง Homed · Disable Motion</div>
+      </div>
+      <div class="card accent-warning">
+        <div class="card-title">After E-STOP</div>
+        <div class="card-body">แก้สาเหตุ → ปลด E-stop → verify DI10 → Clear Alarm → Enable Motion → Home ใหม่</div>
+      </div>
+      <div class="card accent-left">
+        <div class="card-title">Long Move Segmentation</div>
+        <div class="card-body">Controller แบ่ง motion ยาวเป็น USB segments ตาม <code>max_move_steps</code> จาก Nucleo handshake</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ──────────────── SLIDE 8: FIRMWARE ──────────────── -->
+  <section class="slide" data-title="Firmware">
+    <div class="slide-label">STM32 Firmware</div>
+    <h2>Firmware Status — NUCLEO-F439ZI</h2>
+
+    <div class="card-grid col2">
+      <div class="card accent-success">
+        <div class="card-icon">✅</div>
+        <div class="card-title">Deployed: safe-link v1 (ACTIVE)</div>
+        <div class="card-body">
+          รองรับ <code>PING</code> และ <code>STATUS</code> เท่านั้น<br>
+          รายงาน identity: NUCLEO-F439ZI · protocol 1 · safe=true<br>
+          ไม่มีคำสั่ง <code>MOVE</code> ใด ๆ<br><br>
+          <strong>SHA-256:</strong><br>
+          <code style="font-size:.68rem; word-break:break-all">D1E82B1504A341C833FB9B2AC656DB85<br>E0901158683035485E7F6BCAB34DFDA8</code>
+        </div>
+      </div>
+      <div class="card accent-purple">
+        <div class="card-icon">🔮</div>
+        <div class="card-title">Candidate: motion v2 (NOT FLASHED)</div>
+        <div class="card-body">
+          Boot แบบ <strong>disarmed</strong>, STEP/DIR = LOW<br>
+          ต้องรับ <code>ARM SAFE</code> → <code>HEARTBEAT SAFE</code> ต่อเนื่อง<br>
+          Watchdog 500ms → stop + disarm<br>
+          จำกัด 10–1,000 Hz · max 10,000 steps · ไม่รับแกนซ้อน<br><br>
+          <strong>SHA-256:</strong><br>
+          <code style="font-size:.68rem; word-break:break-all">7D0575A0A32CF320CD30547A1F8BD804<br>4735DB32DD6BF32114A41FA116270944</code>
+        </div>
+      </div>
+    </div>
+
+    <h3 style="margin-top:.5rem; margin-bottom:.4rem">สิ่งที่ motion candidate v2 ยังขาด (ต้องเพิ่มก่อน production)</h3>
+    <div class="card-grid col2">
+      <div class="gate-list">
+        <div class="gate-item blocked"><span class="g-icon">🔴</span>Hardware E-Stop input + immediate timer shutdown</div>
+        <div class="gate-item blocked"><span class="g-icon">🔴</span>Head/tail limit inputs สำหรับ X/Y/Z</div>
+        <div class="gate-item blocked"><span class="g-icon">🔴</span>Driver alarm inputs</div>
+      </div>
+      <div class="gate-list">
+        <div class="gate-item blocked"><span class="g-icon">🔴</span>ENA outputs / hardwired enable-permissive feedback</div>
+        <div class="gate-item blocked"><span class="g-icon">🔴</span>Acceleration/Deceleration profile</div>
+        <div class="gate-item blocked"><span class="g-icon">🔴</span>Safety permissive แบบ hardwired เข้า STM32 interrupt</div>
+      </div>
+    </div>
+    <p style="font-size:.75rem; color:var(--warning); margin-top:.3rem">⚠️ watchdog เป็นเพียง operational stop ไม่ใช่ safety function — เหมาะสำหรับ bench test uncoupled เท่านั้น</p>
+  </section>
+
+  <!-- ──────────────── SLIDE 9: PRODUCTION GATE ──────────────── -->
+  <section class="slide" data-title="Production Gate">
+    <div class="slide-label">Production Enablement Gate</div>
+    <h2>Checklist ก่อน Flash / Arm / Move</h2>
+    <p>ต้องครบทุกข้อก่อนจึงอนุญาต motion จริง — ห้ามข้ามขั้นตอน</p>
+
+    <div class="card-grid col2">
+      <div class="gate-list">
+        <div class="gate-item pending"><span class="g-icon">🟡</span><strong>A.</strong> อ่าน DI10 ขณะ E-stop ปล่อยและกด → ยืนยัน polarity สองสถานะ</div>
+        <div class="gate-item pending"><span class="g-icon">🟡</span><strong>B.</strong> ปรับ <code>active_state</code> และตั้ง <code>polarity_verified=true</code> หลังมีหลักฐาน</div>
+        <div class="gate-item pending"><span class="g-icon">🟡</span><strong>C.</strong> ให้ safety relay/KM1 ตัดกำลังหรือ enable ของ X, Y <strong>และ Z</strong> ครบ</div>
+        <div class="gate-item pending"><span class="g-icon">🟡</span><strong>D.</strong> ตรวจ driver input voltage/current และ NMOS polarity ด้วย dummy load</div>
+        <div class="gate-item pending"><span class="g-icon">🟡</span><strong>E.</strong> Scope PA8, PA9, PA5 และ PB0, PB1, PB2 โดยยังถอด driver/motor load</div>
+      </div>
+      <div class="gate-list">
+        <div class="gate-item pending"><span class="g-icon">🟡</span><strong>F.</strong> เพิ่ม Nucleo motion backend ใน Controller (ห้ามใช้ <code>nucleo_io.py</code>)</div>
+        <div class="gate-item pending"><span class="g-icon">🟡</span><strong>G.</strong> ผูก ARM/heartbeat กับ IRIV IO safety state แบบ fail-safe</div>
+        <div class="gate-item pending"><span class="g-icon">🟡</span><strong>H.</strong> เพิ่ม limit-stop ระหว่าง pulse และทดสอบ watchdog/USB loss</div>
+        <div class="gate-item pending"><span class="g-icon">🟡</span><strong>I.</strong> ทดสอบทีละแกน ความเร็วต่ำ/ระยะสั้น โดยมีผู้ควบคุม E-stop</div>
+        <div class="gate-item pending"><span class="g-icon">🟡</span><strong>J.</strong> Calibrate direction, steps/mm, min/max/home และ soft limits</div>
+        <div class="gate-item pending"><span class="g-icon">🟡</span><strong>K.</strong> ผ่าน HOME/JOG/STOP/E-STOP/power-cycle acceptance test</div>
+        <div class="gate-item pending"><span class="g-icon">🟡</span><strong>L.</strong> จึงเปิด automatic slot/dispense sequence</div>
+      </div>
+    </div>
+
+    <div class="card accent-danger" style="margin-top:.5rem">
+      <div class="card-title">🔴 Critical Safety Gap ที่ยังค้าง</div>
+      <div class="card-body">
+        KM1 ตัด 60V ของ X/Y แต่ <strong>24V ของ Z/DM542 ยังไม่ผ่าน KM1</strong>
+        → E-Stop ทางกายภาพยังไม่หยุด Z ได้อย่างสมบูรณ์
+        → <strong>ห้ามอนุญาต production motion จนกว่าจะแก้ wiring Z</strong>
+      </div>
+    </div>
+  </section>
+
+  <!-- ──────────────── SLIDE 10: NEXT STEPS ──────────────── -->
+  <section class="slide" data-title="Next Steps">
+    <div class="slide-label">Road to Production</div>
+    <h2>งานถัดไปตามลำดับ</h2>
+
+    <div class="timeline">
+      <div class="tl-item">
+        <div class="tl-dot active">1</div>
+        <div class="tl-content">
+          <div class="tl-title" style="color:var(--accent)">DI10 Two-State Commissioning — ห้ามขยับมอเตอร์</div>
+          <div class="tl-desc">อ่าน raw DI10 ขณะ E-stop ปล่อย + กด · ยืนยัน polarity ก่อนแก้ <code>active_state</code> · ห้ามเดาจากค่าเดียว</div>
+        </div>
+      </div>
+      <div class="tl-item">
+        <div class="tl-dot active">2</div>
+        <div class="tl-content">
+          <div class="tl-title" style="color:var(--accent)">แก้ Hardwired Safety Gap ของ Z</div>
+          <div class="tl-desc">ให้ช่างไฟต่อ safety relay/KM1 ให้ตัด enable/power ของ DM542 Z ด้วย · ทดสอบโดยไม่พึ่ง Pi/Nucleo</div>
+        </div>
+      </div>
+      <div class="tl-item">
+        <div class="tl-dot future">3</div>
+        <div class="tl-content">
+          <div class="tl-title">ออกแบบ Production Nucleo Backend</div>
+          <div class="tl-desc">serial transaction lock · strict JSON/protocol validation · state machine: disconnected → disarmed → armed → moving → fault · heartbeat จาก fresh IRIV IO state · no auto-re-arm</div>
+        </div>
+      </div>
+      <div class="tl-item">
+        <div class="tl-dot future">4</div>
+        <div class="tl-content">
+          <div class="tl-title">เพิ่ม Z Home (DI6) แยกจาก Z Min (DI4)</div>
+          <div class="tl-desc">แก้ homing model ให้ Z ใช้ Z Home sensor จริง ไม่ใช่ Z Min limit</div>
+        </div>
+      </div>
+      <div class="tl-item">
+        <div class="tl-dot future">5</div>
+        <div class="tl-content">
+          <div class="tl-title">Product Sensor Logic DI7–DI9 + Dispense Verification</div>
+          <div class="tl-desc">drop parking, drop sensor, pickup sensor sequence สำหรับ dispense workflow อัตโนมัติ</div>
+        </div>
+      </div>
+      <div class="tl-item">
+        <div class="tl-dot future">6</div>
+        <div class="tl-content">
+          <div class="tl-title">Bench Scope Firmware Candidate — Driver Disconnected</div>
+          <div class="tl-desc">scope PA8/PA9/PA5 และ PB0/PB1/PB2 บน NMOS Gate/Drain ก่อนต่อ driver ใด ๆ</div>
+        </div>
+      </div>
+      <div class="tl-item">
+        <div class="tl-dot future">7</div>
+        <div class="tl-content">
+          <div class="tl-title">Review / Commit Dirty Worktree เป็นชุดย่อย</div>
+          <div class="tl-desc">แบ่ง: controller/HMI · IRIV IO mapping · Nucleo health link · STM32 candidate · docs · พร้อม backup ก่อนทุก commit</div>
+        </div>
+      </div>
+      <div class="tl-item">
+        <div class="tl-dot future">8</div>
+        <div class="tl-content">
+          <div class="tl-title">Controlled Low-Speed Motion Acceptance Test</div>
+          <div class="tl-desc">ทีละแกน · ความเร็วต่ำ · ระยะสั้น · มีผู้ควบคุม E-stop · ผ่าน HOME/JOG/STOP/E-STOP/power-cycle ครบ</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card-grid col3" style="margin-top:.5rem">
+      <div class="card accent-success">
+        <div class="card-title">📋 Backups Available</div>
+        <div class="card-body">
+          Config backup: <code>/home/admin/NaritVending_backups/config_20260903_0413/</code><br>
+          Nucleo flash: <code>backups/nucleo/nucleo_f439zi_flash_before_serial_20260902_093645.bin</code>
+        </div>
+      </div>
+      <div class="card accent-warning">
+        <div class="card-title">🔑 Files ที่ห้ามเปิดเผย</div>
+        <div class="card-body"><code>/etc/narit-vending.env</code> ห้าม log หรือ copy ลง repository ทุกกรณี</div>
+      </div>
+      <div class="card accent-danger">
+        <div class="card-title">🚫 กฎบังคับ</div>
+        <div class="card-body">
+          ห้าม <code>git reset --hard</code> / <code>git clean</code> ทับ dirty worktree<br>
+          ห้าม flash / ARM / HOME / MOVE ก่อน gate ผ่านครบ
+        </div>
+      </div>
+    </div>
+  </section>
+
+</div><!-- end viewport -->
+
+<script>
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  const navSlides = document.getElementById('navSlides');
+  const counter = document.getElementById('counter');
+  const progressFill = document.getElementById('progressFill');
+  let current = 0;
+
+  // Build nav buttons
+  slides.forEach((sl, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'nav-btn' + (i === 0 ? ' active' : '');
+    btn.textContent = (i + 1) + '. ' + (sl.dataset.title || 'Slide ' + (i + 1));
+    btn.onclick = () => goTo(i);
+    navSlides.appendChild(btn);
+  });
+
+  function goTo(n) {
+    slides[current].classList.remove('active');
+    navSlides.children[current].classList.remove('active');
+    current = Math.max(0, Math.min(n, slides.length - 1));
+    slides[current].classList.add('active');
+    navSlides.children[current].classList.add('active');
+    navSlides.children[current].scrollIntoView({ inline: 'nearest', behavior: 'smooth' });
+    counter.textContent = (current + 1) + ' / ' + slides.length;
+    progressFill.style.width = ((current + 1) / slides.length * 100) + '%';
+  }
+
+  function nextSlide() { goTo(current + 1); }
+  function prevSlide() { goTo(current - 1); }
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') nextSlide();
+    if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')   prevSlide();
+  });
+
+  // Init
+  goTo(0);
+</script>
+</body>
+</html>
