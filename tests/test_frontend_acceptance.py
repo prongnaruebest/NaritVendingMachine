@@ -62,6 +62,11 @@ class FrontendAcceptanceTests(unittest.TestCase):
         self.assertIn("overflow-y: visible !important", STYLE)
         self.assertIn("overscroll-behavior: auto !important", STYLE)
 
+    def test_slot_polling_does_not_replace_an_active_coordinate_editor(self) -> None:
+        self.assertIn("coordinateEditorActive", APP_JS)
+        self.assertIn("tbody.contains(document.activeElement)", APP_JS)
+        self.assertIn("tbody.dataset.renderSignature === renderSignature", APP_JS)
+
     def test_live_axis_positions_are_persistent_across_workspaces(self) -> None:
         for axis in ("x", "y", "z"):
             self.assertEqual(TEMPLATE.count(f'id="footer-axis-{axis}"'), 1)

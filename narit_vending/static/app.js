@@ -931,6 +931,26 @@
 
     const canMove = motionAllowed(true);
     const canEdit = MS.online && !MS.pending && !MS.payload?.busy;
+    const coordinateEditorActive = tbody.contains(document.activeElement)
+      && document.activeElement?.matches?.("[data-slot-coordinate]");
+    if (coordinateEditorActive) {
+      renderSlotManagerSummary();
+      renderSlotManagerDetail();
+      return;
+    }
+    const renderSignature = JSON.stringify({
+      search,
+      filter,
+      selected: MS.selectedSlotCode,
+      canMove,
+      canEdit,
+      entries: entries.map(([code, slot]) => [code, MS.slotDrafts[code] || slot]),
+    });
+    if (tbody.dataset.renderSignature === renderSignature) {
+      renderSlotManagerSummary();
+      renderSlotManagerDetail();
+      return;
+    }
 
     tbody.innerHTML = entries.map(([code, slot]) => {
       const derived = slotManagerStatus(slot);
@@ -962,6 +982,7 @@
         </tr>
       `;
     }).join("");
+    tbody.dataset.renderSignature = renderSignature;
 
     renderSlotManagerSummary();
     renderSlotManagerDetail();
