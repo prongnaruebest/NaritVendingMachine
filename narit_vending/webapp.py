@@ -1248,6 +1248,21 @@ class MotionService:
             lead_pitch = _config_number(axis_payload, "lead_screw_pitch_mm", minimum=0.01, maximum=1_000.0)
             steps_per_mm = _config_number(axis_payload, "steps_per_mm", minimum=0.1, maximum=100_000.0)
             max_travel = _config_number(axis_payload, "max_travel_mm", minimum=0.1, maximum=10_000.0)
+            current_axis = getattr(self.controller.config, axis_name)
+            nominal_travel = (
+                _config_number(axis_payload, "nominal_travel_mm", minimum=0.1, maximum=10_000.0)
+                if axis_payload.get("nominal_travel_mm") is not None else float(current_axis.nominal_travel_mm or max_travel)
+            )
+            measured_travel = (
+                _config_number(axis_payload, "measured_travel_mm", minimum=0.1, maximum=10_000.0)
+                if axis_payload.get("measured_travel_mm") is not None else float(current_axis.measured_travel_mm or max_travel)
+            )
+            travel_margin = (
+                _config_number(axis_payload, "travel_safety_margin_mm", minimum=0.0, maximum=1_000.0)
+                if axis_payload.get("travel_safety_margin_mm") is not None else float(current_axis.travel_safety_margin_mm)
+            )
+            if travel_margin >= measured_travel:
+                raise APIInputError(f"{axis_name.upper()}: travel safety margin must be smaller than measured travel")
             max_speed = _config_number(axis_payload, "max_speed_mm_s", minimum=0.01, maximum=500.0)
             default_speed = _config_number(axis_payload, "default_speed_mm_s", minimum=0.01, maximum=500.0)
             acceleration = _config_number(axis_payload, "acceleration", minimum=0.01, maximum=10_000.0)
@@ -1299,7 +1314,6 @@ class MotionService:
                 else active_high
             )
 
-            current_axis = getattr(self.controller.config, axis_name)
             updated_axis = replace(
                 current_axis,
                 pulse_pin=step_pin,
@@ -1310,6 +1324,9 @@ class MotionService:
                 lead_screw_pitch_mm=lead_pitch,
                 steps_per_mm=steps_per_mm,
                 max_travel_mm=max_travel,
+                nominal_travel_mm=nominal_travel,
+                measured_travel_mm=measured_travel,
+                travel_safety_margin_mm=travel_margin,
                 max_speed_mm_s=max_speed,
                 default_speed_mm_s=default_speed,
                 acceleration=acceleration,
@@ -1354,9 +1371,9 @@ class MotionService:
                 "motor_steps_per_rev": motor_steps,
                 "driver_microsteps": microsteps,
                 "drive_type": current_axis.drive_type,
-                "nominal_travel_mm": current_axis.nominal_travel_mm,
-                "measured_travel_mm": current_axis.measured_travel_mm,
-                "travel_safety_margin_mm": current_axis.travel_safety_margin_mm,
+                "nominal_travel_mm": nominal_travel,
+                "measured_travel_mm": measured_travel,
+                "travel_safety_margin_mm": travel_margin,
                 "pulley_pitch_mm": current_axis.pulley_pitch_mm,
                 "pulley_teeth": current_axis.pulley_teeth,
             }

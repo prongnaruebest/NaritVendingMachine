@@ -59,7 +59,10 @@ class ConfigFoundationTests(unittest.TestCase):
 
     def test_all_test_slots_are_configured_inside_axis_limits(self) -> None:
         slots = self.machine["slots"]
-        limits = {"x": 220.0, "y": 260.0, "z": 200.0}
+        limits = {
+            axis: float(self.machine["axes"][axis]["max_travel_mm"])
+            for axis in ("x", "y", "z")
+        }
 
         self.assertEqual(set(slots), {str(slot) for slot in range(1, 31)})
         for slot_code, slot in slots.items():

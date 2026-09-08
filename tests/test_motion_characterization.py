@@ -145,6 +145,22 @@ class MotionCharacterizationTests(unittest.TestCase):
         away = axis.plan_relative_move(1.0, speed_mm_s=2.0)
         self.assertEqual(away.steps, 80)
 
+    def test_active_max_limit_allows_motion_back_toward_min(self) -> None:
+        config = self._axis_config("x", 1700.0)
+        axis = AxisController.__new__(AxisController)
+        axis.config = config
+        axis.position_steps = axis.mm_to_steps(1700.0)
+        axis.is_homed = True
+        axis.estop = MagicMock(value=False)
+        axis.head_limit = MagicMock(value=False)
+        axis.tail_limit = MagicMock(value=True)
+        axis.stop_requested = lambda: False
+
+        with self.assertRaises(ActiveLimitError):
+            axis.plan_relative_move(1.0, speed_mm_s=5.0)
+        away = axis.plan_relative_move(-1.0, speed_mm_s=5.0)
+        self.assertEqual(away.steps, 80)
+
     def test_move_to_slot_uses_safe_z_then_xy_then_target_z(self) -> None:
         controller, axes = self._mock_controller()
         events: list[tuple] = []

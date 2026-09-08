@@ -409,6 +409,11 @@ class NucleoLink:
 
                     if stop_requested is not None and stop_requested():
                         self.stop()
+                        # A sensor-triggered endpoint stop is a normal end of
+                        # seek. Return the firmware to idle/disarmed so the
+                        # next command (especially movement away from the
+                        # active limit) can start cleanly.
+                        self.disarm()
                         elapsed_s = max(0.0, time.monotonic() - motion_started)
                         completed_steps = min(steps_val, max(0, int(round(elapsed_s * speed_val))))
                         return {

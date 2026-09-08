@@ -2298,6 +2298,13 @@
       document.querySelectorAll(`[data-config-axis="${axis}"]`).forEach((input) => {
         axes[axis][input.dataset.configField] = Number(input.value);
       });
+      const travelCard = document.querySelector(`.travel-calibration-card[data-travel-axis="${axis}"]`);
+      if (travelCard) {
+        const travelValue = (field) => Number(travelCard.querySelector(`[data-travel-field="${field}"]`)?.value);
+        axes[axis].nominal_travel_mm = travelValue("nominal");
+        axes[axis].measured_travel_mm = travelValue("measured");
+        axes[axis].travel_safety_margin_mm = travelValue("margin");
+      }
     });
     // IRIV owns physical I/O, so its GPIO editor is intentionally not rendered.
     // Preserve the installed hardware config and overlay only browser-editable fields.
@@ -2677,7 +2684,7 @@
       return `<article class="travel-calibration-card" data-travel-axis="${axis}">
         <div class="motor-config-head"><strong>AXIS ${axis.toUpperCase()}</strong><span>${drive === "timing_belt" ? "TIMING BELT" : "LEAD SCREW"}</span></div>
         <div class="travel-source-note">${axis === "z" ? "GTD-A001 · 2GT belt · requested nominal stroke 180 mm" : `MISUMI MTSRL25-1800 · physical screw pitch 5 mm · calibrated effective travel ${Number(cfg.lead_screw_pitch_mm || 24.7273).toFixed(4)} mm/motor rev`}</div>
-        <label class="travel-direct-label"><span><strong>Maximum Travel</strong></span>${configurationNumberInput(axis, "max_travel_mm", cfg.max_travel_mm)}<small>mm (แก้ไขได้โดยตรง)</small></label>
+        <label class="travel-direct-label"><span><strong>Maximum Travel</strong></span>${configurationNumberInput(axis, "max_travel_mm", cfg.max_travel_mm)}<small>mm — editable directly; Save and Apply are required</small></label>
         <div class="travel-calibration-fields">
           <label><span>Nominal / Spec</span><input class="config-input" type="number" min="0.1" step="0.1" value="${nominal}" data-travel-field="nominal"><small>mm</small></label>
           <label><span>Measured Min → Max</span><input class="config-input" type="number" min="0.1" step="0.1" value="${measured}" data-travel-field="measured"><small>mm measured by operator</small></label>
@@ -4784,7 +4791,7 @@
 
     const configurationPage = document.querySelector('[data-view-page="configuration"]');
     const markConfigurationDirty = (event) => {
-      if (!event.target.matches("[data-config-axis], [data-pin-group]")) return;
+      if (!event.target.matches("[data-config-axis], [data-pin-group], [data-travel-field]")) return;
       if (event.target.dataset.pinGroup === "digital_inputs" && event.target.dataset.pinField === "pull_up") {
         const activeLogic = document.querySelector(`[data-pin-group="digital_inputs"][data-pin-name="${event.target.dataset.pinName}"][data-pin-field="active_high"]`);
         if (activeLogic) activeLogic.checked = !event.target.checked;
@@ -4797,7 +4804,9 @@
     configurationPage.addEventListener("change", markConfigurationDirty);
     configurationPage.addEventListener("input", (event) => {
       const card = event.target.closest?.("[data-travel-axis]");
-      if (card) updateTravelCard(card);
+      if (card) {
+        updateTravelCard(card);
+      }
     });
     configurationPage.addEventListener("click", (event) => {
       const button = event.target.closest?.("[data-apply-travel]");
