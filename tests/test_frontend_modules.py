@@ -11,6 +11,7 @@ IO_PAGE_CONTROLLER = (ROOT / "narit_vending" / "static" / "io-page-controller.js
 EVENTS_PAGE_CONTROLLER = (ROOT / "narit_vending" / "static" / "events-page-controller.js").read_text(encoding="utf-8")
 FLOW_PAGE_CONTROLLER = (ROOT / "narit_vending" / "static" / "flow-page-controller.js").read_text(encoding="utf-8")
 MQTT_PAGE_CONTROLLER = (ROOT / "narit_vending" / "static" / "mqtt-page-controller.js").read_text(encoding="utf-8")
+ALARMS_PAGE_CONTROLLER = (ROOT / "narit_vending" / "static" / "alarms-page-controller.js").read_text(encoding="utf-8")
 ROUTER = (ROOT / "narit_vending" / "static" / "router.js").read_text(encoding="utf-8")
 
 
@@ -28,6 +29,7 @@ def test_machine_store_loads_between_transport_and_application() -> None:
     events_controller_script = "filename='events-page-controller.js'"
     flow_controller_script = "filename='flow-page-controller.js'"
     mqtt_controller_script = "filename='mqtt-page-controller.js'"
+    alarms_controller_script = "filename='alarms-page-controller.js'"
     app_script = "filename='app.js'"
     router_script = "filename='router.js'"
     assert (
@@ -38,6 +40,7 @@ def test_machine_store_loads_between_transport_and_application() -> None:
         < TEMPLATE.index(events_controller_script)
         < TEMPLATE.index(flow_controller_script)
         < TEMPLATE.index(mqtt_controller_script)
+        < TEMPLATE.index(alarms_controller_script)
         < TEMPLATE.index(router_script)
         < TEMPLATE.index(app_script)
     )
@@ -163,3 +166,13 @@ def test_mqtt_controls_are_page_scoped_without_moving_global_telemetry() -> None
     assert "const mqttRefresh = refreshMqtt()" in APP
     for forbidden in ("fetch(", "/api/", "GPIO", "CommandEnvelope"):
         assert forbidden not in MQTT_PAGE_CONTROLLER
+
+
+def test_alarm_page_reset_is_scoped_and_uses_injected_command_path() -> None:
+    assert 'pageControllers.register("alarms"' in APP
+    assert "NaritAlarmsPageController.create" in APP
+    assert 'removeEventListener("click", onReset)' in ALARMS_PAGE_CONTROLLER
+    assert "options.reset()" in ALARMS_PAGE_CONTROLLER
+    assert '"/api/clear-alarm"' in APP
+    for forbidden in ("fetch(", "/api/", "GPIO", "CommandEnvelope"):
+        assert forbidden not in ALARMS_PAGE_CONTROLLER

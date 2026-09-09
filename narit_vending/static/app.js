@@ -1582,6 +1582,7 @@
   if (!window.NaritEventsPageController) throw new Error("HMI Events page controller failed to load");
   if (!window.NaritFlowPageController) throw new Error("HMI Flow page controller failed to load");
   if (!window.NaritMqttPageController) throw new Error("HMI MQTT page controller failed to load");
+  if (!window.NaritAlarmsPageController) throw new Error("HMI Alarms page controller failed to load");
   const pageControllers = window.NaritPageControllers.createRegistry({
     onError: (error, context) => console.error(
       `[HMI] ${context.view || "unknown"} page ${context.phase} failed`,
@@ -4336,9 +4337,6 @@
     el("clear-alarm").addEventListener("click", () => {
       command("Reset alarms", "/api/clear-alarm", undefined, { isStop: true, noCheck: true });
     });
-    el("page-clear-alarm").addEventListener("click", () => {
-      command("Reset alarms", "/api/clear-alarm", undefined, { isStop: true, noCheck: true });
-    });
 
     /* --- Hold-to-Run Manual Jog Engine --- */
     function stopManualJog(sendControllerStop = true) {
@@ -4871,6 +4869,14 @@
     pageControllers.register("mqtt", window.NaritMqttPageController.create({
       control: controlMqtt,
       render: renderMqttMonitor,
+    }));
+    pageControllers.register("alarms", window.NaritAlarmsPageController.create({
+      reset: () => command(
+        "Reset alarms",
+        "/api/clear-alarm",
+        undefined,
+        { isStop: true, noCheck: true },
+      ),
     }));
     pageControllers.register("visualization", {
       mount: () => {
