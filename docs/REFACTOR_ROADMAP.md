@@ -83,7 +83,7 @@ Exit criterion: pages share one state source, polling does not overlap, and no m
 ## Phase 7 — Release engineering and documentation
 
 - [ ] Add formatting, lint, typing and dependency-direction gates. (`ruff` lint and `mypy` checks now protect the dependency-neutral domain/shared core; expand typing coverage to Controller, persistence and web modules incrementally)
-- [ ] Build staged atomic release and rollback verification. (verified atomic staging and read-only pre-activation source/configuration checks complete; activation and rollback remain)
+- [ ] Build staged atomic release and rollback verification. (tested activation/health/rollback state machine complete; systemd runtime adapter and one-time directory migration remain)
 - [ ] Complete operator, configuration, PEND, testing and troubleshooting manuals.
 - [ ] Run read-only production smoke tests.
 - [ ] Prepare operator-controlled mechanical acceptance checklist.
@@ -141,6 +141,11 @@ python scripts/verify_release.py <release.zip> <release.manifest.json> \
 ```
 
 This compiles staged Python source in memory and reads configuration without modifying it.
+
+The release lifecycle validates a candidate before stopping the current runtime. A failed
+candidate health check restores the previous release and verifies its health. If rollback
+also fails, the persistent state is explicitly `FAILED`; it is never reported as healthy.
+Current automated tests use a fake runtime and do not invoke systemd or hardware.
 
 ## Commit strategy
 
