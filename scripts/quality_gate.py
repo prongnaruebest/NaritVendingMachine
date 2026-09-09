@@ -87,6 +87,7 @@ def build_gates(*, python: str, node: str | None, full: bool) -> tuple[Gate, ...
                     "tests/test_motion_profile.py",
                     "tests/test_nucleo_profile_protocol.py",
                     "tests/test_nucleo_profile_transport.py",
+                    "tests/test_nucleo_profile_firmware_core.py",
                 ),
             ),
             Gate("Static typing", (python, "-m", "mypy", *typed_python_files())),
