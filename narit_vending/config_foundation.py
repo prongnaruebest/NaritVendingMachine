@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import shutil
 from dataclasses import dataclass
@@ -38,6 +39,12 @@ MOTION_OVERRIDE_FIELDS = (
     "travel_safety_margin_mm",
     "pulley_pitch_mm",
     "pulley_teeth",
+    "scurve_enabled",
+    "scurve_profile_type",
+    "scurve_start_speed_mm_s",
+    "scurve_end_speed_mm_s",
+    "scurve_max_jerk_mm_s3",
+    "scurve_control_period_us",
 )
 
 
@@ -295,6 +302,65 @@ def _validate_axis_values(axis: str, payload: dict[str, object], issues: list[Co
             issues.append(ConfigIssue("error", "HOME_POSITION_OUT_OF_RANGE", f"effective.axes.{axis}.home_position_mm", "home position must be within configured travel"))
     except (KeyError, TypeError, ValueError):
         issues.append(ConfigIssue("error", "HOME_POSITION_INVALID", f"effective.axes.{axis}.home_position_mm", "home position must be a number"))
+
+    scurve_fields = {
+        "scurve_enabled",
+        "scurve_profile_type",
+        "scurve_start_speed_mm_s",
+        "scurve_end_speed_mm_s",
+        "scurve_max_jerk_mm_s3",
+        "scurve_control_period_us",
+    }
+    present_scurve_fields = scurve_fields.intersection(payload)
+    if axis == "z" and present_scurve_fields:
+        issues.append(
+            ConfigIssue(
+                "error",
+                "SCURVE_AXIS_UNSUPPORTED",
+                "effective.axes.z",
+                "S-curve configuration is supported for X/Y only",
+            )
+        )
+    elif axis in ("x", "y") and present_scurve_fields:
+        if present_scurve_fields != scurve_fields:
+            issues.append(
+                ConfigIssue(
+                    "error",
+                    "SCURVE_CONFIG_INCOMPLETE",
+                    f"effective.axes.{axis}",
+                    "all S-curve fields must be configured together",
+                )
+            )
+            return
+        if not isinstance(payload.get("scurve_enabled"), bool):
+            issues.append(ConfigIssue("error", "SCURVE_ENABLED_INVALID", f"effective.axes.{axis}.scurve_enabled", "must be boolean"))
+        if payload.get("scurve_profile_type") != "seven_segment_s_curve":
+            issues.append(ConfigIssue("error", "SCURVE_TYPE_INVALID", f"effective.axes.{axis}.scurve_profile_type", "must be seven_segment_s_curve"))
+        for field in ("scurve_start_speed_mm_s", "scurve_end_speed_mm_s"):
+            try:
+                value = float(payload[field])
+                max_speed = float(payload["commissioned_max_speed_mm_s"])
+                if not math.isfinite(value) or not 0 <= value <= max_speed:
+                    raise ValueError
+            except (KeyError, TypeError, ValueError):
+                issues.append(ConfigIssue("error", "SCURVE_SPEED_INVALID", f"effective.axes.{axis}.{field}", "must be finite and within 0-commissioned speed"))
+        try:
+            jerk = float(payload["scurve_max_jerk_mm_s3"])
+            if not math.isfinite(jerk) or jerk <= 0:
+                raise ValueError
+        except (KeyError, TypeError, ValueError):
+            issues.append(ConfigIssue("error", "SCURVE_JERK_INVALID", f"effective.axes.{axis}.scurve_max_jerk_mm_s3", "must be finite and greater than zero"))
+        try:
+            raw_period = payload["scurve_control_period_us"]
+            period = int(raw_period)
+            if (
+                isinstance(raw_period, bool)
+                or float(raw_period) != period
+                or not 100 <= period <= 10_000
+            ):
+                raise ValueError
+        except (KeyError, TypeError, ValueError):
+            issues.append(ConfigIssue("error", "SCURVE_PERIOD_INVALID", f"effective.axes.{axis}.scurve_control_period_us", "must be an integer within 100-10000 us"))
 
 
 def _validate_signal_polarity(inputs: dict[str, object], issues: list[ConfigIssue]) -> None:

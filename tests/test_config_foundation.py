@@ -94,6 +94,50 @@ class ConfigFoundationTests(unittest.TestCase):
 
         self.assertTrue(report.valid)
 
+    def test_iriv_scurve_configuration_is_disabled_and_xy_only(self) -> None:
+        machine = json.loads((ROOT / "machine_config.iriv.json").read_text(encoding="utf-8"))
+        hardware = json.loads((ROOT / "hardware_config.iriv.json").read_text(encoding="utf-8"))
+
+        report = validate_configuration_payloads(machine, hardware)
+
+        self.assertTrue(report.valid, [issue.code for issue in report.issues])
+        for axis in ("x", "y"):
+            effective = report.effective_axes[axis]
+            self.assertFalse(effective["scurve_enabled"])
+            self.assertEqual(effective["scurve_profile_type"], "seven_segment_s_curve")
+            self.assertEqual(effective["scurve_control_period_us"], 1000)
+        self.assertFalse(any(key.startswith("scurve_") for key in report.effective_axes["z"]))
+
+    def test_scurve_configuration_rejects_z_and_incomplete_xy_payloads(self) -> None:
+        machine = json.loads((ROOT / "machine_config.iriv.json").read_text(encoding="utf-8"))
+        hardware = json.loads((ROOT / "hardware_config.iriv.json").read_text(encoding="utf-8"))
+        machine["axes"]["z"]["scurve_enabled"] = False
+        del machine["axes"]["x"]["scurve_max_jerk_mm_s3"]
+        del hardware["machine_parameters"]["axes"]["x"]["scurve_max_jerk_mm_s3"]
+
+        report = validate_configuration_payloads(machine, hardware)
+        codes = {issue.code for issue in report.issues}
+
+        self.assertFalse(report.valid)
+        self.assertIn("SCURVE_AXIS_UNSUPPORTED", codes)
+        self.assertIn("SCURVE_CONFIG_INCOMPLETE", codes)
+
+    def test_scurve_configuration_rejects_unsafe_numeric_values(self) -> None:
+        machine = json.loads((ROOT / "machine_config.iriv.json").read_text(encoding="utf-8"))
+        hardware = json.loads((ROOT / "hardware_config.iriv.json").read_text(encoding="utf-8"))
+        overrides = hardware["machine_parameters"]["axes"]["x"]
+        overrides["scurve_start_speed_mm_s"] = float("inf")
+        overrides["scurve_max_jerk_mm_s3"] = 0
+        overrides["scurve_control_period_us"] = 1000.5
+
+        report = validate_configuration_payloads(machine, hardware)
+        codes = {issue.code for issue in report.issues}
+
+        self.assertFalse(report.valid)
+        self.assertIn("SCURVE_SPEED_INVALID", codes)
+        self.assertIn("SCURVE_JERK_INVALID", codes)
+        self.assertIn("SCURVE_PERIOD_INVALID", codes)
+
     def test_enabled_nucleo_requires_supported_identity_and_transport(self) -> None:
         hardware = copy.deepcopy(self.hardware)
         hardware["nucleo"] = {

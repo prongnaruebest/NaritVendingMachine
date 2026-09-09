@@ -326,13 +326,7 @@
                                                       "measured_travel_mm":  1700,
                                                       "travel_safety_margin_mm":  10.0,
                                                       "pulley_pitch_mm":  null,
-                                                      "pulley_teeth":  null,
-                                                      "scurve_enabled":  false,
-                                                      "scurve_profile_type":  "seven_segment_s_curve",
-                                                      "scurve_start_speed_mm_s":  0.0,
-                                                      "scurve_end_speed_mm_s":  0.0,
-                                                      "scurve_max_jerk_mm_s3":  100.0,
-                                                      "scurve_control_period_us":  1000
+                                                      "pulley_teeth":  null
                                                   },
                                             "y":  {
                                                       "steps_per_mm":  64.705882,
@@ -359,13 +353,7 @@
                                                       "measured_travel_mm":  1700,
                                                       "travel_safety_margin_mm":  10.0,
                                                       "pulley_pitch_mm":  null,
-                                                      "pulley_teeth":  null,
-                                                      "scurve_enabled":  false,
-                                                      "scurve_profile_type":  "seven_segment_s_curve",
-                                                      "scurve_start_speed_mm_s":  0.0,
-                                                      "scurve_end_speed_mm_s":  0.0,
-                                                      "scurve_max_jerk_mm_s3":  100.0,
-                                                      "scurve_control_period_us":  1000
+                                                      "pulley_teeth":  null
                                                   },
                                             "z":  {
                                                       "steps_per_mm":  9.0,

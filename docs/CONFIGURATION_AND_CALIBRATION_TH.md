@@ -142,3 +142,14 @@ PEND ไม่สามารถ bypass E-Stop/ALM หาก PEND ไม่ม�
 - search/latch/default/commissioned speed พร้อมผล ALM/PEND
 - backup path และผล validation
 - ผล Home ซ้ำ, short move, bidirectional move และ external position measurement
+# การตั้งค่า S-curve สำหรับแกน X/Y (Phase 8)
+
+ไฟล์ `machine_config.iriv.json` และ `hardware_config.iriv.json` มีค่าต่อไปนี้สำหรับแกน X และ Y เท่านั้น:
+
+- `scurve_enabled`: เปิดใช้โปรไฟล์ S-curve (ค่าเริ่มต้น `false`)
+- `scurve_profile_type`: ต้องเป็น `seven_segment_s_curve`
+- `scurve_start_speed_mm_s` และ `scurve_end_speed_mm_s`: ความเร็วขอบเขตของโปรไฟล์
+- `scurve_max_jerk_mm_s3`: เพดาน jerk ต้องมากกว่า 0
+- `scurve_control_period_us`: คาบควบคุม 100–10,000 ไมโครวินาที
+
+ค่าชุดนี้ยังปิดอยู่และยังไม่ถูกส่งไปควบคุมมอเตอร์จริง การเพิ่มไว้ใน configuration เป็นการเตรียม validation และ effective configuration ก่อนเชื่อมต่อหน้า Machine Setup, Controller และ firmware protocol v4 candidate ในขั้นถัดไป ห้ามเพิ่มค่าเหล่านี้ให้แกน Z เพราะ Z ต้องใช้ motion path เดิม
