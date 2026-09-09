@@ -90,6 +90,18 @@ Exit criterion: pages share one state source, polling does not overlap, and no m
 
 Exit criterion: failed health checks roll back safely and no deploy performs motion automatically.
 
+## Phase 8 — X/Y jerk-limited motion
+
+- [x] Add a hardware-neutral S-curve reference model and characterization tests for X/Y only.
+- [ ] Replace the reference curve with a firmware-ready seven-segment profile representation.
+- [ ] Extend the NUCLEO protocol with capability-gated buffered continuous profiles.
+- [ ] Integrate X/Y Move, Jog, Home and Limit Seek without changing Z behavior.
+- [ ] Add Machine Setup fields, validation, effective configuration and profile preview.
+- [ ] Build firmware artifact and complete operator-controlled mechanical commissioning.
+
+Exit criterion: X/Y start and stop without segment gaps, all configured kinematic limits are enforced,
+and E-Stop/Stop/ALM/watchdog behavior remains fail-safe. Z remains on its existing motion path.
+
 Run the current non-hardware quality baseline from the repository root:
 
 ```powershell
