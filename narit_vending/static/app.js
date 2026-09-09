@@ -1566,6 +1566,7 @@
   if (!window.NaritIORegistryView) throw new Error("HMI I/O registry view failed to load");
   if (!window.NaritSystemControlPageController) throw new Error("HMI System Control page controller failed to load");
   if (!window.NaritMotionTravelController) throw new Error("HMI Motion Travel controller failed to load");
+  if (!window.NaritMotionTargetController) throw new Error("HMI Motion Target controller failed to load");
   const pageControllers = window.NaritPageControllers.createRegistry({
     onError: (error, context) => console.error(
       `[HMI] ${context.view || "unknown"} page ${context.phase} failed`,
@@ -4538,22 +4539,6 @@
       });
     });
 
-    /* --- Target positioning workflow --- */
-    el("target-load-current").addEventListener("click", loadCurrentManualTarget);
-    el("target-load-selected-slot").addEventListener("click", loadSelectedSlotManualTarget);
-    el("validate-move").addEventListener("click", () => validateMove(true));
-
-    el("plan-move").addEventListener("click", () => previewMove(true));
-    el("arm-move").addEventListener("click", () => armMove(true));
-
-    el("absolute-move").addEventListener("click", () => executeArmedMotion("Execute validated move"));
-    el("controlled-stop").addEventListener("click", () => {
-      command("Controlled stop", "/api/motion/controlled-stop", undefined, { isStop: true, noCheck: true });
-    });
-    el("abort-motion").addEventListener("click", () => {
-      command("Abort motion", "/api/motion/abort", undefined, { isStop: true, noCheck: true });
-    });
-
     document.addEventListener("input", (event) => {
       const control = event.target.closest?.("[data-axis-speed-range], [data-axis-speed-number]");
       if (!control) return;
@@ -4565,12 +4550,6 @@
         applySetupTab(button.dataset.setupTab);
       });
     });
-
-    ["move-x", "move-y", "move-z"]
-      .forEach((id) => el(id).addEventListener("input", () => {
-        if (MS.validation.stage !== "idle") invalidateMotionWorkflow();
-        updateFeedOverride();
-      }));
 
     el("motor-test-arm").addEventListener("click", async () => {
       const result = await command("Arm Motor Test Mode", "/api/maintenance/motor-test", { action: "arm" }, { isStop: true, noCheck: true });
@@ -4853,11 +4832,28 @@
       onMoveToPosition: moveAxisToPosition,
       onError: (error) => console.error("[HMI] Motion travel action failed", error),
     });
+    const motionTargetControls = window.NaritMotionTargetController.create({
+      onLoadCurrent: loadCurrentManualTarget,
+      onLoadSelectedSlot: loadSelectedSlotManualTarget,
+      onValidate: () => validateMove(true),
+      onPreview: () => previewMove(true),
+      onArm: () => armMove(true),
+      onExecute: () => executeArmedMotion("Execute validated move"),
+      onControlledStop: () => command("Controlled stop", "/api/motion/controlled-stop", undefined, { isStop: true, noCheck: true }),
+      onAbort: () => command("Abort motion", "/api/motion/abort", undefined, { isStop: true, noCheck: true }),
+      onTargetChanged: () => {
+        if (MS.validation.stage !== "idle") invalidateMotionWorkflow();
+        updateFeedOverride();
+      },
+      onError: (error) => console.error("[HMI] Motion target action failed", error),
+    });
     pageControllers.register("motion", {
       mount: () => {
         const cleanupSelectedSlot = selectedSlotControls.mount();
         const cleanupTravel = motionTravelControls.mount();
+        const cleanupTarget = motionTargetControls.mount();
         return () => {
+          cleanupTarget();
           cleanupTravel();
           cleanupSelectedSlot();
         };

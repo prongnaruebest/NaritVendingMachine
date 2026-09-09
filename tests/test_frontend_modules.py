@@ -19,6 +19,7 @@ DEMO_PAGE_CONTROLLER = (ROOT / "narit_vending" / "static" / "demo-page-controlle
 IO_REGISTRY_VIEW = (ROOT / "narit_vending" / "static" / "io-registry-view.js").read_text(encoding="utf-8")
 SYSTEM_CONTROL_PAGE_CONTROLLER = (ROOT / "narit_vending" / "static" / "system-control-page-controller.js").read_text(encoding="utf-8")
 MOTION_TRAVEL_CONTROLLER = (ROOT / "narit_vending" / "static" / "motion-travel-controller.js").read_text(encoding="utf-8")
+MOTION_TARGET_CONTROLLER = (ROOT / "narit_vending" / "static" / "motion-target-controller.js").read_text(encoding="utf-8")
 ROUTER = (ROOT / "narit_vending" / "static" / "router.js").read_text(encoding="utf-8")
 TOKENS = (ROOT / "narit_vending" / "static" / "tokens.css").read_text(encoding="utf-8")
 STYLE = (ROOT / "narit_vending" / "static" / "style.css").read_text(encoding="utf-8")
@@ -69,6 +70,7 @@ def test_machine_store_loads_between_transport_and_application() -> None:
     io_registry_script = "filename='io-registry-view.js'"
     system_control_script = "filename='system-control-page-controller.js'"
     motion_travel_script = "filename='motion-travel-controller.js'"
+    motion_target_script = "filename='motion-target-controller.js'"
     app_script = "filename='app.js'"
     router_script = "filename='router.js'"
     assert (
@@ -87,6 +89,7 @@ def test_machine_store_loads_between_transport_and_application() -> None:
         < TEMPLATE.index(io_registry_script)
         < TEMPLATE.index(system_control_script)
         < TEMPLATE.index(motion_travel_script)
+        < TEMPLATE.index(motion_target_script)
         < TEMPLATE.index(router_script)
         < TEMPLATE.index(app_script)
     )
@@ -361,6 +364,30 @@ def test_homing_and_travel_controls_share_motion_page_lifecycle() -> None:
 def test_motion_travel_controller_has_no_direct_transport_or_machine_authority() -> None:
     for forbidden in ("fetch(", "/api/", "GPIO", "CommandEnvelope", "POST"):
         assert forbidden not in MOTION_TRAVEL_CONTROLLER
+
+
+def test_target_workflow_shares_motion_page_lifecycle() -> None:
+    assert "NaritMotionTargetController.create" in APP
+    assert "const cleanupTarget = motionTargetControls.mount()" in APP
+    assert "cleanupTarget()" in APP
+    assert 'el("target-load-current").addEventListener' not in APP
+    assert '["move-x", "move-y", "move-z"]' not in APP
+    for control in (
+        "target-load-current", "target-load-selected-slot", "validate-move", "plan-move",
+        "arm-move", "absolute-move", "controlled-stop", "abort-motion", "move-x", "move-y", "move-z",
+    ):
+        assert control in MOTION_TARGET_CONTROLLER
+    for callback in (
+        "onLoadCurrent:", "onLoadSelectedSlot:", "onValidate:", "onPreview:", "onArm:",
+        "onExecute:", "onControlledStop:", "onAbort:", "onTargetChanged:",
+    ):
+        assert callback in APP
+    assert 'removeEventListener("input", onTargetInput)' in MOTION_TARGET_CONTROLLER
+
+
+def test_motion_target_controller_has_no_direct_transport_or_machine_authority() -> None:
+    for forbidden in ("fetch(", "/api/", "GPIO", "CommandEnvelope", "POST"):
+        assert forbidden not in MOTION_TARGET_CONTROLLER
 
 
 def test_slots_controller_has_no_direct_transport_or_machine_authority() -> None:

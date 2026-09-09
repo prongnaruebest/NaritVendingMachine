@@ -85,6 +85,8 @@ CSS โหลดตามลำดับ `static/tokens.css` → `static/style.c
 
 หน้า Motion ใช้ composite lifecycle รวม `static/selected-slot-controller.js` และ `static/motion-travel-controller.js` ทำให้ Homing, Stop, reset interlock, Min/Max และ single-axis position controls ถูก mount เฉพาะเมื่อเปิดหน้า Motion ขณะที่การตรวจ target, timeout และการส่งคำสั่งยังอยู่ใน Controller-facing callback ของ `app.js`
 
+`static/motion-target-controller.js` เข้าร่วม composite lifecycle เดียวกันสำหรับ Load Current/Selected Slot, Validate, Preview, Arm, Execute, Controlled Stop, Abort และ target-input invalidation โดย controller ย่อยนี้ไม่มี transport หรือ machine authority
+
 เมื่อ speed หรือ target เปลี่ยน:
 
 - Direct Jog/Min/Max ตรวจ readiness ใหม่และใช้ค่าถัดไป
