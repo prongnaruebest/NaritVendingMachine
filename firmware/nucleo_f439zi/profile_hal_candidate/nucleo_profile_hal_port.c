@@ -113,3 +113,22 @@ void NucleoProfileHalPort_DisableAll(NucleoProfileHalPort *port)
   if (port == NULL) return;
   NucleoCompareAdapter_DisableAll(&port->compare_adapter);
 }
+
+void NucleoProfileHalPort_SetRateHook(void *context, uint8_t axis,
+                                      uint32_t rate_millihz)
+{
+  NucleoProfileHalPort *port = (NucleoProfileHalPort *)context;
+  if ((port != NULL) &&
+      (NucleoCompareAdapter_SetRate(&port->compare_adapter, axis,
+                                    rate_millihz) == 0U)) {
+    NucleoProfileHalPort_DisableAll(port);
+  }
+}
+
+void NucleoProfileHalPort_DisableAxisHook(void *context, uint8_t axis)
+{
+  NucleoProfileHalPort *port = (NucleoProfileHalPort *)context;
+  if (port != NULL) {
+    NucleoCompareAdapter_DisableAxis(&port->compare_adapter, axis);
+  }
+}

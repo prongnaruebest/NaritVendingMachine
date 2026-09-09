@@ -159,6 +159,35 @@ def test_candidate_hal_port_maps_shared_tim1_channels_without_cross_stop(tmp_pat
     assert "hal_port host tests passed" in run_result.stdout
 
 
+@pytest.mark.parametrize("feature_enabled", [False, True])
+def test_profile_facade_compiles_with_feature_off_and_on(tmp_path: Path, feature_enabled: bool):
+    compiler = shutil.which("gcc")
+    if compiler is None:
+        pytest.skip("host GCC is unavailable")
+    candidate = ROOT / "firmware" / "nucleo_f439zi" / "profile_hal_candidate"
+    shim = ROOT / "tests" / "c_host" / "hal_shim"
+    executable = tmp_path / f"profile_facade_{int(feature_enabled)}.exe"
+    sources = [
+        CORE / "nucleo_profile_buffer.c", CORE / "nucleo_profile_executor.c",
+        CORE / "nucleo_pulse_scheduler.c", CORE / "nucleo_compare_adapter.c",
+        candidate / "nucleo_profile_hal_port.c", candidate / "nucleo_profile_facade.c",
+        ROOT / "tests" / "c_host" / "test_nucleo_profile_facade.c",
+    ]
+    flags = [f"-DNUCLEO_XY_PROFILE_FEATURE_ENABLED={int(feature_enabled)}"]
+    compile_result = subprocess.run(
+        [compiler, "-std=c99", "-Wall", "-Wextra", "-Werror", *flags,
+         f"-I{shim}", f"-I{CORE}", f"-I{candidate}",
+         *(str(source) for source in sources), "-o", str(executable)],
+        capture_output=True, text=True, timeout=30, check=False,
+    )
+    assert compile_result.returncode == 0, compile_result.stdout + compile_result.stderr
+    run_result = subprocess.run(
+        [str(executable)], capture_output=True, text=True, timeout=10, check=False
+    )
+    assert run_result.returncode == 0, run_result.stdout + run_result.stderr
+    assert "facade host tests passed" in run_result.stdout
+
+
 def test_profile_core_is_not_connected_to_cubeide_build_yet():
     project_sources = (ROOT / "firmware" / "nucleo_f439zi" / "cubeide" / "Release" / "Core" / "Src" / "subdir.mk").read_text(
         encoding="utf-8", errors="replace"
@@ -169,3 +198,4 @@ def test_profile_core_is_not_connected_to_cubeide_build_yet():
     assert "nucleo_timer_adapter.c" not in project_sources
     assert "nucleo_compare_adapter.c" not in project_sources
     assert "nucleo_profile_hal_port.c" not in project_sources
+    assert "nucleo_profile_facade.c" not in project_sources

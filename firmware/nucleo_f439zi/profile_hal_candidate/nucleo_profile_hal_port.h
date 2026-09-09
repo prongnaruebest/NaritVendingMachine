@@ -29,5 +29,8 @@ uint8_t NucleoProfileHalPort_Init(
 void NucleoProfileHalPort_OnCompare(NucleoProfileHalPort *port,
                                     uint8_t axis);
 void NucleoProfileHalPort_DisableAll(NucleoProfileHalPort *port);
+void NucleoProfileHalPort_SetRateHook(void *context, uint8_t axis,
+                                      uint32_t rate_millihz);
+void NucleoProfileHalPort_DisableAxisHook(void *context, uint8_t axis);
 
 #endif

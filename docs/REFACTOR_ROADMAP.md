@@ -103,6 +103,7 @@ Exit criterion: failed health checks roll back safely and no deploy performs mot
 - [x] Add a HAL-independent timer adapter with bounded PSC/ARR/pulse-width calculation and atomic rate updates.
 - [x] Select a fixed-timebase output-compare adapter for shared TIM1 CH1/CH2 after verifying the X/Y mapping; do not use per-axis PSC/ARR.
 - [x] Add a host-compiled STM32 HAL candidate port for shared TIM1 CH1/CH2; keep it outside the CubeIDE build and protocol v3 runtime.
+- [x] Add an end-to-end candidate facade behind a compile-time feature flag that defaults off and continues to advertise protocol v3.
 - [ ] Integrate X/Y Move, Jog, Home and Limit Seek without changing Z behavior.
 - [ ] Add Machine Setup fields, validation, effective configuration and profile preview.
 - [ ] Build firmware artifact and complete operator-controlled mechanical commissioning.
