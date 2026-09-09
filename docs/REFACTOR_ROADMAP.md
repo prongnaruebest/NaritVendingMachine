@@ -83,7 +83,7 @@ Exit criterion: pages share one state source, polling does not overlap, and no m
 ## Phase 7 — Release engineering and documentation
 
 - [ ] Add formatting, lint, typing and dependency-direction gates. (`ruff` lint and `mypy` checks now protect the dependency-neutral domain/shared core; expand typing coverage to Controller, persistence and web modules incrementally)
-- [ ] Build staged atomic release and rollback verification.
+- [ ] Build staged atomic release and rollback verification. (deterministic code-only artifact and SHA-256 manifest complete; remote activation and rollback remain)
 - [ ] Complete operator, configuration, PEND, testing and troubleshooting manuals.
 - [ ] Run read-only production smoke tests.
 - [ ] Prepare operator-controlled mechanical acceptance checklist.
@@ -101,6 +101,16 @@ Use `--quick` while developing to omit the complete test suite. Both modes avoid
 starting Flask, Controller, GPIO, serial communication and motion commands.
 GitHub Actions runs the complete gate on every push and pull request using only
 read access to repository contents; the workflow contains no deployment or machine-control step.
+
+Prepare a deterministic release bundle without including or changing live configuration:
+
+```powershell
+python scripts/build_release.py
+```
+
+The ZIP embeds `release-manifest.json`; a matching manifest is written beside it.
+Both list every packaged file and SHA-256 checksum. Building an artifact does not connect
+to the Pi, restart a service or issue a machine command.
 
 ## Commit strategy
 
