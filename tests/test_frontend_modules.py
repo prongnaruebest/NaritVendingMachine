@@ -14,6 +14,7 @@ MQTT_PAGE_CONTROLLER = (ROOT / "narit_vending" / "static" / "mqtt-page-controlle
 ALARMS_PAGE_CONTROLLER = (ROOT / "narit_vending" / "static" / "alarms-page-controller.js").read_text(encoding="utf-8")
 SLOTS_PAGE_CONTROLLER = (ROOT / "narit_vending" / "static" / "slots-page-controller.js").read_text(encoding="utf-8")
 SELECTED_SLOT_CONTROLLER = (ROOT / "narit_vending" / "static" / "selected-slot-controller.js").read_text(encoding="utf-8")
+VISUALIZATION_PAGE_CONTROLLER = (ROOT / "narit_vending" / "static" / "visualization-page-controller.js").read_text(encoding="utf-8")
 ROUTER = (ROOT / "narit_vending" / "static" / "router.js").read_text(encoding="utf-8")
 
 
@@ -34,6 +35,7 @@ def test_machine_store_loads_between_transport_and_application() -> None:
     alarms_controller_script = "filename='alarms-page-controller.js'"
     slots_controller_script = "filename='slots-page-controller.js'"
     selected_slot_script = "filename='selected-slot-controller.js'"
+    visualization_script = "filename='visualization-page-controller.js'"
     app_script = "filename='app.js'"
     router_script = "filename='router.js'"
     assert (
@@ -47,6 +49,7 @@ def test_machine_store_loads_between_transport_and_application() -> None:
         < TEMPLATE.index(alarms_controller_script)
         < TEMPLATE.index(slots_controller_script)
         < TEMPLATE.index(selected_slot_script)
+        < TEMPLATE.index(visualization_script)
         < TEMPLATE.index(router_script)
         < TEMPLATE.index(app_script)
     )
@@ -119,6 +122,29 @@ def test_visualization_history_polling_is_page_scoped() -> None:
     assert 'pageControllers.register("visualization"' in APP
     assert "window.clearInterval(historyTimer)" in APP
     assert "pageControllers.activate(nextView)" in APP
+
+
+def test_visualization_controls_are_owned_by_page_scoped_controller() -> None:
+    assert "NaritVisualizationPageController.create" in APP
+    assert "const cleanupControls = visualizationControls.mount()" in APP
+    assert "cleanupControls()" in APP
+    assert 'el("visual-slot-grid").addEventListener' not in APP
+    assert 'document.getElementById("visual-slot-grid")' in VISUALIZATION_PAGE_CONTROLLER
+    assert "addEventListener(eventName, handler)" in VISUALIZATION_PAGE_CONTROLLER
+    assert "removeEventListener(eventName, handler)" in VISUALIZATION_PAGE_CONTROLLER
+    for callback in (
+        "onSelect: selectVisualizationSlot",
+        "onCoordinateInput: updateVisualizationCoordinateDraft",
+        "onSave: saveVisualSlotV32",
+        "onGoto: gotoVisualSlot",
+        "onPreview: previewVisualSlot",
+    ):
+        assert callback in APP
+
+
+def test_visualization_controller_has_no_direct_transport_or_machine_authority() -> None:
+    for forbidden in ("fetch(", "/api/", "GPIO", "CommandEnvelope", "POST"):
+        assert forbidden not in VISUALIZATION_PAGE_CONTROLLER
 
 
 def test_io_interactions_are_owned_by_page_scoped_controller() -> None:

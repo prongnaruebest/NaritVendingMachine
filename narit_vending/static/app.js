@@ -1561,6 +1561,7 @@
   if (!window.NaritAlarmsPageController) throw new Error("HMI Alarms page controller failed to load");
   if (!window.NaritSlotsPageController) throw new Error("HMI Slots page controller failed to load");
   if (!window.NaritSelectedSlotController) throw new Error("HMI Selected Slot controller failed to load");
+  if (!window.NaritVisualizationPageController) throw new Error("HMI Visualization page controller failed to load");
   const pageControllers = window.NaritPageControllers.createRegistry({
     onError: (error, context) => console.error(
       `[HMI] ${context.view || "unknown"} page ${context.phase} failed`,
@@ -1838,6 +1839,25 @@
 
   function visualSlotValues() {
     return Object.fromEntries(AXES.map((axis) => [`${axis}_mm`, Number(el(`visual-slot-${axis}`)?.value)]));
+  }
+
+  function selectVisualizationSlot(code) {
+    MS.selectedSlotCode = String(code || "1");
+    MS.visualTargetSlot = MS.selectedSlotCode;
+    MS.visualEditorDirty = false;
+    MS.visualPreview = null;
+    MS.visualEditMode = false;
+    loadSelectedSlotEditor(true);
+    renderVisualizationV32();
+  }
+
+  function updateVisualizationCoordinateDraft() {
+    MS.visualEditorDirty = true;
+    MS.visualPreview = null;
+    const values = visualSlotValues();
+    const original = MS.visualOriginalSlot || {};
+    setText("visual-edit-comparison", AXES.map((axis) => `${axis.toUpperCase()} ${fmtPos(original[`${axis}_mm`])} → ${fmtPos(values[`${axis}_mm`])}`).join(" · "));
+    updateVisualButtons();
   }
 
   function loadCurrentIntoVisualSlot() {
@@ -4589,49 +4609,6 @@
         updateFeedOverride();
       }));
 
-    /* --- Visualization slot click selects only; GOTO requires an explicit button press. --- */
-    el("visual-slot-grid").addEventListener("click", (event) => {
-      const slotButton = event.target.closest("[data-visual-slot]");
-      if (!slotButton) return;
-      const code = slotButton.dataset.visualSlot;
-      MS.selectedSlotCode = code;
-      MS.visualTargetSlot = code;
-      MS.visualEditorDirty = false;
-      MS.visualPreview = null;
-      MS.visualEditMode = false;
-      loadSelectedSlotEditor(true);
-      renderVisualizationV32();
-    });
-    el("visual-command-slot").addEventListener("change", (event) => {
-      const code = String(event.target.value || "1");
-      MS.selectedSlotCode = code;
-      MS.visualTargetSlot = code;
-      MS.visualEditorDirty = false;
-      MS.visualPreview = null;
-      MS.visualEditMode = false;
-      loadSelectedSlotEditor(true);
-      renderVisualizationV32();
-    });
-    AXES.forEach((axis) => el(`visual-slot-${axis}`).addEventListener("input", () => {
-      MS.visualEditorDirty = true;
-      MS.visualPreview = null;
-      const values = visualSlotValues();
-      const original = MS.visualOriginalSlot || {};
-      setText("visual-edit-comparison", AXES.map((item) => `${item.toUpperCase()} ${fmtPos(original[`${item}_mm`])} → ${fmtPos(values[`${item}_mm`])}`).join(" · "));
-      updateVisualButtons();
-    }));
-    el("visual-slot-load-current").addEventListener("click", loadCurrentIntoVisualSlot);
-    el("visual-slot-save").addEventListener("click", saveVisualSlotV32);
-    el("visual-command-load").addEventListener("click", loadVisualSlotTarget);
-    el("visual-home-all").addEventListener("click", () => {
-      command("Home all axes from visualization", "/api/home/all", undefined, { timeoutMs: 300000 });
-    });
-    el("visual-slot-goto").addEventListener("click", gotoVisualSlot);
-    el("visual-load-preview").addEventListener("click", previewVisualSlot);
-    el("visual-send-motion").addEventListener("click", sendVisualTargetToMotion);
-    el("visual-edit-enable").addEventListener("click", () => setVisualEditMode(true));
-    el("visual-edit-cancel").addEventListener("click", () => setVisualEditMode(false));
-
     el("motor-test-arm").addEventListener("click", async () => {
       const result = await command("Arm Motor Test Mode", "/api/maintenance/motor-test", { action: "arm" }, { isStop: true, noCheck: true });
       if (result) {
@@ -4874,11 +4851,29 @@
       onSelectedGoto: gotoSelectedSlot,
       onError: (error) => console.error("[HMI] Selected Slot action failed", error),
     }));
+    const visualizationControls = window.NaritVisualizationPageController.create({
+      onSelect: selectVisualizationSlot,
+      onCoordinateInput: updateVisualizationCoordinateDraft,
+      onLoadCurrent: loadCurrentIntoVisualSlot,
+      onSave: saveVisualSlotV32,
+      onLoadTarget: loadVisualSlotTarget,
+      onHomeAll: () => command("Home all axes from visualization", "/api/home/all", undefined, { timeoutMs: 300000 }),
+      onGoto: gotoVisualSlot,
+      onPreview: previewVisualSlot,
+      onSendToMotion: sendVisualTargetToMotion,
+      onEdit: () => setVisualEditMode(true),
+      onCancelEdit: () => setVisualEditMode(false),
+      onError: (error) => console.error("[HMI] Visualization action failed", error),
+    });
     pageControllers.register("visualization", {
       mount: () => {
+        const cleanupControls = visualizationControls.mount();
         loadDemoHistory();
         const historyTimer = window.setInterval(() => loadDemoHistory(), 5000);
-        return () => window.clearInterval(historyTimer);
+        return () => {
+          window.clearInterval(historyTimer);
+          cleanupControls();
+        };
       },
     });
     bind();
