@@ -66,6 +66,28 @@ def test_profile_executor_compiles_and_enforces_watchdog_without_hal(tmp_path: P
     assert "executor host tests passed" in run_result.stdout
 
 
+def test_sensor_stop_supervisor_stops_axes_independently_and_fails_safe(tmp_path: Path):
+    compiler = shutil.which("gcc")
+    if compiler is None:
+        pytest.skip("host GCC is unavailable")
+    executable = tmp_path / "sensor_stop_test.exe"
+    sources = [
+        CORE / "nucleo_sensor_stop.c",
+        ROOT / "tests" / "c_host" / "test_nucleo_sensor_stop.c",
+    ]
+    compile_result = subprocess.run(
+        [compiler, "-std=c99", "-Wall", "-Wextra", "-Werror", f"-I{CORE}",
+         *(str(source) for source in sources), "-o", str(executable)],
+        capture_output=True, text=True, timeout=30, check=False,
+    )
+    assert compile_result.returncode == 0, compile_result.stdout + compile_result.stderr
+    run_result = subprocess.run(
+        [str(executable)], capture_output=True, text=True, timeout=10, check=False
+    )
+    assert run_result.returncode == 0, run_result.stdout + run_result.stderr
+    assert "sensor_stop host tests passed" in run_result.stdout
+
+
 def test_pulse_scheduler_updates_rate_without_phase_gap_and_counts_exactly(tmp_path: Path):
     compiler = shutil.which("gcc")
     if compiler is None:
@@ -199,3 +221,4 @@ def test_profile_core_is_not_connected_to_cubeide_build_yet():
     assert "nucleo_compare_adapter.c" not in project_sources
     assert "nucleo_profile_hal_port.c" not in project_sources
     assert "nucleo_profile_facade.c" not in project_sources
+    assert "nucleo_sensor_stop.c" not in project_sources

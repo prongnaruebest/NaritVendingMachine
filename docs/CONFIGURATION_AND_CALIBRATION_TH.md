@@ -159,3 +159,5 @@ PEND ไม่สามารถ bypass E-Stop/ALM หาก PEND ไม่ม�
 Controller แสดง routing matrix ใน status payload แยกตามแกนและชนิดคำสั่ง หากเปิด S-curve แล้ว capability หรือ runtime หาย ระบบต้อง block คำสั่งแทนการ fallback เงียบ ๆ ปัจจุบัน Home และ Limit Seek ยังไม่ใช้ S-curve เพราะเป็นคำสั่งที่ต้องหยุดตาม sensor และ buffered contract รุ่นปัจจุบันรองรับเฉพาะระยะ/pulse ที่ทราบล่วงหน้า
 
 Sensor-terminated contract ที่เตรียมไว้กำหนด sensor เป็น `X_MIN`, `X_MAX`, `Y_MIN` หรือ `Y_MAX`, เลือกหยุดแบบ `controlled` สำหรับ search หรือ `immediate` สำหรับ latch และบังคับ watchdog 0.1–3,600 วินาที Firmware ต้องประกาศ `sensor_terminated_profile`, `axis_sensor_stop` และ `profile_watchdog` ผ่าน handshake ครบทุกค่า จึงจะถือว่ารองรับ ห้ามอนุมานจาก protocol version เพียงอย่างเดียว
+
+มี firmware candidate แบบ HAL-independent สำหรับกำกับการหยุด X/Y แยกแกนแล้ว: แกนที่พบ sensor จะหยุดโดยไม่บังคับให้อีกแกนหยุด, ตรวจ sensor ที่ active ก่อนเริ่ม, มี watchdog ต่อแกน และ global safety stop แบบ latch ซึ่งต้อง Reset ก่อนเริ่มใหม่ โค้ดส่วนนี้ผ่าน host test แต่ยังจงใจไม่รวมใน CubeIDE build และยังไม่อนุญาตให้เปิด `scurve_enabled` บนเครื่องจริงจนกว่าจะเชื่อม facade/HAL, build, handshake และผ่าน commissioning
