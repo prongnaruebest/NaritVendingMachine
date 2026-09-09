@@ -302,36 +302,8 @@
 
   /* ── API LAYER ──────────────────────────────────────────────── */
   async function apiCall(path, method = "GET", body, timeoutMs = 8000) {
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
-    try {
-      const res = await fetch(path, {
-        method,
-        headers: body ? { "Content-Type": "application/json" } : undefined,
-        body: body ? JSON.stringify(body) : undefined,
-        signal: ctrl.signal,
-      });
-      const responseText = await res.text();
-      let data = {};
-      if (responseText) {
-        try {
-          data = JSON.parse(responseText);
-        } catch {
-          throw new Error(res.ok ? "Controller returned an invalid response" : `HTTP ${res.status}`);
-        }
-      }
-      if (!res.ok || data.ok === false) {
-        throw new Error(
-          data.error
-          || data.reason
-          || data.message
-          || (res.ok ? "Controller rejected the command without a reason" : `HTTP ${res.status}`)
-        );
-      }
-      return data;
-    } finally {
-      clearTimeout(timer);
-    }
+    if (!window.NaritApiClient) throw new Error("HMI API client failed to load");
+    return window.NaritApiClient.request(path, method, body, timeoutMs);
   }
 
   /* ── ERROR HUMANIZER ────────────────────────────────────────── */
