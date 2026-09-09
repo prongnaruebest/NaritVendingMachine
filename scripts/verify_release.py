@@ -3,7 +3,10 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
+import shutil
 import sys
+import uuid
 import zipfile
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -18,6 +21,7 @@ REQUIRED_FILES = {
     "scripts/setup_pi.sh",
     "scripts/validate_config.py",
 }
+RELEASE_ID_PATTERN = re.compile(r"^[0-9a-f]{12}-[0-9a-f]{12}$")
 
 
 class ReleaseVerificationError(ValueError):
@@ -105,19 +109,81 @@ def verify_release(archive_path: Path, manifest_path: Path) -> dict[str, Any]:
     return external
 
 
+def verify_staged_release(stage_dir: Path, manifest: dict[str, Any]) -> None:
+    entries = manifest.get("files")
+    if not isinstance(entries, list):
+        raise ReleaseVerificationError("Manifest file list is missing")
+    expected = {str(entry["path"]) for entry in entries}
+    actual = {
+        path.relative_to(stage_dir).as_posix()
+        for path in stage_dir.rglob("*")
+        if path.is_file() and path.name != EMBEDDED_MANIFEST
+    }
+    if actual != expected:
+        raise ReleaseVerificationError("Staged and manifest file inventories differ")
+    for entry in entries:
+        path = stage_dir / str(entry["path"])
+        content = path.read_bytes()
+        if len(content) != entry["size"] or _sha256(content) != entry["sha256"]:
+            raise ReleaseVerificationError(f"Staged checksum mismatch: {entry['path']}")
+
+
+def stage_release(archive_path: Path, manifest_path: Path, staging_root: Path) -> Path:
+    manifest = verify_release(archive_path, manifest_path)
+    release_id = manifest.get("release_id")
+    if not isinstance(release_id, str) or RELEASE_ID_PATTERN.fullmatch(release_id) is None:
+        raise ReleaseVerificationError("Release ID is invalid")
+
+    root = staging_root.resolve()
+    root.mkdir(parents=True, exist_ok=True)
+    destination = root / release_id
+    if destination.exists():
+        raise ReleaseVerificationError(f"Release is already staged: {release_id}")
+    temporary = root / f".{release_id}.preparing-{uuid.uuid4().hex}"
+    temporary.mkdir()
+    try:
+        with zipfile.ZipFile(archive_path) as archive:
+            for info in archive.infolist():
+                target = temporary / PurePosixPath(info.filename)
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(archive.read(info.filename))
+                target.chmod(0o755 if info.filename.endswith(".sh") else 0o644)
+        verify_staged_release(temporary, manifest)
+        temporary.rename(destination)
+    except Exception:
+        if temporary.parent == root and temporary.name.startswith(f".{release_id}.preparing-"):
+            shutil.rmtree(temporary, ignore_errors=True)
+        raise
+    return destination
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Verify a release artifact without extracting or activating it.")
     parser.add_argument("archive", type=Path)
     parser.add_argument("manifest", type=Path)
+    parser.add_argument(
+        "--stage-root",
+        type=Path,
+        help="Verify, extract and re-verify under this root without activating the release.",
+    )
     args = parser.parse_args()
     try:
-        manifest = verify_release(args.archive.resolve(), args.manifest.resolve())
+        archive_path = args.archive.resolve()
+        manifest_path = args.manifest.resolve()
+        manifest = verify_release(archive_path, manifest_path)
+        staged_path = (
+            stage_release(archive_path, manifest_path, args.stage_root.resolve()) if args.stage_root else None
+        )
     except (OSError, ReleaseVerificationError) as exc:
         print(f"FAILED: {exc}", file=sys.stderr)
         return 1
     print(f"VERIFIED: {manifest['release_id']}")
     print(f"files={len(manifest['files'])}")
-    print("No files were extracted, no service was restarted and no machine command was issued.")
+    if staged_path:
+        print(f"staged={staged_path}")
+        print("Release was staged but not activated; no service or machine command was issued.")
+    else:
+        print("No files were extracted, no service was restarted and no machine command was issued.")
     return 0
 
 

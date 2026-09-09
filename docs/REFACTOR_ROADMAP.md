@@ -83,7 +83,7 @@ Exit criterion: pages share one state source, polling does not overlap, and no m
 ## Phase 7 — Release engineering and documentation
 
 - [ ] Add formatting, lint, typing and dependency-direction gates. (`ruff` lint and `mypy` checks now protect the dependency-neutral domain/shared core; expand typing coverage to Controller, persistence and web modules incrementally)
-- [ ] Build staged atomic release and rollback verification. (deterministic code-only artifact plus strict pre-extraction verification complete; remote staging, activation and rollback remain)
+- [ ] Build staged atomic release and rollback verification. (verified atomic staging complete; configuration compatibility, activation and rollback remain)
 - [ ] Complete operator, configuration, PEND, testing and troubleshooting manuals.
 - [ ] Run read-only production smoke tests.
 - [ ] Prepare operator-controlled mechanical acceptance checklist.
@@ -120,6 +120,15 @@ python scripts/verify_release.py <release.zip> <release.manifest.json>
 
 Verification rejects checksum/inventory differences, duplicate or unsafe paths and any bundled
 machine/hardware configuration. It does not extract files, restart services or contact hardware.
+
+To extract into a new immutable staging directory and verify every file again after writing:
+
+```powershell
+python scripts/verify_release.py <release.zip> <release.manifest.json> --stage-root <staging-root>
+```
+
+The destination is `<staging-root>/<release-id>`. Existing releases are never overwritten;
+staging alone does not change the active release or restart a service.
 
 ## Commit strategy
 
