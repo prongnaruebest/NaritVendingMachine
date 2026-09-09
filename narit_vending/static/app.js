@@ -1684,7 +1684,7 @@
 
   function applySetupTab(tabName = "motor") {
     MS.currentSetupTab = tabName;
-    const motorFields = new Set(["motor_steps_per_rev", "driver_microsteps", "lead_screw_pitch_mm", "steps_per_mm", "max_travel_mm", "max_speed_mm_s", "default_speed_mm_s", "max_pulse_hz", "commissioned_max_speed_mm_s", "acceleration", "deceleration", "jog_step_mm", "settle_delay", "forward_direction"]);
+    const motorFields = new Set(["motor_steps_per_rev", "driver_microsteps", "lead_screw_pitch_mm", "steps_per_mm", "max_travel_mm", "max_speed_mm_s", "default_speed_mm_s", "max_pulse_hz", "commissioned_max_speed_mm_s", "acceleration", "deceleration", "jog_step_mm", "settle_delay", "forward_direction", "scurve_enabled", "scurve_profile_type", "scurve_start_speed_mm_s", "scurve_end_speed_mm_s", "scurve_max_jerk_mm_s3", "scurve_control_period_us"]);
     const homingFields = new Set(["home_position_mm", "homing_search_speed_mm_s", "homing_latch_speed_mm_s", "homing_timeout_s", "home_direction"]);
     const travelFields = new Set(["motor_steps_per_rev", "driver_microsteps", "lead_screw_pitch_mm", "steps_per_mm", "max_travel_mm"]);
     const motorPanel = $(".motor-pulse-config-panel");
@@ -1699,6 +1699,7 @@
       label.hidden = tabName === "homing" ? !homingFields.has(field) : tabName === "travel" ? !travelFields.has(field) : tabName === "motor" ? !motorFields.has(field) : false;
     });
     $$("[data-motor-card] .motor-derived").forEach((node) => { node.hidden = tabName === "homing"; });
+    $$("[data-motor-card] .scurve-config").forEach((node) => { node.hidden = tabName !== "motor"; });
     $$("#configuration-pin-editor .schedule-card").forEach((card, index) => {
       card.hidden = (tabName === "nucleo" && index !== 0) || (tabName === "io" && index !== 1);
     });
@@ -2104,7 +2105,7 @@
   }
 
   function configurationNumberInput(axis, field, value, step = "0.1") {
-    return `<input class="config-input" type="number" step="${step}" value="${esc(value)}" data-config-axis="${axis}" data-config-field="${field}">`;
+    return `<input class="config-input" type="number" step="${step}" value="${esc(value)}" data-config-axis="${axis}" data-config-field="${field}" aria-label="${axis.toUpperCase()} ${field.replaceAll("_", " ")}">`;
   }
 
   function renderConfigurationEditor(force = false) {
@@ -2116,6 +2117,24 @@
       const pulsesPerRev = Number(config.motor_steps_per_rev || 0) * Number(config.driver_microsteps || 0);
       const theoreticalSteps = pulsesPerRev / Math.max(Number(config.lead_screw_pitch_mm || 1), .0001);
       const pulseFrequency = Number(config.steps_per_mm || 0) * Number(config.max_speed_mm_s || 0);
+      const scurveSupported = Boolean(MS.payload?.nucleo?.supports_buffered_scurve);
+      const scurveSection = axis === "z" ? "" : `<section class="scurve-config" aria-label="Axis ${axis.toUpperCase()} staged S-curve profile">
+        <div class="scurve-config-head">
+          <div><strong>S-CURVE START / STOP</strong><small>Seven-segment profile · X/Y only</small></div>
+          <label class="config-switch scurve-enable" title="${scurveSupported ? "Enable after validation" : "Requires NUCLEO buffered S-curve capability"}">
+            <input type="checkbox" data-config-axis="${axis}" data-config-field="scurve_enabled" ${config.scurve_enabled ? "checked" : ""} ${scurveSupported ? "" : "disabled"}>
+            <span>${scurveSupported ? "ENABLE" : "STAGED · NOT AVAILABLE"}</span>
+          </label>
+          <input type="hidden" value="seven_segment_s_curve" data-config-axis="${axis}" data-config-field="scurve_profile_type" data-config-type="string">
+        </div>
+        <div class="scurve-fields">
+          <label><span>Start Speed</span>${configurationNumberInput(axis, "scurve_start_speed_mm_s", config.scurve_start_speed_mm_s ?? 0)}<small>mm/s</small></label>
+          <label><span>End Speed</span>${configurationNumberInput(axis, "scurve_end_speed_mm_s", config.scurve_end_speed_mm_s ?? 0)}<small>mm/s</small></label>
+          <label><span>Maximum Jerk</span>${configurationNumberInput(axis, "scurve_max_jerk_mm_s3", config.scurve_max_jerk_mm_s3 ?? 100)}<small>mm/s³</small></label>
+          <label><span>Control Period</span>${configurationNumberInput(axis, "scurve_control_period_us", config.scurve_control_period_us ?? 1000, "1")}<small>µs</small></label>
+        </div>
+        <div class="scurve-preview" id="scurve-preview-${axis}" role="status">Profile preview awaiting values.</div>
+      </section>`;
       return `<article class="motor-config-card" data-motor-card="${axis}">
         <div class="motor-config-head"><strong>AXIS ${axis.toUpperCase()}</strong><span>${fmt(pulseFrequency / 1000, 2)} kHz MAX</span></div>
         <div class="motor-config-fields">
@@ -2140,8 +2159,10 @@
           <label><span>Forward Direction</span><select class="config-select" data-config-axis="${axis}" data-config-field="forward_direction"><option value="0" ${Number(config.forward_direction) === 0 ? "selected" : ""}>LOW / 0</option><option value="1" ${Number(config.forward_direction) === 1 ? "selected" : ""}>HIGH / 1</option></select></label>
         </div>
         <div class="motor-derived"><span>Theoretical <b id="config-theoretical-${axis}">${fmt(theoreticalSteps, 3)} pulse/mm</b></span><span>Pulse Frequency <b id="config-frequency-${axis}">${fmt(pulseFrequency, 0)} Hz</b></span><span>Pulses / Rev <b id="config-ppr-${axis}">${fmt(pulsesPerRev, 0)}</b></span></div>
+        ${scurveSection}
       </article>`;
     }).join("");
+    updateConfigurationDerived();
     renderTravelCalibration();
 
     const isIrivBoard = hardware.board_profile === "IRIV_PiControl_CM4" || Boolean(hardware.iriv_io?.enabled) || MS.payload?.io?.enabled === true;
@@ -2222,6 +2243,16 @@
       setText(`config-ppr-${axis}`, fmt(pulsesPerRev, 0));
       const card = document.querySelector(`[data-motor-card="${axis}"]`);
       if (card) card.classList.toggle("fault", frequency > 50000);
+      if (axis !== "z") {
+        const jerk = value("scurve_max_jerk_mm_s3");
+        const acceleration = value("acceleration");
+        const periodUs = value("scurve_control_period_us");
+        const transitionMs = jerk > 0 ? (acceleration / jerk) * 1000 : Number.NaN;
+        const valid = jerk > 0 && Number.isInteger(periodUs) && periodUs >= 100 && periodUs <= 10000;
+        setText(`scurve-preview-${axis}`, valid
+          ? `Preview · jerk transition ${fmt(transitionMs, 1)} ms · control ${(periodUs / 1000).toFixed(3)} ms · disabled until capability handshake`
+          : "Invalid profile · jerk must be > 0 and control period must be 100–10,000 µs.");
+      }
     });
   }
 
@@ -2251,7 +2282,11 @@
     AXES.forEach((axis) => {
       axes[axis] = {};
       document.querySelectorAll(`[data-config-axis="${axis}"]`).forEach((input) => {
-        axes[axis][input.dataset.configField] = Number(input.value);
+        axes[axis][input.dataset.configField] = input.dataset.configType === "string"
+          ? input.value
+          : input.type === "checkbox"
+            ? input.checked
+            : Number(input.value);
       });
       const travelCard = document.querySelector(`.travel-calibration-card[data-travel-axis="${axis}"]`);
       if (travelCard) {

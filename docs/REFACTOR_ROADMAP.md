@@ -106,7 +106,7 @@ Exit criterion: failed health checks roll back safely and no deploy performs mot
 - [x] Add an end-to-end candidate facade behind a compile-time feature flag that defaults off and continues to advertise protocol v3.
 - [x] Add disabled-by-default X/Y S-curve fields to machine/hardware configuration, effective-config merging and validation; Z remains unchanged.
 - [ ] Integrate X/Y Move, Jog, Home and Limit Seek without changing Z behavior.
-- [ ] Add Machine Setup editing, persistence and profile preview for the validated X/Y fields.
+- [x] Add capability-gated Machine Setup editing, atomic persistence and a non-motion profile preview for the validated X/Y fields.
 - [ ] Build firmware artifact and complete operator-controlled mechanical commissioning.
 
 Exit criterion: X/Y start and stop without segment gaps, all configured kinematic limits are enforced,

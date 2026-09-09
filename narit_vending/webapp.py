@@ -1307,6 +1307,37 @@ class MotionService:
             homing_latch_speed = _config_number(axis_payload, "homing_latch_speed_mm_s", minimum=0.01, maximum=homing_search_speed)
             homing_timeout = _config_number(axis_payload, "homing_timeout_s", minimum=1.0, maximum=3600.0)
             forward_direction = _config_integer(axis_payload, "forward_direction", minimum=0, maximum=1)
+            scurve_values: dict[str, object] = {}
+            if axis_name in ("x", "y") and (
+                "scurve_enabled" in axis_payload or current_axis.scurve_enabled is not None
+            ):
+                scurve_enabled = _config_boolean(axis_payload, "scurve_enabled")
+                nucleo_status = self.nucleo_link.status() if self.nucleo_link is not None else {}
+                if scurve_enabled and not bool(nucleo_status.get("supports_buffered_scurve", False)):
+                    raise APIInputError(
+                        f"{axis_name.upper()}: S-curve cannot be enabled until NUCLEO handshake confirms buffered profile support"
+                    )
+                profile_type = str(axis_payload.get("scurve_profile_type", ""))
+                if profile_type != "seven_segment_s_curve":
+                    raise APIInputError(f"{axis_name.upper()}: unsupported S-curve profile type")
+                scurve_values = {
+                    "scurve_enabled": scurve_enabled,
+                    "scurve_profile_type": profile_type,
+                    "scurve_start_speed_mm_s": _config_number(
+                        axis_payload, "scurve_start_speed_mm_s", minimum=0.0, maximum=commissioned_speed
+                    ),
+                    "scurve_end_speed_mm_s": _config_number(
+                        axis_payload, "scurve_end_speed_mm_s", minimum=0.0, maximum=commissioned_speed
+                    ),
+                    "scurve_max_jerk_mm_s3": _config_number(
+                        axis_payload, "scurve_max_jerk_mm_s3", minimum=0.001, maximum=1_000_000.0
+                    ),
+                    "scurve_control_period_us": _config_integer(
+                        axis_payload, "scurve_control_period_us", minimum=100, maximum=10_000
+                    ),
+                }
+            elif axis_name == "z" and any(str(key).startswith("scurve_") for key in axis_payload):
+                raise APIInputError("Z: S-curve configuration is supported for X/Y only")
             if home_direction == forward_direction:
                 raise APIInputError(f"{axis_name.upper()}: home and forward directions must be opposite")
             if default_speed > max_speed:
@@ -1365,6 +1396,7 @@ class MotionService:
                 homing_search_speed_mm_s=homing_search_speed,
                 homing_latch_speed_mm_s=homing_latch_speed,
                 homing_timeout_s=homing_timeout,
+                **scurve_values,
             )
             updated_axes[axis_name] = updated_axis
             updated_hardware["motors"][axis_name] = {
@@ -1400,6 +1432,7 @@ class MotionService:
                 "travel_safety_margin_mm": travel_margin,
                 "pulley_pitch_mm": current_axis.pulley_pitch_mm,
                 "pulley_teeth": current_axis.pulley_teeth,
+                **scurve_values,
             }
 
         for group_name in ("digital_inputs", "digital_outputs"):

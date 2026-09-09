@@ -1,4 +1,5 @@
 import os
+import json
 import shutil
 import tempfile
 import unittest
@@ -8,7 +9,7 @@ os.environ["GPIOZERO_PIN_FACTORY"] = "mock"
 
 from gpiozero import Device
 
-from narit_vending.webapp import MotionService
+from narit_vending.webapp import APIInputError, MotionService
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -49,6 +50,43 @@ class StartupSmokeTests(unittest.TestCase):
             self.assertEqual((restore_points[0] / "machine_config.json").read_bytes(), original_machine)
             self.assertEqual((restore_points[0] / "hardware_config.json").read_bytes(), original_hardware)
             self.assertTrue((restore_points[0] / "manifest.json").exists())
+
+    def test_configuration_save_preserves_disabled_xy_scurve_and_never_adds_it_to_z(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            machine_path = root / "machine_config.json"
+            hardware_path = root / "hardware_config.json"
+            machine = json.loads((ROOT / "machine_config.json").read_text(encoding="utf-8"))
+            hardware = json.loads((ROOT / "hardware_config.json").read_text(encoding="utf-8"))
+            fields = {
+                "scurve_enabled": False,
+                "scurve_profile_type": "seven_segment_s_curve",
+                "scurve_start_speed_mm_s": 0.0,
+                "scurve_end_speed_mm_s": 0.0,
+                "scurve_max_jerk_mm_s3": 100.0,
+                "scurve_control_period_us": 1000,
+            }
+            for axis in ("x", "y"):
+                machine["axes"][axis]["commissioned_max_speed_mm_s"] = machine["axes"][axis]["max_speed_mm_s"]
+                machine["axes"][axis].update(fields)
+                hardware["machine_parameters"]["axes"][axis].update(fields)
+            machine_path.write_text(json.dumps(machine), encoding="utf-8")
+            hardware_path.write_text(json.dumps(hardware), encoding="utf-8")
+            service = MotionService(machine_path, hardware_path)
+
+            service.save_configuration(service.get_config())
+
+            saved_machine = json.loads(machine_path.read_text(encoding="utf-8"))
+            saved_hardware = json.loads(hardware_path.read_text(encoding="utf-8"))
+            for axis in ("x", "y"):
+                self.assertFalse(saved_machine["axes"][axis]["scurve_enabled"])
+                self.assertEqual(saved_hardware["machine_parameters"]["axes"][axis]["scurve_control_period_us"], 1000)
+            self.assertFalse(any(key.startswith("scurve_") for key in saved_machine["axes"]["z"]))
+
+            unsafe = service.get_config()
+            unsafe["axes"]["x"]["scurve_enabled"] = True
+            with self.assertRaisesRegex(APIInputError, "handshake confirms"):
+                service.save_configuration(unsafe)
 
 
 if __name__ == "__main__":

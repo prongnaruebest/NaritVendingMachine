@@ -103,6 +103,12 @@ class AxisConfig:
     travel_safety_margin_mm: float = 5.0
     pulley_pitch_mm: float | None = None
     pulley_teeth: int | None = None
+    scurve_enabled: bool | None = None
+    scurve_profile_type: str | None = None
+    scurve_start_speed_mm_s: float | None = None
+    scurve_end_speed_mm_s: float | None = None
+    scurve_max_jerk_mm_s3: float | None = None
+    scurve_control_period_us: int | None = None
 
     def __post_init__(self) -> None:
         positive_values = {
@@ -152,6 +158,35 @@ class AxisConfig:
             raise MotionError(f"{self.name}: pulley_pitch_mm must be greater than zero")
         if self.pulley_teeth is not None and self.pulley_teeth <= 0:
             raise MotionError(f"{self.name}: pulley_teeth must be greater than zero")
+        scurve_values = (
+            self.scurve_enabled,
+            self.scurve_profile_type,
+            self.scurve_start_speed_mm_s,
+            self.scurve_end_speed_mm_s,
+            self.scurve_max_jerk_mm_s3,
+            self.scurve_control_period_us,
+        )
+        if self.name == "z" and any(value is not None for value in scurve_values):
+            raise MotionError("z: S-curve configuration is supported for X/Y only")
+        if self.name in ("x", "y") and any(value is not None for value in scurve_values):
+            if any(value is None for value in scurve_values):
+                raise MotionError(f"{self.name}: all S-curve fields must be configured together")
+            if not isinstance(self.scurve_enabled, bool):
+                raise MotionError(f"{self.name}: scurve_enabled must be boolean")
+            if self.scurve_profile_type != "seven_segment_s_curve":
+                raise MotionError(f"{self.name}: unsupported S-curve profile type")
+            for field_name in ("scurve_start_speed_mm_s", "scurve_end_speed_mm_s"):
+                value = float(getattr(self, field_name))
+                if not math.isfinite(value) or not 0 <= value <= self.commissioned_max_speed_mm_s:
+                    raise MotionError(f"{self.name}: {field_name} exceeds commissioned speed")
+            assert self.scurve_max_jerk_mm_s3 is not None
+            assert self.scurve_control_period_us is not None
+            if not math.isfinite(self.scurve_max_jerk_mm_s3) or self.scurve_max_jerk_mm_s3 <= 0:
+                raise MotionError(f"{self.name}: scurve_max_jerk_mm_s3 must be greater than zero")
+            if not isinstance(self.scurve_control_period_us, int) or isinstance(self.scurve_control_period_us, bool):
+                raise MotionError(f"{self.name}: scurve_control_period_us must be an integer")
+            if not 100 <= self.scurve_control_period_us <= 10_000:
+                raise MotionError(f"{self.name}: scurve_control_period_us must be within 100-10000")
 
     @property
     def step_pin(self) -> int:
@@ -1389,8 +1424,8 @@ def _build_half_periods(total_steps: int, duration_s: float, ramp_ratio: float =
     return [max(scale * weight, 0.00002) for weight in weights]
 
 
-def _axis_config_to_dict(config: AxisConfig) -> dict[str, int | float | str]:
-    return {
+def _axis_config_to_dict(config: AxisConfig) -> dict[str, int | float | str | bool]:
+    payload: dict[str, int | float | str | bool] = {
         "name": config.name,
         "pulse_pin": config.pulse_pin,
         "direction_pin": config.direction_pin,
@@ -1423,6 +1458,22 @@ def _axis_config_to_dict(config: AxisConfig) -> dict[str, int | float | str]:
         "pulley_teeth": config.pulley_teeth,
         "pulses_per_rev": config.pulses_per_rev,
     }
+    if config.scurve_enabled is not None:
+        assert config.scurve_start_speed_mm_s is not None
+        assert config.scurve_end_speed_mm_s is not None
+        assert config.scurve_max_jerk_mm_s3 is not None
+        assert config.scurve_control_period_us is not None
+        payload.update(
+            {
+                "scurve_enabled": config.scurve_enabled,
+                "scurve_profile_type": str(config.scurve_profile_type),
+                "scurve_start_speed_mm_s": float(config.scurve_start_speed_mm_s),
+                "scurve_end_speed_mm_s": float(config.scurve_end_speed_mm_s),
+                "scurve_max_jerk_mm_s3": float(config.scurve_max_jerk_mm_s3),
+                "scurve_control_period_us": int(config.scurve_control_period_us),
+            }
+        )
+    return payload
 
 
 def _axis_config_from_dict(name: str, payload: dict[str, object]) -> AxisConfig:
@@ -1473,6 +1524,12 @@ def _axis_config_from_dict(name: str, payload: dict[str, object]) -> AxisConfig:
         travel_safety_margin_mm=float(payload.get("travel_safety_margin_mm", 5.0)),
         pulley_pitch_mm=float(payload["pulley_pitch_mm"]) if payload.get("pulley_pitch_mm") is not None else None,
         pulley_teeth=int(payload["pulley_teeth"]) if payload.get("pulley_teeth") is not None else None,
+        scurve_enabled=bool(payload["scurve_enabled"]) if payload.get("scurve_enabled") is not None else None,
+        scurve_profile_type=str(payload["scurve_profile_type"]) if payload.get("scurve_profile_type") is not None else None,
+        scurve_start_speed_mm_s=float(payload["scurve_start_speed_mm_s"]) if payload.get("scurve_start_speed_mm_s") is not None else None,
+        scurve_end_speed_mm_s=float(payload["scurve_end_speed_mm_s"]) if payload.get("scurve_end_speed_mm_s") is not None else None,
+        scurve_max_jerk_mm_s3=float(payload["scurve_max_jerk_mm_s3"]) if payload.get("scurve_max_jerk_mm_s3") is not None else None,
+        scurve_control_period_us=int(payload["scurve_control_period_us"]) if payload.get("scurve_control_period_us") is not None else None,
     )
 
 
