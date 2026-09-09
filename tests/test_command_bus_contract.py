@@ -1,9 +1,12 @@
 import threading
+import tempfile
+from pathlib import Path
 
 from narit_vending.controller.command_bus import CommandBus
 from narit_vending.controller.state_machine import MachineState, StateMachine
 from narit_vending.shared.commands import CommandEnvelope, CommandResult
 from narit_vending.shared.snapshot import AxisSnapshot, MachineSnapshot
+from narit_vending.persistence.idempotency_repository import SQLiteIdempotencyRepository
 
 
 def snapshot() -> MachineSnapshot:
@@ -112,3 +115,33 @@ def test_concurrent_duplicate_never_executes_twice() -> None:
     assert duplicate.error is not None
     assert duplicate.error["code"] == "COMMAND_IN_PROGRESS"
     assert result_holder[0].ok()
+
+
+def test_completed_result_can_be_recovered_after_command_bus_restart() -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        repository_path = Path(directory) / "controller.sqlite3"
+        calls = 0
+
+        def handler(envelope: CommandEnvelope) -> CommandResult:
+            nonlocal calls
+            calls += 1
+            return CommandResult(True, envelope.command_id, "COMPLETED", result={"ok": True})
+
+        first_bus = CommandBus(
+            StateMachine(MachineState.READY),
+            snapshot,
+            idempotency_repository=SQLiteIdempotencyRepository(repository_path),
+        )
+        first_bus.register("JOG", handler)
+        first_bus.submit(command("survives-restart"))
+
+        second_bus = CommandBus(
+            StateMachine(MachineState.READY),
+            snapshot,
+            idempotency_repository=SQLiteIdempotencyRepository(repository_path),
+        )
+        second_bus.register("JOG", handler)
+        recovered = second_bus.submit(command("survives-restart"))
+
+        assert recovered.ok()
+        assert calls == 1

@@ -17,12 +17,16 @@ from __future__ import annotations
 import json
 import logging
 import threading
-from collections import OrderedDict
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Callable
 
 from .safety import SafetyInterlock
 from .state_machine import StateMachine
+from ..persistence.idempotency_repository import (
+    IdempotencyRecord,
+    IdempotencyRepository,
+    InMemoryIdempotencyRepository,
+)
 
 if TYPE_CHECKING:
     from narit_vending.shared.commands import CommandEnvelope, CommandResult
@@ -48,6 +52,7 @@ class CommandBus:
         snapshot_fn: Callable[[], "MachineSnapshot"],
         *,
         idempotency_capacity: int = 256,
+        idempotency_repository: IdempotencyRepository | None = None,
     ) -> None:
         self._state_machine = state_machine
         self._snapshot_fn = snapshot_fn
@@ -55,8 +60,7 @@ class CommandBus:
         self._motion_lock = threading.Lock()
         self._handlers: dict[str, Callable[["CommandEnvelope"], "CommandResult"]] = {}
         self._lock = threading.RLock()
-        self._idempotency_capacity = max(1, int(idempotency_capacity))
-        self._idempotency: OrderedDict[str, tuple[str, "CommandResult"]] = OrderedDict()
+        self._idempotency = idempotency_repository or InMemoryIdempotencyRepository(idempotency_capacity)
         self._idempotency_inflight: dict[str, str] = {}
 
     def register(self, command_type: str, handler: Callable[["CommandEnvelope"], "CommandResult"]) -> None:
@@ -74,15 +78,13 @@ class CommandBus:
         with self._lock:
             cached = self._idempotency.get(key)
             if cached is not None:
-                cached_fingerprint, cached_result = cached
-                if cached_fingerprint != fingerprint:
+                if cached.fingerprint != fingerprint:
                     return CommandResult.rejected(
                         envelope.command_id,
                         "Idempotency key was already used for a different command",
                         code="IDEMPOTENCY_CONFLICT",
                     )
-                self._idempotency.move_to_end(key)
-                return CommandResult.from_dict(cached_result.to_dict())
+                return CommandResult.from_dict(cached.result)
             inflight_fingerprint = self._idempotency_inflight.get(key)
             if inflight_fingerprint is not None:
                 if inflight_fingerprint != fingerprint:
@@ -103,10 +105,7 @@ class CommandBus:
             result = self._submit_once(envelope)
             if result.state != "BUSY":
                 with self._lock:
-                    self._idempotency[key] = (fingerprint, CommandResult.from_dict(result.to_dict()))
-                    self._idempotency.move_to_end(key)
-                    while len(self._idempotency) > self._idempotency_capacity:
-                        self._idempotency.popitem(last=False)
+                    self._idempotency.put(IdempotencyRecord(key, fingerprint, result.to_dict()))
             return result
         finally:
             with self._lock:
