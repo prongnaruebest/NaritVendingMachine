@@ -107,6 +107,7 @@ Exit criterion: failed health checks roll back safely and no deploy performs mot
 - [x] Add disabled-by-default X/Y S-curve fields to machine/hardware configuration, effective-config merging and validation; Z remains unchanged.
 - [ ] Integrate X/Y Move, Jog, Home and Limit Seek without changing Z behavior.
 - [x] Add capability-gated Machine Setup editing, atomic persistence and a non-motion profile preview for the validated X/Y fields.
+- [x] Add a fail-closed operation routing matrix: bounded X/Y Move/Jog may use the future buffered runtime, while Home/Limit Seek remain blocked until sensor-terminated profile support exists; Z always stays legacy.
 - [ ] Build firmware artifact and complete operator-controlled mechanical commissioning.
 
 Exit criterion: X/Y start and stop without segment gaps, all configured kinematic limits are enforced,

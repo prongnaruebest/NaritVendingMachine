@@ -75,9 +75,10 @@ class WorkspaceNavigationTests(unittest.TestCase):
 
         self.assertIn('axis === "z" ? ""', script)
         self.assertIn('MS.payload?.nucleo?.supports_buffered_scurve', script)
+        self.assertIn('MS.payload?.motion_profile_routing?.[axis]?.move', script)
         self.assertIn('data-config-field="scurve_enabled"', script)
         self.assertIn('"scurve_max_jerk_mm_s3"', script)
-        self.assertIn('disabled until capability handshake', script)
+        self.assertIn('gated by capability and runtime', script)
 
     def test_configuration_apply_waits_for_controller_config_reload(self) -> None:
         script = (ROOT / "narit_vending" / "static" / "app.js").read_text(

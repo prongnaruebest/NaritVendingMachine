@@ -1,8 +1,9 @@
-import os
 import json
+import os
 import shutil
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 
 os.environ["GPIOZERO_PIN_FACTORY"] = "mock"
@@ -31,6 +32,10 @@ class StartupSmokeTests(unittest.TestCase):
         self.assertEqual(effective["effective_axes"]["x"]["pulse_pin"], 16)
         self.assertEqual(effective["effective_axes"]["y"]["head_limit_pin"], 22)
         self.assertEqual(effective["effective_axes"]["z"]["enable_pin"], 19)
+        routing = service.status_payload()["motion_profile_routing"]
+        self.assertEqual(routing["x"]["move"]["route"], "legacy")
+        self.assertTrue(routing["x"]["move"]["executable"])
+        self.assertEqual(routing["z"]["home"]["route"], "legacy")
 
     def test_configuration_save_creates_restore_point_first(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -87,6 +92,31 @@ class StartupSmokeTests(unittest.TestCase):
             unsafe["axes"]["x"]["scurve_enabled"] = True
             with self.assertRaisesRegex(APIInputError, "handshake confirms"):
                 service.save_configuration(unsafe)
+
+    def test_manually_enabled_scurve_fails_closed_at_motion_entry_points(self) -> None:
+        service = MotionService(ROOT / "machine_config.json", ROOT / "hardware_config.json")
+        staged_x = replace(
+            service.controller.config.x,
+            scurve_enabled=True,
+            scurve_profile_type="seven_segment_s_curve",
+            scurve_start_speed_mm_s=0.0,
+            scurve_end_speed_mm_s=0.0,
+            scurve_max_jerk_mm_s3=100.0,
+            scurve_control_period_us=1000,
+        )
+        service.controller.config = replace(service.controller.config, x=staged_x)
+
+        results = (
+            service.move_to(x_mm=1.0),
+            service.jog("x", 1.0, allow_unhomed=True),
+            service.home_axis("x"),
+            service.move_to_limit("x", "max"),
+            service.move_to_slot("1"),
+        )
+
+        for result in results:
+            self.assertFalse(result["ok"])
+            self.assertIn("blocked", result["error"])
 
 
 if __name__ == "__main__":

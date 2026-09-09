@@ -17,6 +17,7 @@ from flask import Flask, jsonify, redirect, render_template, request
 
 from .controller.ports import IRIVIOPort, NucleoTransportPort, PiControlIOPort
 from .controller.position_completion import PendCompletionVerifier
+from .domain.motion_profile_routing import ProfileOperation, decide_profile_route
 from .config_foundation import (
     create_config_backup,
     validate_configuration_files,
@@ -109,6 +110,8 @@ class MotionService:
         self.motor_test_armed = False
         self.motor_test_armed_until: float | None = None
         self.motion_enabled = True
+        # Candidate buffered transport is not connected to production serial yet.
+        self.profile_runtime_ready = False
         self._safety_trip_latched = False
         self._safety_monitor_stop = threading.Event()
         self._safety_monitor_thread: threading.Thread | None = None
@@ -210,6 +213,19 @@ class MotionService:
                 controller_status["state"] = "alarm"
             self._sync_iriv_outputs(controller_status, hardware_fault)
             motor_test = self._motor_test_status(controller_status)
+            profile_capability = bool(nucleo_status.get("supports_buffered_scurve", False))
+            profile_routing = {
+                axis_name: {
+                    operation.value: decide_profile_route(
+                        getattr(self.controller.config, axis_name),
+                        operation,
+                        capability_ready=profile_capability,
+                        runtime_ready=self.profile_runtime_ready,
+                    ).to_dict()
+                    for operation in ProfileOperation
+                }
+                for axis_name in ("x", "y", "z")
+            }
             for axis_name, axis_status in ((name, controller_status[name]) for name in ("x", "y", "z")):
                 if axis_status["is_homed"] and self.homing[axis_name] == "not_homed":
                     self.homing[axis_name] = "passed"
@@ -234,6 +250,7 @@ class MotionService:
                 "io": io_status,
                 "picontrol_io": picontrol_status,
                 "nucleo": nucleo_status,
+                "motion_profile_routing": profile_routing,
                 "operation": {
                     "phase": self.operation_phase,
                     "message": self.operation_message,
@@ -631,6 +648,10 @@ class MotionService:
             if errors:
                 self.armed_move = None
                 return {"ok": False, "error": "; ".join(errors)}
+            route_error = MotionService._profile_route_error(self, required_axes, ProfileOperation.MOVE)
+            if route_error:
+                self.armed_move = None
+                return {"ok": False, "error": route_error}
             self.armed_move = None
             self.completed_request_ids[request_id] = {"ok": False, "error": "Command is already executing"}
 
@@ -962,9 +983,35 @@ class MotionService:
             time_s = self.controller.timer_seconds
         return speed_mm_s, time_s
 
+    def _profile_route_error(
+        self,
+        axes: tuple[str, ...] | list[str] | set[str],
+        operation: ProfileOperation,
+    ) -> str:
+        controller = getattr(self, "controller", None)
+        machine_config = getattr(controller, "config", None)
+        if not isinstance(machine_config, MachineConfig):
+            return ""
+        nucleo_link = getattr(self, "nucleo_link", None)
+        nucleo_status = nucleo_link.status() if nucleo_link is not None else {}
+        capability_ready = bool(nucleo_status.get("supports_buffered_scurve", False))
+        for axis_name in axes:
+            decision = decide_profile_route(
+                getattr(machine_config, axis_name),
+                operation,
+                capability_ready=capability_ready,
+                runtime_ready=bool(getattr(self, "profile_runtime_ready", False)),
+            )
+            if not decision.executable:
+                return f"{axis_name.upper()} {operation.value} blocked: {decision.reason}"
+        return ""
+
     def start_motion(self, slot_code: str | None = None, speed_mm_s: float | None = None, time_s: float | None = None) -> dict[str, object]:
         if not slot_code:
             return {"ok": False, "error": "A slot is required to start a dispense operation"}
+        route_error = MotionService._profile_route_error(self, ("x", "y", "z"), ProfileOperation.MOVE)
+        if route_error:
+            return {"ok": False, "error": route_error}
         def action():
             slot = self.controller.move_to_slot(slot_code, speed_mm_s=speed_mm_s, time_s=time_s)
             self.activate_dispense()
@@ -985,6 +1032,9 @@ class MotionService:
     def home_axis(self, axis_name: str) -> dict[str, object]:
         if self.configuration_restart_required:
             return {"ok": False, "error": "Configuration changed; apply and restart the controller before homing"}
+        route_error = MotionService._profile_route_error(self, (axis_name,), ProfileOperation.HOME)
+        if route_error:
+            return {"ok": False, "error": route_error}
         self._prepare_home((axis_name,))
         return self._run(f"home_{axis_name}", lambda: self.controller.home_axis(axis_name, progress=self._home_progress))
 
@@ -992,6 +1042,9 @@ class MotionService:
         if self.configuration_restart_required:
             return {"ok": False, "error": "Configuration changed; apply and restart the controller before homing"}
         axes = self.controller.config.home_order
+        route_error = MotionService._profile_route_error(self, list(axes), ProfileOperation.HOME)
+        if route_error:
+            return {"ok": False, "error": route_error}
         self._prepare_home(axes)
         return self._run("home_all", lambda: self.controller.home_all(progress=self._home_progress))
 
@@ -1034,6 +1087,9 @@ class MotionService:
         continuous: bool = False,
     ) -> dict[str, object]:
         axis = self.controller.axes()[axis_name]
+        route_error = MotionService._profile_route_error(self, (axis_name,), ProfileOperation.JOG)
+        if route_error:
+            return {"ok": False, "error": route_error}
         if not axis.is_homed and not allow_unhomed:
             return {"ok": False, "error": f"{axis_name.upper()} axis is not homed; use Motor Test Mode or bypass safety for raw testing"}
         if continuous and axis.is_homed:
@@ -1052,6 +1108,9 @@ class MotionService:
         if axis_name not in self.controller.axes() or endpoint not in {"min", "max"}:
             return {"ok": False, "error": "axis and endpoint must identify X/Y/Z and min/max"}
         axis = self.controller.axes()[axis_name]
+        route_error = MotionService._profile_route_error(self, (axis_name,), ProfileOperation.LIMIT_SEEK)
+        if route_error:
+            return {"ok": False, "error": route_error}
         return self._run(
             f"seek_{axis_name}_{endpoint}_limit",
             lambda: axis.seek_limit(endpoint, speed_mm_s=speed_mm_s),
@@ -1069,6 +1128,9 @@ class MotionService:
         # MQTT supplies a request ID/callback. Treat that as an explicit request
         # for the Controller-owned return-home sequence. Direct HMI Go To Slot
         # calls retain their standard positioning behaviour.
+        route_error = MotionService._profile_route_error(self, ("x", "y", "z"), ProfileOperation.MOVE)
+        if route_error:
+            return {"ok": False, "error": route_error}
         if request_id is not None or phase_callback is not None:
             return self.run_slot_sequence(
                 slot_code,
@@ -1093,6 +1155,9 @@ class MotionService:
         phase_callback=None,
     ) -> dict[str, object]:
         """Compatibility adapter; sequence orchestration lives in controller/."""
+        route_error = MotionService._profile_route_error(self, ("x", "y", "z"), ProfileOperation.MOVE)
+        if route_error:
+            return {"ok": False, "error": route_error}
         return self.sequence_service.run(
             slot_code,
             speed_mm_s=speed_mm_s,
@@ -1164,6 +1229,14 @@ class MotionService:
         speed_mm_s: float | None = None,
         time_s: float | None = None,
     ) -> dict[str, object]:
+        participating = tuple(
+            axis_name
+            for axis_name, target in (("x", x_mm), ("y", y_mm), ("z", z_mm))
+            if target is not None
+        )
+        route_error = MotionService._profile_route_error(self, participating, ProfileOperation.MOVE)
+        if route_error:
+            return {"ok": False, "error": route_error}
         return self._run(
             "absolute_move",
             lambda: self.controller.move_to(x_mm=x_mm, y_mm=y_mm, z_mm=z_mm, speed_mm_s=speed_mm_s, time_s=time_s).to_dict(),
@@ -1316,6 +1389,10 @@ class MotionService:
                 if scurve_enabled and not bool(nucleo_status.get("supports_buffered_scurve", False)):
                     raise APIInputError(
                         f"{axis_name.upper()}: S-curve cannot be enabled until NUCLEO handshake confirms buffered profile support"
+                    )
+                if scurve_enabled and not self.profile_runtime_ready:
+                    raise APIInputError(
+                        f"{axis_name.upper()}: S-curve cannot be enabled until buffered profile runtime is connected"
                     )
                 profile_type = str(axis_payload.get("scurve_profile_type", ""))
                 if profile_type != "seven_segment_s_curve":

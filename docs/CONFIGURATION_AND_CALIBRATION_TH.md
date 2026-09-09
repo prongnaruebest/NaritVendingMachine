@@ -155,3 +155,5 @@ PEND ไม่สามารถ bypass E-Stop/ALM หาก PEND ไม่ม�
 หน้า Machine Setup แสดงค่าชุดนี้เฉพาะการ์ด X/Y และบันทึกลง machine/hardware configuration แบบ atomic พร้อม backup ได้แล้ว ส่วน preview เป็นการคำนวณเพื่อทบทวนค่าบนหน้าเว็บเท่านั้นและไม่สั่ง motion สวิตช์ Enable จะถูกปิดไว้จนกว่า NUCLEO handshake จะรายงาน buffered S-curve capability จริง
 
 ค่า production ปัจจุบันยังเป็น `scurve_enabled = false` และยังไม่ถูกส่งไปควบคุมมอเตอร์ ห้ามเพิ่มค่าเหล่านี้ให้แกน Z เพราะ Z ต้องใช้ motion path เดิม
+
+Controller แสดง routing matrix ใน status payload แยกตามแกนและชนิดคำสั่ง หากเปิด S-curve แล้ว capability หรือ runtime หาย ระบบต้อง block คำสั่งแทนการ fallback เงียบ ๆ ปัจจุบัน Home และ Limit Seek ยังไม่ใช้ S-curve เพราะเป็นคำสั่งที่ต้องหยุดตาม sensor และ buffered contract รุ่นปัจจุบันรองรับเฉพาะระยะ/pulse ที่ทราบล่วงหน้า

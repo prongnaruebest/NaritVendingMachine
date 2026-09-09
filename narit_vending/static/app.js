@@ -2117,13 +2117,16 @@
       const pulsesPerRev = Number(config.motor_steps_per_rev || 0) * Number(config.driver_microsteps || 0);
       const theoreticalSteps = pulsesPerRev / Math.max(Number(config.lead_screw_pitch_mm || 1), .0001);
       const pulseFrequency = Number(config.steps_per_mm || 0) * Number(config.max_speed_mm_s || 0);
+      const scurveRoute = MS.payload?.motion_profile_routing?.[axis]?.move || {};
       const scurveSupported = Boolean(MS.payload?.nucleo?.supports_buffered_scurve);
+      const scurveRuntimeReady = Boolean(scurveRoute.runtime_ready);
+      const scurveAvailable = scurveSupported && scurveRuntimeReady;
       const scurveSection = axis === "z" ? "" : `<section class="scurve-config" aria-label="Axis ${axis.toUpperCase()} staged S-curve profile">
         <div class="scurve-config-head">
           <div><strong>S-CURVE START / STOP</strong><small>Seven-segment profile · X/Y only</small></div>
-          <label class="config-switch scurve-enable" title="${scurveSupported ? "Enable after validation" : "Requires NUCLEO buffered S-curve capability"}">
-            <input type="checkbox" data-config-axis="${axis}" data-config-field="scurve_enabled" ${config.scurve_enabled ? "checked" : ""} ${scurveSupported ? "" : "disabled"}>
-            <span>${scurveSupported ? "ENABLE" : "STAGED · NOT AVAILABLE"}</span>
+          <label class="config-switch scurve-enable" title="${scurveAvailable ? "Enable after validation" : esc(scurveRoute.reason || "Requires NUCLEO capability and production runtime")} ">
+            <input type="checkbox" data-config-axis="${axis}" data-config-field="scurve_enabled" ${config.scurve_enabled ? "checked" : ""} ${scurveAvailable ? "" : "disabled"}>
+            <span>${scurveAvailable ? "ENABLE" : "STAGED · NOT AVAILABLE"}</span>
           </label>
           <input type="hidden" value="seven_segment_s_curve" data-config-axis="${axis}" data-config-field="scurve_profile_type" data-config-type="string">
         </div>
@@ -2250,7 +2253,7 @@
         const transitionMs = jerk > 0 ? (acceleration / jerk) * 1000 : Number.NaN;
         const valid = jerk > 0 && Number.isInteger(periodUs) && periodUs >= 100 && periodUs <= 10000;
         setText(`scurve-preview-${axis}`, valid
-          ? `Preview · jerk transition ${fmt(transitionMs, 1)} ms · control ${(periodUs / 1000).toFixed(3)} ms · disabled until capability handshake`
+          ? `Preview · jerk transition ${fmt(transitionMs, 1)} ms · control ${(periodUs / 1000).toFixed(3)} ms · gated by capability and runtime`
           : "Invalid profile · jerk must be > 0 and control period must be 100–10,000 µs.");
       }
     });
