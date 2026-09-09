@@ -1562,6 +1562,7 @@
   if (!window.NaritSlotsPageController) throw new Error("HMI Slots page controller failed to load");
   if (!window.NaritSelectedSlotController) throw new Error("HMI Selected Slot controller failed to load");
   if (!window.NaritVisualizationPageController) throw new Error("HMI Visualization page controller failed to load");
+  if (!window.NaritDemoPageController) throw new Error("HMI Demo page controller failed to load");
   const pageControllers = window.NaritPageControllers.createRegistry({
     onError: (error, context) => console.error(
       `[HMI] ${context.view || "unknown"} page ${context.phase} failed`,
@@ -3945,6 +3946,46 @@
     return Math.max(10, Math.ceil((estimated * 1.25) + 10));
   }
 
+  function demoPayload() {
+    const selected = MS.visualTargetSlot || MS.selectedSlotCode || "1";
+    const mode = el("demo-mode")?.value || "sequential";
+    const maxDuration = calculateDemoMaxDuration();
+    const durationInput = el("demo-max-duration");
+    if (durationInput) durationInput.value = String(maxDuration);
+    return {
+      mode,
+      slots: mode === "selected" ? [selected] : Object.keys(MS.slots),
+      sample_count: Number(el("demo-max-cycles")?.value || 0),
+      max_duration_s: maxDuration,
+      dwell_s: Number(el("demo-dwell")?.value || 0),
+      speed_mm_s: effectiveMotionSpeed(),
+      stop_on_failure: true,
+    };
+  }
+
+  async function demoAction(action, payload = {}) {
+    try {
+      const data = await apiCall(`/api/demo/${action}`, "POST", payload, 10000);
+      const result = data.result || data;
+      if (action === "arm") MS.demoArmToken = result.arm_token || "";
+      if (["configure", "validate", "start", "stop"].includes(action) && action !== "arm" && action !== "start") {
+        MS.demoArmToken = "";
+      }
+      setText("demo-feedback", result.error || `Demo ${action}: ${result.state || "accepted"}`);
+      await refresh();
+      if (["start", "stop"].includes(action)) loadDemoHistory(true);
+    } catch (error) {
+      setText("demo-feedback", error.message);
+      toast(`DEMO ${action.toUpperCase()} FAILED — ${error.message}`, "error");
+    }
+  }
+
+  function invalidateDemoConfiguration() {
+    MS.demoArmToken = "";
+    setText("demo-feedback", "Demo parameters changed — Configure, Validate and Arm again.");
+    renderDemoSampling();
+  }
+
   function renderWorkspacePages() {
     const status = getStatus();
     const operation = getOperation();
@@ -4294,37 +4335,6 @@
         runSystemAction("/api/system/drives/restore-power", "X/Y drive power restored. Motion remains disabled; Home X/Y before use.");
       }
     });
-
-    const demoPayload = () => {
-      const selected = MS.visualTargetSlot || MS.selectedSlotCode || "1";
-      const mode = el("demo-mode")?.value || "sequential";
-      const maxDuration = calculateDemoMaxDuration();
-      const durationInput = el("demo-max-duration");
-      if (durationInput) durationInput.value = String(maxDuration);
-      return {mode, slots: mode === "selected" ? [selected] : Object.keys(MS.slots), sample_count: Number(el("demo-max-cycles")?.value || 0), max_duration_s: maxDuration, dwell_s: Number(el("demo-dwell")?.value || 0), speed_mm_s: effectiveMotionSpeed(), stop_on_failure: true};
-    };
-    const demoAction = async (action, payload = {}) => {
-      try {
-        const data = await apiCall(`/api/demo/${action}`, "POST", payload, 10000);
-        const result = data.result || data;
-        if (action === "arm") MS.demoArmToken = result.arm_token || "";
-        if (["configure", "validate", "start", "stop"].includes(action) && action !== "arm") {
-          if (action !== "start") MS.demoArmToken = "";
-        }
-        setText("demo-feedback", result.error || `Demo ${action}: ${result.state || "accepted"}`);
-        await refresh();
-        if (["start", "stop"].includes(action)) loadDemoHistory(true);
-      } catch (err) { setText("demo-feedback", err.message); toast(`DEMO ${action.toUpperCase()} FAILED — ${err.message}`, "error"); }
-    };
-    el("demo-configure")?.addEventListener("click", () => demoAction("configure", demoPayload()));
-    el("demo-validate")?.addEventListener("click", () => demoAction("validate"));
-    el("demo-arm")?.addEventListener("click", () => demoAction("arm"));
-    el("demo-start")?.addEventListener("click", () => { if (window.confirm("Start the bounded motion-only Demo Slot Sampling sequence? Confirm the machine area is clear.")) demoAction("start", {arm_token: MS.demoArmToken}); });
-    el("demo-pause")?.addEventListener("click", () => demoAction("pause"));
-    el("demo-resume")?.addEventListener("click", () => demoAction("resume"));
-    el("demo-stop")?.addEventListener("click", () => demoAction("stop"));
-    el("demo-history-refresh")?.addEventListener("click", () => loadDemoHistory(true));
-    ["demo-mode", "demo-max-cycles", "demo-dwell"].forEach((id) => el(id)?.addEventListener("input", () => { MS.demoArmToken = ""; setText("demo-feedback", "Demo parameters changed — Configure, Validate and Arm again."); renderDemoSampling(); }));
 
     /* --- Emergency Stop --- */
     el("stop-button").addEventListener("click", () => {
@@ -4865,13 +4875,32 @@
       onCancelEdit: () => setVisualEditMode(false),
       onError: (error) => console.error("[HMI] Visualization action failed", error),
     });
+    const demoControls = window.NaritDemoPageController.create({
+      onConfigure: () => demoAction("configure", demoPayload()),
+      onValidate: () => demoAction("validate"),
+      onArm: () => demoAction("arm"),
+      onStart: () => {
+        if (window.confirm("Start the bounded motion-only Demo Slot Sampling sequence? Confirm the machine area is clear.")) {
+          return demoAction("start", { arm_token: MS.demoArmToken });
+        }
+        return undefined;
+      },
+      onPause: () => demoAction("pause"),
+      onResume: () => demoAction("resume"),
+      onStop: () => demoAction("stop"),
+      onRefresh: () => loadDemoHistory(true),
+      onParametersChanged: invalidateDemoConfiguration,
+      onError: (error) => console.error("[HMI] Demo action failed", error),
+    });
     pageControllers.register("visualization", {
       mount: () => {
         const cleanupControls = visualizationControls.mount();
+        const cleanupDemo = demoControls.mount();
         loadDemoHistory();
         const historyTimer = window.setInterval(() => loadDemoHistory(), 5000);
         return () => {
           window.clearInterval(historyTimer);
+          cleanupDemo();
           cleanupControls();
         };
       },

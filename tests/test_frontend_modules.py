@@ -15,6 +15,7 @@ ALARMS_PAGE_CONTROLLER = (ROOT / "narit_vending" / "static" / "alarms-page-contr
 SLOTS_PAGE_CONTROLLER = (ROOT / "narit_vending" / "static" / "slots-page-controller.js").read_text(encoding="utf-8")
 SELECTED_SLOT_CONTROLLER = (ROOT / "narit_vending" / "static" / "selected-slot-controller.js").read_text(encoding="utf-8")
 VISUALIZATION_PAGE_CONTROLLER = (ROOT / "narit_vending" / "static" / "visualization-page-controller.js").read_text(encoding="utf-8")
+DEMO_PAGE_CONTROLLER = (ROOT / "narit_vending" / "static" / "demo-page-controller.js").read_text(encoding="utf-8")
 ROUTER = (ROOT / "narit_vending" / "static" / "router.js").read_text(encoding="utf-8")
 
 
@@ -36,6 +37,7 @@ def test_machine_store_loads_between_transport_and_application() -> None:
     slots_controller_script = "filename='slots-page-controller.js'"
     selected_slot_script = "filename='selected-slot-controller.js'"
     visualization_script = "filename='visualization-page-controller.js'"
+    demo_script = "filename='demo-page-controller.js'"
     app_script = "filename='app.js'"
     router_script = "filename='router.js'"
     assert (
@@ -50,6 +52,7 @@ def test_machine_store_loads_between_transport_and_application() -> None:
         < TEMPLATE.index(slots_controller_script)
         < TEMPLATE.index(selected_slot_script)
         < TEMPLATE.index(visualization_script)
+        < TEMPLATE.index(demo_script)
         < TEMPLATE.index(router_script)
         < TEMPLATE.index(app_script)
     )
@@ -145,6 +148,24 @@ def test_visualization_controls_are_owned_by_page_scoped_controller() -> None:
 def test_visualization_controller_has_no_direct_transport_or_machine_authority() -> None:
     for forbidden in ("fetch(", "/api/", "GPIO", "CommandEnvelope", "POST"):
         assert forbidden not in VISUALIZATION_PAGE_CONTROLLER
+
+
+def test_demo_controls_share_visualization_page_lifecycle() -> None:
+    assert "NaritDemoPageController.create" in APP
+    assert "const cleanupDemo = demoControls.mount()" in APP
+    assert "cleanupDemo()" in APP
+    assert 'el("demo-configure")?.addEventListener' not in APP
+    for control_id in ("demo-configure", "demo-start", "demo-stop", "demo-history-refresh", "demo-max-cycles"):
+        assert f'document.getElementById("{control_id}")' in DEMO_PAGE_CONTROLLER
+    assert "addEventListener(eventName, handler)" in DEMO_PAGE_CONTROLLER
+    assert "removeEventListener(eventName, handler)" in DEMO_PAGE_CONTROLLER
+    for callback in ("onConfigure:", "onValidate:", "onArm:", "onStart:", "onStop:", "onParametersChanged:"):
+        assert callback in APP
+
+
+def test_demo_controller_has_no_direct_transport_or_machine_authority() -> None:
+    for forbidden in ("fetch(", "/api/", "GPIO", "CommandEnvelope", "POST"):
+        assert forbidden not in DEMO_PAGE_CONTROLLER
 
 
 def test_io_interactions_are_owned_by_page_scoped_controller() -> None:
