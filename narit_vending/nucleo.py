@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from typing import Any, Callable
 
 from narit_vending.domain.errors import MotionError, NucleoError
+from narit_vending.domain.nucleo_profile_protocol import NucleoCapabilities
 
 _log = logging.getLogger(__name__)
 
@@ -74,6 +75,21 @@ class NucleoLink:
         except (TypeError, ValueError):
             advertised = NUCLEO_LEGACY_MAX_STEPS
         return max(1, advertised)
+
+    @property
+    def capabilities(self) -> NucleoCapabilities:
+        """Capabilities explicitly advertised by the completed handshake."""
+
+        return NucleoCapabilities.from_handshake(
+            self._last_payload,
+            fallback_protocol=self.expected_protocol,
+        )
+
+    @property
+    def supports_buffered_scurve(self) -> bool:
+        """Never infer profile support from protocol v3 or version alone."""
+
+        return self.capabilities.supports_buffered_scurve
 
     def start(self) -> None:
         if self._thread and self._thread.is_alive():
@@ -623,6 +639,8 @@ class NucleoLink:
             "watchdog": payload.get("watchdog", False),
             "moving": moving,
             "max_move_steps": self.max_move_steps,
+            "capabilities": sorted(self.capabilities.advertised),
+            "supports_buffered_scurve": self.supports_buffered_scurve,
             "uptime_ms": payload.get("uptime_ms"),
             "last_success_at": last_success_at,
             "last_error": last_error,
