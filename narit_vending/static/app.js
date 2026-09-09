@@ -1580,6 +1580,7 @@
   if (!window.NaritPageControllers) throw new Error("HMI page controllers failed to load");
   if (!window.NaritIOPageController) throw new Error("HMI I/O page controller failed to load");
   if (!window.NaritEventsPageController) throw new Error("HMI Events page controller failed to load");
+  if (!window.NaritFlowPageController) throw new Error("HMI Flow page controller failed to load");
   const pageControllers = window.NaritPageControllers.createRegistry({
     onError: (error, context) => console.error(
       `[HMI] ${context.view || "unknown"} page ${context.phase} failed`,
@@ -4325,13 +4326,6 @@
     el("demo-history-refresh")?.addEventListener("click", () => loadDemoHistory(true));
     ["demo-mode", "demo-max-cycles", "demo-dwell"].forEach((id) => el(id)?.addEventListener("input", () => { MS.demoArmToken = ""; setText("demo-feedback", "Demo parameters changed — Configure, Validate and Arm again."); renderDemoSampling(); }));
 
-    $$(".flow-node").forEach((node) => node.addEventListener("click", () => {
-      const detail = el("flow-step-detail");
-      if (!detail) return;
-      const state = [...node.classList].find((name) => ["complete", "active", "blocked", "pending"].includes(name)) || "pending";
-      detail.innerHTML = `<strong>${esc(node.querySelector("strong")?.textContent || "Step")}</strong><p>State: ${esc(state.toUpperCase())}</p><p>Preconditions and live state are evaluated by Controller safety interlocks. Current command: ${esc(MS.payload?.active_command || "NONE")}. No machine command is sent from this panel.</p>`;
-    }));
-
     /* --- Emergency Stop --- */
     el("stop-button").addEventListener("click", () => {
       command("Emergency stop", "/api/stop", undefined, { isStop: true, noCheck: true });
@@ -4875,6 +4869,7 @@
       render: renderEventLog,
       exportCsv: exportFilteredEventsCsv,
     }));
+    pageControllers.register("flow", window.NaritFlowPageController.create({ state: MS }));
     pageControllers.register("visualization", {
       mount: () => {
         loadDemoHistory();

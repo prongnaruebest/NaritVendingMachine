@@ -9,6 +9,7 @@ MACHINE_STORE = (ROOT / "narit_vending" / "static" / "machine-store.js").read_te
 PAGE_CONTROLLERS = (ROOT / "narit_vending" / "static" / "page-controllers.js").read_text(encoding="utf-8")
 IO_PAGE_CONTROLLER = (ROOT / "narit_vending" / "static" / "io-page-controller.js").read_text(encoding="utf-8")
 EVENTS_PAGE_CONTROLLER = (ROOT / "narit_vending" / "static" / "events-page-controller.js").read_text(encoding="utf-8")
+FLOW_PAGE_CONTROLLER = (ROOT / "narit_vending" / "static" / "flow-page-controller.js").read_text(encoding="utf-8")
 ROUTER = (ROOT / "narit_vending" / "static" / "router.js").read_text(encoding="utf-8")
 
 
@@ -24,6 +25,7 @@ def test_machine_store_loads_between_transport_and_application() -> None:
     controllers_script = "filename='page-controllers.js'"
     io_controller_script = "filename='io-page-controller.js'"
     events_controller_script = "filename='events-page-controller.js'"
+    flow_controller_script = "filename='flow-page-controller.js'"
     app_script = "filename='app.js'"
     router_script = "filename='router.js'"
     assert (
@@ -32,6 +34,7 @@ def test_machine_store_loads_between_transport_and_application() -> None:
         < TEMPLATE.index(controllers_script)
         < TEMPLATE.index(io_controller_script)
         < TEMPLATE.index(events_controller_script)
+        < TEMPLATE.index(flow_controller_script)
         < TEMPLATE.index(router_script)
         < TEMPLATE.index(app_script)
     )
@@ -135,3 +138,13 @@ def test_event_log_interactions_are_owned_by_page_scoped_controller() -> None:
 def test_event_log_controller_is_read_only_and_has_no_transport_authority() -> None:
     for forbidden in ("fetch(", "/api/", "GPIO", "CommandEnvelope", "POST"):
         assert forbidden not in EVENTS_PAGE_CONTROLLER
+
+
+def test_system_flow_interaction_is_page_scoped_and_read_only() -> None:
+    assert 'pageControllers.register("flow"' in APP
+    assert "NaritFlowPageController.create" in APP
+    assert 'removeEventListener("click", onNodeClick)' in FLOW_PAGE_CONTROLLER
+    assert "No machine command is sent from this panel" in FLOW_PAGE_CONTROLLER
+    assert "replaceChildren" in FLOW_PAGE_CONTROLLER
+    for forbidden in ("fetch(", "/api/", "GPIO", "CommandEnvelope", "POST", "innerHTML"):
+        assert forbidden not in FLOW_PAGE_CONTROLLER

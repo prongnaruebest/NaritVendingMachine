@@ -163,7 +163,8 @@ class HealthApiTests(unittest.TestCase):
         self.assertIn('blocked.push(["ACTIVE ALARM"', app_js)
         self.assertIn('blocked.push(["CONTROLLER OFFLINE"', app_js)
         self.assertIn('setFlow("flow-complete"', app_js)
-        self.assertIn("No machine command is sent from this panel", app_js)
+        flow_controller = (Path(__file__).resolve().parents[1] / "narit_vending" / "static" / "flow-page-controller.js").read_text(encoding="utf-8")
+        self.assertIn("No machine command is sent from this panel", flow_controller)
 
 
 class WebAppNewProcessTests(unittest.TestCase):
