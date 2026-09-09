@@ -1071,6 +1071,48 @@
     setText("selected-slot-current", "Current position loaded — click SAVE VALUES to store it.");
   }
 
+  function changeSelectedSlot(code) {
+    MS.selectedSlotCode = code;
+    MS.visualTargetSlot = code;
+    MS.slotEditorDirty = false;
+    loadSelectedSlotEditor(true);
+    invalidateMotionWorkflow("Slot changed — load and validate the target.");
+    updateButtonStates();
+  }
+
+  function loadSelectedSlotTarget() {
+    const code = selectedSlotCode();
+    const slot = MS.slots[code] || {};
+    AXES.forEach((axis) => {
+      el(`move-${axis}`).value = Number(slot[`${axis}_mm`] || 0).toFixed(3);
+    });
+    invalidateMotionWorkflow(`Slot ${code} loaded — validate before movement.`);
+    toast(`Slot ${code} coordinates loaded into Target Positioning.`, "ok");
+  }
+
+  async function validateSelectedSlotTarget() {
+    loadSelectedSlotTarget();
+    const plan = await validateMove(true);
+    if (plan) await previewMove(true);
+  }
+
+  function setSlotSequenceMode(enabled) {
+    MS.slotSequenceMode = Boolean(enabled);
+    updateSlotSequenceMode();
+    toast(MS.slotSequenceMode
+      ? "Sequence Mode ON — slot commands will return all axes home."
+      : "Sequence Mode OFF — standard Go To Slot restored.", "ok");
+  }
+
+  function gotoSelectedSlot() {
+    const code = selectedSlotCode();
+    if (!code) return;
+    command(slotMotionLabel(code), slotMotionEndpoint(code), targetSpeedPayload(), {
+      requireHome: true,
+      timeoutMs: 600000,
+    });
+  }
+
   /* ── RENDER: ALARM SUMMARY ──────────────────────────────────── */
   function renderAlarmSummary() {
     const node = el("alarm-summary");
@@ -1518,6 +1560,7 @@
   if (!window.NaritMqttPageController) throw new Error("HMI MQTT page controller failed to load");
   if (!window.NaritAlarmsPageController) throw new Error("HMI Alarms page controller failed to load");
   if (!window.NaritSlotsPageController) throw new Error("HMI Slots page controller failed to load");
+  if (!window.NaritSelectedSlotController) throw new Error("HMI Selected Slot controller failed to load");
   const pageControllers = window.NaritPageControllers.createRegistry({
     onError: (error, context) => console.error(
       `[HMI] ${context.view || "unknown"} page ${context.phase} failed`,
@@ -4546,44 +4589,6 @@
         updateFeedOverride();
       }));
 
-    /* --- Selected slot direct controls --- */
-    el("selected-slot-code").addEventListener("change", (event) => {
-      MS.selectedSlotCode = event.target.value;
-      MS.visualTargetSlot = event.target.value;
-      MS.slotEditorDirty = false;
-      loadSelectedSlotEditor(true);
-      invalidateMotionWorkflow("Slot changed — load and validate the target.");
-      updateButtonStates();
-    });
-    el("selected-slot-load-target").addEventListener("click", () => {
-      const code = selectedSlotCode();
-      const slot = MS.slots[code] || {};
-      AXES.forEach((axis) => { el(`move-${axis}`).value = Number(slot[`${axis}_mm`] || 0).toFixed(3); });
-      invalidateMotionWorkflow(`Slot ${code} loaded — validate before movement.`);
-      toast(`Slot ${code} coordinates loaded into Target Positioning.`, "ok");
-    });
-    el("selected-slot-validate").addEventListener("click", async () => {
-      el("selected-slot-load-target").click();
-      const plan = await validateMove(true);
-      if (plan) await previewMove(true);
-    });
-    el("slot-sequence-toggle").addEventListener("change", (event) => {
-      MS.slotSequenceMode = Boolean(event.target.checked);
-      updateSlotSequenceMode();
-      toast(MS.slotSequenceMode
-        ? "Sequence Mode ON — slot commands will return all axes home."
-        : "Sequence Mode OFF — standard Go To Slot restored.", "ok");
-    });
-    el("selected-slot-goto").addEventListener("click", () => {
-      const code = selectedSlotCode();
-      if (code) {
-        command(slotMotionLabel(code), slotMotionEndpoint(code), targetSpeedPayload(), {
-          requireHome: true,
-          timeoutMs: 600000,
-        });
-      }
-    });
-
     /* --- Visualization slot click selects only; GOTO requires an explicit button press. --- */
     el("visual-slot-grid").addEventListener("click", (event) => {
       const slotButton = event.target.closest("[data-visual-slot]");
@@ -4860,6 +4865,14 @@
         if (result) delete MS.slotDrafts[code];
       },
       onError: (error) => console.error("[HMI] Slot table action failed", error),
+    }));
+    pageControllers.register("motion", window.NaritSelectedSlotController.create({
+      onSelectedChange: changeSelectedSlot,
+      onLoadTarget: loadSelectedSlotTarget,
+      onValidate: validateSelectedSlotTarget,
+      onSequenceToggle: setSlotSequenceMode,
+      onSelectedGoto: gotoSelectedSlot,
+      onError: (error) => console.error("[HMI] Selected Slot action failed", error),
     }));
     pageControllers.register("visualization", {
       mount: () => {

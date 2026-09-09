@@ -77,7 +77,7 @@ STOP และ E-Stop มี priority สูงสุด คำสั่งป�
 
 ## Shared UI state
 
-`static/machine-store.js` เป็น shared browser state สำหรับ selected slot, speed X/Y/Z, position, homed state, connection, alarm, active command และ validation/arm state ส่วน `static/api-client.js` รับผิดชอบ HTTP/timeout/response parsing, `static/router.js` รับผิดชอบ hash/deep-link, `static/page-controllers.js` จำกัดอายุ timer/listener เฉพาะหน้าที่เปิด และ controller รายหน้าดูแล interaction เฉพาะ workspace นั้น ตาราง Slots ใช้ event delegation หนึ่งชุดแม้แถวถูก render ใหม่ `static/app.js` ยังคงรับผิดชอบ interaction/rendering ส่วนที่ยังไม่ย้าย ค่าใน localStorage เป็น preference เท่านั้น ไม่ใช่ machine authority
+`static/machine-store.js` เป็น shared browser state สำหรับ selected slot, speed X/Y/Z, position, homed state, connection, alarm, active command และ validation/arm state ส่วน `static/api-client.js` รับผิดชอบ HTTP/timeout/response parsing, `static/router.js` รับผิดชอบ hash/deep-link, `static/page-controllers.js` จำกัดอายุ timer/listener เฉพาะหน้าที่เปิด และ controller รายหน้าดูแล interaction เฉพาะ workspace นั้น ตาราง Slots ใช้ event delegation หนึ่งชุดแม้แถวถูก render ใหม่ ส่วน Selected Slot mount ตามตำแหน่งจริงในหน้า Motion โดยทั้งคู่ใช้ state เดียวกัน `static/app.js` ยังคงรับผิดชอบ interaction/rendering ส่วนที่ยังไม่ย้าย ค่าใน localStorage เป็น preference เท่านั้น ไม่ใช่ machine authority
 
 เมื่อ speed หรือ target เปลี่ยน:
 

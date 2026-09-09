@@ -13,6 +13,7 @@ FLOW_PAGE_CONTROLLER = (ROOT / "narit_vending" / "static" / "flow-page-controlle
 MQTT_PAGE_CONTROLLER = (ROOT / "narit_vending" / "static" / "mqtt-page-controller.js").read_text(encoding="utf-8")
 ALARMS_PAGE_CONTROLLER = (ROOT / "narit_vending" / "static" / "alarms-page-controller.js").read_text(encoding="utf-8")
 SLOTS_PAGE_CONTROLLER = (ROOT / "narit_vending" / "static" / "slots-page-controller.js").read_text(encoding="utf-8")
+SELECTED_SLOT_CONTROLLER = (ROOT / "narit_vending" / "static" / "selected-slot-controller.js").read_text(encoding="utf-8")
 ROUTER = (ROOT / "narit_vending" / "static" / "router.js").read_text(encoding="utf-8")
 
 
@@ -32,6 +33,7 @@ def test_machine_store_loads_between_transport_and_application() -> None:
     mqtt_controller_script = "filename='mqtt-page-controller.js'"
     alarms_controller_script = "filename='alarms-page-controller.js'"
     slots_controller_script = "filename='slots-page-controller.js'"
+    selected_slot_script = "filename='selected-slot-controller.js'"
     app_script = "filename='app.js'"
     router_script = "filename='router.js'"
     assert (
@@ -44,6 +46,7 @@ def test_machine_store_loads_between_transport_and_application() -> None:
         < TEMPLATE.index(mqtt_controller_script)
         < TEMPLATE.index(alarms_controller_script)
         < TEMPLATE.index(slots_controller_script)
+        < TEMPLATE.index(selected_slot_script)
         < TEMPLATE.index(router_script)
         < TEMPLATE.index(app_script)
     )
@@ -190,6 +193,33 @@ def test_slot_table_uses_one_page_scoped_delegated_listener() -> None:
     assert "$$('[data-slot-coordinate]')" not in APP
     for action in ("onSave", "onSelect", "onGoto", "onDispense", "onTeach"):
         assert f"options.{action}" in SLOTS_PAGE_CONTROLLER
+
+
+def test_selected_slot_controls_use_the_motion_page_lifecycle() -> None:
+    assert 'pageControllers.register("motion"' in APP
+    assert "NaritSelectedSlotController.create" in APP
+    for listener in (
+        'selected?.addEventListener("change", onSelectedChange)',
+        'loadTarget?.addEventListener("click", onLoadTarget)',
+        'validate?.addEventListener("click", onValidate)',
+        'sequenceToggle?.addEventListener("change", onSequenceToggle)',
+        'selectedGoto?.addEventListener("click", onSelectedGoto)',
+    ):
+        assert listener in SELECTED_SLOT_CONTROLLER
+    for callback in (
+        "onSelectedChange: changeSelectedSlot",
+        "onLoadTarget: loadSelectedSlotTarget",
+        "onValidate: validateSelectedSlotTarget",
+        "onSequenceToggle: setSlotSequenceMode",
+        "onSelectedGoto: gotoSelectedSlot",
+    ):
+        assert callback in APP
+    assert 'el("selected-slot-load-target").click()' not in APP
+
+
+def test_selected_slot_controller_has_no_direct_transport_or_machine_authority() -> None:
+    for forbidden in ("fetch(", "/api/", "GPIO", "CommandEnvelope", "POST"):
+        assert forbidden not in SELECTED_SLOT_CONTROLLER
 
 
 def test_slots_controller_has_no_direct_transport_or_machine_authority() -> None:
