@@ -1,82 +1,5 @@
-/* =============================================================
-   NARIT VENDING MACHINE — Industrial HMI Design System
-   Target: 1920×1080 desktop HMI
-   Philosophy: Machine state first, operator action second,
-               diagnostics third.
-   ============================================================= */
-
-/* ── TOKENS ──────────────────────────────────────────────────── */
-:root {
-  /* Backgrounds */
-  --bg:          #0a0f14;
-  --bg-deep:     #060b0f;
-  --surf-0:      #0f1820;  /* main stage */
-  --surf-1:      #152030;  /* panels */
-  --surf-2:      #1c2d40;  /* cards */
-  --surf-3:      #243550;  /* inputs/inset */
-  --surf-4:      #2c3e56;  /* hover/selected */
-
-  /* Borders */
-  --border:        rgba(80,130,190,0.18);
-  --border-med:    rgba(80,130,190,0.30);
-  --border-strong: rgba(80,130,190,0.55);
-
-  /* Text */
-  --text:   #d8eaf8;
-  --text-0: #f3f8fc;
-  --text-1: #bfd1e1;
-  --text-2: #8aabc8;
-  --text-3: #556f88;
-  --text-4: #3a5068;
-
-  /* State — semantic only, never decorative */
-  --green:      #2db56a;
-  --green-dim:  rgba(45,181,106,0.15);
-  --green-brd:  rgba(45,181,106,0.40);
-  --amber:      #c8871a;
-  --amber-dim:  rgba(200,135,26,0.15);
-  --amber-brd:  rgba(200,135,26,0.40);
-  --red:        #c23030;
-  --red-bright: #e04444;
-  --red-dim:    rgba(194,48,48,0.15);
-  --red-brd:    rgba(194,48,48,0.40);
-  --blue:       #2878d0;
-  --blue-lt:    #5aaaf8;
-  --blue-dim:   rgba(40,120,208,0.15);
-  --blue-brd:   rgba(40,120,208,0.40);
-  --accent-cyan: #5aaaf8;
-  --gray:       #4a6278;
-  --gray-dim:   rgba(74,98,120,0.18);
-  --gray-brd:   rgba(74,98,120,0.35);
-
-  /* Typography */
-  --font-ui:   Inter, "Segoe UI", system-ui, Arial, sans-serif;
-  --font-mono: "IBM Plex Mono", "Roboto Mono", Consolas, monospace;
-
-  /* Geometry */
-  --r-sm:  6px;
-  --r-md:  10px;
-  --r-lg:  14px;
-  --r-xl:  18px;
-  --shadow: 0 8px 28px rgba(0,0,0,0.40);
-  --shadow-deep: 0 16px 48px rgba(0,0,0,0.55);
-
-  font-family: var(--font-ui);
-  color: var(--text);
-  font-size: 13px;
-  line-height: 1.45;
-}
-
-/* ── RESET ───────────────────────────────────────────────────── */
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html, body { height: 100%; background: var(--bg-deep); }
-body { overflow: hidden; min-height: 100vh; }
-button, input, select, textarea { font: inherit; color: inherit; }
-button { cursor: pointer; }
-a { color: var(--blue-lt); }
-pre { font-family: var(--font-mono); }
-ul, ol { list-style: none; }
-h1, h2, h3, h4 { font-weight: 700; line-height: 1.2; }
+/* NARIT VENDING MACHINE — component and page styles.
+   Design tokens and global reset are defined in tokens.css. */
 
 /* ── SHELL ───────────────────────────────────────────────────── */
 .hmi-shell {
@@ -1372,9 +1295,6 @@ select.slot-filter {
 
 
 /* Three-column HMI layout compatibility */
-:root {
-  font-size: 14px;
-}
 
 .hmi-shell {
   height: 100vh;
@@ -1905,9 +1825,6 @@ select.slot-filter {
 }
 
 /* Motion workspace layout revision v9 */
-:root {
-  font-size: 15px;
-}
 
 .hmi-shell {
   grid-template-rows: 86px auto minmax(0, 1fr) 38px;
@@ -7473,7 +7390,6 @@ select:focus-visible {
 }
 
 /* UNIFIED RESPONSIVE LAYOUT V2 — final authority for every workspace */
-:root { --layout-gap: 12px; --layout-pad: 14px; --content-max: 1680px; }
 html, body { width: 100%; max-width: 100%; }
 body { font-size: 14px; }
 .hmi-shell,
@@ -7587,7 +7503,6 @@ body { font-size: 14px; }
 .axis-speed-row { min-height: 76px; }
 
 @media (max-width: 1500px) {
-  :root { --layout-pad: 12px; }
   .hmi-shell,
   .hmi-shell.view-wide {
     grid-template-columns: 200px minmax(0, 1fr) !important;
@@ -7624,7 +7539,6 @@ body { font-size: 14px; }
 }
 
 @media (max-width: 900px) {
-  :root { --layout-pad: 8px; --layout-gap: 8px; }
   body { overflow: auto !important; }
   .hmi-shell,
   .hmi-shell.view-wide {

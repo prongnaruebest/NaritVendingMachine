@@ -18,12 +18,26 @@ VISUALIZATION_PAGE_CONTROLLER = (ROOT / "narit_vending" / "static" / "visualizat
 DEMO_PAGE_CONTROLLER = (ROOT / "narit_vending" / "static" / "demo-page-controller.js").read_text(encoding="utf-8")
 IO_REGISTRY_VIEW = (ROOT / "narit_vending" / "static" / "io-registry-view.js").read_text(encoding="utf-8")
 ROUTER = (ROOT / "narit_vending" / "static" / "router.js").read_text(encoding="utf-8")
+TOKENS = (ROOT / "narit_vending" / "static" / "tokens.css").read_text(encoding="utf-8")
+STYLE = (ROOT / "narit_vending" / "static" / "style.css").read_text(encoding="utf-8")
 
 
 def test_api_client_loads_before_application() -> None:
     api_script = "filename='api-client.js'"
     app_script = "filename='app.js'"
     assert TEMPLATE.index(api_script) < TEMPLATE.index(app_script)
+
+
+def test_css_token_layer_loads_before_component_and_page_styles() -> None:
+    token_stylesheet = "filename='tokens.css'"
+    component_stylesheet = "filename='style.css'"
+    assert TEMPLATE.index(token_stylesheet) < TEMPLATE.index(component_stylesheet)
+    assert ":root" in TOKENS
+    assert "--bg:" in TOKENS
+    assert "--text:" in TOKENS
+    assert "--green:" in TOKENS
+    assert "box-sizing: border-box" in TOKENS
+    assert ":root" not in STYLE
 
 
 def test_machine_store_loads_between_transport_and_application() -> None:
