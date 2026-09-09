@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import shutil
 import subprocess
 import sys
@@ -20,6 +21,14 @@ class Gate:
 
 def javascript_files(root: Path = ROOT) -> tuple[Path, ...]:
     return tuple(sorted((root / "narit_vending" / "static").rglob("*.js")))
+
+
+def typed_python_files(root: Path = ROOT) -> tuple[str, ...]:
+    files: list[Path] = []
+    for package in ("domain", "shared"):
+        package_root = root / "narit_vending" / package
+        files.extend(path for path in package_root.glob("*.py") if path.name != "__init__.py")
+    return tuple(path.relative_to(root).as_posix() for path in sorted(files))
 
 
 def build_gates(*, python: str, node: str | None, full: bool) -> tuple[Gate, ...]:
@@ -43,6 +52,25 @@ def build_gates(*, python: str, node: str | None, full: bool) -> tuple[Gate, ...
             Gate("JavaScript syntax: " + path.name, (node, "--check", str(path)))
             for path in javascript_files()
         )
+    gates.extend(
+        (
+            Gate(
+                "Python lint",
+                (
+                    python,
+                    "-m",
+                    "ruff",
+                    "check",
+                    "narit_vending/domain",
+                    "narit_vending/shared",
+                    "scripts/quality_gate.py",
+                    "tests/test_architecture_boundaries.py",
+                    "tests/test_quality_gate.py",
+                ),
+            ),
+            Gate("Static typing", (python, "-m", "mypy", *typed_python_files())),
+        )
+    )
     gates.extend(
         (
             Gate("Configuration", (python, "scripts/validate_config.py")),
@@ -81,6 +109,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     node = shutil.which("node")
     if node is None:
         print("FAILED: JavaScript syntax gate requires Node.js.", file=sys.stderr)
+        return 2
+    missing_modules = [name for name in ("ruff", "mypy", "pytest") if importlib.util.find_spec(name) is None]
+    if missing_modules:
+        print(
+            "FAILED: missing development tools: "
+            + ", ".join(missing_modules)
+            + ". Install requirements-dev.txt.",
+            file=sys.stderr,
+        )
         return 2
 
     gates = build_gates(python=sys.executable, node=node, full=not args.quick)

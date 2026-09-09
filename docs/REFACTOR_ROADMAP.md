@@ -82,7 +82,7 @@ Exit criterion: pages share one state source, polling does not overlap, and no m
 
 ## Phase 7 — Release engineering and documentation
 
-- [ ] Add formatting, lint, typing and dependency-direction gates. (repeatable whitespace, Python/JavaScript syntax, configuration, dependency and full-test baseline gate added; formatter and static-type checker integration remains)
+- [ ] Add formatting, lint, typing and dependency-direction gates. (`ruff` lint and `mypy` checks now protect the dependency-neutral domain/shared core; expand typing coverage to Controller, persistence and web modules incrementally)
 - [ ] Build staged atomic release and rollback verification.
 - [ ] Complete operator, configuration, PEND, testing and troubleshooting manuals.
 - [ ] Run read-only production smoke tests.
@@ -93,6 +93,7 @@ Exit criterion: failed health checks roll back safely and no deploy performs mot
 Run the current non-hardware quality baseline from the repository root:
 
 ```powershell
+python -m pip install -r requirements-dev.txt
 python scripts/quality_gate.py
 ```
 

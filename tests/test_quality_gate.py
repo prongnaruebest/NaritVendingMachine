@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from scripts.quality_gate import build_gates, javascript_files
+from scripts.quality_gate import build_gates, javascript_files, typed_python_files
 
 
 def test_javascript_inventory_is_sorted_and_scoped_to_static_tree():
@@ -23,6 +23,8 @@ def test_quick_gate_includes_required_non_hardware_checks():
     assert "Python syntax" in names
     assert "Configuration" in names
     assert "Dependency boundaries" in names
+    assert "Python lint" in names
+    assert "Static typing" in names
     assert "Automated tests" not in names
     assert any("node --check" in command for command in commands)
     forbidden_entry_points = ("main.py", "webapp.py", "deploy_to_", "systemctl", "/api/motion")
@@ -47,3 +49,11 @@ def test_gate_commands_run_from_repository_relative_inputs():
         for argument in gate.command:
             if argument.endswith(".py") and argument != "tests/test_architecture_boundaries.py":
                 assert not Path(argument).is_absolute()
+
+
+def test_static_typing_scope_is_explicit_and_dependency_neutral():
+    files = typed_python_files()
+
+    assert files
+    assert all(path.startswith(("narit_vending/domain/", "narit_vending/shared/")) for path in files)
+    assert all(not path.endswith("/__init__.py") for path in files)
