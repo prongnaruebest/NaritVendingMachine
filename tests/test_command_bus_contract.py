@@ -4,7 +4,7 @@ from pathlib import Path
 
 from narit_vending.controller.command_bus import CommandBus
 from narit_vending.controller.state_machine import MachineState, StateMachine
-from narit_vending.shared.commands import CommandEnvelope, CommandResult
+from narit_vending.shared.commands import CommandEnvelope, CommandMetadata, CommandResult
 from narit_vending.shared.snapshot import AxisSnapshot, MachineSnapshot
 from narit_vending.persistence.idempotency_repository import SQLiteIdempotencyRepository
 
@@ -145,3 +145,22 @@ def test_completed_result_can_be_recovered_after_command_bus_restart() -> None:
 
         assert recovered.ok()
         assert calls == 1
+
+
+def test_command_result_creates_structured_correlated_audit_event() -> None:
+    bus = CommandBus(StateMachine(MachineState.READY), snapshot)
+    bus.register("JOG", lambda env: CommandResult(True, env.command_id, "COMPLETED"))
+    envelope = CommandEnvelope(
+        command_type="JOG",
+        source="http",
+        parameters={"axis": "x", "distance_mm": 1},
+        metadata=CommandMetadata(correlation_id="workflow-42"),
+    )
+
+    bus.submit(envelope)
+
+    audit = bus.recent_audit_events()[0]
+    assert audit.event_code == "COMMAND_COMPLETED"
+    assert audit.correlation_id == "workflow-42"
+    assert audit.command_id == envelope.command_id
+    assert audit.details["command_type"] == "JOG"

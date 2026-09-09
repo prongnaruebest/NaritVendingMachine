@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import logging
 import threading
+import uuid
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Callable
 
@@ -27,6 +28,8 @@ from ..persistence.idempotency_repository import (
     IdempotencyRepository,
     InMemoryIdempotencyRepository,
 )
+from ..domain.audit import AuditEvent
+from ..persistence.audit_repository import AuditRepository, InMemoryAuditRepository
 
 if TYPE_CHECKING:
     from narit_vending.shared.commands import CommandEnvelope, CommandResult
@@ -53,6 +56,7 @@ class CommandBus:
         *,
         idempotency_capacity: int = 256,
         idempotency_repository: IdempotencyRepository | None = None,
+        audit_repository: AuditRepository | None = None,
     ) -> None:
         self._state_machine = state_machine
         self._snapshot_fn = snapshot_fn
@@ -61,6 +65,7 @@ class CommandBus:
         self._handlers: dict[str, Callable[["CommandEnvelope"], "CommandResult"]] = {}
         self._lock = threading.RLock()
         self._idempotency = idempotency_repository or InMemoryIdempotencyRepository(idempotency_capacity)
+        self._audit = audit_repository or InMemoryAuditRepository()
         self._idempotency_inflight: dict[str, str] = {}
 
     def register(self, command_type: str, handler: Callable[["CommandEnvelope"], "CommandResult"]) -> None:
@@ -79,26 +84,34 @@ class CommandBus:
             cached = self._idempotency.get(key)
             if cached is not None:
                 if cached.fingerprint != fingerprint:
-                    return CommandResult.rejected(
+                    result = CommandResult.rejected(
                         envelope.command_id,
                         "Idempotency key was already used for a different command",
                         code="IDEMPOTENCY_CONFLICT",
                     )
-                return CommandResult.from_dict(cached.result)
+                    self._record_audit(envelope, result)
+                    return result
+                result = CommandResult.from_dict(cached.result)
+                self._record_audit(envelope, result, event_code="COMMAND_REPLAYED")
+                return result
             inflight_fingerprint = self._idempotency_inflight.get(key)
             if inflight_fingerprint is not None:
                 if inflight_fingerprint != fingerprint:
-                    return CommandResult.rejected(
+                    result = CommandResult.rejected(
                         envelope.command_id,
                         "Idempotency key is in use by a different command",
                         code="IDEMPOTENCY_CONFLICT",
                     )
-                return CommandResult.rejected(
+                    self._record_audit(envelope, result)
+                    return result
+                result = CommandResult.rejected(
                     envelope.command_id,
                     "Command with this idempotency key is already in progress",
                     code="COMMAND_IN_PROGRESS",
                     retryable=True,
                 )
+                self._record_audit(envelope, result)
+                return result
             self._idempotency_inflight[key] = fingerprint
 
         try:
@@ -106,10 +119,41 @@ class CommandBus:
             if result.state != "BUSY":
                 with self._lock:
                     self._idempotency.put(IdempotencyRecord(key, fingerprint, result.to_dict()))
+            self._record_audit(envelope, result)
             return result
         finally:
             with self._lock:
                 self._idempotency_inflight.pop(key, None)
+
+    def _record_audit(
+        self,
+        envelope: "CommandEnvelope",
+        result: "CommandResult",
+        *,
+        event_code: str | None = None,
+    ) -> None:
+        code = event_code or str((result.error or {}).get("code") or f"COMMAND_{result.state}")
+        severity = "INFO" if result.state in {"ACCEPTED", "COMPLETED"} else "WARNING" if result.state in {"REJECTED", "BUSY"} else "ERROR"
+        correlation_id = envelope.metadata.correlation_id or envelope.command_id
+        try:
+            self._audit.append(AuditEvent(
+                event_id=uuid.uuid4().hex,
+                occurred_at=result.completed_at or _now(),
+                event_code=code,
+                correlation_id=correlation_id,
+                command_id=envelope.command_id,
+                category="COMMAND",
+                severity=severity,
+                outcome=result.state,
+                source=envelope.source,
+                message=result.reason or code,
+                details={"command_type": envelope.command_type, "parameters": envelope.parameters},
+            ))
+        except Exception:
+            _log.exception("Failed to persist audit event for command %s", envelope.command_id)
+
+    def recent_audit_events(self, limit: int = 100) -> list[AuditEvent]:
+        return self._audit.recent(limit)
 
     @staticmethod
     def _fingerprint(envelope: "CommandEnvelope") -> str:
