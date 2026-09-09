@@ -6,6 +6,7 @@ TEMPLATE = (ROOT / "narit_vending" / "templates" / "index.html").read_text(encod
 APP = (ROOT / "narit_vending" / "static" / "app.js").read_text(encoding="utf-8")
 API_CLIENT = (ROOT / "narit_vending" / "static" / "api-client.js").read_text(encoding="utf-8")
 MACHINE_STORE = (ROOT / "narit_vending" / "static" / "machine-store.js").read_text(encoding="utf-8")
+PAGE_CONTROLLERS = (ROOT / "narit_vending" / "static" / "page-controllers.js").read_text(encoding="utf-8")
 ROUTER = (ROOT / "narit_vending" / "static" / "router.js").read_text(encoding="utf-8")
 
 
@@ -18,9 +19,16 @@ def test_api_client_loads_before_application() -> None:
 def test_machine_store_loads_between_transport_and_application() -> None:
     api_script = "filename='api-client.js'"
     store_script = "filename='machine-store.js'"
+    controllers_script = "filename='page-controllers.js'"
     app_script = "filename='app.js'"
     router_script = "filename='router.js'"
-    assert TEMPLATE.index(api_script) < TEMPLATE.index(store_script) < TEMPLATE.index(router_script) < TEMPLATE.index(app_script)
+    assert (
+        TEMPLATE.index(api_script)
+        < TEMPLATE.index(store_script)
+        < TEMPLATE.index(controllers_script)
+        < TEMPLATE.index(router_script)
+        < TEMPLATE.index(app_script)
+    )
 
 
 def test_application_delegates_transport_to_api_client() -> None:
@@ -73,3 +81,20 @@ def test_application_delegates_workspace_navigation_to_router() -> None:
     assert "const workspaceRouter = window.NaritRouter.create" in APP
     assert "return workspaceRouter.navigate(view, updateHash)" in APP
     assert "workspaceRouter.start()" in APP
+
+
+def test_page_controller_registry_has_bounded_mount_lifecycle() -> None:
+    assert "if (activeView === view) return" in PAGE_CONTROLLERS
+    assert 'typeof activeCleanup === "function"' in PAGE_CONTROLLERS
+    assert "controllers.clear()" in PAGE_CONTROLLERS
+    assert "Page controller already registered" in PAGE_CONTROLLERS
+    assert 'report(error, "mount", view)' in PAGE_CONTROLLERS
+    assert 'report(error, "unmount", previousView)' in PAGE_CONTROLLERS
+    for forbidden in ("fetch(", "/api/", "GPIO", "CommandEnvelope"):
+        assert forbidden not in PAGE_CONTROLLERS
+
+
+def test_visualization_history_polling_is_page_scoped() -> None:
+    assert 'pageControllers.register("visualization"' in APP
+    assert "window.clearInterval(historyTimer)" in APP
+    assert "pageControllers.activate(nextView)" in APP

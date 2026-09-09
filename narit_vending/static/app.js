@@ -1577,6 +1577,13 @@
   const SETUP_VIEWS = new Set(["configuration", "motor-test"]);
 
   if (!window.NaritRouter) throw new Error("HMI router failed to load");
+  if (!window.NaritPageControllers) throw new Error("HMI page controllers failed to load");
+  const pageControllers = window.NaritPageControllers.createRegistry({
+    onError: (error, context) => console.error(
+      `[HMI] ${context.view || "unknown"} page ${context.phase} failed`,
+      error,
+    ),
+  });
   const workspaceRouter = window.NaritRouter.create({
     state: MS,
     validViews: VALID_VIEWS,
@@ -1592,7 +1599,10 @@
         apiCall("/api/maintenance/motor-test", "POST", { action: "cancel" }).then(refresh).catch(() => {});
       }
     },
-    afterNavigate: () => renderWorkspacePages(),
+    afterNavigate: (nextView) => {
+      renderWorkspacePages();
+      pageControllers.activate(nextView);
+    },
   });
 
 
@@ -3853,7 +3863,6 @@
       durationInput.value = String(active && configuredDuration > 0 ? Math.ceil(configuredDuration) : calculateDemoMaxDuration());
     }
     renderDemoHistory();
-    if (MS.currentView === "visualization" && Date.now() - MS.demoHistoryFetchedAt > 5000) loadDemoHistory();
   }
 
   async function loadDemoHistory(force = false) {
@@ -4900,6 +4909,13 @@
     } catch (_) {}
     organizeWorkspacePanels();
     renderAxisSpeedBanks();
+    pageControllers.register("visualization", {
+      mount: () => {
+        loadDemoHistory();
+        const historyTimer = window.setInterval(() => loadDemoHistory(), 5000);
+        return () => window.clearInterval(historyTimer);
+      },
+    });
     bind();
     switchWorkspace(location.hash.slice(1) || "motion", false);
     log("Industrial motion HMI initialised", "info", "SYSTEM");

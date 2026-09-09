@@ -10,7 +10,7 @@ narit_vending/
   web/                 Flask web process และ IPC client
     routes/            Status, commands, configuration
   shared/              CommandEnvelope, MachineSnapshot, IPC protocol
-  static/              API client, shared machine store, hash router, app rendering และ CSS
+  static/              API client, shared store, router/page lifecycle, app rendering และ CSS
   templates/           HMI HTML
   motion.py            Axis/MotionController และ homing
   nucleo.py            USB Serial handshake, heartbeat, STEP command และ transport capability
@@ -77,7 +77,7 @@ STOP และ E-Stop มี priority สูงสุด คำสั่งป�
 
 ## Shared UI state
 
-`static/machine-store.js` เป็น shared browser state สำหรับ selected slot, speed X/Y/Z, position, homed state, connection, alarm, active command และ validation/arm state ส่วน `static/api-client.js` รับผิดชอบ HTTP/timeout/response parsing, `static/router.js` รับผิดชอบ hash/deep-link/navigation lifecycle และ `static/app.js` รับผิดชอบ interaction/rendering ค่าใน localStorage เป็น preference เท่านั้น ไม่ใช่ machine authority
+`static/machine-store.js` เป็น shared browser state สำหรับ selected slot, speed X/Y/Z, position, homed state, connection, alarm, active command และ validation/arm state ส่วน `static/api-client.js` รับผิดชอบ HTTP/timeout/response parsing, `static/router.js` รับผิดชอบ hash/deep-link, `static/page-controllers.js` จำกัดอายุ timer/listener เฉพาะหน้าที่เปิด และ `static/app.js` รับผิดชอบ interaction/rendering ค่าใน localStorage เป็น preference เท่านั้น ไม่ใช่ machine authority
 
 เมื่อ speed หรือ target เปลี่ยน:
 
