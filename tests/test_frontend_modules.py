@@ -17,6 +17,7 @@ SELECTED_SLOT_CONTROLLER = (ROOT / "narit_vending" / "static" / "selected-slot-c
 VISUALIZATION_PAGE_CONTROLLER = (ROOT / "narit_vending" / "static" / "visualization-page-controller.js").read_text(encoding="utf-8")
 DEMO_PAGE_CONTROLLER = (ROOT / "narit_vending" / "static" / "demo-page-controller.js").read_text(encoding="utf-8")
 IO_REGISTRY_VIEW = (ROOT / "narit_vending" / "static" / "io-registry-view.js").read_text(encoding="utf-8")
+SYSTEM_CONTROL_PAGE_CONTROLLER = (ROOT / "narit_vending" / "static" / "system-control-page-controller.js").read_text(encoding="utf-8")
 ROUTER = (ROOT / "narit_vending" / "static" / "router.js").read_text(encoding="utf-8")
 TOKENS = (ROOT / "narit_vending" / "static" / "tokens.css").read_text(encoding="utf-8")
 STYLE = (ROOT / "narit_vending" / "static" / "style.css").read_text(encoding="utf-8")
@@ -65,6 +66,7 @@ def test_machine_store_loads_between_transport_and_application() -> None:
     visualization_script = "filename='visualization-page-controller.js'"
     demo_script = "filename='demo-page-controller.js'"
     io_registry_script = "filename='io-registry-view.js'"
+    system_control_script = "filename='system-control-page-controller.js'"
     app_script = "filename='app.js'"
     router_script = "filename='router.js'"
     assert (
@@ -81,6 +83,7 @@ def test_machine_store_loads_between_transport_and_application() -> None:
         < TEMPLATE.index(visualization_script)
         < TEMPLATE.index(demo_script)
         < TEMPLATE.index(io_registry_script)
+        < TEMPLATE.index(system_control_script)
         < TEMPLATE.index(router_script)
         < TEMPLATE.index(app_script)
     )
@@ -211,6 +214,29 @@ def test_io_views_delegate_registry_metadata_to_pure_selectors() -> None:
 def test_io_registry_view_is_pure_and_has_no_machine_authority() -> None:
     for forbidden in ("fetch(", "/api/", "GPIO", "CommandEnvelope", "POST", "document."):
         assert forbidden not in IO_REGISTRY_VIEW
+
+
+def test_system_control_actions_use_page_scoped_lifecycle() -> None:
+    assert 'pageControllers.register("system-control"' in APP
+    assert "NaritSystemControlPageController.create" in APP
+    assert 'el("system-motion-disable")?.addEventListener' not in APP
+    for control_id in (
+        "system-motion-disable", "system-motion-enable", "system-nucleo-reset",
+        "system-drive-power-reset", "system-drive-power-cut", "system-drive-power-restore",
+    ):
+        assert control_id in SYSTEM_CONTROL_PAGE_CONTROLLER
+    assert 'node?.addEventListener("click", handler)' in SYSTEM_CONTROL_PAGE_CONTROLLER
+    assert 'node?.removeEventListener("click", handler)' in SYSTEM_CONTROL_PAGE_CONTROLLER
+    for callback in (
+        "onDisableMotion:", "onEnableMotion:", "onResetNucleoLink:",
+        "onResetDrivePower:", "onCutDrivePower:", "onRestoreDrivePower:",
+    ):
+        assert callback in APP
+
+
+def test_system_control_page_controller_has_no_transport_or_hardware_authority() -> None:
+    for forbidden in ("fetch(", "/api/", "GPIO", "CommandEnvelope", "POST"):
+        assert forbidden not in SYSTEM_CONTROL_PAGE_CONTROLLER
 
 
 def test_io_interactions_are_owned_by_page_scoped_controller() -> None:

@@ -1564,6 +1564,7 @@
   if (!window.NaritVisualizationPageController) throw new Error("HMI Visualization page controller failed to load");
   if (!window.NaritDemoPageController) throw new Error("HMI Demo page controller failed to load");
   if (!window.NaritIORegistryView) throw new Error("HMI I/O registry view failed to load");
+  if (!window.NaritSystemControlPageController) throw new Error("HMI System Control page controller failed to load");
   const pageControllers = window.NaritPageControllers.createRegistry({
     onError: (error, context) => console.error(
       `[HMI] ${context.view || "unknown"} page ${context.phase} failed`,
@@ -3815,6 +3816,18 @@
     }
   }
 
+  async function runSystemAction(path, successMessage) {
+    try {
+      await apiCall(path, "POST", {}, 10000);
+      setText("system-action-result", successMessage);
+      toast(successMessage, "ok");
+      await refresh();
+    } catch (error) {
+      setText("system-action-result", error.message);
+      toast(`SYSTEM CONTROL FAILED — ${error.message}`, "error");
+    }
+  }
+
   function renderDemoSampling() {
     const demo = MS.payload?.demo || {};
     const state = String(demo.state || "IDLE").toUpperCase();
@@ -4281,37 +4294,6 @@
     /* --- Workspace navigation --- */
     workspaceRouter.start();
 
-    const runSystemAction = async (path, successMessage) => {
-      try {
-        await apiCall(path, "POST", {}, 10000);
-        setText("system-action-result", successMessage);
-        toast(successMessage, "ok");
-        await refresh();
-      } catch (err) {
-        setText("system-action-result", err.message);
-        toast(`SYSTEM CONTROL FAILED — ${err.message}`, "error");
-      }
-    };
-    el("system-motion-disable")?.addEventListener("click", () => runSystemAction("/api/system/motion/disable", "Motion disabled; all axes stopped and disarmed."));
-    el("system-motion-enable")?.addEventListener("click", () => runSystemAction("/api/system/motion/enable", "Motion enabled for future validated commands."));
-    el("system-nucleo-reset")?.addEventListener("click", () => {
-      if (window.confirm("Stop and disarm all axes, then reset the NUCLEO USB link and handshake? This is not a physical NRST reset.")) runSystemAction("/api/system/nucleo/reset-link", "NUCLEO USB link reset; motion remains disabled.");
-    });
-    el("system-drive-power-reset")?.addEventListener("click", () => {
-      const warning = "Reset X/Y drive power now? All axes will stop, NUCLEO will disarm, KM1 will remove 60 V for 3 seconds, and X/Y homing references will be cleared.";
-      if (window.confirm(warning)) runSystemAction("/api/system/drives/reset-power", "X/Y drive power reset complete. Motion remains disabled; Home X/Y before use.");
-    });
-    el("system-drive-power-cut")?.addEventListener("click", () => {
-      if (window.confirm("Cut 60 V power to X/Y drives and keep it OFF? All axes will stop and X/Y homing references will be cleared.")) {
-        runSystemAction("/api/system/drives/cut-power", "X/Y drive power is OFF. Motion remains disabled.");
-      }
-    });
-    el("system-drive-power-restore")?.addEventListener("click", () => {
-      if (window.confirm("Restore 60 V power to X/Y drives through KM1? Motion will remain disabled and X/Y must be homed before use.")) {
-        runSystemAction("/api/system/drives/restore-power", "X/Y drive power restored. Motion remains disabled; Home X/Y before use.");
-      }
-    });
-
     /* --- Emergency Stop --- */
     el("stop-button").addEventListener("click", () => {
       command("Emergency stop", "/api/stop", undefined, { isStop: true, noCheck: true });
@@ -4776,6 +4758,36 @@
         undefined,
         { isStop: true, noCheck: true },
       ),
+    }));
+    pageControllers.register("system-control", window.NaritSystemControlPageController.create({
+      onDisableMotion: () => runSystemAction("/api/system/motion/disable", "Motion disabled; all axes stopped and disarmed."),
+      onEnableMotion: () => runSystemAction("/api/system/motion/enable", "Motion enabled for future validated commands."),
+      onResetNucleoLink: () => {
+        if (window.confirm("Stop and disarm all axes, then reset the NUCLEO USB link and handshake? This is not a physical NRST reset.")) {
+          return runSystemAction("/api/system/nucleo/reset-link", "NUCLEO USB link reset; motion remains disabled.");
+        }
+        return undefined;
+      },
+      onResetDrivePower: () => {
+        const warning = "Reset X/Y drive power now? All axes will stop, NUCLEO will disarm, KM1 will remove 60 V for 3 seconds, and X/Y homing references will be cleared.";
+        if (window.confirm(warning)) {
+          return runSystemAction("/api/system/drives/reset-power", "X/Y drive power reset complete. Motion remains disabled; Home X/Y before use.");
+        }
+        return undefined;
+      },
+      onCutDrivePower: () => {
+        if (window.confirm("Cut 60 V power to X/Y drives and keep it OFF? All axes will stop and X/Y homing references will be cleared.")) {
+          return runSystemAction("/api/system/drives/cut-power", "X/Y drive power is OFF. Motion remains disabled.");
+        }
+        return undefined;
+      },
+      onRestoreDrivePower: () => {
+        if (window.confirm("Restore 60 V power to X/Y drives through KM1? Motion will remain disabled and X/Y must be homed before use.")) {
+          return runSystemAction("/api/system/drives/restore-power", "X/Y drive power restored. Motion remains disabled; Home X/Y before use.");
+        }
+        return undefined;
+      },
+      onError: (error) => console.error("[HMI] System Control action failed", error),
     }));
     pageControllers.register("slots", window.NaritSlotsPageController.create({
       render: renderSlotTable,

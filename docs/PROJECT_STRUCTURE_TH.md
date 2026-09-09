@@ -81,6 +81,8 @@ CSS โหลดตามลำดับ `static/tokens.css` → `static/style.c
 
 `static/machine-store.js` เป็น shared browser state สำหรับ selected slot, speed X/Y/Z, position, homed state, connection, alarm, active command และ validation/arm state ส่วน `static/api-client.js` รับผิดชอบ HTTP/timeout/response parsing, `static/router.js` รับผิดชอบ hash/deep-link, `static/page-controllers.js` จำกัดอายุ timer/listener เฉพาะหน้าที่เปิด และ controller รายหน้าดูแล interaction เฉพาะ workspace นั้น ตาราง Slots ใช้ event delegation หนึ่งชุดแม้แถวถูก render ใหม่ ส่วน Selected Slot mount ตามตำแหน่งจริงในหน้า Motion และ Visualization/Demo Sampling controls mount เฉพาะเมื่อเปิดหน้า Visualization โดยทั้งหมดใช้ state เดียวกัน `static/io-registry-view.js` แปลง authoritative Controller I/O registry เป็น label, category, terminal และสถานะสำหรับทุก I/O view จากกฎกลางชุดเดียว `static/app.js` ยังคงรับผิดชอบ interaction/rendering ส่วนที่ยังไม่ย้าย ค่าใน localStorage เป็น preference เท่านั้น ไม่ใช่ machine authority
 
+`static/system-control-page-controller.js` เป็นเจ้าของอายุ event listener ของ Enable/Disable Motion, USB-link reset และ X/Y drive-power controls เฉพาะตอนเปิดหน้า System Control ส่วน confirmation, API command, safety validation และผลลัพธ์ยังถูกส่งกลับไปดำเนินการผ่าน Controller path ใน `app.js`
+
 เมื่อ speed หรือ target เปลี่ยน:
 
 - Direct Jog/Min/Max ตรวจ readiness ใหม่และใช้ค่าถัดไป
