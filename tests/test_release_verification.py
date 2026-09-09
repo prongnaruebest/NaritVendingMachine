@@ -111,6 +111,14 @@ def test_staged_python_validation_rejects_syntax_error(tmp_path: Path):
         validate_staged_python(staged)
 
 
+def test_staged_python_validation_accepts_utf8_bom_like_python_loader(tmp_path: Path):
+    artifact = _artifact(tmp_path)
+    staged = stage_release(artifact.archive_path, artifact.manifest_path, tmp_path / "staging")
+    (staged / "main.py").write_bytes(b"\xef\xbb\xbfVALUE = 1\n")
+
+    assert validate_staged_python(staged) >= 3
+
+
 def test_staged_validator_checks_external_configuration_read_only(tmp_path: Path):
     artifact = _artifact(tmp_path)
     staged = stage_release(artifact.archive_path, artifact.manifest_path, tmp_path / "staging")

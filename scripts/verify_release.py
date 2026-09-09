@@ -162,10 +162,9 @@ def stage_release(archive_path: Path, manifest_path: Path, staging_root: Path) -
 def validate_staged_python(stage_dir: Path) -> int:
     checked = 0
     for path in sorted(stage_dir.rglob("*.py")):
-        source = path.read_text(encoding="utf-8")
         try:
-            compile(source, path.relative_to(stage_dir).as_posix(), "exec")
-        except (SyntaxError, UnicodeDecodeError) as exc:
+            compile(path.read_bytes(), path.relative_to(stage_dir).as_posix(), "exec")
+        except SyntaxError as exc:
             raise ReleaseVerificationError(f"Staged Python validation failed: {path.name}: {exc}") from exc
         checked += 1
     if checked == 0:
