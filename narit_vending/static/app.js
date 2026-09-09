@@ -4372,6 +4372,9 @@
     }
   }
 
+  let beginManualJog;
+  let endManualJog;
+
   function bind() {
     /* --- Workspace navigation --- */
     workspaceRouter.start();
@@ -4387,7 +4390,7 @@
     });
 
     /* --- Hold-to-Run Manual Jog Engine --- */
-    function beginManualJog(axis, dir, btn, event) {
+    beginManualJog = function (axis, dir, btn, event) {
       if (btn && btn.disabled) return;
       if (!canJogAxis(axis)) {
         toast(`${axis.toUpperCase()} cannot jog: not homed or motion inhibited`, "warn");
@@ -4427,9 +4430,9 @@
           }
         }
       }, HOLD_DELAY_MS);
-    }
+    };
 
-    function endManualJog(axis, dir, btn) {
+    endManualJog = function (axis, dir, btn) {
       if (!MS.manualJog.active) return;
       if (MS.manualJog.holdTimer) {
         // Released before hold threshold -> single step move
@@ -4442,24 +4445,8 @@
         // Was in hold continuous mode -> stop
         stopManualJog();
       }
-    }
+    };
 
-    /* --- Jog directional buttons --- */
-    $$("[data-jog]").forEach((btn) => {
-      const [axis, dir] = btn.dataset.jog.split(":");
-      btn.addEventListener("pointerdown", (event) => {
-        event.preventDefault();
-        beginManualJog(axis, dir, btn, event);
-      });
-      btn.addEventListener("pointerup", (event) => {
-        event.preventDefault();
-        endManualJog(axis, dir, btn);
-      });
-      btn.addEventListener("pointercancel", () => stopManualJog());
-      btn.addEventListener("lostpointercapture", () => stopManualJog());
-      btn.addEventListener("contextmenu", (event) => event.preventDefault());
-      btn.addEventListener("click", (event) => event.preventDefault());
-    });
     /* --- Jog step presets --- */
     $$(".step-btn").forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -4487,40 +4474,6 @@
       });
     });
 
-    el("jog-keyboard-enable").addEventListener("change", (event) => {
-      MS.keyboardJogEnabled = event.target.checked;
-      toast(`Keyboard jog ${MS.keyboardJogEnabled ? "enabled" : "disabled"}.`, MS.keyboardJogEnabled ? "ok" : "");
-    });
-    document.addEventListener("keydown", (event) => {
-      if (!MS.keyboardJogEnabled || MS.currentView !== "motion" || event.repeat) return;
-      const tagName = document.activeElement?.tagName?.toLowerCase();
-      if (["input", "select", "textarea", "button"].includes(tagName) || document.activeElement?.isContentEditable) return;
-      const keyMap = {
-        ArrowLeft: ["x", "-1"], ArrowRight: ["x", "1"],
-        ArrowDown: ["y", "-1"], ArrowUp: ["y", "1"],
-        PageDown: ["z", "-1"], PageUp: ["z", "1"],
-      };
-      const move = keyMap[event.key];
-      if (!move) return;
-      event.preventDefault();
-      const [axis, dir] = move;
-      const btn = document.querySelector(`[data-jog="${axis}:${dir}"]`);
-      beginManualJog(axis, dir, btn);
-    });
-
-    document.addEventListener("keyup", (event) => {
-      if (!MS.keyboardJogEnabled || MS.currentView !== "motion") return;
-      const keyMap = {
-        ArrowLeft: ["x", "-1"], ArrowRight: ["x", "1"],
-        ArrowDown: ["y", "-1"], ArrowUp: ["y", "1"],
-        PageDown: ["z", "-1"], PageUp: ["z", "1"],
-      };
-      const move = keyMap[event.key];
-      if (!move) return;
-      const [axis, dir] = move;
-      const btn = document.querySelector(`[data-jog="${axis}:${dir}"]`);
-      endManualJog(axis, dir, btn);
-    });
 
     /* --- Feed override presets --- */
     $$(".fo-preset-btn").forEach((btn) => {
@@ -4841,6 +4794,13 @@
     });
     const motionJogSafety = window.NaritMotionJogSafetyController.create({
       onStop: stopManualJog,
+      onBegin: (...args) => beginManualJog?.(...args),
+      onEnd: (...args) => endManualJog?.(...args),
+      isKeyboardEnabled: () => MS.keyboardJogEnabled,
+      onKeyboardToggle: (enabled) => {
+        MS.keyboardJogEnabled = enabled;
+        toast(`Keyboard jog ${enabled ? "enabled" : "disabled"}.`, enabled ? "ok" : "");
+      },
       onAllowUnhomedChanged: updateButtonStates,
     });
     pageControllers.register("motion", {

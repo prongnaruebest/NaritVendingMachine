@@ -402,6 +402,11 @@ def test_manual_jog_fail_safe_events_share_motion_lifecycle() -> None:
     for event in ('removeEventListener("blur", stop)', 'removeEventListener("visibilitychange", visibility)'):
         assert event in MOTION_JOG_SAFETY_CONTROLLER
     assert "stop();" in MOTION_JOG_SAFETY_CONTROLLER
+    for event in ("pointerdown", "pointerup", "pointercancel", "lostpointercapture", "keydown", "keyup"):
+        assert event in MOTION_JOG_SAFETY_CONTROLLER
+    assert "/* --- Jog directional buttons --- */" not in APP
+    assert 'document.addEventListener("keydown"' not in APP
+    assert "onBegin:" in APP and "onEnd:" in APP and "onKeyboardToggle:" in APP
     for forbidden in ("fetch(", "/api/", "GPIO", "CommandEnvelope", "POST"):
         assert forbidden not in MOTION_JOG_SAFETY_CONTROLLER
 
