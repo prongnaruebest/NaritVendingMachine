@@ -19,7 +19,14 @@ def _project(root: Path) -> None:
         "narit_vending/__pycache__/app.pyc": "cache",
         "deploy/service.service": "[Service]\n",
         "scripts/setup_pi.sh": "#!/bin/sh\n",
-        "scripts/validate_config.py": "VALID = True\n",
+        "scripts/validate_config.py": (
+            "import argparse, json\n"
+            "parser = argparse.ArgumentParser()\n"
+            "parser.add_argument('--machine', required=True)\n"
+            "parser.add_argument('--hardware', required=True)\n"
+            "parser.parse_args()\n"
+            "print(json.dumps({'valid': True, 'revision': 'fixture'}))\n"
+        ),
         "scripts/deploy_to_iriv.ps1": "must not ship\n",
     }
     for name, content in files.items():

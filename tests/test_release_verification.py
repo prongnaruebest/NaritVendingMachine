@@ -12,6 +12,8 @@ from scripts.verify_release import (
     stage_release,
     verify_release,
     verify_staged_release,
+    validate_staged_configuration,
+    validate_staged_python,
 )
 
 from .test_release_artifact import _project
@@ -74,6 +76,7 @@ def test_stage_release_extracts_and_reverifies_without_activation(tmp_path: Path
     assert (staged / "release-manifest.json").is_file()
     assert not (staged / "machine_config.json").exists()
     verify_staged_release(staged, manifest)
+    assert validate_staged_python(staged) >= 3
 
 
 def test_stage_release_never_overwrites_existing_release(tmp_path: Path):
@@ -97,3 +100,27 @@ def test_staged_verification_detects_post_extraction_tamper(tmp_path: Path):
 
     with pytest.raises(ReleaseVerificationError, match="Staged checksum mismatch"):
         verify_staged_release(staged, manifest)
+
+
+def test_staged_python_validation_rejects_syntax_error(tmp_path: Path):
+    artifact = _artifact(tmp_path)
+    staged = stage_release(artifact.archive_path, artifact.manifest_path, tmp_path / "staging")
+    (staged / "main.py").write_text("if broken syntax\n", encoding="utf-8")
+
+    with pytest.raises(ReleaseVerificationError, match="Python validation failed"):
+        validate_staged_python(staged)
+
+
+def test_staged_validator_checks_external_configuration_read_only(tmp_path: Path):
+    artifact = _artifact(tmp_path)
+    staged = stage_release(artifact.archive_path, artifact.manifest_path, tmp_path / "staging")
+    machine = tmp_path / "machine.json"
+    hardware = tmp_path / "hardware.json"
+    machine.write_text("{}\n", encoding="utf-8")
+    hardware.write_text("{}\n", encoding="utf-8")
+
+    report = validate_staged_configuration(staged, machine, hardware)
+
+    assert report == {"valid": True, "revision": "fixture"}
+    assert machine.read_text(encoding="utf-8") == "{}\n"
+    assert hardware.read_text(encoding="utf-8") == "{}\n"

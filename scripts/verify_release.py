@@ -3,8 +3,10 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import shutil
+import subprocess
 import sys
 import uuid
 import zipfile
@@ -157,6 +159,58 @@ def stage_release(archive_path: Path, manifest_path: Path, staging_root: Path) -
     return destination
 
 
+def validate_staged_python(stage_dir: Path) -> int:
+    checked = 0
+    for path in sorted(stage_dir.rglob("*.py")):
+        source = path.read_text(encoding="utf-8")
+        try:
+            compile(source, path.relative_to(stage_dir).as_posix(), "exec")
+        except (SyntaxError, UnicodeDecodeError) as exc:
+            raise ReleaseVerificationError(f"Staged Python validation failed: {path.name}: {exc}") from exc
+        checked += 1
+    if checked == 0:
+        raise ReleaseVerificationError("Staged release contains no Python source")
+    return checked
+
+
+def validate_staged_configuration(
+    stage_dir: Path,
+    machine_config: Path,
+    hardware_config: Path,
+    *,
+    python: str = sys.executable,
+) -> dict[str, Any]:
+    validator = stage_dir / "scripts" / "validate_config.py"
+    if not validator.is_file():
+        raise ReleaseVerificationError("Staged configuration validator is missing")
+    command = (
+        python,
+        str(validator),
+        "--machine",
+        str(machine_config.resolve()),
+        "--hardware",
+        str(hardware_config.resolve()),
+    )
+    result = subprocess.run(
+        command,
+        cwd=stage_dir,
+        check=False,
+        capture_output=True,
+        text=True,
+        env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+    )
+    if result.returncode:
+        detail = result.stderr.strip() or result.stdout.strip() or f"exit {result.returncode}"
+        raise ReleaseVerificationError(f"Staged configuration validation failed: {detail}")
+    try:
+        report = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        raise ReleaseVerificationError("Staged configuration validator returned invalid JSON") from exc
+    if not isinstance(report, dict) or report.get("valid") is not True:
+        raise ReleaseVerificationError("Staged configuration report is not valid")
+    return report
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Verify a release artifact without extracting or activating it.")
     parser.add_argument("archive", type=Path)
@@ -166,13 +220,31 @@ def main() -> int:
         type=Path,
         help="Verify, extract and re-verify under this root without activating the release.",
     )
+    parser.add_argument("--machine-config", type=Path)
+    parser.add_argument("--hardware-config", type=Path)
+    parser.add_argument("--python", default=sys.executable)
     args = parser.parse_args()
+    if bool(args.machine_config) != bool(args.hardware_config):
+        parser.error("--machine-config and --hardware-config must be supplied together")
+    if args.machine_config and not args.stage_root:
+        parser.error("configuration compatibility checks require --stage-root")
     try:
         archive_path = args.archive.resolve()
         manifest_path = args.manifest.resolve()
         manifest = verify_release(archive_path, manifest_path)
         staged_path = (
             stage_release(archive_path, manifest_path, args.stage_root.resolve()) if args.stage_root else None
+        )
+        checked_python = validate_staged_python(staged_path) if staged_path else 0
+        config_report = (
+            validate_staged_configuration(
+                staged_path,
+                args.machine_config,
+                args.hardware_config,
+                python=args.python,
+            )
+            if staged_path and args.machine_config and args.hardware_config
+            else None
         )
     except (OSError, ReleaseVerificationError) as exc:
         print(f"FAILED: {exc}", file=sys.stderr)
@@ -181,6 +253,9 @@ def main() -> int:
     print(f"files={len(manifest['files'])}")
     if staged_path:
         print(f"staged={staged_path}")
+        print(f"python_files_checked={checked_python}")
+        if config_report:
+            print(f"configuration_revision={config_report.get('revision', 'unknown')}")
         print("Release was staged but not activated; no service or machine command was issued.")
     else:
         print("No files were extracted, no service was restarted and no machine command was issued.")

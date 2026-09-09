@@ -83,7 +83,7 @@ Exit criterion: pages share one state source, polling does not overlap, and no m
 ## Phase 7 — Release engineering and documentation
 
 - [ ] Add formatting, lint, typing and dependency-direction gates. (`ruff` lint and `mypy` checks now protect the dependency-neutral domain/shared core; expand typing coverage to Controller, persistence and web modules incrementally)
-- [ ] Build staged atomic release and rollback verification. (verified atomic staging complete; configuration compatibility, activation and rollback remain)
+- [ ] Build staged atomic release and rollback verification. (verified atomic staging and read-only pre-activation source/configuration checks complete; activation and rollback remain)
 - [ ] Complete operator, configuration, PEND, testing and troubleshooting manuals.
 - [ ] Run read-only production smoke tests.
 - [ ] Prepare operator-controlled mechanical acceptance checklist.
@@ -129,6 +129,18 @@ python scripts/verify_release.py <release.zip> <release.manifest.json> --stage-r
 
 The destination is `<staging-root>/<release-id>`. Existing releases are never overwritten;
 staging alone does not change the active release or restart a service.
+
+On the target host, add both live configuration paths to run compatibility validation using
+the code from the staged release:
+
+```text
+python scripts/verify_release.py <release.zip> <release.manifest.json> \
+  --stage-root <staging-root> \
+  --machine-config <machine-config.json> \
+  --hardware-config <hardware-config.json>
+```
+
+This compiles staged Python source in memory and reads configuration without modifying it.
 
 ## Commit strategy
 
