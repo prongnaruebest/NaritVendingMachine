@@ -12,6 +12,7 @@ EVENTS_PAGE_CONTROLLER = (ROOT / "narit_vending" / "static" / "events-page-contr
 FLOW_PAGE_CONTROLLER = (ROOT / "narit_vending" / "static" / "flow-page-controller.js").read_text(encoding="utf-8")
 MQTT_PAGE_CONTROLLER = (ROOT / "narit_vending" / "static" / "mqtt-page-controller.js").read_text(encoding="utf-8")
 ALARMS_PAGE_CONTROLLER = (ROOT / "narit_vending" / "static" / "alarms-page-controller.js").read_text(encoding="utf-8")
+SLOTS_PAGE_CONTROLLER = (ROOT / "narit_vending" / "static" / "slots-page-controller.js").read_text(encoding="utf-8")
 ROUTER = (ROOT / "narit_vending" / "static" / "router.js").read_text(encoding="utf-8")
 
 
@@ -30,6 +31,7 @@ def test_machine_store_loads_between_transport_and_application() -> None:
     flow_controller_script = "filename='flow-page-controller.js'"
     mqtt_controller_script = "filename='mqtt-page-controller.js'"
     alarms_controller_script = "filename='alarms-page-controller.js'"
+    slots_controller_script = "filename='slots-page-controller.js'"
     app_script = "filename='app.js'"
     router_script = "filename='router.js'"
     assert (
@@ -41,6 +43,7 @@ def test_machine_store_loads_between_transport_and_application() -> None:
         < TEMPLATE.index(flow_controller_script)
         < TEMPLATE.index(mqtt_controller_script)
         < TEMPLATE.index(alarms_controller_script)
+        < TEMPLATE.index(slots_controller_script)
         < TEMPLATE.index(router_script)
         < TEMPLATE.index(app_script)
     )
@@ -176,3 +179,19 @@ def test_alarm_page_reset_is_scoped_and_uses_injected_command_path() -> None:
     assert '"/api/clear-alarm"' in APP
     for forbidden in ("fetch(", "/api/", "GPIO", "CommandEnvelope"):
         assert forbidden not in ALARMS_PAGE_CONTROLLER
+
+
+def test_slot_table_uses_one_page_scoped_delegated_listener() -> None:
+    assert 'pageControllers.register("slots"' in APP
+    assert "NaritSlotsPageController.create" in APP
+    assert 'table?.addEventListener("click", onTableClick)' in SLOTS_PAGE_CONTROLLER
+    assert 'table?.removeEventListener("click", onTableClick)' in SLOTS_PAGE_CONTROLLER
+    assert 'table?.addEventListener("input", onCoordinate)' in SLOTS_PAGE_CONTROLLER
+    assert "$$('[data-slot-coordinate]')" not in APP
+    for action in ("onSave", "onSelect", "onGoto", "onDispense", "onTeach"):
+        assert f"options.{action}" in SLOTS_PAGE_CONTROLLER
+
+
+def test_slots_controller_has_no_direct_transport_or_machine_authority() -> None:
+    for forbidden in ("fetch(", "/api/", "GPIO", "CommandEnvelope", "POST"):
+        assert forbidden not in SLOTS_PAGE_CONTROLLER

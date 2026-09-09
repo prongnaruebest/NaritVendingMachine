@@ -906,72 +906,6 @@
     renderSlotManagerSummary();
     renderSlotManagerDetail();
 
-    $$('[data-slot-coordinate]').forEach((input) => {
-      input.addEventListener("input", () => {
-        const code = input.dataset.slotCoordinate;
-        const slot = MS.slots[code] || {};
-        MS.slotDrafts[code] ||= {
-          x_mm: Number(slot.x_mm || 0),
-          y_mm: Number(slot.y_mm || 0),
-          z_mm: Number(slot.z_mm || 0),
-        };
-        MS.slotDrafts[code][`${input.dataset.slotAxis}_mm`] = Number(input.value);
-      });
-    });
-
-    $$('[data-slot-update]').forEach((btn) => {
-      btn.addEventListener("click", async () => {
-        const code = btn.dataset.slotUpdate;
-        const payload = slotPayloadFromValues(code, MS.slotDrafts[code] || MS.slots[code] || {});
-        if (!payload) return;
-        const result = await command(`Save slot ${code} position`, `/api/slots/${code}`, payload,
-          { isStop: true, noCheck: true });
-        if (result) delete MS.slotDrafts[code];
-      });
-    });
-
-    $$('[data-slot-select]').forEach((btn) => {
-      btn.addEventListener("click", () => selectSlotFromManager(btn.dataset.slotSelect));
-    });
-
-    // Bind slot action buttons
-    $$("[data-slot-goto]").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const code = btn.dataset.slotGoto;
-        const slot = MS.slots[code] || {};
-        const confirmation = [
-          `${slotSequenceEnabled() ? "Run sequence" : "Move gantry"} to Slot ${code}?`,
-          `Target: X ${fmtPos(slot.x_mm)} · Y ${fmtPos(slot.y_mm)} · Z ${fmtPos(slot.z_mm)} mm`,
-          `Speed: ${fmtSpd(targetSpeedPayload().speed_mm_s)} mm/s`,
-          slotSequenceEnabled()
-            ? "Sequence: X → Y → Z → hold 3 s → Home Z → Home Y → Home X."
-            : "Confirm the travel area is clear before continuing.",
-          "Confirm the travel area is clear before continuing.",
-        ].join("\n");
-        if (!window.confirm(confirmation)) return;
-        selectSlotFromManager(code);
-        MS.visualTargetSlot = code;
-        command(slotMotionLabel(code), slotMotionEndpoint(code), targetSpeedPayload(), { requireHome: true, timeoutMs: 600000 });
-      });
-    });
-    $$("[data-slot-dispense]").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const code = btn.dataset.slotDispense;
-        selectSlotFromManager(code);
-        MS.visualTargetSlot = code;
-        command(`Dispense slot ${code}`, "/api/start",
-          { slot: code, ...targetSpeedPayload() }, { requireHome: true });
-      });
-    });
-    $$("[data-slot-teach]").forEach((btn) => {
-      btn.addEventListener("click", async () => {
-        const code = btn.dataset.slotTeach;
-        MS.selectedSlotCode = code;
-        const result = await command(`Save current position to slot ${code}`, `/api/slots/${code}/save-current`, undefined,
-          { requireHome: true });
-        if (result) delete MS.slotDrafts[code];
-      });
-    });
   }
 
   function slotManagerEntries() {
@@ -1583,6 +1517,7 @@
   if (!window.NaritFlowPageController) throw new Error("HMI Flow page controller failed to load");
   if (!window.NaritMqttPageController) throw new Error("HMI MQTT page controller failed to load");
   if (!window.NaritAlarmsPageController) throw new Error("HMI Alarms page controller failed to load");
+  if (!window.NaritSlotsPageController) throw new Error("HMI Slots page controller failed to load");
   const pageControllers = window.NaritPageControllers.createRegistry({
     onError: (error, context) => console.error(
       `[HMI] ${context.view || "unknown"} page ${context.phase} failed`,
@@ -4611,10 +4546,6 @@
         updateFeedOverride();
       }));
 
-    /* --- Slot search / filter --- */
-    el("slot-search").addEventListener("input", renderSlotTable);
-    el("slot-filter").addEventListener("change", renderSlotTable);
-
     /* --- Selected slot direct controls --- */
     el("selected-slot-code").addEventListener("change", (event) => {
       MS.selectedSlotCode = event.target.value;
@@ -4877,6 +4808,58 @@
         undefined,
         { isStop: true, noCheck: true },
       ),
+    }));
+    pageControllers.register("slots", window.NaritSlotsPageController.create({
+      render: renderSlotTable,
+      onCoordinate: (code, axis, value) => {
+        const slot = MS.slots[code] || {};
+        MS.slotDrafts[code] ||= {
+          x_mm: Number(slot.x_mm || 0),
+          y_mm: Number(slot.y_mm || 0),
+          z_mm: Number(slot.z_mm || 0),
+        };
+        MS.slotDrafts[code][`${axis}_mm`] = Number(value);
+      },
+      onSave: async (code) => {
+        const payload = slotPayloadFromValues(code, MS.slotDrafts[code] || MS.slots[code] || {});
+        if (!payload) return;
+        const result = await command(`Save slot ${code} position`, `/api/slots/${code}`, payload,
+          { isStop: true, noCheck: true });
+        if (result) delete MS.slotDrafts[code];
+      },
+      onSelect: selectSlotFromManager,
+      onGoto: (code) => {
+        const slot = MS.slots[code] || {};
+        const confirmation = [
+          `${slotSequenceEnabled() ? "Run sequence" : "Move gantry"} to Slot ${code}?`,
+          `Target: X ${fmtPos(slot.x_mm)} · Y ${fmtPos(slot.y_mm)} · Z ${fmtPos(slot.z_mm)} mm`,
+          `Speed: ${fmtSpd(targetSpeedPayload().speed_mm_s)} mm/s`,
+          slotSequenceEnabled()
+            ? "Sequence: X → Y → Z → hold 3 s → Home Z → Home Y → Home X."
+            : "Confirm the travel area is clear before continuing.",
+          "Confirm the travel area is clear before continuing.",
+        ].join("\n");
+        if (!window.confirm(confirmation)) return;
+        selectSlotFromManager(code);
+        MS.visualTargetSlot = code;
+        command(slotMotionLabel(code), slotMotionEndpoint(code), targetSpeedPayload(), {
+          requireHome: true,
+          timeoutMs: 600000,
+        });
+      },
+      onDispense: (code) => {
+        selectSlotFromManager(code);
+        MS.visualTargetSlot = code;
+        command(`Dispense slot ${code}`, "/api/start",
+          { slot: code, ...targetSpeedPayload() }, { requireHome: true });
+      },
+      onTeach: async (code) => {
+        MS.selectedSlotCode = code;
+        const result = await command(`Save current position to slot ${code}`, `/api/slots/${code}/save-current`, undefined,
+          { requireHome: true });
+        if (result) delete MS.slotDrafts[code];
+      },
+      onError: (error) => console.error("[HMI] Slot table action failed", error),
     }));
     pageControllers.register("visualization", {
       mount: () => {
