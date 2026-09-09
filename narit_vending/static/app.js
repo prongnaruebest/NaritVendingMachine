@@ -1578,6 +1578,7 @@
 
   if (!window.NaritRouter) throw new Error("HMI router failed to load");
   if (!window.NaritPageControllers) throw new Error("HMI page controllers failed to load");
+  if (!window.NaritIOPageController) throw new Error("HMI I/O page controller failed to load");
   const pageControllers = window.NaritPageControllers.createRegistry({
     onError: (error, context) => console.error(
       `[HMI] ${context.view || "unknown"} page ${context.phase} failed`,
@@ -4879,22 +4880,6 @@
       });
     });
 
-    /* --- I/O Status Page event listeners --- */
-    $$(".io-filter-btn").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        MS.ioFilter = btn.dataset.ioFilter || "all";
-        $$(".io-filter-btn").forEach((b) => b.classList.toggle("active", b === btn));
-        renderIOStatusPage();
-      });
-    });
-    el("io-search-input")?.addEventListener("input", (event) => {
-      MS.ioSearch = (event.target.value || "").toLowerCase().trim();
-      renderIOStatusPage();
-    });
-    el("btn-io-refresh")?.addEventListener("click", () => {
-      refresh();
-      toast("I/O Status refreshed", "ok");
-    });
     $$('[data-homing-shortcut]').forEach((button) => button.addEventListener("click", openHomingControls));
 
   }
@@ -4909,6 +4894,13 @@
     } catch (_) {}
     organizeWorkspacePanels();
     renderAxisSpeedBanks();
+    pageControllers.register("io-status", window.NaritIOPageController.create({
+      state: MS,
+      render: renderIOStatusPage,
+      refresh,
+      toast,
+      onError: (error) => console.error("[HMI] I/O refresh failed", error),
+    }));
     pageControllers.register("visualization", {
       mount: () => {
         loadDemoHistory();

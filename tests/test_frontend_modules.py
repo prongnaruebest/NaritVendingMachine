@@ -7,6 +7,7 @@ APP = (ROOT / "narit_vending" / "static" / "app.js").read_text(encoding="utf-8")
 API_CLIENT = (ROOT / "narit_vending" / "static" / "api-client.js").read_text(encoding="utf-8")
 MACHINE_STORE = (ROOT / "narit_vending" / "static" / "machine-store.js").read_text(encoding="utf-8")
 PAGE_CONTROLLERS = (ROOT / "narit_vending" / "static" / "page-controllers.js").read_text(encoding="utf-8")
+IO_PAGE_CONTROLLER = (ROOT / "narit_vending" / "static" / "io-page-controller.js").read_text(encoding="utf-8")
 ROUTER = (ROOT / "narit_vending" / "static" / "router.js").read_text(encoding="utf-8")
 
 
@@ -20,12 +21,14 @@ def test_machine_store_loads_between_transport_and_application() -> None:
     api_script = "filename='api-client.js'"
     store_script = "filename='machine-store.js'"
     controllers_script = "filename='page-controllers.js'"
+    io_controller_script = "filename='io-page-controller.js'"
     app_script = "filename='app.js'"
     router_script = "filename='router.js'"
     assert (
         TEMPLATE.index(api_script)
         < TEMPLATE.index(store_script)
         < TEMPLATE.index(controllers_script)
+        < TEMPLATE.index(io_controller_script)
         < TEMPLATE.index(router_script)
         < TEMPLATE.index(app_script)
     )
@@ -98,3 +101,19 @@ def test_visualization_history_polling_is_page_scoped() -> None:
     assert 'pageControllers.register("visualization"' in APP
     assert "window.clearInterval(historyTimer)" in APP
     assert "pageControllers.activate(nextView)" in APP
+
+
+def test_io_interactions_are_owned_by_page_scoped_controller() -> None:
+    assert 'pageControllers.register("io-status"' in APP
+    assert "NaritIOPageController.create" in APP
+    assert "I/O Status Page event listeners" not in APP
+    assert 'removeEventListener("click", onFilter)' in IO_PAGE_CONTROLLER
+    assert 'removeEventListener("input", onSearch)' in IO_PAGE_CONTROLLER
+    assert 'removeEventListener("click", onRefresh)' in IO_PAGE_CONTROLLER
+    assert "options.state.ioFilter" in IO_PAGE_CONTROLLER
+    assert "options.state.ioSearch" in IO_PAGE_CONTROLLER
+
+
+def test_io_page_controller_is_read_only_and_has_no_transport_authority() -> None:
+    for forbidden in ("fetch(", "/api/", "GPIO", "CommandEnvelope", "POST"):
+        assert forbidden not in IO_PAGE_CONTROLLER
