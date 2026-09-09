@@ -1,49 +1,49 @@
 # การตั้งค่าระบบส่งกำลังและระยะเคลื่อนที่
 
-## ค่าตั้งต้นของเครื่อง
+เอกสารสรุปนี้ใช้กับ IRIV V1 รายละเอียดเต็มอยู่ที่
+[CONFIGURATION_AND_CALIBRATION_TH.md](CONFIGURATION_AND_CALIBRATION_TH.md)
 
-| แกน | ระบบส่งกำลัง | ระยะอ้างอิง | ค่าคำนวณเริ่มต้น |
-| --- | --- | ---: | --- |
-| X | MISUMI MTSRL25-1800, physical pitch 5 mm/rev | วัดจริง 1,600 mm | สอบเทียบร่วมกับ Y เป็น 68.75 pulse/mm; software travel 1,590 mm |
-| Y | MISUMI MTSRL25-1800, physical pitch 5 mm/rev | วัดจริง 1,600 mm | 110,000 pulse ÷ 1,600 mm = 68.75 pulse/mm; software travel 1,590 mm |
-| Z | GTD-A001, timing belt 2GT | 180 mm nominal | คงค่า 200 pulse/mm จนกว่าจะยืนยันจำนวนฟัน pulley และอัตราทด |
+## ค่าที่บันทึกอยู่ปัจจุบัน
 
-ความยาวสกรู 1,800 mm ไม่ใช่หลักฐานว่า usable stroke เท่ากับ 1,800 mm เพราะตำแหน่งน็อต ชุดรองรับปลายเพลา และ limit sensor ทำให้ระยะจริงสั้นลง ค่า `max_travel_mm` สุดท้ายต้องมาจากการวัดกับเครื่องจริง
+| แกน | ระบบส่งกำลัง | ระยะ | Calibration ที่บันทึก |
+|---|---|---:|---:|
+| X | MISUMI MTSRL25-1800; ต้องยืนยัน pitch/อัตราทดจริง | 1,700 mm | 64.705882 pulse/mm |
+| Y | MISUMI MTSRL25-1800; ต้องยืนยัน pitch/อัตราทดจริง | 1,700 mm | 64.705882 pulse/mm |
+| Z | GTD-A001 timing belt 2GT | 160 mm | 9 pulse/mm; pulley teeth ยังไม่ยืนยัน |
 
-## ขั้นตอนวัดระยะ
+ความยาวชิ้นส่วน nominal ไม่ใช่ usable stroke ค่า production ต้องมาจาก physical Min→Max measurement
+และ pulse count ที่บันทึกในรอบเดียวกัน
 
-1. เคลียร์ alarm ของไดรฟ์ตามคู่มือผู้ผลิตและตรวจว่าพื้นที่เคลื่อนที่ปลอดภัย
-2. ใช้ความเร็ว commissioning ต่ำ ห้ามเริ่มจากความเร็วสูงสุด
-3. Home แกนที่ต้องการวัดให้ตำแหน่ง Min เป็น 0
-4. ผู้ควบคุมสั่ง Move to Max และเฝ้าปุ่ม Stop/E-Stop ตลอดเวลา ระบบต้องหยุดเมื่อ Max sensor ทำงาน
-5. วัดระยะ Min ถึง Max จริงด้วยอุปกรณ์วัดภายนอก อย่าใช้ค่าหน้าเว็บเพียงอย่างเดียวก่อนสอบเทียบ pulse/mm
-6. เปิด `Machine Setup > Travel & Drive Setup`
-7. กรอก `Measured Min → Max` และ `Safety Margin`
-8. กด `USE MEASURED − MARGIN` จากนั้นตรวจ `Maximum Travel`
-9. กด `SAVE TO PI` และ `APPLY & RESTART` การบันทึกค่าจะไม่สั่งมอเตอร์เคลื่อนที่
-10. Home ใหม่และทดสอบด้วยความเร็วต่ำก่อนใช้งานจริง
+## ขั้นตอนย่อ
 
-สูตรที่ใช้คือ `software travel = measured physical stroke − safety margin`
+1. สำรอง configuration และบันทึก revision
+2. ตรวจ safety/communication และใช้ความเร็วต่ำ
+3. Home ที่ Min
+4. ผู้ควบคุมสั่ง Move to physical Max sensor
+5. บันทึก observed pulse และวัดระยะด้วยเครื่องมือภายนอก
+6. คำนวณ `pulses_per_mm = observed_pulses / measured_distance_mm`
+7. ทำซ้ำสองทิศและหลายระยะ
+8. แก้ Machine Setup, Save, Apply & Restart
+9. ตรวจ revision, Home ใหม่และทดสอบระยะสั้น
 
-## การสอบเทียบ Z แบบสายพาน
+สูตรแนะนำคือ `software travel = measured physical stroke − safety margin` แต่ configuration ปัจจุบัน
+เก็บ X/Y `measured_travel_mm=1700`, `margin=10` และ `max_travel_mm=1700` ซึ่งไม่ตรงสูตรนี้
+จึงต้องยืนยันเจตนาและวัดซ้ำก่อนเปลี่ยนค่า production
 
-หน้าอ้างอิง GTD-A001 ระบุสายพาน 2GT แต่ไม่ระบุจำนวนฟัน pulley ของชุดที่ติดตั้ง จึงห้ามสมมติค่า 20 ฟันโดยไม่มีการตรวจชิ้นส่วนจริง
+## Z แบบสายพาน
 
-- `travel_per_rev_mm = belt_pitch_mm × pulley_teeth ÷ gear_ratio`
-- `pulses_per_mm = motor_steps_per_rev × microsteps ÷ travel_per_rev_mm`
+`travel_per_rev_mm = belt_pitch_mm × pulley_teeth ÷ gear_ratio` และ
+`pulses_per_mm = pulses_per_rev ÷ travel_per_rev_mm` ปัจจุบัน pulley teeth ยังเป็น null จึงห้าม
+สมมติจำนวนฟัน ค่า 9 pulse/mm ต้องถือเป็น empirical value จนมี measurement record
 
-ตัวอย่างเท่านั้น: pulley 20 ฟัน, pitch 2 mm, ไม่มีอัตราทด จะเคลื่อนที่ 40 mm/rev แต่ต้องตรวจ pulley และอัตราทดจริงก่อนบันทึก
+## ความเร็ว
 
-## ข้อจำกัดความเร็วชั่วคราว
+configuration บันทึก commissioned maximum 100 mm/s ทุกแกน แต่ค่านี้ไม่ใช่หลักฐานว่าเครื่องผ่าน
+commissioning ที่ความเร็วดังกล่าว ต้องเพิ่มทีละขั้นและตรวจ ALM, PEND, position error และกลไก
+ค่า 50,000 pulse/s ของ NUCLEO ไม่ใช่ mechanical safe-speed rating
 
-หลังการวัดล่าสุด ระบบเปิดช่วง slider ปกติเป็น X/Y 20 mm/s และ Z 10 mm/s เพื่อให้ปรับเกิน 5 mm/s ได้ โดยยังคงต้องเพิ่มความเร็วทีละขั้นและตรวจ drive alarm ค่าเพดาน 50,000 pulse/s ของ NUCLEO ไม่ใช่หลักฐานว่ากลไกสามารถทำงานที่ความเร็วนั้นได้อย่างปลอดภัย
+## ประวัติที่ห้ามนำมาปะปน
 
-## ผลสอบเทียบ X/Y วันที่ 2026-09-07
-
-เมื่อ Y Max sensor ทำงาน Controller บันทึก 110,000 pulse และแสดง 343.75 mm ด้วยค่าเดิม 320 pulse/mm ขณะที่ผู้ควบคุมวัดระยะจริงได้ 1,600 mm:
-
-- `pulses_per_mm = 110000 / 1600 = 68.75`
-- `effective_travel_per_motor_rev = 1600 / 68.75 = 23.272727 mm/rev`
-- `software_travel = 1600 - 10 = 1590 mm`
-
-ค่า 23.272727 mm/rev เป็นค่า effective ของระบบทั้งหมด ไม่ใช่ physical pitch ของสกรู 5 mm/rev ความแตกต่างต้องตรวจการตั้ง microstep จริง อัตราทด coupling/gear และระยะที่วัดอีกครั้งก่อนถือเป็น calibration ขั้นสุดท้าย ค่า X ใช้ calibration เดียวกับ Y ตามข้อมูลที่ผู้ควบคุมแจ้งว่าระบบส่งกำลังและระยะจริงเท่ากัน
+บันทึกวันที่ 2026-09-07 เคยใช้ 110,000 pulse กับระยะ 1,600 mm และได้ 68.75 pulse/mm
+configuration ปัจจุบันเปลี่ยนเป็น 64.705882 pulse/mm สำหรับ 1,700 mm โดยยังต้องมี measurement record ใหม่
+ห้ามใช้บันทึก 1,600 mm เป็นหลักฐานรองรับค่า 1,700 mm

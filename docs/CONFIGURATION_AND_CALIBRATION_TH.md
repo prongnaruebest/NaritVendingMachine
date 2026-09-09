@@ -1,0 +1,144 @@
+# คู่มือ Configuration และ Axis Calibration
+
+คู่มือนี้ใช้กับเครื่องจริงโปรไฟล์ IRIV (`machine_config.iriv.json` และ `hardware_config.iriv.json`)
+การแก้ configuration ไม่ทำให้มอเตอร์เคลื่อน แต่ `Apply & Restart` ทำให้ Controller restart,
+motion ถูกล็อก และ Homed status ถูกล้าง
+
+## 1. Configuration authority
+
+Effective configuration ถูกประกอบตามลำดับ:
+
+1. `machine_config.iriv.json` ให้ค่าพื้นฐานของ axis, homing, travel และ slots
+2. `hardware_config.iriv.json > motors` ให้ STEP/DIR/Enable pins
+3. `hardware_config.iriv.json > digital_inputs` ให้ limit/home pins
+4. `hardware_config.iriv.json > machine_parameters.axes` override motion parameters
+
+ห้ามอ่านไฟล์ใดไฟล์หนึ่งแล้วสรุปว่าเป็นค่าที่ Controller ใช้ ให้ตรวจ `GET /api/config/effective`
+หรือหน้า Machine Setup พร้อม configuration revision เสมอ ค่า override ที่ต่างกันต้องแสดง warning
+ไฟล์ที่ไม่มี `.iriv` เป็นโปรไฟล์อื่น ไม่ใช่ authority ของเครื่อง IRIV V1
+
+## 2. ค่าปัจจุบันของโปรไฟล์ IRIV
+
+| Axis | Drive type | pulses/rev | pulses/mm | Maximum travel | Default speed | Homing search/latch |
+|---|---|---:|---:|---:|---:|---:|
+| X | lead screw/effective calibration | 1,600 | 64.705882 | 1,700 mm | 5 mm/s | 20 / 5 mm/s |
+| Y | lead screw/effective calibration | 1,600 | 64.705882 | 1,700 mm | 5 mm/s | 20 / 5 mm/s |
+| Z | timing belt/pulley | 1,600 | 9.0 | 160 mm | 2 mm/s | 20 / 5 mm/s |
+
+ทั้งสามแกนบันทึก `commissioned_max_speed_mm_s = 100` แต่ห้ามตีความว่า 100 mm/s ผ่านการทดสอบแล้ว
+หากไม่มี commissioning record ที่ตรวจ driver alarm, PEND, position error และกลไก ให้ลดค่าลงเป็น
+ความเร็วที่พิสูจน์แล้วก่อนใช้งาน production
+
+## 3. สูตรมาตรฐาน
+
+```text
+pulses_per_rev = motor_steps_per_rev × driver_microsteps
+pulses_per_mm = pulses_per_rev ÷ travel_per_rev_mm
+travel_per_rev_mm = pulses_per_rev ÷ pulses_per_mm
+pulse_hz = speed_mm_s × pulses_per_mm
+rpm = pulse_hz × 60 ÷ pulses_per_rev
+speed_mm_s = pulse_hz ÷ pulses_per_mm
+```
+
+เพดานเชิงตัวเลขคือค่าต่ำสุดของ `max_speed_mm_s`, `commissioned_max_speed_mm_s` และ
+`max_pulse_hz ÷ pulses_per_mm` เพดาน NUCLEO หรือ pulse-input rating ของ driver
+ไม่ใช่ความเร็วกลไกที่ปลอดภัย
+
+## 4. X/Y lead screw และ effective calibration
+
+จาก motor 200 step/rev และ microstep 8 จะได้ `pulses_per_rev = 1,600` แต่ค่าปัจจุบัน
+`64.705882 pulse/mm` เทียบเท่า effective travel `24.727273 mm/rev` ซึ่งไม่เท่ากับ screw pitch
+5 mm/rev ที่เคยอ้างไว้ ต้องตรวจ DIP switch, อัตราทด, pulse count และการวัด stroke อีกครั้ง
+
+```text
+calibrated_pulses_per_mm = observed_pulses ÷ measured_distance_mm
+```
+
+ห้ามปรับ pitch เพื่อทำให้ตัวเลขหน้าจอตรงเพียงอย่างเดียว ทดสอบอย่างน้อยสองระยะและสองทิศ
+เพื่อค้นหา backlash หรือ pulse loss
+
+## 5. Z timing belt/pulley
+
+Z ไม่มี lead screw ค่า compatibility field `lead_screw_pitch_mm = 177.777778` หมายถึง effective
+travel per motor revolution จาก `1,600 ÷ 9` ไม่ใช่ lead-screw pitch จริง
+
+```text
+pulley_travel_per_rev_mm = belt_pitch_mm × pulley_teeth ÷ gear_ratio
+pulses_per_mm = pulses_per_rev ÷ pulley_travel_per_rev_mm
+```
+
+ปัจจุบัน belt pitch คือ 2 mm แต่ `pulley_teeth` ยังเป็น null จึงต้องถือ `9 pulse/mm` เป็น empirical
+value ชั่วคราว ต้องยืนยันจาก pulse count Min→Max และระยะจริง 160 mm
+
+## 6. Travel calibration workflow
+
+1. สำรอง configuration และบันทึก revision
+2. ตรวจ E-Stop, Stop, ALM, NUCLEO และ IRIV I/O
+3. ใช้ความเร็วต่ำที่พิสูจน์แล้วและ Home ที่ Min
+4. ผู้ควบคุมสั่ง Move to Max ซึ่งต้องจบด้วย physical Max sensor และ watchdog
+5. บันทึก observed pulses และวัด Min→Max ด้วยเครื่องมือภายนอก
+6. คำนวณ pulses/mm แล้วทำซ้ำ Max→Min เพื่อตรวจ backlash/pulse loss
+7. กำหนด measured/software travel ตามพื้นที่ปลอดภัยจริง
+8. แก้ `Machine Setup > Travel & Drive Setup`
+9. ตรวจ effective values แล้ว `SAVE TO PI`
+10. `APPLY & RESTART`, รอ Controller กลับมาและตรวจ revision
+11. Home ใหม่และทดสอบระยะสั้นด้วยความเร็วต่ำ
+
+Move to Min/Max ใช้ sensor จริงเป็น completion boundary; software travel ไม่ควรแทน sensor
+แต่ E-Stop, Stop, alarm, communication fault และ watchdog ห้ามถูกปิด
+
+## 7. Motor และ Homing Settings
+
+| Parameter | ความหมาย | Validation สำคัญ |
+|---|---|---|
+| `motor_steps_per_rev` | full steps ต่อรอบ | มากกว่า 0 และตรง datasheet |
+| `driver_microsteps` | microstep ของ driver | มากกว่า 0 และตรง DIP switch |
+| `steps_per_mm` | pulse ต่อ 1 mm | ผ่าน empirical calibration |
+| `max_travel_mm` | software coordinate สูงสุด | ไม่เกินช่วงปลอดภัย |
+| `default_speed_mm_s` | speed เริ่มต้น | ไม่เกินทุก speed ceiling |
+| `acceleration`, `deceleration` | ramp หน่วย mm/s² | เพิ่มทีละขั้นและตรวจ oscillation |
+| `home_direction`, `forward_direction` | polarity ทิศทาง | เป็น 0/1 และตรงข้ามกัน |
+
+- `home_position_mm` ต้องอยู่ระหว่าง 0 และ `max_travel_mm`
+- search speed ใช้ค้นหาระยะไกล; latch speed ใช้ approach รอบยืนยัน
+- timeout เป็น time watchdog ไม่ใช่จำนวน step จำกัด
+- Homed เป็น true เมื่อ zero และ offset move สำเร็จเท่านั้น
+- Protocol v3 จึงใช้ parallel Home All; v2 ต้อง fallback แบบลำดับ
+
+## 8. PEND commissioning X/Y
+
+PiControl local DI2 คือ `X_PEND` และ DI3 คือ `Y_PEND` เป็น in-position feedback ไม่ใช่ Drive Alarm
+
+1. คง `commissioned=false` และ `require_transition=false`
+2. ตรวจ raw/logical polarity ตอน idle
+3. สั่งระยะสั้นที่ความเร็วต่ำภายใต้ผู้ควบคุม
+4. ยืนยัน transition และเวลาที่กลับ stable หลายรอบ รวม zero-distance
+5. ตั้ง `settle_timeout_ms` จากค่าที่วัดพร้อม margin
+6. เปิด `commissioned=true` ทีละแกน
+7. เปิด `require_transition=true` เมื่อ polling มองเห็น transition ทุกคำสั่งจริงเท่านั้น
+
+PEND ไม่สามารถ bypass E-Stop/ALM หาก PEND ไม่มาเมื่อ commissioned แล้ว คำสั่งต้อง Failed
+และไม่ควร Reset Drives อัตโนมัติ
+
+## 9. Save, Validate และ Apply
+
+1. `RESET CHANGES` คืนเฉพาะค่าที่ยังไม่ได้บันทึก
+2. การแก้ field ต้องทำให้ dirty และ invalidate pending Validate/Arm
+3. `SAVE TO PI` ต้อง validate และสร้าง backup ก่อน atomic write
+4. Validation error ต้องห้าม Save และแสดง field/code
+5. หลัง Save ต้องแสดง `restart_required=true`; process เดิมยังไม่ใช้ค่าใหม่
+6. `APPLY & RESTART` ใช้เมื่อเครื่อง Idle และพื้นที่ปลอดภัย
+7. รอ API กลับมาแล้วตรวจ `restart_required=false` และ revision ใหม่
+8. ตรวจ Controller/NUCLEO/IRIV และ Home ใหม่
+
+ห้ามกด Apply ซ้ำระหว่าง restart หากไม่กลับมาตามเวลา ให้ตรวจ service log และ effective configuration
+แทนการสั่ง motion
+
+## 10. Configuration acceptance record
+
+- วันที่, ผู้ดำเนินการ และ revision ก่อน/หลัง
+- DIP switch, motor steps, pulley teeth/ratio หรือ screw pitch ที่ตรวจจริง
+- measured distance, observed pulses และ pulses/mm
+- search/latch/default/commissioned speed พร้อมผล ALM/PEND
+- backup path และผล validation
+- ผล Home ซ้ำ, short move, bidirectional move และ external position measurement
