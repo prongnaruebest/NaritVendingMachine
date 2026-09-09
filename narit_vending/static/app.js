@@ -1563,6 +1563,7 @@
   if (!window.NaritSelectedSlotController) throw new Error("HMI Selected Slot controller failed to load");
   if (!window.NaritVisualizationPageController) throw new Error("HMI Visualization page controller failed to load");
   if (!window.NaritDemoPageController) throw new Error("HMI Demo page controller failed to load");
+  if (!window.NaritIORegistryView) throw new Error("HMI I/O registry view failed to load");
   const pageControllers = window.NaritPageControllers.createRegistry({
     onError: (error, context) => console.error(
       `[HMI] ${context.view || "unknown"} page ${context.phase} failed`,
@@ -3143,44 +3144,19 @@
 
   /* ── RENDER: INDUSTRIAL I/O MATRIX & COMMISSIONING ────────── */
   function controllerIORegistry(filters = {}) {
-    const channels = Array.isArray(MS.payload?.io_registry) ? MS.payload.io_registry : [];
-    return channels.filter((channel) => Object.entries(filters).every(([key, value]) => channel?.[key] === value));
+    return window.NaritIORegistryView.channels(MS.payload?.io_registry, filters);
   }
 
   function controllerIOChannel(filters = {}) {
-    return controllerIORegistry(filters)[0] || null;
+    return window.NaritIORegistryView.first(MS.payload?.io_registry, filters);
   }
 
-  const IO_KIND_LABELS = {
-    safety_interlock: "Safety Interlock",
-    drive_alarm: "Drive Alarm Feedback",
-    position_feedback: "Position Feedback",
-    position_switch: "Position / Limit Switch",
-    process_sensor: "Process Sensor",
-    command_output: "Controller Output",
-  };
-
   function ioDefinition(channel) {
-    const category = channel.safety_class === "safety" ? "safety"
-      : channel.kind === "position_switch" ? "limits"
-      : channel.kind === "process_sensor" ? "sensors"
-      : channel.kind === "drive_alarm" ? "drive-alarms"
-      : channel.direction === "output" ? "outputs" : "inputs";
-    return {
-      ...channel,
-      role: IO_KIND_LABELS[channel.kind] || "Digital I/O",
-      category,
-      terminal: channel.address || "--",
-      coil: channel.protocol_address || channel.address || "--",
-      desc: `${channel.source === "iriv_modbus" ? "IRIV Modbus" : "PiControl local"} · ${channel.stale ? "stale data" : "live Controller data"}`,
-      highlight: channel.kind === "position_switch" && String(channel.key).endsWith("_home"),
-      isSafety: channel.safety_class === "safety",
-      isAlarm: channel.kind === "drive_alarm" || channel.key === "alarm",
-    };
+    return window.NaritIORegistryView.definition(channel);
   }
 
   function irivChannelDefinitions(direction) {
-    return controllerIORegistry({ source: "iriv_modbus", direction }).map(ioDefinition);
+    return window.NaritIORegistryView.definitions(MS.payload?.io_registry, { source: "iriv_modbus", direction });
   }
 
   function renderIOMatrix() {

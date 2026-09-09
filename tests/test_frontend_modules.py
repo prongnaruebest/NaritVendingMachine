@@ -16,6 +16,7 @@ SLOTS_PAGE_CONTROLLER = (ROOT / "narit_vending" / "static" / "slots-page-control
 SELECTED_SLOT_CONTROLLER = (ROOT / "narit_vending" / "static" / "selected-slot-controller.js").read_text(encoding="utf-8")
 VISUALIZATION_PAGE_CONTROLLER = (ROOT / "narit_vending" / "static" / "visualization-page-controller.js").read_text(encoding="utf-8")
 DEMO_PAGE_CONTROLLER = (ROOT / "narit_vending" / "static" / "demo-page-controller.js").read_text(encoding="utf-8")
+IO_REGISTRY_VIEW = (ROOT / "narit_vending" / "static" / "io-registry-view.js").read_text(encoding="utf-8")
 ROUTER = (ROOT / "narit_vending" / "static" / "router.js").read_text(encoding="utf-8")
 
 
@@ -38,6 +39,7 @@ def test_machine_store_loads_between_transport_and_application() -> None:
     selected_slot_script = "filename='selected-slot-controller.js'"
     visualization_script = "filename='visualization-page-controller.js'"
     demo_script = "filename='demo-page-controller.js'"
+    io_registry_script = "filename='io-registry-view.js'"
     app_script = "filename='app.js'"
     router_script = "filename='router.js'"
     assert (
@@ -53,6 +55,7 @@ def test_machine_store_loads_between_transport_and_application() -> None:
         < TEMPLATE.index(selected_slot_script)
         < TEMPLATE.index(visualization_script)
         < TEMPLATE.index(demo_script)
+        < TEMPLATE.index(io_registry_script)
         < TEMPLATE.index(router_script)
         < TEMPLATE.index(app_script)
     )
@@ -166,6 +169,23 @@ def test_demo_controls_share_visualization_page_lifecycle() -> None:
 def test_demo_controller_has_no_direct_transport_or_machine_authority() -> None:
     for forbidden in ("fetch(", "/api/", "GPIO", "CommandEnvelope", "POST"):
         assert forbidden not in DEMO_PAGE_CONTROLLER
+
+
+def test_io_views_delegate_registry_metadata_to_pure_selectors() -> None:
+    assert "NaritIORegistryView.channels" in APP
+    assert "NaritIORegistryView.first" in APP
+    assert "NaritIORegistryView.definition" in APP
+    assert "NaritIORegistryView.definitions" in APP
+    assert "const IO_KIND_LABELS" not in APP
+    for kind in ("safety_interlock", "drive_alarm", "position_feedback", "position_switch", "process_sensor", "command_output"):
+        assert kind in IO_REGISTRY_VIEW
+    for derived in ("category", "terminal", "coil", "highlight", "isSafety", "isAlarm"):
+        assert derived in IO_REGISTRY_VIEW
+
+
+def test_io_registry_view_is_pure_and_has_no_machine_authority() -> None:
+    for forbidden in ("fetch(", "/api/", "GPIO", "CommandEnvelope", "POST", "document."):
+        assert forbidden not in IO_REGISTRY_VIEW
 
 
 def test_io_interactions_are_owned_by_page_scoped_controller() -> None:
