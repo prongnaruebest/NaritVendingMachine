@@ -95,6 +95,7 @@ Exit criterion: failed health checks roll back safely and no deploy performs mot
 - [x] Add a hardware-neutral S-curve reference model and characterization tests for X/Y only.
 - [x] Add a firmware-ready seven-segment profile representation with stable seven-phase serialization.
 - [x] Define the capability-gated buffered profile contract (protocol v4 candidate; transport remains disabled).
+- [x] Add a disabled-by-default buffered transport adapter with fake-exchange failure tests.
 - [ ] Integrate X/Y Move, Jog, Home and Limit Seek without changing Z behavior.
 - [ ] Add Machine Setup fields, validation, effective configuration and profile preview.
 - [ ] Build firmware artifact and complete operator-controlled mechanical commissioning.
