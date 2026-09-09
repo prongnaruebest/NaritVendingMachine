@@ -40,6 +40,7 @@ from .mqtt_service import MQTTService
 from .iriv_io import IRIVIOBackend, IRIVIOError
 from .picontrol_io import PiControlIOBackend
 from .nucleo import NucleoLink
+from .persistence.slot_repository import JsonSlotRepository
 
 
 _logger = logging.getLogger(__name__)
@@ -117,6 +118,8 @@ class MotionService:
         else:
             config = build_default_machine_config()
             save_machine_config(config, self.config_path)
+        self.slot_repository = JsonSlotRepository(self.config_path)
+        self._slot_revision = self.slot_repository.revision()
 
         self.config_report = validate_configuration_files(self.config_path, self.hw_config_path)
         if not self.config_report.valid:
@@ -1114,6 +1117,7 @@ class MotionService:
         dispense_delay_ms: int = 0,
     ) -> dict[str, object]:
         def action():
+            previous_config = self.controller.config
             self.controller.update_slot(
                 slot_code,
                 x_mm=x_mm,
@@ -1122,15 +1126,32 @@ class MotionService:
                 product_name=product_name,
                 dispense_delay_ms=dispense_delay_ms,
             )
-            save_machine_config(self.controller.config, self.config_path)
+            try:
+                self._slot_revision = self.slot_repository.save_slot(
+                    slot_code,
+                    self.controller.config.slots[str(slot_code)].to_dict(),
+                    expected_revision=self._slot_revision,
+                )
+            except Exception:
+                self.controller.config = previous_config
+                raise
 
         return self._run(f"save_slot_{slot_code}", action, motion_command=False)
 
     def save_slot_from_current(self, slot_code: str) -> dict[str, object]:
         def action():
             current = self.controller.current_position()
+            previous_config = self.controller.config
             self.controller.update_slot(slot_code, **current)
-            save_machine_config(self.controller.config, self.config_path)
+            try:
+                self._slot_revision = self.slot_repository.save_slot(
+                    slot_code,
+                    self.controller.config.slots[str(slot_code)].to_dict(),
+                    expected_revision=self._slot_revision,
+                )
+            except Exception:
+                self.controller.config = previous_config
+                raise
             return current
 
         return self._run(f"save_current_slot_{slot_code}", action, motion_command=False)
@@ -1480,6 +1501,7 @@ class MotionService:
             raise
 
         self.controller.config = updated_config
+        self._slot_revision = self.slot_repository.revision()
         self.configuration_restart_required = True
         self.config_report = validate_configuration_files(self.config_path, self.hw_config_path)
         self.armed_move = None
@@ -1505,8 +1527,17 @@ class MotionService:
 
     def reset_slot(self, slot_code: str) -> dict[str, object]:
         def action():
+            previous_config = self.controller.config
             self.controller.update_slot(slot_code, x_mm=0.0, y_mm=0.0, z_mm=0.0)
-            save_machine_config(self.controller.config, self.config_path)
+            try:
+                self._slot_revision = self.slot_repository.save_slot(
+                    slot_code,
+                    self.controller.config.slots[str(slot_code)].to_dict(),
+                    expected_revision=self._slot_revision,
+                )
+            except Exception:
+                self.controller.config = previous_config
+                raise
 
         return self._run(f"reset_slot_{slot_code}", action, motion_command=False)
 
