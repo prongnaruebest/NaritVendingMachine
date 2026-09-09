@@ -83,6 +83,8 @@ CSS โหลดตามลำดับ `static/tokens.css` → `static/style.c
 
 `static/system-control-page-controller.js` เป็นเจ้าของอายุ event listener ของ Enable/Disable Motion, USB-link reset และ X/Y drive-power controls เฉพาะตอนเปิดหน้า System Control ส่วน confirmation, API command, safety validation และผลลัพธ์ยังถูกส่งกลับไปดำเนินการผ่าน Controller path ใน `app.js`
 
+หน้า Motion ใช้ composite lifecycle รวม `static/selected-slot-controller.js` และ `static/motion-travel-controller.js` ทำให้ Homing, Stop, reset interlock, Min/Max และ single-axis position controls ถูก mount เฉพาะเมื่อเปิดหน้า Motion ขณะที่การตรวจ target, timeout และการส่งคำสั่งยังอยู่ใน Controller-facing callback ของ `app.js`
+
 เมื่อ speed หรือ target เปลี่ยน:
 
 - Direct Jog/Min/Max ตรวจ readiness ใหม่และใช้ค่าถัดไป

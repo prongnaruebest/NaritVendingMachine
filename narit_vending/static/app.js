@@ -1565,6 +1565,7 @@
   if (!window.NaritDemoPageController) throw new Error("HMI Demo page controller failed to load");
   if (!window.NaritIORegistryView) throw new Error("HMI I/O registry view failed to load");
   if (!window.NaritSystemControlPageController) throw new Error("HMI System Control page controller failed to load");
+  if (!window.NaritMotionTravelController) throw new Error("HMI Motion Travel controller failed to load");
   const pageControllers = window.NaritPageControllers.createRegistry({
     onError: (error, context) => console.error(
       `[HMI] ${context.view || "unknown"} page ${context.phase} failed`,
@@ -3975,6 +3976,64 @@
     renderDemoSampling();
   }
 
+  function homeAllAxes() {
+    return command("Home all axes", "/api/home/all", undefined, { timeoutMs: 300000 });
+  }
+
+  function homeAxis(axis) {
+    if (!AXES.includes(axis)) return undefined;
+    return command(`Home axis ${axis.toUpperCase()}`, `/api/home/${axis}`, undefined, { timeoutMs: 300000 });
+  }
+
+  function stopTravelMotion() {
+    setText("travel-limit-feedback", "STOP requested — waiting for controller status.");
+    return command("Stop motion", "/api/stop", undefined, { isStop: true, noCheck: true });
+  }
+
+  async function resetTravelInterlock() {
+    setText("travel-limit-feedback", "Resetting software Stop latch and resettable alarms…");
+    const result = await command("Reset stop and alarms", "/api/clear-alarm", undefined, { isStop: true, noCheck: true });
+    setText("travel-limit-feedback", result
+      ? "Reset accepted. Waiting for Controller readiness before enabling Min / Max."
+      : "Reset was rejected. Review the interlock reason above.");
+  }
+
+  async function moveAxisToLimit(axis, limit) {
+    const maximum = Number(MS.config?.axes?.[axis]?.max_travel_mm);
+    if (!AXES.includes(axis) || !["min", "max"].includes(limit) || !Number.isFinite(maximum)) {
+      toast("Axis travel configuration is unavailable.", "error");
+      return;
+    }
+    const target = limit === "min" ? 0 : maximum;
+    setText("travel-limit-feedback", `Moving ${axis.toUpperCase()} to ${limit.toUpperCase()} (${target.toFixed(3)} mm).`);
+    const result = await command(
+      `Move ${axis.toUpperCase()} to ${limit.toUpperCase()}`,
+      "/api/move-to-limit",
+      { axis, endpoint: limit, speed_mm_s: effectiveMotionSpeed([axis]) },
+      { timeoutMs: 650000 },
+    );
+    setText("travel-limit-feedback", result
+      ? `${axis.toUpperCase()} ${limit.toUpperCase()} command completed. Verify the displayed position and limit sensor.`
+      : `${axis.toUpperCase()} ${limit.toUpperCase()} command was rejected or stopped. Review the interlock message.`);
+  }
+
+  function moveAxisToPosition(axis) {
+    if (!AXES.includes(axis)) return undefined;
+    const target = Number(el(`axis-goto-${axis}`)?.value);
+    const maximum = Number(MS.config?.axes?.[axis]?.max_travel_mm);
+    if (!Number.isFinite(target) || target < 0 || target > maximum) {
+      toast(`${axis.toUpperCase()} target must be within 0-${maximum} mm.`, "error");
+      return undefined;
+    }
+    setText("travel-limit-feedback", `Moving ${axis.toUpperCase()} to ${target.toFixed(3)} mm.`);
+    return command(
+      `Move ${axis.toUpperCase()} to ${target.toFixed(3)} mm`,
+      "/api/move",
+      { [`${axis}_mm`]: target, speed_mm_s: effectiveMotionSpeed([axis]) },
+      { requiredAxes: [axis], timeoutMs: 650000 },
+    );
+  }
+
   function renderWorkspacePages() {
     const status = getStatus();
     const operation = getOperation();
@@ -4479,17 +4538,6 @@
       });
     });
 
-    /* --- Homing --- */
-    el("home-all").addEventListener("click", () => {
-      command("Home all axes", "/api/home/all", undefined, { timeoutMs: 300000 });
-    });
-    $$(".home-axis").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const axis = btn.dataset.axis;
-        command(`Home axis ${axis.toUpperCase()}`, `/api/home/${axis}`, undefined, { timeoutMs: 300000 });
-      });
-    });
-
     /* --- Target positioning workflow --- */
     el("target-load-current").addEventListener("click", loadCurrentManualTarget);
     el("target-load-selected-slot").addEventListener("click", loadSelectedSlotManualTarget);
@@ -4506,59 +4554,6 @@
       command("Abort motion", "/api/motion/abort", undefined, { isStop: true, noCheck: true });
     });
 
-    el("operator-stop").addEventListener("click", () => {
-      setText("travel-limit-feedback", "STOP requested — waiting for controller status.");
-      command("Stop motion", "/api/stop", undefined, { isStop: true, noCheck: true });
-    });
-    el("travel-reset-interlock").addEventListener("click", async () => {
-      setText("travel-limit-feedback", "Resetting software Stop latch and resettable alarms…");
-      const result = await command("Reset stop and alarms", "/api/clear-alarm", undefined, { isStop: true, noCheck: true });
-      setText("travel-limit-feedback", result
-        ? "Reset accepted. Waiting for Controller readiness before enabling Min / Max."
-        : "Reset was rejected. Review the interlock reason above.");
-    });
-    $$('[data-travel-axis]').forEach((button) => {
-      button.addEventListener("click", () => {
-        const axis = button.dataset.travelAxis;
-        const limit = button.dataset.travelLimit;
-        const maximum = Number(MS.config?.axes?.[axis]?.max_travel_mm);
-        if (!AXES.includes(axis) || !["min", "max"].includes(limit) || !Number.isFinite(maximum)) {
-          toast("Axis travel configuration is unavailable.", "error");
-          return;
-        }
-        const target = limit === "min" ? 0 : maximum;
-        setText("travel-limit-feedback", `Moving ${axis.toUpperCase()} to ${limit.toUpperCase()} (${target.toFixed(3)} mm).`);
-        command(
-          `Move ${axis.toUpperCase()} to ${limit.toUpperCase()}`,
-          "/api/move-to-limit",
-          { axis, endpoint: limit, speed_mm_s: effectiveMotionSpeed([axis]) },
-          { timeoutMs: 650000 },
-        ).then((result) => {
-          setText("travel-limit-feedback", result
-            ? `${axis.toUpperCase()} ${limit.toUpperCase()} command completed. Verify the displayed position and limit sensor.`
-            : `${axis.toUpperCase()} ${limit.toUpperCase()} command was rejected or stopped. Review the interlock message.`);
-        });
-      });
-    });
-    $$('[data-axis-goto]').forEach((button) => {
-      button.addEventListener("click", () => {
-        const axis = button.dataset.axisGoto;
-        const input = el(`axis-goto-${axis}`);
-        const target = Number(input?.value);
-        const maximum = Number(MS.config?.axes?.[axis]?.max_travel_mm);
-        if (!Number.isFinite(target) || target < 0 || target > maximum) {
-          toast(`${axis.toUpperCase()} target must be within 0-${maximum} mm.`, "error");
-          return;
-        }
-        setText("travel-limit-feedback", `Moving ${axis.toUpperCase()} to ${target.toFixed(3)} mm.`);
-        command(
-          `Move ${axis.toUpperCase()} to ${target.toFixed(3)} mm`,
-          "/api/move",
-          { [`${axis}_mm`]: target, speed_mm_s: effectiveMotionSpeed([axis]) },
-          { requiredAxes: [axis], timeoutMs: 650000 },
-        );
-      });
-    });
     document.addEventListener("input", (event) => {
       const control = event.target.closest?.("[data-axis-speed-range], [data-axis-speed-number]");
       if (!control) return;
@@ -4841,14 +4836,33 @@
       },
       onError: (error) => console.error("[HMI] Slot table action failed", error),
     }));
-    pageControllers.register("motion", window.NaritSelectedSlotController.create({
+    const selectedSlotControls = window.NaritSelectedSlotController.create({
       onSelectedChange: changeSelectedSlot,
       onLoadTarget: loadSelectedSlotTarget,
       onValidate: validateSelectedSlotTarget,
       onSequenceToggle: setSlotSequenceMode,
       onSelectedGoto: gotoSelectedSlot,
       onError: (error) => console.error("[HMI] Selected Slot action failed", error),
-    }));
+    });
+    const motionTravelControls = window.NaritMotionTravelController.create({
+      onHomeAll: homeAllAxes,
+      onHomeAxis: homeAxis,
+      onStop: stopTravelMotion,
+      onResetInterlock: resetTravelInterlock,
+      onMoveToLimit: moveAxisToLimit,
+      onMoveToPosition: moveAxisToPosition,
+      onError: (error) => console.error("[HMI] Motion travel action failed", error),
+    });
+    pageControllers.register("motion", {
+      mount: () => {
+        const cleanupSelectedSlot = selectedSlotControls.mount();
+        const cleanupTravel = motionTravelControls.mount();
+        return () => {
+          cleanupTravel();
+          cleanupSelectedSlot();
+        };
+      },
+    });
     const visualizationControls = window.NaritVisualizationPageController.create({
       onSelect: selectVisualizationSlot,
       onCoordinateInput: updateVisualizationCoordinateDraft,
