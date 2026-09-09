@@ -84,7 +84,7 @@ Exit criterion: pages share one state source, polling does not overlap, and no m
 
 - [ ] Add formatting, lint, typing and dependency-direction gates. (`ruff` lint and `mypy` checks now protect the dependency-neutral domain/shared core; expand typing coverage to Controller, persistence and web modules incrementally)
 - [x] Build staged atomic release and rollback verification. (artifact, verification, staging, activation, rollback and interruption recovery are automated with non-hardware tests; production execution remains operator-controlled)
-- [ ] Complete operator, configuration, PEND, testing and troubleshooting manuals.
+- [ ] Complete operator, configuration, PEND, testing and troubleshooting manuals. (release migration and rollback runbook complete)
 - [ ] Run read-only production smoke tests.
 - [ ] Prepare operator-controlled mechanical acceptance checklist.
 

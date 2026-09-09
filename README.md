@@ -19,6 +19,7 @@ Motion control base for a Raspberry Pi vending machine with `X/Y/Z` axes, head/t
 - `docs/`: architecture specifications, proposals, and API documentation
 - `docs/ARCHITECTURE_TH.md`: architecture และ production enablement gate ของตู้ IRIV + NUCLEO ปัจจุบัน
 - `docs/HANDOFF_CURRENT_TH.md`: จุดเริ่มต้นสำหรับส่งต่องานทั้งหมด
+- `docs/RELEASE_MIGRATION_RUNBOOK_TH.md`: release, staging, migration และ rollback gates
 - `docs/IRIV_WIRING_TH.md`: network, IRIV IO และ STM32 wiring ล่าสุด
 - `docs/STM32_NMOS_CURRENT_WIRING_TH.md`: connector และ NMOS wiring details
 - `docs/IRIV_ARCHITECTURE.md` / `docs/IRIV_WIRING.md`: legacy references; ห้ามใช้เป็นแบบตู้ปัจจุบัน
