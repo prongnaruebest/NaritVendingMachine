@@ -108,6 +108,7 @@ Exit criterion: failed health checks roll back safely and no deploy performs mot
 - [ ] Integrate X/Y Move, Jog, Home and Limit Seek without changing Z behavior.
 - [x] Add capability-gated Machine Setup editing, atomic persistence and a non-motion profile preview for the validated X/Y fields.
 - [x] Add a fail-closed operation routing matrix: bounded X/Y Move/Jog may use the future buffered runtime, while Home/Limit Seek remain blocked until sensor-terminated profile support exists; Z always stays legacy.
+- [x] Define the checksummed sensor-terminated X/Y profile contract with axis-scoped Min/Max sensors, controlled/immediate stop modes, bounded watchdog and explicit handshake capabilities.
 - [ ] Build firmware artifact and complete operator-controlled mechanical commissioning.
 
 Exit criterion: X/Y start and stop without segment gaps, all configured kinematic limits are enforced,

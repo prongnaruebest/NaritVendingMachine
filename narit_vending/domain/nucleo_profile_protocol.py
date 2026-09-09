@@ -22,6 +22,9 @@ PROFILE_CAPABILITIES = frozenset(
         "profile_telemetry",
     }
 )
+SENSOR_TERMINATED_PROFILE_CAPABILITIES = frozenset(
+    {"sensor_terminated_profile", "axis_sensor_stop", "profile_watchdog"}
+)
 _COMMAND_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,63}$")
 
 
@@ -33,6 +36,10 @@ class NucleoCapabilities:
     @property
     def supports_buffered_scurve(self) -> bool:
         return self.protocol >= PROFILE_PROTOCOL_MIN_VERSION and PROFILE_CAPABILITIES <= self.advertised
+
+    @property
+    def supports_sensor_terminated_scurve(self) -> bool:
+        return self.supports_buffered_scurve and SENSOR_TERMINATED_PROFILE_CAPABILITIES <= self.advertised
 
     @classmethod
     def from_handshake(cls, payload: Mapping[str, Any], *, fallback_protocol: int) -> "NucleoCapabilities":
@@ -149,6 +156,39 @@ class BufferedProfileCommand:
             "sequence": self.sequence,
             "phases": list(self.phases),
         }
+        canonical = json.dumps(body, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+        body["checksum"] = hashlib.sha256(canonical.encode("ascii")).hexdigest()
+        return body
+
+
+@dataclass(frozen=True)
+class SensorTerminatedProfileCommand:
+    """Profile envelope whose endpoint is a physical X/Y limit sensor."""
+
+    profile: BufferedProfileCommand
+    sensor: str
+    stop_mode: str
+    watchdog_us: int
+
+    def __post_init__(self) -> None:
+        expected = {"X_MIN", "X_MAX"} if self.profile.axis == "x" else {"Y_MIN", "Y_MAX"}
+        if self.sensor not in expected:
+            raise ValueError(f"sensor must match profile axis ({'/'.join(sorted(expected))})")
+        if self.stop_mode not in {"controlled", "immediate"}:
+            raise ValueError("stop_mode must be controlled or immediate")
+        if isinstance(self.watchdog_us, bool) or not 100_000 <= self.watchdog_us <= 3_600_000_000:
+            raise ValueError("watchdog_us must be within 100000-3600000000")
+    def payload(self) -> dict[str, object]:
+        body = self.profile.payload()
+        body.update(
+            {
+                "type": "sensor_profile",
+                "termination_sensor": self.sensor,
+                "sensor_stop_mode": self.stop_mode,
+                "watchdog_us": self.watchdog_us,
+            }
+        )
+        body.pop("checksum", None)
         canonical = json.dumps(body, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
         body["checksum"] = hashlib.sha256(canonical.encode("ascii")).hexdigest()
         return body

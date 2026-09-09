@@ -38,7 +38,18 @@ def test_sensor_terminated_operations_are_not_misrouted_to_bounded_profile(opera
     decision = decide_profile_route(config("x", True), operation, capability_ready=True, runtime_ready=True)
 
     assert not decision.executable
-    assert "Sensor-terminated" in decision.reason
+    assert "sensor-terminated" in decision.reason.lower()
+
+
+@pytest.mark.parametrize("operation", [ProfileOperation.HOME, ProfileOperation.LIMIT_SEEK])
+def test_sensor_terminated_operations_route_only_after_all_gates(operation):
+    decision = decide_profile_route(
+        config("x", True), operation,
+        capability_ready=True, runtime_ready=True, sensor_termination_ready=True,
+    )
+
+    assert decision.executable
+    assert decision.route == "sensor_terminated_scurve"
 
 
 @pytest.mark.parametrize("operation", [ProfileOperation.MOVE, ProfileOperation.JOG])
@@ -49,4 +60,3 @@ def test_bounded_xy_profile_requires_connected_runtime(operation):
     assert not disconnected.executable
     assert connected.executable
     assert connected.route == "buffered_scurve"
-

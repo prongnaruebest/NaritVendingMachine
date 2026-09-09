@@ -91,6 +91,12 @@ class NucleoLink:
 
         return self.capabilities.supports_buffered_scurve
 
+    @property
+    def supports_sensor_terminated_scurve(self) -> bool:
+        """Require explicit sensor-stop/watchdog capabilities from handshake."""
+
+        return self.capabilities.supports_sensor_terminated_scurve
+
     def start(self) -> None:
         if self._thread and self._thread.is_alive():
             return
@@ -641,6 +647,7 @@ class NucleoLink:
             "max_move_steps": self.max_move_steps,
             "capabilities": sorted(self.capabilities.advertised),
             "supports_buffered_scurve": self.supports_buffered_scurve,
+            "supports_sensor_terminated_scurve": self.supports_sensor_terminated_scurve,
             "uptime_ms": payload.get("uptime_ms"),
             "last_success_at": last_success_at,
             "last_error": last_error,

@@ -157,3 +157,5 @@ PEND ไม่สามารถ bypass E-Stop/ALM หาก PEND ไม่ม�
 ค่า production ปัจจุบันยังเป็น `scurve_enabled = false` และยังไม่ถูกส่งไปควบคุมมอเตอร์ ห้ามเพิ่มค่าเหล่านี้ให้แกน Z เพราะ Z ต้องใช้ motion path เดิม
 
 Controller แสดง routing matrix ใน status payload แยกตามแกนและชนิดคำสั่ง หากเปิด S-curve แล้ว capability หรือ runtime หาย ระบบต้อง block คำสั่งแทนการ fallback เงียบ ๆ ปัจจุบัน Home และ Limit Seek ยังไม่ใช้ S-curve เพราะเป็นคำสั่งที่ต้องหยุดตาม sensor และ buffered contract รุ่นปัจจุบันรองรับเฉพาะระยะ/pulse ที่ทราบล่วงหน้า
+
+Sensor-terminated contract ที่เตรียมไว้กำหนด sensor เป็น `X_MIN`, `X_MAX`, `Y_MIN` หรือ `Y_MAX`, เลือกหยุดแบบ `controlled` สำหรับ search หรือ `immediate` สำหรับ latch และบังคับ watchdog 0.1–3,600 วินาที Firmware ต้องประกาศ `sensor_terminated_profile`, `axis_sensor_stop` และ `profile_watchdog` ผ่าน handshake ครบทุกค่า จึงจะถือว่ารองรับ ห้ามอนุมานจาก protocol version เพียงอย่างเดียว

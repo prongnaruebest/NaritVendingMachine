@@ -214,6 +214,7 @@ class MotionService:
             self._sync_iriv_outputs(controller_status, hardware_fault)
             motor_test = self._motor_test_status(controller_status)
             profile_capability = bool(nucleo_status.get("supports_buffered_scurve", False))
+            sensor_profile_capability = bool(nucleo_status.get("supports_sensor_terminated_scurve", False))
             profile_routing = {
                 axis_name: {
                     operation.value: decide_profile_route(
@@ -221,6 +222,7 @@ class MotionService:
                         operation,
                         capability_ready=profile_capability,
                         runtime_ready=self.profile_runtime_ready,
+                        sensor_termination_ready=sensor_profile_capability,
                     ).to_dict()
                     for operation in ProfileOperation
                 }
@@ -995,12 +997,14 @@ class MotionService:
         nucleo_link = getattr(self, "nucleo_link", None)
         nucleo_status = nucleo_link.status() if nucleo_link is not None else {}
         capability_ready = bool(nucleo_status.get("supports_buffered_scurve", False))
+        sensor_termination_ready = bool(nucleo_status.get("supports_sensor_terminated_scurve", False))
         for axis_name in axes:
             decision = decide_profile_route(
                 getattr(machine_config, axis_name),
                 operation,
                 capability_ready=capability_ready,
                 runtime_ready=bool(getattr(self, "profile_runtime_ready", False)),
+                sensor_termination_ready=sensor_termination_ready,
             )
             if not decision.executable:
                 return f"{axis_name.upper()} {operation.value} blocked: {decision.reason}"
