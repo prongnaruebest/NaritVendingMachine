@@ -18,6 +18,7 @@ TREE_ROOTS = ("narit_vending", "deploy")
 SCRIPT_FILES = (
     "scripts/activate_release.py",
     "scripts/plan_release_migration.py",
+    "scripts/rehearse_release_migration.py",
     "scripts/setup_pi.sh",
     "scripts/validate_config.py",
     "scripts/verify_release.py",

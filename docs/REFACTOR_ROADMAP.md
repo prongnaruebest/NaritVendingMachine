@@ -83,7 +83,7 @@ Exit criterion: pages share one state source, polling does not overlap, and no m
 ## Phase 7 — Release engineering and documentation
 
 - [ ] Add formatting, lint, typing and dependency-direction gates. (`ruff` lint and `mypy` checks now protect the dependency-neutral domain/shared core; expand typing coverage to Controller, persistence and web modules incrementally)
-- [ ] Build staged atomic release and rollback verification. (guarded adapter, release-layout service templates and read-only migration plan complete; production migration rehearsal remains)
+- [x] Build staged atomic release and rollback verification. (artifact, verification, staging, activation, rollback and interruption recovery are automated with non-hardware tests; production execution remains operator-controlled)
 - [ ] Complete operator, configuration, PEND, testing and troubleshooting manuals.
 - [ ] Run read-only production smoke tests.
 - [ ] Prepare operator-controlled mechanical acceptance checklist.
@@ -157,6 +157,16 @@ The release-layout unit templates live under `deploy/release-layout/`; legacy un
 untouched so the existing deploy script cannot enable the new layout prematurely. Persistent
 configuration, SQLite history, backups and `.venv` are placed under `shared/`, while `current`
 points only to immutable release code.
+
+Run the non-hardware migration rehearsal locally with:
+
+```powershell
+python scripts/rehearse_release_migration.py
+```
+
+The migration coordinator journals every phase. Validation or backup failure aborts before
+service shutdown; a normal failure rolls back immediately; a hard interruption leaves a
+recoverable phase which must be explicitly recovered before another migration can start.
 
 ## Commit strategy
 
