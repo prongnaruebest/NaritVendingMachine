@@ -5,12 +5,20 @@ ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE = (ROOT / "narit_vending" / "templates" / "index.html").read_text(encoding="utf-8")
 APP = (ROOT / "narit_vending" / "static" / "app.js").read_text(encoding="utf-8")
 API_CLIENT = (ROOT / "narit_vending" / "static" / "api-client.js").read_text(encoding="utf-8")
+MACHINE_STORE = (ROOT / "narit_vending" / "static" / "machine-store.js").read_text(encoding="utf-8")
 
 
 def test_api_client_loads_before_application() -> None:
     api_script = "filename='api-client.js'"
     app_script = "filename='app.js'"
     assert TEMPLATE.index(api_script) < TEMPLATE.index(app_script)
+
+
+def test_machine_store_loads_between_transport_and_application() -> None:
+    api_script = "filename='api-client.js'"
+    store_script = "filename='machine-store.js'"
+    app_script = "filename='app.js'"
+    assert TEMPLATE.index(api_script) < TEMPLATE.index(store_script) < TEMPLATE.index(app_script)
 
 
 def test_application_delegates_transport_to_api_client() -> None:
@@ -32,3 +40,18 @@ def test_api_client_has_no_machine_or_hardware_authority() -> None:
     forbidden = ("GPIO", "pulse", "motion_enabled", "is_homed", "localStorage")
     for token in forbidden:
         assert token not in API_CLIENT
+
+
+def test_application_uses_one_shared_machine_store_and_selectors() -> None:
+    assert "const MS = window.NaritMachineStore.state" in APP
+    assert "const machineSelectors = window.NaritMachineStore.selectors" in APP
+    assert "const MS = {" not in APP
+    for selector in ("status", "operation", "axis", "allAxesHomed", "motorTest"):
+        assert f"{selector}:" in MACHINE_STORE
+
+
+def test_machine_store_is_browser_state_not_machine_authority() -> None:
+    assert "Controller remains machine authority" in MACHINE_STORE
+    assert "axisSpeeds: { x: 5.0, y: 5.0, z: 5.0 }" in MACHINE_STORE
+    for forbidden in ("fetch(", "GPIO", "CommandEnvelope", "/api/"):
+        assert forbidden not in MACHINE_STORE

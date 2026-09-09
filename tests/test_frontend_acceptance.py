@@ -8,6 +8,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE = (ROOT / "narit_vending" / "templates" / "index.html").read_text(encoding="utf-8")
 APP_JS = (ROOT / "narit_vending" / "static" / "app.js").read_text(encoding="utf-8")
+MACHINE_STORE = (ROOT / "narit_vending" / "static" / "machine-store.js").read_text(encoding="utf-8")
 STYLE = (ROOT / "narit_vending" / "static" / "style.css").read_text(encoding="utf-8")
 
 
@@ -39,7 +40,7 @@ class FrontendAcceptanceTests(unittest.TestCase):
 
     def test_linked_axis_speed_controls_use_shared_state(self) -> None:
         self.assertGreaterEqual(TEMPLATE.count("data-axis-speed-bank"), 4)
-        self.assertIn("axisSpeeds: { x: 5.0, y: 5.0, z: 5.0 }", APP_JS)
+        self.assertIn("axisSpeeds: { x: 5.0, y: 5.0, z: 5.0 }", MACHINE_STORE)
         self.assertIn('localStorage.setItem("narit.axisSpeeds"', APP_JS)
         self.assertIn("effectiveMotionSpeed([axis])", APP_JS)
         self.assertIn('invalidateMotionWorkflow("Axis speed changed', APP_JS)

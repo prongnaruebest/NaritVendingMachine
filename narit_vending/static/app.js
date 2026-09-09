@@ -12,65 +12,9 @@
   const POLL_INTERVAL_MS = 1000;
 
   /* ── CENTRALIZED MACHINE STATE ──────────────────────────────── */
-  const MS = {
-    // Connectivity
-    online: false,
-    pending: false,
-    motorTestJog: { active: false, token: 0, button: null },
-    manualJog: { active: false, token: 0, button: null, isHolding: false, holdTimer: null },
-
-    // From /api/status payload
-    payload: null,
-    config: null,
-    slots: {},
-    mqtt: null,
-    mqttPollPending: false,
-    mqttControlPending: false,
-
-    // Event log
-    events: [],
-    lastError: "",
-
-    // Validation state
-    validation: { valid: false, stage: "idle", message: "Target not validated.", plan: null, axes: {}, armToken: null },
-
-    // UI state
-    feedOverridePct: 100,   // 0–100, displayed
-    selectedJogStep: 1.0,
-    selectedJogSpeed: 5.0,
-    axisSpeeds: { x: 5.0, y: 5.0, z: 5.0 },
-    keyboardJogEnabled: false,
-    selectedSlotCode: "",
-    slotSequenceMode: false,
-    visualTargetSlot: "",
-    slotEditorDirty: false,
-    visualEditorDirty: false,
-    ioFilter: "all",
-    ioSearch: "",
-    visualEditMode: false,
-    visualPreview: null,
-    visualOriginalSlot: null,
-    visualGotoPending: false,
-    axisVelocity: Object.fromEntries(AXES.map((axis) => [axis, { positionMm: null, sampledAt: 0, mmS: 0, direction: "IDLE" }])),
-    lastStatusAt: 0,
-    configDirty: false,
-    configSaving: false,
-    slotDrafts: {},
-    dashboardSelectedSlot: "1",
-    dashboardOperationStartedAt: null,
-    dashboardTrackedCommand: "",
-    dashboardWasBusy: false,
-    silentErrorUntil: 0,
-    logFilter: "all",
-    eventFilters: { search: "", severity: "all", category: "all", outcome: "all" },
-    selectedEventId: "",
-    currentView: "motion",
-    currentSetupTab: "motor",
-    demoArmToken: "",
-    demoHistory: [],
-    demoHistoryPending: false,
-    demoHistoryFetchedAt: 0,
-  };
+  if (!window.NaritMachineStore) throw new Error("HMI machine store failed to load");
+  const MS = window.NaritMachineStore.state;
+  const machineSelectors = window.NaritMachineStore.selectors;
 
   /* ── DOM HELPERS ────────────────────────────────────────────── */
   const $ = (sel) => document.querySelector(sel);
@@ -139,9 +83,9 @@
   }
 
   /* ── STATE ACCESSORS ────────────────────────────────────────── */
-  function getStatus() { return MS.payload?.status || {}; }
-  function getOperation() { return MS.payload?.operation || {}; }
-  function getAxis(axis) { return getStatus()[axis] || {}; }
+  function getStatus() { return machineSelectors.status(); }
+  function getOperation() { return machineSelectors.operation(); }
+  function getAxis(axis) { return machineSelectors.axis(axis); }
 
   function updateAxisVelocity(payload) {
     const sampledAt = Date.now();
@@ -177,11 +121,11 @@
   }
 
   function allAxesHomed() {
-    return AXES.every((a) => Boolean(getAxis(a).is_homed));
+    return machineSelectors.allAxesHomed();
   }
 
   function motorTestState() {
-    return MS.payload?.safety?.motor_test || { armed: false, expires_in_s: 0 };
+    return machineSelectors.motorTest();
   }
 
   function activeAlarmCount() {
