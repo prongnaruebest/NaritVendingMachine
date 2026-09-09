@@ -90,6 +90,28 @@ def test_pulse_scheduler_updates_rate_without_phase_gap_and_counts_exactly(tmp_p
     assert "scheduler host tests passed" in run_result.stdout
 
 
+def test_timer_adapter_computes_registers_and_updates_atomically(tmp_path: Path):
+    compiler = shutil.which("gcc")
+    if compiler is None:
+        pytest.skip("host GCC is unavailable")
+    executable = tmp_path / "timer_adapter_test.exe"
+    sources = [
+        CORE / "nucleo_timer_adapter.c",
+        ROOT / "tests" / "c_host" / "test_nucleo_timer_adapter.c",
+    ]
+    compile_result = subprocess.run(
+        [compiler, "-std=c99", "-Wall", "-Wextra", "-Werror", f"-I{CORE}",
+         *(str(source) for source in sources), "-o", str(executable)],
+        capture_output=True, text=True, timeout=30, check=False,
+    )
+    assert compile_result.returncode == 0, compile_result.stdout + compile_result.stderr
+    run_result = subprocess.run(
+        [str(executable)], capture_output=True, text=True, timeout=10, check=False
+    )
+    assert run_result.returncode == 0, run_result.stdout + run_result.stderr
+    assert "timer_adapter host tests passed" in run_result.stdout
+
+
 def test_profile_core_is_not_connected_to_cubeide_build_yet():
     project_sources = (ROOT / "firmware" / "nucleo_f439zi" / "cubeide" / "Release" / "Core" / "Src" / "subdir.mk").read_text(
         encoding="utf-8", errors="replace"
@@ -97,3 +119,4 @@ def test_profile_core_is_not_connected_to_cubeide_build_yet():
     assert "nucleo_profile_buffer.c" not in project_sources
     assert "nucleo_profile_executor.c" not in project_sources
     assert "nucleo_pulse_scheduler.c" not in project_sources
+    assert "nucleo_timer_adapter.c" not in project_sources

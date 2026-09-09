@@ -100,6 +100,7 @@ Exit criterion: failed health checks roll back safely and no deploy performs mot
 - [x] Add a timer-independent X/Y profile executor with synchronized start, phase transitions and fail-safe heartbeat handling.
 - [x] Convert every wire phase to fixed-point pulse-domain kinematics so firmware never needs an implicit steps/mm value.
 - [x] Add a host-tested pulse scheduler that updates rates without phase-boundary disable and stops at exact X/Y pulse counts.
+- [x] Add a HAL-independent timer adapter with bounded PSC/ARR/pulse-width calculation and atomic rate updates.
 - [ ] Integrate X/Y Move, Jog, Home and Limit Seek without changing Z behavior.
 - [ ] Add Machine Setup fields, validation, effective configuration and profile preview.
 - [ ] Build firmware artifact and complete operator-controlled mechanical commissioning.
