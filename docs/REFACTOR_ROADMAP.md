@@ -73,7 +73,7 @@ Exit criterion: a command/session can be reconstructed from persistent records w
 ## Phase 6 — Frontend modularization
 
 - [x] Extract API client, machine store and selectors.
-- [ ] Extract router and lifecycle-safe page controllers. (read-only pages, Slots table, Motion Selected Slot/Homing/Travel/Target, Visualization, Demo Sampling and System Control complete; Jog remains)
+- [ ] Extract router and lifecycle-safe page controllers. (Motion Jog fail-safe blur/visibility/unmount lifecycle extracted; directional and keyboard bindings remain)
 - [x] Generate I/O views from registry metadata.
 - [ ] Split component/page CSS under one token layer. (token/reset, shared speed controls and final responsive/page authority layers extracted; remaining components incremental)
 - [ ] Preserve all responsive and accessibility acceptance tests.

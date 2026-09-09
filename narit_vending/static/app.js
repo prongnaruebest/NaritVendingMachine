@@ -1567,6 +1567,7 @@
   if (!window.NaritSystemControlPageController) throw new Error("HMI System Control page controller failed to load");
   if (!window.NaritMotionTravelController) throw new Error("HMI Motion Travel controller failed to load");
   if (!window.NaritMotionTargetController) throw new Error("HMI Motion Target controller failed to load");
+  if (!window.NaritMotionJogSafetyController) throw new Error("HMI Motion Jog Safety controller failed to load");
   const pageControllers = window.NaritPageControllers.createRegistry({
     onError: (error, context) => console.error(
       `[HMI] ${context.view || "unknown"} page ${context.phase} failed`,
@@ -4350,6 +4351,27 @@
     }
   }
 
+  function stopManualJog(sendControllerStop = true) {
+    if (MS.manualJog.holdTimer) {
+      clearTimeout(MS.manualJog.holdTimer);
+      MS.manualJog.holdTimer = null;
+    }
+    if (!MS.manualJog.active && !MS.manualJog.isHolding) return;
+    const wasHolding = MS.manualJog.isHolding;
+    MS.manualJog.active = false;
+    MS.manualJog.isHolding = false;
+    MS.manualJog.token += 1;
+    if (MS.manualJog.button) {
+      MS.manualJog.button.classList.remove("running");
+      MS.manualJog.button = null;
+    }
+    const bypassHome = Boolean($("#jog-allow-unhomed")?.checked);
+    setText("jog-status-text", allAxesHomed() ? "READY" : (bypassHome ? "UNHOMED JOG PERMITTED" : "HOME REQUIRED"));
+    if (sendControllerStop && wasHolding) {
+      apiCall("/api/motion/controlled-stop", "POST", {}, 2500).catch(() => {});
+    }
+  }
+
   function bind() {
     /* --- Workspace navigation --- */
     workspaceRouter.start();
@@ -4365,27 +4387,6 @@
     });
 
     /* --- Hold-to-Run Manual Jog Engine --- */
-    function stopManualJog(sendControllerStop = true) {
-      if (MS.manualJog.holdTimer) {
-        clearTimeout(MS.manualJog.holdTimer);
-        MS.manualJog.holdTimer = null;
-      }
-      if (!MS.manualJog.active && !MS.manualJog.isHolding) return;
-      const wasHolding = MS.manualJog.isHolding;
-      MS.manualJog.active = false;
-      MS.manualJog.isHolding = false;
-      MS.manualJog.token += 1;
-      if (MS.manualJog.button) {
-        MS.manualJog.button.classList.remove("running");
-        MS.manualJog.button = null;
-      }
-      const bypassHome = Boolean($("#jog-allow-unhomed")?.checked);
-      setText("jog-status-text", allAxesHomed() ? "READY" : (bypassHome ? "UNHOMED JOG PERMITTED" : "HOME REQUIRED"));
-      if (sendControllerStop && wasHolding) {
-        apiCall("/api/motion/controlled-stop", "POST", {}, 2500).catch(() => {});
-      }
-    }
-
     function beginManualJog(axis, dir, btn, event) {
       if (btn && btn.disabled) return;
       if (!canJogAxis(axis)) {
@@ -4459,15 +4460,6 @@
       btn.addEventListener("contextmenu", (event) => event.preventDefault());
       btn.addEventListener("click", (event) => event.preventDefault());
     });
-    window.addEventListener("blur", () => stopManualJog());
-    document.addEventListener("visibilitychange", () => {
-      if (document.hidden) stopManualJog();
-    });
-
-    $("#jog-allow-unhomed")?.addEventListener("change", () => {
-      updateButtonStates();
-    });
-
     /* --- Jog step presets --- */
     $$(".step-btn").forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -4847,12 +4839,18 @@
       },
       onError: (error) => console.error("[HMI] Motion target action failed", error),
     });
+    const motionJogSafety = window.NaritMotionJogSafetyController.create({
+      onStop: stopManualJog,
+      onAllowUnhomedChanged: updateButtonStates,
+    });
     pageControllers.register("motion", {
       mount: () => {
         const cleanupSelectedSlot = selectedSlotControls.mount();
         const cleanupTravel = motionTravelControls.mount();
         const cleanupTarget = motionTargetControls.mount();
+        const cleanupJogSafety = motionJogSafety.mount();
         return () => {
+          cleanupJogSafety();
           cleanupTarget();
           cleanupTravel();
           cleanupSelectedSlot();

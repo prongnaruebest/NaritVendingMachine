@@ -20,6 +20,7 @@ IO_REGISTRY_VIEW = (ROOT / "narit_vending" / "static" / "io-registry-view.js").r
 SYSTEM_CONTROL_PAGE_CONTROLLER = (ROOT / "narit_vending" / "static" / "system-control-page-controller.js").read_text(encoding="utf-8")
 MOTION_TRAVEL_CONTROLLER = (ROOT / "narit_vending" / "static" / "motion-travel-controller.js").read_text(encoding="utf-8")
 MOTION_TARGET_CONTROLLER = (ROOT / "narit_vending" / "static" / "motion-target-controller.js").read_text(encoding="utf-8")
+MOTION_JOG_SAFETY_CONTROLLER = (ROOT / "narit_vending" / "static" / "motion-jog-safety-controller.js").read_text(encoding="utf-8")
 ROUTER = (ROOT / "narit_vending" / "static" / "router.js").read_text(encoding="utf-8")
 TOKENS = (ROOT / "narit_vending" / "static" / "tokens.css").read_text(encoding="utf-8")
 STYLE = (ROOT / "narit_vending" / "static" / "style.css").read_text(encoding="utf-8")
@@ -71,6 +72,7 @@ def test_machine_store_loads_between_transport_and_application() -> None:
     system_control_script = "filename='system-control-page-controller.js'"
     motion_travel_script = "filename='motion-travel-controller.js'"
     motion_target_script = "filename='motion-target-controller.js'"
+    motion_jog_safety_script = "filename='motion-jog-safety-controller.js'"
     app_script = "filename='app.js'"
     router_script = "filename='router.js'"
     assert (
@@ -90,6 +92,7 @@ def test_machine_store_loads_between_transport_and_application() -> None:
         < TEMPLATE.index(system_control_script)
         < TEMPLATE.index(motion_travel_script)
         < TEMPLATE.index(motion_target_script)
+        < TEMPLATE.index(motion_jog_safety_script)
         < TEMPLATE.index(router_script)
         < TEMPLATE.index(app_script)
     )
@@ -388,6 +391,19 @@ def test_target_workflow_shares_motion_page_lifecycle() -> None:
 def test_motion_target_controller_has_no_direct_transport_or_machine_authority() -> None:
     for forbidden in ("fetch(", "/api/", "GPIO", "CommandEnvelope", "POST"):
         assert forbidden not in MOTION_TARGET_CONTROLLER
+
+
+def test_manual_jog_fail_safe_events_share_motion_lifecycle() -> None:
+    assert "NaritMotionJogSafetyController.create" in APP
+    assert "const cleanupJogSafety = motionJogSafety.mount()" in APP
+    assert "cleanupJogSafety()" in APP
+    for event in ('addEventListener("blur", stop)', 'addEventListener("visibilitychange", visibility)'):
+        assert event in MOTION_JOG_SAFETY_CONTROLLER
+    for event in ('removeEventListener("blur", stop)', 'removeEventListener("visibilitychange", visibility)'):
+        assert event in MOTION_JOG_SAFETY_CONTROLLER
+    assert "stop();" in MOTION_JOG_SAFETY_CONTROLLER
+    for forbidden in ("fetch(", "/api/", "GPIO", "CommandEnvelope", "POST"):
+        assert forbidden not in MOTION_JOG_SAFETY_CONTROLLER
 
 
 def test_slots_controller_has_no_direct_transport_or_machine_authority() -> None:
