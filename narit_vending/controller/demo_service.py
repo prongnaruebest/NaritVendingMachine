@@ -6,17 +6,14 @@ import csv
 import io
 import json
 import random
-import sqlite3
 import threading
 import time
 import uuid
-from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from ..persistence.demo_schema import DEMO_MIGRATIONS
-from ..persistence.sqlite_migrations import SQLiteMigrator
+from ..persistence.demo_repository import DemoRepository
 
 
 def _now() -> str:
@@ -27,6 +24,7 @@ class DemoSamplingService:
     def __init__(self, motion_service: Any, database_path: str | Path) -> None:
         self.motion = motion_service
         self.database_path = Path(database_path)
+        self.repository = DemoRepository(self.database_path)
         self._lock = threading.RLock()
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
@@ -46,14 +44,8 @@ class DemoSamplingService:
         self._last_result = ""
         self._init_db()
 
-    def _connect(self) -> sqlite3.Connection:
-        connection = sqlite3.connect(self.database_path, timeout=5)
-        connection.row_factory = sqlite3.Row
-        connection.execute("PRAGMA foreign_keys = ON")
-        return connection
-
     def _init_db(self) -> None:
-        self.schema_version = SQLiteMigrator(self.database_path, DEMO_MIGRATIONS).migrate()
+        self.schema_version = self.repository.schema_version
 
     def _normalise(self, payload: dict[str, Any]) -> dict[str, Any]:
         slots = [str(value) for value in payload.get("slots", []) if str(value) in self.motion.controller.config.slots]
@@ -137,8 +129,13 @@ class DemoSamplingService:
             self._counters = {key: 0 for key in self._counters}
             requested = max(0, self._config["sample_count"])
             self._counters["requested"] = requested
-            with closing(self._connect()) as db, db:
-                db.execute("INSERT INTO demo_sessions(session_id,started_at,state,configuration_json,requested) VALUES(?,?,?,?,?)", (self._session_id, self._started_at, self._state, json.dumps(self._config, sort_keys=True), requested))
+            self.repository.create_session(
+                session_id=self._session_id,
+                started_at=self._started_at,
+                state=self._state,
+                configuration=self._config,
+                requested=requested,
+            )
             self._thread = threading.Thread(target=self._run, name="demo-slot-sampling", daemon=True)
             self._thread.start()
             return {"ok": True, "session_id": self._session_id, "state": self._state}
@@ -148,8 +145,7 @@ class DemoSamplingService:
         if self._config["mode"] == "random":
             rng.shuffle(slots)
         elif self._config["mode"] == "balanced":
-            with closing(self._connect()) as db, db:
-                counts = {row["slot_code"]: row["count"] for row in db.execute("SELECT slot_code,COUNT(*) count FROM demo_samples GROUP BY slot_code")}
+            counts = self.repository.sample_counts_by_slot()
             slots.sort(key=lambda slot: (counts.get(slot, 0), slot))
         return slots
 
@@ -211,8 +207,17 @@ class DemoSamplingService:
                 if not stopped:
                     self._counters["passed" if passed else "failed"] += 1
                 self._last_result = outcome if passed or stopped else f"FAILED: {reason}"
-                with closing(self._connect()) as db, db:
-                    db.execute("INSERT INTO demo_samples VALUES(?,?,?,?,?,?,?,?,?)", (sample_id, self._session_id, self._cycle, slot, sample_started, _now(), round(time.monotonic()-t0, 3), outcome, reason))
+                self.repository.add_sample(
+                    sample_id=sample_id,
+                    session_id=self._session_id,
+                    cycle_no=self._cycle,
+                    slot_code=slot,
+                    started_at=sample_started,
+                    completed_at=_now(),
+                    duration_s=round(time.monotonic() - t0, 3),
+                    result=outcome,
+                    reason=reason,
+                )
                 if stopped:
                     break
                 if not passed and self._config["stop_on_failure"]:
@@ -231,8 +236,13 @@ class DemoSamplingService:
         finally:
             self._ended_at = _now()
             self._current_slot = self._next_slot = None
-            with closing(self._connect()) as db, db:
-                db.execute("UPDATE demo_sessions SET ended_at=?,state=?,attempted=?,passed=?,failed=?,skipped=?,stopped=?,final_reason=? WHERE session_id=?", (self._ended_at, self._state, self._counters["attempted"], self._counters["passed"], self._counters["failed"], self._counters["skipped"], self._counters["stopped"], reason, self._session_id))
+            self.repository.finish_session(
+                session_id=self._session_id,
+                ended_at=self._ended_at,
+                state=self._state,
+                counters=self._counters,
+                final_reason=reason,
+            )
 
     def pause(self) -> dict[str, Any]:
         with self._lock:
@@ -268,36 +278,12 @@ class DemoSamplingService:
             return {"state": self._state, "session_id": self._session_id, "started_at": self._started_at, "ended_at": self._ended_at, "cycle": self._cycle, "current_slot": self._current_slot, "next_slot": self._next_slot, "configuration": dict(self._config), "counters": dict(self._counters) | {"success_rate": round(100*self._counters["passed"]/attempted, 1) if attempted else 0.0}, "last_result": self._last_result, "pause_requested": self._pause_requested, "schema_version": self.schema_version}
 
     def history(self, limit: int = 50) -> list[dict[str, Any]]:
-        with closing(self._connect()) as db, db:
-            sessions = [
-                dict(row)
-                for row in db.execute(
-                    "SELECT * FROM demo_sessions ORDER BY started_at DESC LIMIT ?",
-                    (max(1, min(500, limit)),),
-                )
-            ]
-            for session in sessions:
-                try:
-                    session["configuration"] = json.loads(session.pop("configuration_json"))
-                except (TypeError, ValueError, json.JSONDecodeError):
-                    session["configuration"] = {}
-                    session.pop("configuration_json", None)
-                session["samples"] = [
-                    dict(row)
-                    for row in db.execute(
-                        """SELECT sample_id,cycle_no,slot_code,started_at,completed_at,
-                                  duration_s,result,reason
-                           FROM demo_samples WHERE session_id=? ORDER BY cycle_no""",
-                        (session["session_id"],),
-                    )
-                ]
-            return sessions
+        return self.repository.history(limit)
 
     def export_csv(self) -> str:
         output = io.StringIO()
         writer = csv.writer(output)
         writer.writerow(("session_id", "cycle", "slot", "started_at", "completed_at", "duration_s", "result", "reason"))
-        with closing(self._connect()) as db, db:
-            for row in db.execute("SELECT session_id,cycle_no,slot_code,started_at,completed_at,duration_s,result,reason FROM demo_samples ORDER BY started_at"):
-                writer.writerow(tuple(row))
+        for row in self.repository.export_sample_rows():
+            writer.writerow(row)
         return output.getvalue()
