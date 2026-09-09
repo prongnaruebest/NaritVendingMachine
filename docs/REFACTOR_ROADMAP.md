@@ -93,7 +93,7 @@ Exit criterion: failed health checks roll back safely and no deploy performs mot
 ## Phase 8 — X/Y jerk-limited motion
 
 - [x] Add a hardware-neutral S-curve reference model and characterization tests for X/Y only.
-- [ ] Replace the reference curve with a firmware-ready seven-segment profile representation.
+- [x] Add a firmware-ready seven-segment profile representation with stable seven-phase serialization.
 - [ ] Extend the NUCLEO protocol with capability-gated buffered continuous profiles.
 - [ ] Integrate X/Y Move, Jog, Home and Limit Seek without changing Z behavior.
 - [ ] Add Machine Setup fields, validation, effective configuration and profile preview.
