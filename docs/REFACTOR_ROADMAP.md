@@ -97,6 +97,7 @@ Exit criterion: failed health checks roll back safely and no deploy performs mot
 - [x] Define the capability-gated buffered profile contract (protocol v4 candidate; transport remains disabled).
 - [x] Add a disabled-by-default buffered transport adapter with fake-exchange failure tests.
 - [x] Add a HAL-independent firmware profile parser/buffer state machine with host-compiled tests; keep it outside the CubeIDE build.
+- [x] Add a timer-independent X/Y profile executor with synchronized start, phase transitions and fail-safe heartbeat handling.
 - [ ] Integrate X/Y Move, Jog, Home and Limit Seek without changing Z behavior.
 - [ ] Add Machine Setup fields, validation, effective configuration and profile preview.
 - [ ] Build firmware artifact and complete operator-controlled mechanical commissioning.
