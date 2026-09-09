@@ -83,7 +83,7 @@ Exit criterion: pages share one state source, polling does not overlap, and no m
 ## Phase 7 — Release engineering and documentation
 
 - [ ] Add formatting, lint, typing and dependency-direction gates. (`ruff` lint and `mypy` checks now protect the dependency-neutral domain/shared core; expand typing coverage to Controller, persistence and web modules incrementally)
-- [ ] Build staged atomic release and rollback verification. (guarded systemd adapter and dry-run activation CLI complete; one-time directory/service migration remains)
+- [ ] Build staged atomic release and rollback verification. (guarded adapter, release-layout service templates and read-only migration plan complete; production migration rehearsal remains)
 - [ ] Complete operator, configuration, PEND, testing and troubleshooting manuals.
 - [ ] Run read-only production smoke tests.
 - [ ] Prepare operator-controlled mechanical acceptance checklist.
@@ -151,6 +151,12 @@ Current automated tests use a fake runtime and do not invoke systemd or hardware
 is restricted to POSIX, requires both `--execute` and the explicit confirmation token, and uses
 the lifecycle rollback path. The current production service layout must be migrated before live
 activation is enabled; do not point this command at the legacy application directory.
+
+`scripts/plan_release_migration.py` prints the one-time layout plan without changing the host.
+The release-layout unit templates live under `deploy/release-layout/`; legacy unit files remain
+untouched so the existing deploy script cannot enable the new layout prematurely. Persistent
+configuration, SQLite history, backups and `.venv` are placed under `shared/`, while `current`
+points only to immutable release code.
 
 ## Commit strategy
 

@@ -17,6 +17,7 @@ ROOT_FILES = ("README.md", "main.py", "requirements.txt")
 TREE_ROOTS = ("narit_vending", "deploy")
 SCRIPT_FILES = (
     "scripts/activate_release.py",
+    "scripts/plan_release_migration.py",
     "scripts/setup_pi.sh",
     "scripts/validate_config.py",
     "scripts/verify_release.py",
