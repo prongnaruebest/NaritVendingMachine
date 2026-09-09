@@ -83,7 +83,7 @@ Exit criterion: pages share one state source, polling does not overlap, and no m
 ## Phase 7 — Release engineering and documentation
 
 - [ ] Add formatting, lint, typing and dependency-direction gates. (`ruff` lint and `mypy` checks now protect the dependency-neutral domain/shared core; expand typing coverage to Controller, persistence and web modules incrementally)
-- [ ] Build staged atomic release and rollback verification. (deterministic code-only artifact and SHA-256 manifest complete; remote activation and rollback remain)
+- [ ] Build staged atomic release and rollback verification. (deterministic code-only artifact plus strict pre-extraction verification complete; remote staging, activation and rollback remain)
 - [ ] Complete operator, configuration, PEND, testing and troubleshooting manuals.
 - [ ] Run read-only production smoke tests.
 - [ ] Prepare operator-controlled mechanical acceptance checklist.
@@ -111,6 +111,15 @@ python scripts/build_release.py
 The ZIP embeds `release-manifest.json`; a matching manifest is written beside it.
 Both list every packaged file and SHA-256 checksum. Building an artifact does not connect
 to the Pi, restart a service or issue a machine command.
+
+Verify a received artifact before extracting it into a staging directory:
+
+```powershell
+python scripts/verify_release.py <release.zip> <release.manifest.json>
+```
+
+Verification rejects checksum/inventory differences, duplicate or unsafe paths and any bundled
+machine/hardware configuration. It does not extract files, restart services or contact hardware.
 
 ## Commit strategy
 

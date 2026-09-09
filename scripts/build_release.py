@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 FIXED_ZIP_TIME = (2020, 1, 1, 0, 0, 0)
 ROOT_FILES = ("README.md", "main.py", "requirements.txt")
 TREE_ROOTS = ("narit_vending", "deploy")
-SCRIPT_FILES = ("scripts/setup_pi.sh", "scripts/validate_config.py")
+SCRIPT_FILES = ("scripts/setup_pi.sh", "scripts/validate_config.py", "scripts/verify_release.py")
 
 
 @dataclass(frozen=True)

@@ -14,6 +14,7 @@ def _project(root: Path) -> None:
         "requirements.txt": "Flask\n",
         "machine_config.json": "{\"do_not_package\": true}\n",
         "hardware_config.iriv.json": "{\"do_not_package\": true}\n",
+        "narit_vending/__init__.py": "\n",
         "narit_vending/app.py": "VALUE = 1\n",
         "narit_vending/__pycache__/app.pyc": "cache",
         "deploy/service.service": "[Service]\n",
