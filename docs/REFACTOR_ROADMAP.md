@@ -99,6 +99,8 @@ python scripts/quality_gate.py
 
 Use `--quick` while developing to omit the complete test suite. Both modes avoid
 starting Flask, Controller, GPIO, serial communication and motion commands.
+GitHub Actions runs the complete gate on every push and pull request using only
+read access to repository contents; the workflow contains no deployment or machine-control step.
 
 ## Commit strategy
 
