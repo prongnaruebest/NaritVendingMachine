@@ -83,7 +83,7 @@ Exit criterion: pages share one state source, polling does not overlap, and no m
 ## Phase 7 — Release engineering and documentation
 
 - [ ] Add formatting, lint, typing and dependency-direction gates. (`ruff` lint and `mypy` checks now protect the dependency-neutral domain/shared core; expand typing coverage to Controller, persistence and web modules incrementally)
-- [ ] Build staged atomic release and rollback verification. (tested activation/health/rollback state machine complete; systemd runtime adapter and one-time directory migration remain)
+- [ ] Build staged atomic release and rollback verification. (guarded systemd adapter and dry-run activation CLI complete; one-time directory/service migration remains)
 - [ ] Complete operator, configuration, PEND, testing and troubleshooting manuals.
 - [ ] Run read-only production smoke tests.
 - [ ] Prepare operator-controlled mechanical acceptance checklist.
@@ -146,6 +146,11 @@ The release lifecycle validates a candidate before stopping the current runtime.
 candidate health check restores the previous release and verifies its health. If rollback
 also fails, the persistent state is explicitly `FAILED`; it is never reported as healthy.
 Current automated tests use a fake runtime and do not invoke systemd or hardware.
+
+`scripts/activate_release.py` defaults to read-only validation and plan output. Live activation
+is restricted to POSIX, requires both `--execute` and the explicit confirmation token, and uses
+the lifecycle rollback path. The current production service layout must be migrated before live
+activation is enabled; do not point this command at the legacy application directory.
 
 ## Commit strategy
 
