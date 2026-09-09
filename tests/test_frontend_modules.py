@@ -20,6 +20,7 @@ IO_REGISTRY_VIEW = (ROOT / "narit_vending" / "static" / "io-registry-view.js").r
 ROUTER = (ROOT / "narit_vending" / "static" / "router.js").read_text(encoding="utf-8")
 TOKENS = (ROOT / "narit_vending" / "static" / "tokens.css").read_text(encoding="utf-8")
 STYLE = (ROOT / "narit_vending" / "static" / "style.css").read_text(encoding="utf-8")
+COMPONENTS = (ROOT / "narit_vending" / "static" / "components.css").read_text(encoding="utf-8")
 LAYOUT = (ROOT / "narit_vending" / "static" / "layout.css").read_text(encoding="utf-8")
 
 
@@ -32,8 +33,9 @@ def test_api_client_loads_before_application() -> None:
 def test_css_token_layer_loads_before_component_and_page_styles() -> None:
     token_stylesheet = "filename='tokens.css'"
     component_stylesheet = "filename='style.css'"
+    reusable_stylesheet = "filename='components.css'"
     layout_stylesheet = "filename='layout.css'"
-    assert TEMPLATE.index(token_stylesheet) < TEMPLATE.index(component_stylesheet) < TEMPLATE.index(layout_stylesheet)
+    assert TEMPLATE.index(token_stylesheet) < TEMPLATE.index(component_stylesheet) < TEMPLATE.index(reusable_stylesheet) < TEMPLATE.index(layout_stylesheet)
     assert ":root" in TOKENS
     assert "--bg:" in TOKENS
     assert "--text:" in TOKENS
@@ -44,6 +46,9 @@ def test_css_token_layer_loads_before_component_and_page_styles() -> None:
     assert "UNIFIED RESPONSIVE LAYOUT V2" in LAYOUT
     assert ".workspace-view.io-status-page.active" in LAYOUT
     assert '@media (max-width: 900px)' in LAYOUT
+    assert ".axis-speed-row" not in STYLE
+    assert ".axis-speed-row" in COMPONENTS
+    assert ".linked-speed-panel" in COMPONENTS
 
 
 def test_machine_store_loads_between_transport_and_application() -> None:

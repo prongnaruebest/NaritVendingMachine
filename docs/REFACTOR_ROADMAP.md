@@ -75,7 +75,7 @@ Exit criterion: a command/session can be reconstructed from persistent records w
 - [x] Extract API client, machine store and selectors.
 - [ ] Extract router and lifecycle-safe page controllers. (read-only pages, Slots table, Motion Selected Slot, Visualization and Demo Sampling controls complete; migration incremental)
 - [x] Generate I/O views from registry metadata.
-- [ ] Split component/page CSS under one token layer. (token/reset and final responsive/page authority layers extracted; component split remains incremental)
+- [ ] Split component/page CSS under one token layer. (token/reset, shared speed controls and final responsive/page authority layers extracted; remaining components incremental)
 - [ ] Preserve all responsive and accessibility acceptance tests.
 
 Exit criterion: pages share one state source, polling does not overlap, and no module contains hardware authority.

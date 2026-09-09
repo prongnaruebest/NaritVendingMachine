@@ -1,0 +1,79 @@
+/* Reusable HMI components — loaded after legacy base styles and before final layout authority. */
+
+.linked-speed-panel {
+  margin-bottom: 14px;
+  padding: 14px 16px;
+}
+.linked-speed-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+.linked-speed-head > span {
+  color: var(--text-muted);
+  font-size: 11px;
+  text-align: right;
+}
+.axis-speed-bank {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.axis-speed-bank.compact {
+  grid-template-columns: 1fr;
+  margin-top: 10px;
+}
+.section-speed-bank {
+  margin: 0 14px 14px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surf-2) 82%, transparent);
+}
+.jog-axis-speed-bank { margin-top: 8px; }
+.axis-speed-row {
+  display: grid;
+  grid-template-columns: 24px minmax(90px, 1fr) 72px 38px;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surf-2);
+}
+.axis-speed-row > strong { color: var(--blue-lt); font-size: 15px; }
+.axis-speed-row input[type="range"] { width: 100%; min-width: 0; accent-color: var(--blue); }
+.axis-speed-row input[type="number"] {
+  width: 72px;
+  min-height: 40px;
+  padding: 6px;
+  color: var(--text);
+  background: var(--surf-1);
+  border: 1px solid var(--border-med);
+  border-radius: 6px;
+  font: 600 13px var(--font-mono);
+}
+.axis-speed-row > span { color: var(--text-muted); font-size: 11px; }
+.axis-speed-row > small {
+  grid-column: 2 / -1;
+  color: var(--text-muted);
+  font: 10px var(--font-mono);
+}
+.axis-speed-note {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+@media (max-width: 1050px) {
+  .axis-speed-bank { grid-template-columns: 1fr; }
+}
+@media (max-width: 560px) {
+  .linked-speed-head { display: block; }
+  .linked-speed-head > span { display: block; margin-top: 6px; text-align: left; }
+  .axis-speed-row { grid-template-columns: 24px minmax(70px, 1fr) 68px 36px; }
+}

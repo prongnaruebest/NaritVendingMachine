@@ -12,7 +12,7 @@ MACHINE_STORE = (ROOT / "narit_vending" / "static" / "machine-store.js").read_te
 ROUTER = (ROOT / "narit_vending" / "static" / "router.js").read_text(encoding="utf-8")
 STYLE = "\n".join(
     (ROOT / "narit_vending" / "static" / filename).read_text(encoding="utf-8")
-    for filename in ("tokens.css", "style.css", "layout.css")
+    for filename in ("tokens.css", "style.css", "components.css", "layout.css")
 )
 
 
