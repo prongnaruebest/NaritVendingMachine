@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE = (ROOT / "narit_vending" / "templates" / "index.html").read_text(encoding="utf-8")
 APP_JS = (ROOT / "narit_vending" / "static" / "app.js").read_text(encoding="utf-8")
 MACHINE_STORE = (ROOT / "narit_vending" / "static" / "machine-store.js").read_text(encoding="utf-8")
+ROUTER = (ROOT / "narit_vending" / "static" / "router.js").read_text(encoding="utf-8")
 STYLE = (ROOT / "narit_vending" / "static" / "style.css").read_text(encoding="utf-8")
 
 
@@ -27,7 +28,7 @@ class FrontendAcceptanceTests(unittest.TestCase):
         self.assertTrue(required <= pages)
         self.assertTrue(required <= targets)
         self.assertTrue(required <= valid_views)
-        self.assertIn('window.addEventListener("hashchange"', APP_JS)
+        self.assertIn('window.addEventListener("hashchange"', ROUTER)
 
     def test_javascript_functions_are_declared_once(self) -> None:
         names = re.findall(r"^\s*function\s+([A-Za-z_$][\w$]*)\s*\(", APP_JS, re.M)

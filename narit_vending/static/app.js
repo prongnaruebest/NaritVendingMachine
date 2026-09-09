@@ -1576,32 +1576,28 @@
   const POSITION_VIEWS = new Set(["slots", "visualization"]);
   const SETUP_VIEWS = new Set(["configuration", "motor-test"]);
 
+  if (!window.NaritRouter) throw new Error("HMI router failed to load");
+  const workspaceRouter = window.NaritRouter.create({
+    state: MS,
+    validViews: VALID_VIEWS,
+    fallbackView: "motion",
+    groups: [
+      { primaryId: "nav-diagnostics", views: DIAGNOSTIC_VIEWS },
+      { primaryId: "nav-configuration", views: SETUP_VIEWS },
+      { primaryId: "nav-slots", views: POSITION_VIEWS },
+    ],
+    beforeNavigate: (currentView, nextView) => {
+      if (currentView === "motor-test" && nextView !== "motor-test" && motorTestState().armed) {
+        stopMotorTestJog("Motor Test Mode closed");
+        apiCall("/api/maintenance/motor-test", "POST", { action: "cancel" }).then(refresh).catch(() => {});
+      }
+    },
+    afterNavigate: () => renderWorkspacePages(),
+  });
+
 
   function switchWorkspace(view, updateHash = true) {
-    const nextView = VALID_VIEWS.has(view) ? view : "motion";
-    if (MS.currentView === "motor-test" && nextView !== "motor-test" && motorTestState().armed) {
-      stopMotorTestJog("Motor Test Mode closed");
-      apiCall("/api/maintenance/motor-test", "POST", { action: "cancel" }).then(refresh).catch(() => {});
-    }
-    MS.currentView = nextView;
-    $$('[data-view-page]').forEach((page) => page.classList.toggle("active", page.dataset.viewPage === nextView));
-    $$('[data-view-target]').forEach((button) => {
-      const target = button.dataset.viewTarget;
-      const isPrimaryDiagnostics = button.id === "nav-diagnostics" && DIAGNOSTIC_VIEWS.has(nextView);
-      const isPrimarySetup = button.id === "nav-configuration" && SETUP_VIEWS.has(nextView);
-      const isPrimaryPositions = button.id === "nav-slots" && POSITION_VIEWS.has(nextView);
-      const active = target === nextView || isPrimaryDiagnostics || isPrimarySetup || isPrimaryPositions;
-      button.classList.toggle("active", active);
-      if (active) button.setAttribute("aria-current", "page");
-      else button.removeAttribute("aria-current");
-    });
-    const shell = $(".hmi-shell");
-    if (shell) {
-      shell.classList.toggle("view-wide", nextView !== "motion");
-      shell.classList.toggle("view-dashboard", nextView === "dashboard");
-    }
-    if (updateHash && location.hash !== `#${nextView}`) history.replaceState(null, "", `#${nextView}`);
-    renderWorkspacePages();
+    return workspaceRouter.navigate(view, updateHash);
   }
 
   function openHomingControls() {
@@ -4254,10 +4250,7 @@
 
   function bind() {
     /* --- Workspace navigation --- */
-    $$('[data-view-target]').forEach((button) => {
-      button.addEventListener("click", () => switchWorkspace(button.dataset.viewTarget));
-    });
-    window.addEventListener("hashchange", () => switchWorkspace(location.hash.slice(1), false));
+    workspaceRouter.start();
 
     const runSystemAction = async (path, successMessage) => {
       try {

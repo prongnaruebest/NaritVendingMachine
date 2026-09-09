@@ -6,6 +6,7 @@ TEMPLATE = (ROOT / "narit_vending" / "templates" / "index.html").read_text(encod
 APP = (ROOT / "narit_vending" / "static" / "app.js").read_text(encoding="utf-8")
 API_CLIENT = (ROOT / "narit_vending" / "static" / "api-client.js").read_text(encoding="utf-8")
 MACHINE_STORE = (ROOT / "narit_vending" / "static" / "machine-store.js").read_text(encoding="utf-8")
+ROUTER = (ROOT / "narit_vending" / "static" / "router.js").read_text(encoding="utf-8")
 
 
 def test_api_client_loads_before_application() -> None:
@@ -18,7 +19,8 @@ def test_machine_store_loads_between_transport_and_application() -> None:
     api_script = "filename='api-client.js'"
     store_script = "filename='machine-store.js'"
     app_script = "filename='app.js'"
-    assert TEMPLATE.index(api_script) < TEMPLATE.index(store_script) < TEMPLATE.index(app_script)
+    router_script = "filename='router.js'"
+    assert TEMPLATE.index(api_script) < TEMPLATE.index(store_script) < TEMPLATE.index(router_script) < TEMPLATE.index(app_script)
 
 
 def test_application_delegates_transport_to_api_client() -> None:
@@ -55,3 +57,19 @@ def test_machine_store_is_browser_state_not_machine_authority() -> None:
     assert "axisSpeeds: { x: 5.0, y: 5.0, z: 5.0 }" in MACHINE_STORE
     for forbidden in ("fetch(", "GPIO", "CommandEnvelope", "/api/"):
         assert forbidden not in MACHINE_STORE
+
+
+def test_router_has_idempotent_lifecycle_and_no_machine_authority() -> None:
+    assert "if (started) return" in ROUTER
+    assert "if (!started) return" in ROUTER
+    assert 'removeEventListener("hashchange", onHashChange)' in ROUTER
+    assert "beforeNavigate" in ROUTER
+    assert "afterNavigate" in ROUTER
+    for forbidden in ("fetch(", "/api/", "GPIO", "CommandEnvelope"):
+        assert forbidden not in ROUTER
+
+
+def test_application_delegates_workspace_navigation_to_router() -> None:
+    assert "const workspaceRouter = window.NaritRouter.create" in APP
+    assert "return workspaceRouter.navigate(view, updateHash)" in APP
+    assert "workspaceRouter.start()" in APP
