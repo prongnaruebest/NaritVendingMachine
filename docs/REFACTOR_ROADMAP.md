@@ -66,7 +66,7 @@ Exit criterion: plans are pure/testable and hardware execution consumes validate
 - [x] Add SQLite migration/version framework.
 - [x] Add repositories for slots, demo sessions/samples, audit and idempotency.
 - [x] Introduce structured event codes and correlation IDs.
-- [ ] Add retention, backup and restore tests.
+- [x] Add retention, backup and restore tests.
 
 Exit criterion: a command/session can be reconstructed from persistent records without parsing free-form text.
 
