@@ -2,6 +2,38 @@
 
 คู่มือนี้ใช้กับ HMI ปัจจุบันที่ `http://192.168.70.80/` สำหรับควบคุมเครื่องจริงผ่าน Controller และ NUCLEO USB ห้ามใช้หน้าเว็บแทนการตรวจความปลอดภัยทางกายภาพ
 
+## ขอบเขตและหลักสำคัญ
+
+- Browser ไม่ได้ควบคุม GPIO หรือ STEP/DIR โดยตรง ทุกคำสั่งต้องผ่าน Controller และ safety interlock
+- สถานะ `Online` หมายถึงสื่อสารได้ ไม่ได้แปลว่าเครื่องพร้อมเคลื่อน ต้องดู `Machine Readiness` และ `Motion Authority` แยกกัน
+- ปุ่ม `Enable Motion` ให้สิทธิ์คำสั่งในอนาคตเท่านั้น ไม่เริ่ม Home, Jog หรือ Move
+- ปุ่ม `Disable Motion`, `Stop Motion` และ E-Stop มีหน้าที่ต่างกัน ห้ามใช้แทนกันในการแก้ปัญหาทางกล
+- ค่าตำแหน่งจากซอฟต์แวร์เชื่อถือได้หลัง Home สำเร็จและ reference ยังไม่ถูกล้างเท่านั้น
+
+## Quick Start สำหรับการทำงานปกติ
+
+1. ตรวจพื้นที่, wiring และไฟเลี้ยงด้วยสายตา
+2. เปิด Overview แล้วตรวจ Controller, NUCLEO และ IRIV I/O
+3. ตรวจ `E-Stop / KM1 = CLEAR`, Drive Alarm = Clear และ Motion queue ว่าง
+4. กด Reset Alarms เฉพาะหลังแก้ต้นเหตุแล้ว
+5. กด Enable Motion และยืนยันว่า Motion Authority แสดง Enabled
+6. Home แกนที่จะใช้งาน หรือ Home All
+7. ตั้ง Speed X/Y/Z จาก control ชุดเดียวในหน้า Motion
+8. เลือก Jog, Move, Slot หรือ Demo ตามงาน
+9. หลังงานจบ รอ Idle แล้ว Disable Motion
+
+## ความหมายสถานะหลัก
+
+| สถานะ | ความหมาย | สิ่งที่ผู้ใช้ควรทำ |
+|---|---|---|
+| Controller Online | Web ติดต่อ process เจ้าของ motion ได้ | ตรวจ readiness ต่อ |
+| NUCLEO Safe Link | USB handshake/heartbeat อยู่ในสถานะที่รายงานว่าปลอดภัย | ตรวจ protocol capability และ Home |
+| IRIV I/O Online | Modbus polling ทำงาน | ตรวจ stale timestamp และ logical inputs ต่อ |
+| Motion Authority Disabled | Controller ปฏิเสธ motion ใหม่ | แก้ interlock แล้ว Enable Motion |
+| Not Homed | machine coordinate ของแกนนั้นยังเชื่อถือไม่ได้ | Home แกนนั้นก่อน normal motion |
+| Busy / Active Command | มีคำสั่งอยู่ในการประมวลผล | รอหรือ Stop; ห้ามกดคำสั่งซ้ำ |
+| Alarm / Inhibited | มี safety หรือ device fault | อ่าน reason และแก้ต้นเหตุก่อน Reset |
+
 ## ก่อนเริ่มใช้งาน
 
 1. ตรวจพื้นที่เคลื่อนที่ X/Y/Z และนำสิ่งกีดขวางออก
@@ -33,6 +65,9 @@
 
 Home search อาศัย sensor จริงและ time watchdog ไม่ใช้ software position limit เป็นตัวหยุดค้นหา หาก sensor ค้างหรือไม่ทำงาน คำสั่งต้องจบเป็น Failed
 
+หากแกนเริ่มต้นอยู่บน Min sensor ระบบต้อง Back off ให้ sensor release แล้วจึง approach ซ้ำด้วย latch speed
+ห้ามจับหรือดันแกนด้วยมือระหว่าง Home หาก Home ล้มเหลวให้อ่าน phase และ Event Log ก่อนสั่งซ้ำ
+
 ## Speed X/Y/Z
 
 - Slider และช่องตัวเลขของแต่ละแกนใช้ shared state เดียวกันทุกหน้า
@@ -51,6 +86,9 @@ Home search อาศัย sensor จริงและ time watchdog ไม่
 3. ปล่อยปุ่ม, browser blur, page hidden หรือ connection loss ต้องหยุด
 4. Normal Jog ต้อง Home แกนนั้นก่อน และห้าม bypass software limits
 
+เมื่อ Min หรือ Max sensor ทำงาน ต้อง disable เฉพาะปุ่มที่เคลื่อนเข้าหา sensor ทิศตรงข้ามต้องยังใช้ถอยออกได้
+หากทั้งสองทิศถูกปิด ให้ตรวจ Stop latch, Motion Authority, Homed, driver alarm และ stale connection แทนการ Reset ซ้ำ
+
 ## Move to Min/Max
 
 1. Home แกนที่ต้องการ
@@ -59,6 +97,21 @@ Home search อาศัย sensor จริงและ time watchdog ไม่
 4. กด Min หรือ Max และยืนยันว่าพื้นที่ปลอดภัย
 
 คำสั่งระยะยาวไม่ต้องแบ่งระยะเอง Controller จะแบ่งจำนวน pulse ตาม capability `max_move_steps` ที่ NUCLEO handshake รายงานโดยอัตโนมัติ ห้ามยึดค่าคงที่จากหน้าเว็บ และ Controller ยังคงตรวจ Stop/E-Stop/limit ระหว่าง segment
+
+คำสั่งนี้เป็นการค้นหา physical endpoint: sensor ที่เลือกเป็นเงื่อนไขจบคำสั่ง ไม่ใช่ margin จาก software travel
+แต่ E-Stop, Stop, driver alarm, communication fault และ watchdog ยังทำงานเสมอ เมื่อชน Max แล้วต้องสั่งทิศ Min
+หรือ target ที่ต่ำกว่าปัจจุบันเพื่อถอยออกได้ การ Reset alarm ไม่ใช่เงื่อนไขบังคับหากไม่มี alarm จริง
+
+## Move รายแกนไปยังตำแหน่ง
+
+1. ตรวจว่าแกนนั้น Homed และ Motion Authority Enabled
+2. ใส่ Target position หน่วย mm ใน X, Y หรือ Z
+3. ตรวจว่าค่าอยู่ระหว่าง 0 และ travel ของแกน
+4. ตรวจ speed ของแกนจาก shared speed control
+5. กด `MOVE X`, `MOVE Y` หรือ `MOVE Z`
+
+การเคลื่อนที่ศูนย์ระยะ เช่น Z อยู่ที่ค่าเดิมแล้วเปลี่ยนเฉพาะ X/Y ต้องไม่ถือเป็น error
+ถ้าคำสั่งถูกปฏิเสธให้อ่าน reason; ห้ามเพิ่ม target เกิน travel เพื่อบังคับให้เคลื่อน
 
 ## อ่านหน้า Diagnostics & I/O
 
@@ -110,13 +163,28 @@ Home search อาศัย sensor จริงและ time watchdog ไม่
 - ถ้า STM32 ไม่ตอบ: หน้า System Control & Health → Reset USB Link; ปุ่มนี้ไม่ใช่การกด NRST ทางกายภาพ
 - หาก IRIV I/O Offline ห้าม Enable Motion ให้ตรวจสาย LAN, ไฟเลี้ยง, Modbus และ address ก่อน
 
+### System Control & Health
+
+- `Disable Motion`: ส่ง Stop/Disarm และล็อกคำสั่งเคลื่อนที่ใหม่ ไม่ตัดสินแทน E-Stop ทางกายภาพ
+- `Enable Motion`: ปลด software inhibit เมื่อ DI10, IRIV I/O, NUCLEO และ interlock ผ่าน ไม่ทำให้มอเตอร์เคลื่อน
+- `Reset USB Link`: กู้ transport/handshake ของ NUCLEO ไม่ใช่ STM32 hardware NRST และไม่ Home อัตโนมัติ
+- `Cut Power`: ตัดคำสั่ง DO0/KM1 สำหรับไฟไดรฟ์ X/Y ตามวงจรที่ติดตั้ง พร้อมคง Motion Disabled
+- `Restore Power`: จ่ายกลับเมื่อ E-Stop NC และเงื่อนไขไฟฟ้าผ่าน แต่ไม่ Enable Motion และไม่คืน Homed
+- `Reset Drives`: Stop/Disarm → ตัดไฟ X/Y ตามเวลาที่กำหนด → จ่ายกลับ จากนั้นต้องตรวจ DI0/DI1 alarm,
+  DI10/KM1 feedback และ Home X/Y ใหม่
+
+ใช้ Reset Drives หลังแก้ต้นเหตุของ HBS860H fault แล้วเท่านั้น การ power cycle อาจไม่ล้าง fault ที่เกิดจาก wiring,
+motor feedback, over-current, over-voltage หรือสาเหตุที่ยังคงอยู่ ห้ามกดซ้ำเป็นวงรอบ
+
 ## Manual Commissioning
 
 ใช้เฉพาะช่าง commissioning ในพื้นที่ปลอดภัย ต้อง Arm ก่อนและ Arm มีอายุจำกัด Hold-to-run ต้องหยุดเมื่อปล่อยปุ่ม, blur, page hidden หรือ communication loss การ bypass home/position limit ไม่สามารถข้าม E-Stop, physical Stop, driver alarm หรือ communication fault ได้ Raw Jog จะล้าง Homed status และต้องมี audit log
 
 ## Demo Slot Sampling
 
-ดูขั้นตอนฉบับเต็มที่ [DEMO_SLOT_SAMPLING_TH.md](DEMO_SLOT_SAMPLING_TH.md) ค่าเริ่มต้นเป็น Motion only และต้องมีขอบเขตจำนวนรอบหรือเวลาเสมอ
+ดูขั้นตอนฉบับเต็มที่ [DEMO_SLOT_SAMPLING_TH.md](DEMO_SLOT_SAMPLING_TH.md) ค่าเริ่มต้นเป็น Motion only
+ผู้ใช้ใส่จำนวน Slot Moves และ Dwell; UI คำนวณ Maximum Duration ให้อัตโนมัติจากตำแหน่ง, speed และ dwell
+Controller ยังบังคับ bounded sequence และไม่ Resume session เดิมหลัง restart
 
 ## ตรวจปัญหาเบื้องต้น
 
@@ -129,6 +197,9 @@ Home search อาศัย sensor จริงและ time watchdog ไม่
 | NUCLEO Offline | ตรวจ USB path, baud rate, firmware/protocol handshake และ USB reset link |
 | IRIV Offline | ตรวจไฟเลี้ยง, LAN, host/port, Unit ID และ Modbus polling |
 | Motor หยุดกลางทาง | ตรวจ E-Stop, Stop latch, limit, driver alarm, USB heartbeat และ Event Log |
+| อยู่ Max แล้วถอยออกไม่ได้ | ตรวจว่าปุ่มทิศออกจาก sensor ไม่ถูก frontend ปิดผิด, active command จบแล้ว และ stop latch clear |
+| Reset Drives แล้ว alarm ไม่หาย | หยุดกดซ้ำ ตรวจรหัส/ไฟ ALM ของ HBS860H, DI0/DI1, encoder/motor wiring และแรงดันจริง |
+| หน้าเว็บค้างหรือค่าตำแหน่ง stale | กด Stop ทางกายภาพเมื่อมีความเสี่ยง ตรวจ Controller/IPC ก่อน refresh; ห้ามถือค่าค้างเป็นตำแหน่งจริง |
 
 ## หลังจบงาน
 
