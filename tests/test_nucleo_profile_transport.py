@@ -103,3 +103,20 @@ def test_buffer_underrun_is_a_hard_transport_error():
     with pytest.raises(NucleoError, match="buffer underrun"):
         transport.accept_telemetry({"command_id": "move-xy-1", "state": "BUFFER_UNDERRUN"})
     assert "underrun" in transport.status.last_error
+
+
+def test_transport_payload_contains_only_integer_pulse_domain_kinematics():
+    captured = []
+
+    def exchange(payload, timeout):
+        captured.append(payload)
+        return {"type": "ack", "command_id": payload["command_id"], "sequence": payload["sequence"], "status": "buffered"}
+
+    transport = BufferedProfileTransport(exchange=exchange, capabilities=_capabilities(), enabled=True)
+    transport.stage(_commands(1))
+    phase = captured[0]["phases"][0]
+    assert "jerk_mm_s3" not in phase
+    assert all(isinstance(phase[name], int) for name in (
+        "duration_us", "end_step", "start_rate_millihz", "end_rate_millihz",
+        "start_accel_millihz_s", "end_accel_millihz_s", "jerk_millihz_s2",
+    ))

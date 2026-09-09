@@ -57,7 +57,7 @@ class BufferedProfileCommand:
     direction: int
     steps: int
     sequence: int
-    phases: tuple[dict[str, float | str], ...]
+    phases: tuple[dict[str, int | str], ...]
 
     def __post_init__(self) -> None:
         if not _COMMAND_ID_PATTERN.fullmatch(self.command_id):
@@ -73,12 +73,27 @@ class BufferedProfileCommand:
         if len(self.phases) != 7:
             raise ValueError("seven-segment profile must contain exactly 7 phases")
         for phase in self.phases:
-            duration = phase.get("duration_s")
-            jerk = phase.get("jerk_mm_s3")
-            if not isinstance(duration, (int, float)) or not math.isfinite(float(duration)) or duration < 0:
-                raise ValueError("phase duration_s must be finite and non-negative")
-            if not isinstance(jerk, (int, float)) or not math.isfinite(float(jerk)):
-                raise ValueError("phase jerk_mm_s3 must be finite")
+            required = {
+                "duration_us",
+                "end_step",
+                "start_rate_millihz",
+                "end_rate_millihz",
+                "start_accel_millihz_s",
+                "end_accel_millihz_s",
+                "jerk_millihz_s2",
+            }
+            if not required <= phase.keys():
+                raise ValueError("pulse-domain profile phase is incomplete")
+            for name in required:
+                value = phase[name]
+                if isinstance(value, bool) or not isinstance(value, int):
+                    raise ValueError(f"phase {name} must be an integer")
+            duration_us = phase["duration_us"]
+            end_step = phase["end_step"]
+            if not isinstance(duration_us, int) or not isinstance(end_step, int):
+                raise ValueError("phase duration_us and end_step must be integers")
+            if duration_us < 0 or end_step < 0:
+                raise ValueError("phase duration_us and end_step must be non-negative")
 
     @classmethod
     def from_profile(
@@ -91,13 +106,36 @@ class BufferedProfileCommand:
         sequence: int,
         profile: SevenSegmentSCurve,
     ) -> "BufferedProfileCommand":
+        if steps <= 0 or profile.distance_mm == 0:
+            raise ValueError("non-zero profile distance and steps are required")
+        pulses_per_mm = steps / abs(profile.distance_mm)
+        direction_sign = math.copysign(1.0, profile.distance_mm)
+        elapsed = 0.0
+        pulse_phases: list[dict[str, int | str]] = []
+        for index, phase in enumerate(profile.phases):
+            start = profile.sample(elapsed)
+            elapsed += phase.duration_s
+            end = profile.sample(elapsed)
+            end_step = steps if index == len(profile.phases) - 1 else round(abs(end.position_mm) * pulses_per_mm)
+            pulse_phases.append(
+                {
+                    "name": phase.name,
+                    "duration_us": round(phase.duration_s * 1_000_000),
+                    "end_step": end_step,
+                    "start_rate_millihz": round(abs(start.velocity_mm_s) * pulses_per_mm * 1000),
+                    "end_rate_millihz": round(abs(end.velocity_mm_s) * pulses_per_mm * 1000),
+                    "start_accel_millihz_s": round(start.acceleration_mm_s2 * direction_sign * pulses_per_mm * 1000),
+                    "end_accel_millihz_s": round(end.acceleration_mm_s2 * direction_sign * pulses_per_mm * 1000),
+                    "jerk_millihz_s2": round(phase.jerk_mm_s3 * direction_sign * pulses_per_mm * 1000),
+                }
+            )
         return cls(
             command_id=command_id,
             axis=axis.lower(),
             direction=direction,
             steps=steps,
             sequence=sequence,
-            phases=tuple(phase.to_dict() for phase in profile.phases),
+            phases=tuple(pulse_phases),
         )
 
     def payload(self) -> dict[str, object]:

@@ -55,6 +55,26 @@ def test_payload_is_stable_and_checksummed():
     assert first["axis"] == "X"
     assert len(first["phases"]) == 7
     assert len(first["checksum"]) == 64
+    phases = first["phases"]
+    assert phases[-1]["end_step"] == 6471
+    assert phases[0]["duration_us"] > 0
+    assert phases[0]["start_rate_millihz"] == 0
+    assert phases[-1]["end_rate_millihz"] == 0
+
+
+def test_pulse_domain_phases_are_direction_independent_but_direction_remains_explicit():
+    limits = MotionProfileLimits(30.0, 20.0, 100.0)
+    forward = BufferedProfileCommand.from_profile(
+        command_id="forward", axis="x", direction=1, steps=6471, sequence=0,
+        profile=build_seven_segment_scurve(100.0, limits),
+    )
+    reverse = BufferedProfileCommand.from_profile(
+        command_id="reverse", axis="x", direction=0, steps=6471, sequence=0,
+        profile=build_seven_segment_scurve(-100.0, limits),
+    )
+    assert forward.phases == reverse.phases
+    assert forward.direction == 1
+    assert reverse.direction == 0
 
 
 def test_sequence_rejects_duplicate_gap_and_cross_command_frames():
