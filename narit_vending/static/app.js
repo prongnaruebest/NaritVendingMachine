@@ -1581,6 +1581,7 @@
   if (!window.NaritIOPageController) throw new Error("HMI I/O page controller failed to load");
   if (!window.NaritEventsPageController) throw new Error("HMI Events page controller failed to load");
   if (!window.NaritFlowPageController) throw new Error("HMI Flow page controller failed to load");
+  if (!window.NaritMqttPageController) throw new Error("HMI MQTT page controller failed to load");
   const pageControllers = window.NaritPageControllers.createRegistry({
     onError: (error, context) => console.error(
       `[HMI] ${context.view || "unknown"} page ${context.phase} failed`,
@@ -4828,9 +4829,6 @@
       renderDashboard();
     });
 
-    el("mqtt-connect").addEventListener("click", () => controlMqtt("connect"));
-    el("mqtt-disconnect").addEventListener("click", () => controlMqtt("disconnect"));
-
     /* --- Event log filter --- */
     $$(".evt-filter-btn").forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -4870,6 +4868,10 @@
       exportCsv: exportFilteredEventsCsv,
     }));
     pageControllers.register("flow", window.NaritFlowPageController.create({ state: MS }));
+    pageControllers.register("mqtt", window.NaritMqttPageController.create({
+      control: controlMqtt,
+      render: renderMqttMonitor,
+    }));
     pageControllers.register("visualization", {
       mount: () => {
         loadDemoHistory();

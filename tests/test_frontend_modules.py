@@ -10,6 +10,7 @@ PAGE_CONTROLLERS = (ROOT / "narit_vending" / "static" / "page-controllers.js").r
 IO_PAGE_CONTROLLER = (ROOT / "narit_vending" / "static" / "io-page-controller.js").read_text(encoding="utf-8")
 EVENTS_PAGE_CONTROLLER = (ROOT / "narit_vending" / "static" / "events-page-controller.js").read_text(encoding="utf-8")
 FLOW_PAGE_CONTROLLER = (ROOT / "narit_vending" / "static" / "flow-page-controller.js").read_text(encoding="utf-8")
+MQTT_PAGE_CONTROLLER = (ROOT / "narit_vending" / "static" / "mqtt-page-controller.js").read_text(encoding="utf-8")
 ROUTER = (ROOT / "narit_vending" / "static" / "router.js").read_text(encoding="utf-8")
 
 
@@ -26,6 +27,7 @@ def test_machine_store_loads_between_transport_and_application() -> None:
     io_controller_script = "filename='io-page-controller.js'"
     events_controller_script = "filename='events-page-controller.js'"
     flow_controller_script = "filename='flow-page-controller.js'"
+    mqtt_controller_script = "filename='mqtt-page-controller.js'"
     app_script = "filename='app.js'"
     router_script = "filename='router.js'"
     assert (
@@ -35,6 +37,7 @@ def test_machine_store_loads_between_transport_and_application() -> None:
         < TEMPLATE.index(io_controller_script)
         < TEMPLATE.index(events_controller_script)
         < TEMPLATE.index(flow_controller_script)
+        < TEMPLATE.index(mqtt_controller_script)
         < TEMPLATE.index(router_script)
         < TEMPLATE.index(app_script)
     )
@@ -148,3 +151,15 @@ def test_system_flow_interaction_is_page_scoped_and_read_only() -> None:
     assert "replaceChildren" in FLOW_PAGE_CONTROLLER
     for forbidden in ("fetch(", "/api/", "GPIO", "CommandEnvelope", "POST", "innerHTML"):
         assert forbidden not in FLOW_PAGE_CONTROLLER
+
+
+def test_mqtt_controls_are_page_scoped_without_moving_global_telemetry() -> None:
+    assert 'pageControllers.register("mqtt"' in APP
+    assert "NaritMqttPageController.create" in APP
+    assert 'removeEventListener("click", connect)' in MQTT_PAGE_CONTROLLER
+    assert 'removeEventListener("click", disconnect)' in MQTT_PAGE_CONTROLLER
+    assert 'options.control("connect")' in MQTT_PAGE_CONTROLLER
+    assert 'options.control("disconnect")' in MQTT_PAGE_CONTROLLER
+    assert "const mqttRefresh = refreshMqtt()" in APP
+    for forbidden in ("fetch(", "/api/", "GPIO", "CommandEnvelope"):
+        assert forbidden not in MQTT_PAGE_CONTROLLER
