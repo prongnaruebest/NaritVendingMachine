@@ -39,6 +39,9 @@ static void make_frame(NucleoProfileFrame *frame, uint8_t axis,
   frame->sequence = sequence;
   for (index = 0U; index < NUCLEO_PROFILE_PHASE_COUNT; index++) {
     frame->phases[index].duration_us = phase_us;
+    frame->phases[index].end_step = ((uint32_t)(index + 1U) * 1000U) / 7U;
+    frame->phases[index].start_rate_millihz = 1000000U;
+    frame->phases[index].end_rate_millihz = 1000000U;
   }
 }
 

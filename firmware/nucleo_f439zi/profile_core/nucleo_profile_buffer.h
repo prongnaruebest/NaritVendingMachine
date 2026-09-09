@@ -31,7 +31,12 @@ typedef enum {
 
 typedef struct {
   uint32_t duration_us;
-  int32_t jerk_milli_mm_s3;
+  uint32_t end_step;
+  uint32_t start_rate_millihz;
+  uint32_t end_rate_millihz;
+  int32_t start_accel_millihz_s;
+  int32_t end_accel_millihz_s;
+  int32_t jerk_millihz_s2;
 } NucleoProfilePhase;
 
 typedef struct {

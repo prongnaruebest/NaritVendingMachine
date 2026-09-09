@@ -5,8 +5,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define PROFILE_LINE_MAX 512U
-#define PROFILE_TOKEN_COUNT (7U + (NUCLEO_PROFILE_PHASE_COUNT * 2U))
+#define PROFILE_LINE_MAX 1024U
+#define PROFILE_TOKEN_COUNT (7U + (NUCLEO_PROFILE_PHASE_COUNT * 7U))
+#define PROFILE_MAX_RATE_MILLIHZ 50000000UL
 
 static uint8_t valid_command_id(const char *value)
 {
@@ -95,10 +96,24 @@ NucleoProfileResult NucleoProfile_ParseLine(const char *line,
   if (!parse_u32(tokens[5], &frame->sequence)) return NUCLEO_PROFILE_ERR_RANGE;
   strcpy(frame->checksum, tokens[6]);
   for (index = 0U; index < NUCLEO_PROFILE_PHASE_COUNT; index++) {
-    if (!parse_u32(tokens[7U + index * 2U], &frame->phases[index].duration_us) ||
-        !parse_i32(tokens[8U + index * 2U], &frame->phases[index].jerk_milli_mm_s3)) {
+    size_t offset = 7U + index * 7U;
+    NucleoProfilePhase *phase = &frame->phases[index];
+    if (!parse_u32(tokens[offset], &phase->duration_us) ||
+        !parse_u32(tokens[offset + 1U], &phase->end_step) ||
+        !parse_u32(tokens[offset + 2U], &phase->start_rate_millihz) ||
+        !parse_u32(tokens[offset + 3U], &phase->end_rate_millihz) ||
+        !parse_i32(tokens[offset + 4U], &phase->start_accel_millihz_s) ||
+        !parse_i32(tokens[offset + 5U], &phase->end_accel_millihz_s) ||
+        !parse_i32(tokens[offset + 6U], &phase->jerk_millihz_s2)) {
       return NUCLEO_PROFILE_ERR_RANGE;
     }
+    if ((phase->start_rate_millihz > PROFILE_MAX_RATE_MILLIHZ) ||
+        (phase->end_rate_millihz > PROFILE_MAX_RATE_MILLIHZ) ||
+        ((index > 0U) && (phase->end_step < frame->phases[index - 1U].end_step)) ||
+        (phase->end_step > frame->steps)) return NUCLEO_PROFILE_ERR_RANGE;
+  }
+  if (frame->phases[NUCLEO_PROFILE_PHASE_COUNT - 1U].end_step != frame->steps) {
+    return NUCLEO_PROFILE_ERR_RANGE;
   }
   return NUCLEO_PROFILE_OK;
 }

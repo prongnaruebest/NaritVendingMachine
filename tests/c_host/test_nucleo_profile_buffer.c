@@ -9,10 +9,14 @@ static const char *HASH_B = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
 
 static void make_line(char *line, const char *id, const char axis, unsigned long sequence, const char *hash)
 {
-  sprintf(line,
-          "PROFILE %s %c 1 6471 %lu %s 1000 100000 2000 0 1000 -100000 5000 0 "
-          "1000 -100000 2000 0 1000 100000",
-          id, axis, sequence, hash);
+  unsigned int index;
+  char phase[96];
+  sprintf(line, "PROFILE %s %c 1 6471 %lu %s", id, axis, sequence, hash);
+  for (index = 0U; index < 7U; index++) {
+    unsigned long end_step = (index == 6U) ? 6471UL : (unsigned long)(index + 1U) * 900UL;
+    sprintf(phase, " 1000 %lu 1000 2000 10000 10000 100000", end_step);
+    strcat(line, phase);
+  }
 }
 
 int main(void)
