@@ -37,4 +37,8 @@
 
 ## ขอบเขตปัจจุบัน
 
-Demo repository ใช้ SQLite ใน runtime แล้ว ส่วน Audit และ Idempotency มีทั้ง memory และ SQLite repository แต่ Controller runtime ยังใช้ค่าเริ่มต้นแบบ memory จนกว่าจะผ่าน phase gate สำหรับเปิด persistence และกำหนดตำแหน่งฐานข้อมูลจริงอย่างชัดเจน
+Demo ใช้ `demo_results.sqlite3` ส่วน Audit และ Idempotency ใช้ `controller_history.sqlite3` ข้างไฟล์ machine configuration การแยกไฟล์ป้องกัน migration namespace ชนกัน และทำให้กำหนด retention/restore แยกตามชนิดข้อมูลได้ สามารถเปลี่ยนตำแหน่ง command history ด้วย `--persistence-db` ขณะเริ่ม Controller
+
+Idempotency record ทำให้คำสั่งที่สำเร็จแล้วและส่งซ้ำด้วย key เดิมหลัง Controller restart ไม่ถูกสั่งทำงานซ้ำ ส่วน audit event จะเก็บ command ID, correlation ID, event code, ผลลัพธ์ และรายละเอียดที่มีโครงสร้าง
+
+ต้องสำรองทั้ง `demo_results.sqlite3` และ `controller_history.sqlite3` เพื่อเก็บข้อมูล runtime ครบชุด ห้ามตั้ง `--persistence-db` ให้ชี้ไปยัง `demo_results.sqlite3`

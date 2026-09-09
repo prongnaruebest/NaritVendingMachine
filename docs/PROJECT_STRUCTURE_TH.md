@@ -23,6 +23,7 @@ docs/                  คู่มือและสถาปัตยกรร
 machine_config*.json   Machine coordinates, axes และ slots
 hardware_config*.json  I/O, USB และ hardware mapping
 demo_results.sqlite3   Runtime Demo sessions บนเครื่อง Deploy
+controller_history.sqlite3   Command audit และ idempotency บนเครื่อง Deploy
 ```
 
 ## Data flow

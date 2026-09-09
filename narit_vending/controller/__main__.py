@@ -21,6 +21,7 @@ import logging
 import os
 import signal
 import sys
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -198,14 +199,40 @@ def _register_handlers(bus: Any, service: Any) -> None:
     _log.info("Registered %d command handlers", len(bus._handlers))
 
 
-async def _async_main(service: Any, args: argparse.Namespace) -> None:
+def _build_command_bus(state_machine: Any, snapshot_fn: Any, args: argparse.Namespace) -> Any:
+    """Build the runtime bus with durable command history repositories."""
     from narit_vending.controller.command_bus import CommandBus
+    from narit_vending.persistence.audit_repository import SQLiteAuditRepository
+    from narit_vending.persistence.idempotency_repository import SQLiteIdempotencyRepository
+
+    configured_path = getattr(args, "persistence_db", None)
+    database_path = (
+        Path(configured_path)
+        if configured_path
+        else Path(args.config).resolve().parent / "controller_history.sqlite3"
+    )
+    database_path = database_path.resolve()
+    demo_database_path = Path(args.config).resolve().parent / "demo_results.sqlite3"
+    if database_path == demo_database_path:
+        raise ValueError(
+            "command persistence database must differ from demo_results.sqlite3"
+        )
+    _log.info("Persistent command history database: %s", database_path)
+    return CommandBus(
+        state_machine,
+        snapshot_fn,
+        idempotency_repository=SQLiteIdempotencyRepository(database_path),
+        audit_repository=SQLiteAuditRepository(database_path),
+    )
+
+
+async def _async_main(service: Any, args: argparse.Namespace) -> None:
     from narit_vending.controller.server import IPCServer
     from narit_vending.controller.state_machine import StateMachine
 
     state_machine = StateMachine()
     snapshot_fn = lambda: _build_snapshot(service)  # noqa: E731
-    bus = CommandBus(state_machine, snapshot_fn)
+    bus = _build_command_bus(state_machine, snapshot_fn, args)
     _register_handlers(bus, service)
     service.mqtt_service.set_command_dispatcher(bus.submit)
 
@@ -259,6 +286,14 @@ def main() -> None:
         "--mock-gpio",
         action="store_true",
         help="Use mock GPIO (no physical hardware required)",
+    )
+    parser.add_argument(
+        "--persistence-db",
+        default=None,
+        help=(
+            "SQLite path for command audit and idempotency history "
+            "(default: controller_history.sqlite3 beside the machine config)"
+        ),
     )
     parser.add_argument(
         "--log-level",
