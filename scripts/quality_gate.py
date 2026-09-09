@@ -1,0 +1,96 @@
+from __future__ import annotations
+
+import argparse
+import shutil
+import subprocess
+import sys
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Sequence
+
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+@dataclass(frozen=True)
+class Gate:
+    name: str
+    command: tuple[str, ...]
+
+
+def javascript_files(root: Path = ROOT) -> tuple[Path, ...]:
+    return tuple(sorted((root / "narit_vending" / "static").rglob("*.js")))
+
+
+def build_gates(*, python: str, node: str | None, full: bool) -> tuple[Gate, ...]:
+    gates: list[Gate] = [
+        Gate("Whitespace", ("git", "diff", "--check")),
+        Gate(
+            "Python syntax",
+            (
+                python,
+                "-m",
+                "compileall",
+                "-q",
+                "narit_vending",
+                "tests",
+                "scripts",
+            ),
+        ),
+    ]
+    if node:
+        gates.extend(
+            Gate("JavaScript syntax: " + path.name, (node, "--check", str(path)))
+            for path in javascript_files()
+        )
+    gates.extend(
+        (
+            Gate("Configuration", (python, "scripts/validate_config.py")),
+            Gate(
+                "Dependency boundaries",
+                (python, "-m", "pytest", "-q", "tests/test_architecture_boundaries.py"),
+            ),
+        )
+    )
+    if full:
+        gates.append(Gate("Automated tests", (python, "-m", "pytest", "-q")))
+    return tuple(gates)
+
+
+def run_gate(gate: Gate) -> bool:
+    print(f"\n==> {gate.name}", flush=True)
+    result = subprocess.run(gate.command, cwd=ROOT, check=False)
+    if result.returncode:
+        print(f"FAILED: {gate.name} (exit {result.returncode})", flush=True)
+        return False
+    print(f"PASS: {gate.name}", flush=True)
+    return True
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        description="Run read-only source quality gates without initializing machine hardware."
+    )
+    parser.add_argument(
+        "--quick",
+        action="store_true",
+        help="Skip the full suite; architecture boundary tests still run.",
+    )
+    args = parser.parse_args(argv)
+
+    node = shutil.which("node")
+    if node is None:
+        print("FAILED: JavaScript syntax gate requires Node.js.", file=sys.stderr)
+        return 2
+
+    gates = build_gates(python=sys.executable, node=node, full=not args.quick)
+    for gate in gates:
+        if not run_gate(gate):
+            return 1
+    print(f"\nQUALITY GATE PASSED ({len(gates)} checks)", flush=True)
+    print("No server, Controller, GPIO, serial transport or motion command was started.", flush=True)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

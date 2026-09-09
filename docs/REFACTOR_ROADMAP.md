@@ -82,13 +82,22 @@ Exit criterion: pages share one state source, polling does not overlap, and no m
 
 ## Phase 7 — Release engineering and documentation
 
-- [ ] Add formatting, lint, typing and dependency-direction gates.
+- [ ] Add formatting, lint, typing and dependency-direction gates. (repeatable whitespace, Python/JavaScript syntax, configuration, dependency and full-test baseline gate added; formatter and static-type checker integration remains)
 - [ ] Build staged atomic release and rollback verification.
 - [ ] Complete operator, configuration, PEND, testing and troubleshooting manuals.
 - [ ] Run read-only production smoke tests.
 - [ ] Prepare operator-controlled mechanical acceptance checklist.
 
 Exit criterion: failed health checks roll back safely and no deploy performs motion automatically.
+
+Run the current non-hardware quality baseline from the repository root:
+
+```powershell
+python scripts/quality_gate.py
+```
+
+Use `--quick` while developing to omit the complete test suite. Both modes avoid
+starting Flask, Controller, GPIO, serial communication and motion commands.
 
 ## Commit strategy
 
