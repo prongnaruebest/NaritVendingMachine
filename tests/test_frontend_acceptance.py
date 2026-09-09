@@ -10,7 +10,10 @@ TEMPLATE = (ROOT / "narit_vending" / "templates" / "index.html").read_text(encod
 APP_JS = (ROOT / "narit_vending" / "static" / "app.js").read_text(encoding="utf-8")
 MACHINE_STORE = (ROOT / "narit_vending" / "static" / "machine-store.js").read_text(encoding="utf-8")
 ROUTER = (ROOT / "narit_vending" / "static" / "router.js").read_text(encoding="utf-8")
-STYLE = (ROOT / "narit_vending" / "static" / "style.css").read_text(encoding="utf-8")
+STYLE = "\n".join(
+    (ROOT / "narit_vending" / "static" / filename).read_text(encoding="utf-8")
+    for filename in ("tokens.css", "style.css", "layout.css")
+)
 
 
 class FrontendAcceptanceTests(unittest.TestCase):
