@@ -1579,6 +1579,7 @@
   if (!window.NaritRouter) throw new Error("HMI router failed to load");
   if (!window.NaritPageControllers) throw new Error("HMI page controllers failed to load");
   if (!window.NaritIOPageController) throw new Error("HMI I/O page controller failed to load");
+  if (!window.NaritEventsPageController) throw new Error("HMI Events page controller failed to load");
   const pageControllers = window.NaritPageControllers.createRegistry({
     onError: (error, context) => console.error(
       `[HMI] ${context.view || "unknown"} page ${context.phase} failed`,
@@ -4331,37 +4332,6 @@
       detail.innerHTML = `<strong>${esc(node.querySelector("strong")?.textContent || "Step")}</strong><p>State: ${esc(state.toUpperCase())}</p><p>Preconditions and live state are evaluated by Controller safety interlocks. Current command: ${esc(MS.payload?.active_command || "NONE")}. No machine command is sent from this panel.</p>`;
     }));
 
-    /* --- Event History filters and read-only detail --- */
-    const eventFilterInputs = {
-      search: el("event-search"), severity: el("event-severity-filter"),
-      category: el("event-category-filter"), outcome: el("event-outcome-filter"),
-    };
-    Object.entries(eventFilterInputs).forEach(([key, input]) => input?.addEventListener("input", () => {
-      MS.eventFilters[key] = input.value;
-      renderEventLog();
-    }));
-    el("event-clear-filters")?.addEventListener("click", () => {
-      MS.eventFilters = { search: "", severity: "all", category: "all", outcome: "all" };
-      Object.entries(eventFilterInputs).forEach(([key, input]) => { if (input) input.value = MS.eventFilters[key]; });
-      $$("[data-event-quick]").forEach((button) => button.classList.toggle("active", button.dataset.eventQuick === "all"));
-      renderEventLog();
-    });
-    $$("[data-event-quick]").forEach((button) => button.addEventListener("click", () => {
-      const quick = button.dataset.eventQuick;
-      MS.eventFilters = { search: "", severity: "all", category: "all", outcome: "all" };
-      if (["fault", "warn"].includes(quick)) MS.eventFilters.severity = quick;
-      else if (quick !== "all") MS.eventFilters.category = quick;
-      Object.entries(eventFilterInputs).forEach(([key, input]) => { if (input) input.value = MS.eventFilters[key]; });
-      $$("[data-event-quick]").forEach((node) => node.classList.toggle("active", node === button));
-      renderEventLog();
-    }));
-    el("event-log-page")?.addEventListener("click", (event) => {
-      const button = event.target.closest("[data-event-detail]");
-      if (!button) return;
-      MS.selectedEventId = button.dataset.eventDetail;
-      renderEventLog();
-    });
-
     /* --- Emergency Stop --- */
     el("stop-button").addEventListener("click", () => {
       command("Emergency stop", "/api/stop", undefined, { isStop: true, noCheck: true });
@@ -4576,7 +4546,6 @@
     el("abort-motion").addEventListener("click", () => {
       command("Abort motion", "/api/motion/abort", undefined, { isStop: true, noCheck: true });
     });
-    el("event-export-csv")?.addEventListener("click", exportFilteredEventsCsv);
 
     el("operator-stop").addEventListener("click", () => {
       setText("travel-limit-feedback", "STOP requested — waiting for controller status.");
@@ -4900,6 +4869,11 @@
       refresh,
       toast,
       onError: (error) => console.error("[HMI] I/O refresh failed", error),
+    }));
+    pageControllers.register("events", window.NaritEventsPageController.create({
+      state: MS,
+      render: renderEventLog,
+      exportCsv: exportFilteredEventsCsv,
     }));
     pageControllers.register("visualization", {
       mount: () => {
