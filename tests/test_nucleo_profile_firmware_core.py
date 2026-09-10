@@ -192,6 +192,7 @@ def test_profile_facade_compiles_with_feature_off_and_on(tmp_path: Path, feature
     sources = [
         CORE / "nucleo_profile_buffer.c", CORE / "nucleo_profile_executor.c",
         CORE / "nucleo_pulse_scheduler.c", CORE / "nucleo_compare_adapter.c",
+        CORE / "nucleo_sensor_stop.c",
         candidate / "nucleo_profile_hal_port.c", candidate / "nucleo_profile_facade.c",
         ROOT / "tests" / "c_host" / "test_nucleo_profile_facade.c",
     ]

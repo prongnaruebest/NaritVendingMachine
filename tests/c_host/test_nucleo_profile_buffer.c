@@ -19,6 +19,20 @@ static void make_line(char *line, const char *id, const char axis, unsigned long
   }
 }
 
+static void make_sensor_line(char *line, const char *sensor, const char *mode,
+                             unsigned long long watchdog, const char *hash)
+{
+  unsigned int index;
+  char phase[96];
+  sprintf(line, "SENSOR_PROFILE seek-x X 1 6471 0 %s %s %llu %s",
+          sensor, mode, watchdog, hash);
+  for (index = 0U; index < 7U; index++) {
+    unsigned long end_step = (index == 6U) ? 6471UL : (unsigned long)(index + 1U) * 900UL;
+    sprintf(phase, " 1000 %lu 1000 2000 10000 10000 100000", end_step);
+    strcat(line, phase);
+  }
+}
+
 int main(void)
 {
   NucleoProfileBuffer buffer;
@@ -55,6 +69,17 @@ int main(void)
 
   make_line(line, "move-2", 'Z', 0UL, HASH_A);
   assert(NucleoProfile_ParseLine(line, &x) == NUCLEO_PROFILE_ERR_AXIS);
+
+  make_sensor_line(line, "X_MAX", "controlled", 60000000ULL, HASH_A);
+  assert(NucleoProfile_ParseLine(line, &x) == NUCLEO_PROFILE_OK);
+  assert(x.sensor_terminated == 1U && x.termination_sensor == 1U);
+  assert(x.sensor_stop_mode == 0U && x.sensor_watchdog_us == 60000000ULL);
+  make_sensor_line(line, "Y_MAX", "controlled", 60000000ULL, HASH_A);
+  assert(NucleoProfile_ParseLine(line, &x) == NUCLEO_PROFILE_ERR_AXIS);
+  make_sensor_line(line, "X_MAX", "coast", 60000000ULL, HASH_A);
+  assert(NucleoProfile_ParseLine(line, &x) == NUCLEO_PROFILE_ERR_RANGE);
+  make_sensor_line(line, "X_MAX", "immediate", 99999ULL, HASH_A);
+  assert(NucleoProfile_ParseLine(line, &x) == NUCLEO_PROFILE_ERR_RANGE);
   puts("nucleo_profile_buffer host tests passed");
   return 0;
 }

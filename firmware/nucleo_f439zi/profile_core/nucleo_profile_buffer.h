@@ -45,6 +45,10 @@ typedef struct {
   uint8_t direction;
   uint32_t steps;
   uint32_t sequence;
+  uint8_t sensor_terminated;
+  uint8_t termination_sensor;
+  uint8_t sensor_stop_mode;
+  uint64_t sensor_watchdog_us;
   char checksum[65U];
   NucleoProfilePhase phases[NUCLEO_PROFILE_PHASE_COUNT];
 } NucleoProfileFrame;

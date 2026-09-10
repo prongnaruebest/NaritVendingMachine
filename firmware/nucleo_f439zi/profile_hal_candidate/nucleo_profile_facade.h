@@ -3,6 +3,7 @@
 
 #include "nucleo_profile_hal_port.h"
 #include "nucleo_pulse_scheduler.h"
+#include "nucleo_sensor_stop.h"
 
 #ifndef NUCLEO_XY_PROFILE_FEATURE_ENABLED
 #define NUCLEO_XY_PROFILE_FEATURE_ENABLED 0
@@ -12,6 +13,7 @@ typedef struct {
   NucleoProfileBuffer buffer;
   NucleoProfileExecutor executor;
   NucleoPulseScheduler scheduler;
+  NucleoSensorStopSupervisor sensor_stop;
   NucleoProfileHalPort hal_port;
   uint8_t initialized;
 } NucleoProfileFacade;
@@ -27,12 +29,21 @@ NucleoProfileResult NucleoProfileFacade_StageLine(
 NucleoProfileResult NucleoProfileFacade_Start(
     NucleoProfileFacade *facade, const char *command_id,
     uint64_t now_us, uint8_t safety_permissive);
+NucleoProfileResult NucleoProfileFacade_StartSensor(
+    NucleoProfileFacade *facade, const char *command_id,
+    uint64_t now_us, uint8_t safety_permissive,
+    uint8_t x_sensor_active, uint8_t y_sensor_active);
 void NucleoProfileFacade_Heartbeat(NucleoProfileFacade *facade,
                                    uint64_t now_us,
                                    uint8_t safety_permissive);
 NucleoProfileState NucleoProfileFacade_Poll(NucleoProfileFacade *facade,
                                             uint64_t now_us,
                                             uint8_t safety_permissive);
+NucleoProfileState NucleoProfileFacade_PollSensors(
+    NucleoProfileFacade *facade, uint64_t now_us,
+    uint8_t safety_permissive, uint8_t x_sensor_active,
+    uint8_t y_sensor_active);
 void NucleoProfileFacade_SafetyStop(NucleoProfileFacade *facade);
+void NucleoProfileFacade_Reset(NucleoProfileFacade *facade);
 
 #endif

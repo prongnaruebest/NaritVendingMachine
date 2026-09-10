@@ -7,6 +7,7 @@
 
 #define PROFILE_LINE_MAX 1024U
 #define PROFILE_TOKEN_COUNT (7U + (NUCLEO_PROFILE_PHASE_COUNT * 7U))
+#define SENSOR_PROFILE_TOKEN_COUNT (10U + (NUCLEO_PROFILE_PHASE_COUNT * 7U))
 #define PROFILE_MAX_RATE_MILLIHZ 50000000UL
 
 static uint8_t valid_command_id(const char *value)
@@ -51,6 +52,15 @@ static uint8_t parse_i32(const char *token, int32_t *value)
   return 1U;
 }
 
+static uint8_t parse_u64(const char *token, uint64_t *value)
+{
+  char *end = NULL;
+  unsigned long long parsed = strtoull(token, &end, 10);
+  if ((token[0] == '\0') || (end == NULL) || (*end != '\0')) return 0U;
+  *value = (uint64_t)parsed;
+  return 1U;
+}
+
 void NucleoProfileBuffer_Init(NucleoProfileBuffer *buffer)
 {
   if (buffer == NULL) return;
@@ -62,26 +72,35 @@ NucleoProfileResult NucleoProfile_ParseLine(const char *line,
                                             NucleoProfileFrame *frame)
 {
   char copy[PROFILE_LINE_MAX];
-  char *tokens[PROFILE_TOKEN_COUNT];
+  char *tokens[SENSOR_PROFILE_TOKEN_COUNT];
   char *token;
   size_t count = 0U;
   size_t index;
   uint32_t parsed = 0U;
+  size_t expected_count;
+  size_t checksum_offset;
+  size_t phase_offset;
+  uint8_t sensor_profile;
 
   if ((line == NULL) || (frame == NULL) || (strlen(line) >= sizeof(copy))) {
     return NUCLEO_PROFILE_ERR_FORMAT;
   }
   strcpy(copy, line);
   token = strtok(copy, " ");
-  while ((token != NULL) && (count < PROFILE_TOKEN_COUNT)) {
+  while ((token != NULL) && (count < SENSOR_PROFILE_TOKEN_COUNT)) {
     tokens[count++] = token;
     token = strtok(NULL, " ");
   }
-  if ((token != NULL) || (count != PROFILE_TOKEN_COUNT) ||
-      (strcmp(tokens[0], "PROFILE") != 0)) {
+  if (count == 0U) return NUCLEO_PROFILE_ERR_FORMAT;
+  sensor_profile = (strcmp(tokens[0], "SENSOR_PROFILE") == 0) ? 1U : 0U;
+  expected_count = sensor_profile ? SENSOR_PROFILE_TOKEN_COUNT : PROFILE_TOKEN_COUNT;
+  checksum_offset = sensor_profile ? 9U : 6U;
+  phase_offset = sensor_profile ? 10U : 7U;
+  if ((token != NULL) || (count != expected_count) ||
+      ((!sensor_profile) && (strcmp(tokens[0], "PROFILE") != 0))) {
     return NUCLEO_PROFILE_ERR_FORMAT;
   }
-  if (!valid_command_id(tokens[1]) || !valid_checksum(tokens[6])) {
+  if (!valid_command_id(tokens[1]) || !valid_checksum(tokens[checksum_offset])) {
     return NUCLEO_PROFILE_ERR_FORMAT;
   }
   if ((strlen(tokens[2]) != 1U) || ((tokens[2][0] != 'X') && (tokens[2][0] != 'Y'))) {
@@ -94,9 +113,28 @@ NucleoProfileResult NucleoProfile_ParseLine(const char *line,
   frame->direction = (uint8_t)parsed;
   if (!parse_u32(tokens[4], &frame->steps) || (frame->steps == 0U)) return NUCLEO_PROFILE_ERR_RANGE;
   if (!parse_u32(tokens[5], &frame->sequence)) return NUCLEO_PROFILE_ERR_RANGE;
-  strcpy(frame->checksum, tokens[6]);
+  if (sensor_profile) {
+    const char axis_name = tokens[2][0];
+    const char *expected_min = (axis_name == 'X') ? "X_MIN" : "Y_MIN";
+    const char *expected_max = (axis_name == 'X') ? "X_MAX" : "Y_MAX";
+    if ((strcmp(tokens[6], expected_min) != 0) &&
+        (strcmp(tokens[6], expected_max) != 0)) return NUCLEO_PROFILE_ERR_AXIS;
+    frame->sensor_terminated = 1U;
+    frame->termination_sensor = (uint8_t)(axis_name == 'X'
+        ? (strcmp(tokens[6], "X_MIN") == 0 ? 0U : 1U)
+        : (strcmp(tokens[6], "Y_MIN") == 0 ? 2U : 3U));
+    if (strcmp(tokens[7], "controlled") == 0) frame->sensor_stop_mode = 0U;
+    else if (strcmp(tokens[7], "immediate") == 0) frame->sensor_stop_mode = 1U;
+    else return NUCLEO_PROFILE_ERR_RANGE;
+    if (!parse_u64(tokens[8], &frame->sensor_watchdog_us) ||
+        (frame->sensor_watchdog_us < 100000ULL) ||
+        (frame->sensor_watchdog_us > 3600000000ULL)) {
+      return NUCLEO_PROFILE_ERR_RANGE;
+    }
+  }
+  strcpy(frame->checksum, tokens[checksum_offset]);
   for (index = 0U; index < NUCLEO_PROFILE_PHASE_COUNT; index++) {
-    size_t offset = 7U + index * 7U;
+    size_t offset = phase_offset + index * 7U;
     NucleoProfilePhase *phase = &frame->phases[index];
     if (!parse_u32(tokens[offset], &phase->duration_us) ||
         !parse_u32(tokens[offset + 1U], &phase->end_step) ||

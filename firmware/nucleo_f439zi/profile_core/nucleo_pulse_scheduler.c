@@ -114,16 +114,23 @@ uint8_t NucleoPulseScheduler_OnPulse(NucleoPulseScheduler *scheduler,
   return 1U;
 }
 
+void NucleoPulseScheduler_StopAxis(NucleoPulseScheduler *scheduler,
+                                   uint8_t axis)
+{
+  if ((scheduler == NULL) || (axis > 1U)) return;
+  if ((scheduler->active[axis] != 0U) &&
+      (scheduler->hooks.disable_axis != NULL)) {
+    scheduler->hooks.disable_axis(scheduler->hooks.context, axis);
+  }
+  scheduler->active[axis] = 0U;
+}
+
 void NucleoPulseScheduler_SafetyStop(NucleoPulseScheduler *scheduler)
 {
   uint8_t axis;
   if (scheduler == NULL) return;
   for (axis = 0U; axis < 2U; axis++) {
-    if ((scheduler->active[axis] != 0U) &&
-        (scheduler->hooks.disable_axis != NULL)) {
-      scheduler->hooks.disable_axis(scheduler->hooks.context, axis);
-    }
-    scheduler->active[axis] = 0U;
+    NucleoPulseScheduler_StopAxis(scheduler, axis);
   }
   if (scheduler->executor != NULL) {
     NucleoProfileExecutor_SafetyStop(scheduler->executor);

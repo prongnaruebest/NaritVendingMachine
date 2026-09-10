@@ -32,6 +32,8 @@ void NucleoPulseScheduler_ControlTick(NucleoPulseScheduler *scheduler,
                                       uint64_t now_us);
 uint8_t NucleoPulseScheduler_OnPulse(NucleoPulseScheduler *scheduler,
                                     uint8_t axis);
+void NucleoPulseScheduler_StopAxis(NucleoPulseScheduler *scheduler,
+                                   uint8_t axis);
 void NucleoPulseScheduler_SafetyStop(NucleoPulseScheduler *scheduler);
 
 #endif
