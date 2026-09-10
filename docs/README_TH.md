@@ -4,14 +4,22 @@
 
 เอกสารในโฟลเดอร์นี้อธิบายระบบ HMI, Controller, IRIV I/O และ STM32 NUCLEO-F439ZI สำหรับเครื่องจริง ก่อนใช้ข้อมูลด้านสายไฟหรือความปลอดภัยต้องตรวจเทียบกับเครื่อง As-Built เสมอ
 
+## ข้อตกลงวิศวกรรมและการทำงานร่วมกับ AI
+
+ก่อนแก้ไขโค้ด คอนฟิก หรือส่งต่องาน ต้องอ่านและปฏิบัติตามข้อตกลงร่วมต่อไปนี้:
+
+- **[AGENTS.md](../AGENTS.md)** — กฎบังคับสำหรับคน, Codex และ Antigravity
+- **[ENGINEERING_WORKFLOW_AND_HANDOFF_TH.md](ENGINEERING_WORKFLOW_AND_HANDOFF_TH.md)** — แนวทางออกแบบ เขียนโค้ด คอมเมนต์ ทดสอบ Deploy และส่งต่องาน
+
 ## เริ่มอ่านจากที่นี่
 
 | เอกสาร | ใช้สำหรับ |
 |---|---|
+| [AGENTS.md](../AGENTS.md) | กฎบังคับสำหรับคน, Codex และ Antigravity |
+| [ENGINEERING_WORKFLOW_AND_HANDOFF_TH.md](ENGINEERING_WORKFLOW_AND_HANDOFF_TH.md) | แนวทางออกแบบ เขียนโค้ด คอมเมนต์ ทดสอบ Deploy และส่งต่องาน |
 | [USER_MANUAL_TH.md](USER_MANUAL_TH.md) | คู่มือเปิดเครื่อง, Home, Jog, Min/Max, GOTO, Slot และการตั้งความเร็ว |
 | [SAFETY_AND_RECOVERY_TH.md](SAFETY_AND_RECOVERY_TH.md) | เงื่อนไข interlock, E-Stop, Stop และขั้นตอนกู้ระบบ |
 | [PROJECT_STRUCTURE_TH.md](PROJECT_STRUCTURE_TH.md) | โครงสร้าง source code, process ownership และ data flow |
-| [ENGINEERING_WORKFLOW_AND_HANDOFF_TH.md](ENGINEERING_WORKFLOW_AND_HANDOFF_TH.md) | กฎพัฒนา การเขียนคอมเมนต์ Definition of Done และการส่งต่องานระหว่างคน/AI |
 | [API_REFERENCE.md](API_REFERENCE.md) | Endpoint สำคัญของ Web/Controller |
 | [DEMO_SLOT_SAMPLING_TH.md](DEMO_SLOT_SAMPLING_TH.md) | การทดสอบ Demo Slot Sampling แบบมีขอบเขต |
 | [ARCHITECTURE_TH.md](ARCHITECTURE_TH.md) | สถาปัตยกรรมฉบับละเอียดและข้อมูลส่งต่องาน |
