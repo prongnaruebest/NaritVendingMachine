@@ -100,8 +100,13 @@ NucleoProfileResult NucleoProfileFacade_StartSensor(
   uint32_t index;
   NucleoProfileResult result;
   if ((NUCLEO_XY_PROFILE_FEATURE_ENABLED == 0) || (facade == NULL) ||
-      (facade->initialized == 0U) || (command_id == NULL) ||
-      (safety_permissive == 0U)) return NUCLEO_PROFILE_ERR_STATE;
+      (facade->initialized == 0U) || (command_id == NULL)) {
+    return NUCLEO_PROFILE_ERR_STATE;
+  }
+  if (safety_permissive == 0U) {
+    NucleoProfileFacade_SafetyStop(facade);
+    return NUCLEO_PROFILE_ERR_STATE;
+  }
   for (index = 0U; index < facade->buffer.count; index++) {
     NucleoProfileFrame *frame = &facade->buffer.frames[index];
     uint8_t sensor_active;
