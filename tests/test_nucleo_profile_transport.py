@@ -6,10 +6,12 @@ from narit_vending.domain.errors import NucleoError
 from narit_vending.domain.motion_profile import MotionProfileLimits, build_seven_segment_scurve
 from narit_vending.domain.nucleo_profile_protocol import (
     PROFILE_CAPABILITIES,
+    SENSOR_TERMINATED_PROFILE_CAPABILITIES,
     BufferedProfileCommand,
     NucleoCapabilities,
+    SensorTerminatedProfileCommand,
 )
-from narit_vending.nucleo_profile_transport import BufferedProfileTransport
+from narit_vending.nucleo_profile_transport import BufferedProfileTransport, SensorProfileWireTransport
 
 
 def _capabilities(protocol: int = 4, complete: bool = True) -> NucleoCapabilities:
@@ -30,6 +32,13 @@ def _commands(count: int = 2) -> list[BufferedProfileCommand]:
         )
         for index in range(count)
     ]
+
+
+def _sensor_commands() -> list[SensorTerminatedProfileCommand]:
+    return [SensorTerminatedProfileCommand(
+        profile=_commands(1)[0], sensor="X_MAX", stop_mode="immediate",
+        watchdog_us=2_000_000,
+    )]
 
 
 def test_transport_is_disabled_by_default_and_performs_no_exchange():
@@ -120,3 +129,59 @@ def test_transport_payload_contains_only_integer_pulse_domain_kinematics():
         "duration_us", "end_step", "start_rate_millihz", "end_rate_millihz",
         "start_accel_millihz_s", "end_accel_millihz_s", "jerk_millihz_s2",
     ))
+
+
+def test_sensor_wire_transport_is_disabled_and_capability_gated_without_exchange():
+    calls = []
+    transport = SensorProfileWireTransport(
+        exchange=lambda line, timeout: calls.append(line), capabilities=_capabilities(),
+    )
+    with pytest.raises(NucleoError, match="disabled"):
+        transport.stage(_sensor_commands())
+    assert calls == []
+
+    transport = SensorProfileWireTransport(
+        exchange=lambda line, timeout: calls.append(line),
+        capabilities=_capabilities(), enabled=True,
+    )
+    with pytest.raises(NucleoError, match="does not advertise"):
+        transport.stage(_sensor_commands())
+    assert calls == []
+
+
+def test_sensor_wire_transport_stages_ascii_then_starts_separately():
+    calls: list[bytes] = []
+
+    def exchange(line: bytes, timeout: float):
+        calls.append(line)
+        fields = line.decode("ascii").strip().split(" ")
+        if fields[0] == "SENSOR_START":
+            return {"type": "ack", "command_id": fields[1], "status": "running"}
+        return {"type": "ack", "command_id": fields[1],
+                "sequence": int(fields[5]), "status": "buffered"}
+
+    capabilities = NucleoCapabilities(
+        4, PROFILE_CAPABILITIES | SENSOR_TERMINATED_PROFILE_CAPABILITIES
+    )
+    transport = SensorProfileWireTransport(
+        exchange=exchange, capabilities=capabilities, enabled=True,
+    )
+    assert transport.stage(_sensor_commands())["started"] is False
+    assert calls[0].startswith(b"SENSOR_PROFILE move-xy-1 X ")
+    assert calls[0].endswith(b"\n")
+    assert transport.start("move-xy-1")["status"] == "running"
+    assert calls[-1] == b"SENSOR_START move-xy-1 1\n"
+
+
+def test_sensor_wire_transport_rejects_bad_ack_and_clears_stage():
+    capabilities = NucleoCapabilities(
+        4, PROFILE_CAPABILITIES | SENSOR_TERMINATED_PROFILE_CAPABILITIES
+    )
+    transport = SensorProfileWireTransport(
+        exchange=lambda line, timeout: {"type": "ack", "command_id": "wrong",
+                                        "sequence": 0, "status": "buffered"},
+        capabilities=capabilities, enabled=True,
+    )
+    with pytest.raises(NucleoError, match="command_id mismatch"):
+        transport.stage(_sensor_commands())
+    assert transport.status.staged_command_id is None

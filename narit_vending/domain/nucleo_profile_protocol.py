@@ -28,6 +28,14 @@ SENSOR_TERMINATED_PROFILE_CAPABILITIES = frozenset(
 _COMMAND_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,63}$")
 
 
+def _phase_wire_fields(phases: tuple[dict[str, int | str], ...]) -> list[str]:
+    names = (
+        "duration_us", "end_step", "start_rate_millihz", "end_rate_millihz",
+        "start_accel_millihz_s", "end_accel_millihz_s", "jerk_millihz_s2",
+    )
+    return [str(phase[name]) for phase in phases for name in names]
+
+
 @dataclass(frozen=True)
 class NucleoCapabilities:
     protocol: int
@@ -160,6 +168,17 @@ class BufferedProfileCommand:
         body["checksum"] = hashlib.sha256(canonical.encode("ascii")).hexdigest()
         return body
 
+    def wire_line(self) -> str:
+        """Return the stable ASCII frame consumed by the candidate C parser."""
+
+        payload = self.payload()
+        fields = [
+            "PROFILE", self.command_id, self.axis.upper(), str(self.direction),
+            str(self.steps), str(self.sequence), str(payload["checksum"]),
+            *_phase_wire_fields(self.phases),
+        ]
+        return " ".join(fields)
+
 
 @dataclass(frozen=True)
 class SensorTerminatedProfileCommand:
@@ -192,6 +211,20 @@ class SensorTerminatedProfileCommand:
         canonical = json.dumps(body, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
         body["checksum"] = hashlib.sha256(canonical.encode("ascii")).hexdigest()
         return body
+
+
+    def wire_line(self) -> str:
+        """Return the stable sensor-terminated ASCII frame for firmware."""
+
+        payload = self.payload()
+        profile = self.profile
+        fields = [
+            "SENSOR_PROFILE", profile.command_id, profile.axis.upper(),
+            str(profile.direction), str(profile.steps), str(profile.sequence),
+            self.sensor, self.stop_mode, str(self.watchdog_us),
+            str(payload["checksum"]), *_phase_wire_fields(profile.phases),
+        ]
+        return " ".join(fields)
 
 
 def validate_profile_sequence(commands: Iterable[BufferedProfileCommand]) -> tuple[BufferedProfileCommand, ...]:
