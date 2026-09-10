@@ -1,4 +1,5 @@
 #include "nucleo_profile_dispatcher.h"
+#include "nucleo_sha256.h"
 
 #include <assert.h>
 #include <stdio.h>
@@ -23,12 +24,17 @@ static void make_sensor_line(char *line)
 {
   unsigned int index;
   char phase[96];
-  sprintf(line, "SENSOR_PROFILE seek-x X 1 6471 0 X_MAX immediate 1000000 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+  char phases[768] = "";
+  char hash[65];
+  const char *header = "SENSOR_PROFILE seek-x X 1 6471 0 X_MAX immediate 1000000";
   for (index = 0U; index < 7U; index++) {
     unsigned long end_step = (index == 6U) ? 6471UL : (unsigned long)(index + 1U) * 900UL;
     sprintf(phase, " 1000 %lu 1000 2000 10000 10000 100000", end_step);
-    strcat(line, phase);
+    strcat(phases, phase);
   }
+  sprintf(line, "%s%s", header, phases);
+  NucleoSha256_Hex((const uint8_t *)line, strlen(line), hash);
+  sprintf(line, "%s %s%s", header, hash, phases);
 }
 
 int main(void)

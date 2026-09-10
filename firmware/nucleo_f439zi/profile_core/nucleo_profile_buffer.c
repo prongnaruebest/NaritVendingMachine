@@ -1,4 +1,5 @@
 #include "nucleo_profile_buffer.h"
+#include "nucleo_sha256.h"
 
 #include <ctype.h>
 #include <stdio.h>
@@ -28,6 +29,33 @@ static uint8_t valid_checksum(const char *value)
   if (strlen(value) != 64U) return 0U;
   for (index = 0U; index < 64U; index++) {
     if (!isxdigit((unsigned char)value[index])) return 0U;
+  }
+  return 1U;
+}
+
+static uint8_t checksum_matches(char **tokens, size_t count,
+                                size_t checksum_offset)
+{
+  char canonical[PROFILE_LINE_MAX];
+  char expected[65];
+  size_t used = 0U;
+  size_t index;
+  for (index = 0U; index < count; index++) {
+    size_t token_length;
+    if (index == checksum_offset) continue;
+    token_length = strlen(tokens[index]);
+    if ((used != 0U) && (used + 1U >= sizeof(canonical))) return 0U;
+    if (used != 0U) canonical[used++] = ' ';
+    if (used + token_length >= sizeof(canonical)) return 0U;
+    memcpy(&canonical[used], tokens[index], token_length);
+    used += token_length;
+  }
+  canonical[used] = '\0';
+  NucleoSha256_Hex((const uint8_t *)canonical, used, expected);
+  for (index = 0U; index < 64U; index++) {
+    if (tolower((unsigned char)tokens[checksum_offset][index]) != expected[index]) {
+      return 0U;
+    }
   }
   return 1U;
 }
@@ -102,6 +130,9 @@ NucleoProfileResult NucleoProfile_ParseLine(const char *line,
   }
   if (!valid_command_id(tokens[1]) || !valid_checksum(tokens[checksum_offset])) {
     return NUCLEO_PROFILE_ERR_FORMAT;
+  }
+  if (!checksum_matches(tokens, count, checksum_offset)) {
+    return NUCLEO_PROFILE_ERR_COMMAND;
   }
   if ((strlen(tokens[2]) != 1U) || ((tokens[2][0] != 'X') && (tokens[2][0] != 'Y'))) {
     return NUCLEO_PROFILE_ERR_AXIS;

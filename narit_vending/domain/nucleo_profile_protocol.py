@@ -36,6 +36,10 @@ def _phase_wire_fields(phases: tuple[dict[str, int | str], ...]) -> list[str]:
     return [str(phase[name]) for phase in phases for name in names]
 
 
+def _wire_checksum(fields: list[str]) -> str:
+    return hashlib.sha256(" ".join(fields).encode("ascii")).hexdigest()
+
+
 @dataclass(frozen=True)
 class NucleoCapabilities:
     protocol: int
@@ -171,13 +175,12 @@ class BufferedProfileCommand:
     def wire_line(self) -> str:
         """Return the stable ASCII frame consumed by the candidate C parser."""
 
-        payload = self.payload()
-        fields = [
+        header = [
             "PROFILE", self.command_id, self.axis.upper(), str(self.direction),
-            str(self.steps), str(self.sequence), str(payload["checksum"]),
-            *_phase_wire_fields(self.phases),
+            str(self.steps), str(self.sequence),
         ]
-        return " ".join(fields)
+        phases = _phase_wire_fields(self.phases)
+        return " ".join([*header, _wire_checksum([*header, *phases]), *phases])
 
 
 @dataclass(frozen=True)
@@ -216,15 +219,14 @@ class SensorTerminatedProfileCommand:
     def wire_line(self) -> str:
         """Return the stable sensor-terminated ASCII frame for firmware."""
 
-        payload = self.payload()
         profile = self.profile
-        fields = [
+        header = [
             "SENSOR_PROFILE", profile.command_id, profile.axis.upper(),
             str(profile.direction), str(profile.steps), str(profile.sequence),
             self.sensor, self.stop_mode, str(self.watchdog_us),
-            str(payload["checksum"]), *_phase_wire_fields(profile.phases),
         ]
-        return " ".join(fields)
+        phases = _phase_wire_fields(profile.phases)
+        return " ".join([*header, _wire_checksum([*header, *phases]), *phases])
 
 
 def validate_profile_sequence(commands: Iterable[BufferedProfileCommand]) -> tuple[BufferedProfileCommand, ...]:

@@ -113,6 +113,7 @@ Exit criterion: failed health checks roll back safely and no deploy performs mot
 - [x] Parse `SENSOR_PROFILE` frames in the firmware candidate facade, reject bypass through the bounded-profile start path, stop a sensor-complete scheduler axis independently and escalate watchdog/global safety events to stop all axes.
 - [x] Add stable Raspberry Pi ASCII serialization and a disabled-by-default, capability-gated sensor-profile wire adapter with separate stage/start acknowledgements and mock-only transport tests.
 - [x] Add a bounded HAL-independent UART command dispatcher for `SENSOR_PROFILE`/`SENSOR_START`, deterministic ACK/error responses, strict frame-count checks and malformed/oversized-input host fuzz coverage; keep it outside the CubeIDE build.
+- [x] Verify SHA-256 over canonical ASCII profile fields in the firmware parser and generate the identical wire checksum on Raspberry Pi; reject any altered profile data before staging.
 - [ ] Build firmware artifact and complete operator-controlled mechanical commissioning.
 
 Exit criterion: X/Y start and stop without segment gaps, all configured kinematic limits are enforced,

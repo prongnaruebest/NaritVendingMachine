@@ -25,6 +25,7 @@ def test_profile_buffer_core_compiles_and_runs_without_hal(tmp_path: Path):
             "-Wextra",
             "-Werror",
             f"-I{CORE}",
+            str(CORE / "nucleo_sha256.c"),
             str(CORE / "nucleo_profile_buffer.c"),
             str(HARNESS),
             "-o",
@@ -49,6 +50,7 @@ def test_profile_executor_compiles_and_enforces_watchdog_without_hal(tmp_path: P
         pytest.skip("host GCC is unavailable")
     executable = tmp_path / "profile_executor_test.exe"
     sources = [
+        CORE / "nucleo_sha256.c",
         CORE / "nucleo_profile_buffer.c",
         CORE / "nucleo_profile_executor.c",
         ROOT / "tests" / "c_host" / "test_nucleo_profile_executor.c",
@@ -94,6 +96,7 @@ def test_pulse_scheduler_updates_rate_without_phase_gap_and_counts_exactly(tmp_p
         pytest.skip("host GCC is unavailable")
     executable = tmp_path / "pulse_scheduler_test.exe"
     sources = [
+        CORE / "nucleo_sha256.c",
         CORE / "nucleo_profile_buffer.c",
         CORE / "nucleo_profile_executor.c",
         CORE / "nucleo_pulse_scheduler.c",
@@ -190,7 +193,7 @@ def test_profile_facade_compiles_with_feature_off_and_on(tmp_path: Path, feature
     shim = ROOT / "tests" / "c_host" / "hal_shim"
     executable = tmp_path / f"profile_facade_{int(feature_enabled)}.exe"
     sources = [
-        CORE / "nucleo_profile_buffer.c", CORE / "nucleo_profile_executor.c",
+        CORE / "nucleo_sha256.c", CORE / "nucleo_profile_buffer.c", CORE / "nucleo_profile_executor.c",
         CORE / "nucleo_pulse_scheduler.c", CORE / "nucleo_compare_adapter.c",
         CORE / "nucleo_sensor_stop.c",
         candidate / "nucleo_profile_hal_port.c", candidate / "nucleo_profile_facade.c",
@@ -221,7 +224,7 @@ def test_profile_dispatcher_is_bounded_and_feature_gated(tmp_path: Path, feature
     # Avoid Windows installer-detection heuristics on executable names.
     executable = tmp_path / f"profile_rx_{int(feature_enabled)}.exe"
     sources = [
-        CORE / "nucleo_profile_buffer.c", CORE / "nucleo_profile_executor.c",
+        CORE / "nucleo_sha256.c", CORE / "nucleo_profile_buffer.c", CORE / "nucleo_profile_executor.c",
         CORE / "nucleo_pulse_scheduler.c", CORE / "nucleo_compare_adapter.c",
         CORE / "nucleo_sensor_stop.c", candidate / "nucleo_profile_hal_port.c",
         candidate / "nucleo_profile_facade.c", candidate / "nucleo_profile_dispatcher.c",
@@ -255,3 +258,4 @@ def test_profile_core_is_not_connected_to_cubeide_build_yet():
     assert "nucleo_profile_facade.c" not in project_sources
     assert "nucleo_profile_dispatcher.c" not in project_sources
     assert "nucleo_sensor_stop.c" not in project_sources
+    assert "nucleo_sha256.c" not in project_sources

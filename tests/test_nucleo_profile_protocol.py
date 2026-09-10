@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import pytest
 
 from narit_vending.domain.motion_profile import MotionProfileLimits, build_seven_segment_scurve
@@ -126,7 +127,7 @@ def test_sensor_profile_payload_is_axis_scoped_checksummed_and_watchdog_bounded(
         "SENSOR_PROFILE", "move-1", "X", "1", "6471", "0",
         "X_MAX", "controlled", "60000000",
     ]
-    assert fields[9] == payload["checksum"]
+    assert fields[9] == hashlib.sha256(" ".join([*fields[:9], *fields[10:]]).encode("ascii")).hexdigest()
     assert len(fields) == 59
     assert wire.isascii() and "\n" not in wire
 
@@ -135,7 +136,7 @@ def test_buffered_profile_wire_line_matches_candidate_parser_order():
     command = _command()
     fields = command.wire_line().split(" ")
     assert fields[:6] == ["PROFILE", "move-1", "X", "1", "6471", "0"]
-    assert fields[6] == command.payload()["checksum"]
+    assert fields[6] == hashlib.sha256(" ".join([*fields[:6], *fields[7:]]).encode("ascii")).hexdigest()
     assert len(fields) == 56
 
 
