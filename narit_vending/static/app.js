@@ -3776,6 +3776,7 @@
     const summaryGrid = el("dashboard-io-summary");
     if (!summaryGrid) return;
 
+    const rawInputs = MS.payload?.io?.raw_inputs || {};
     const items = controllerIORegistry({ source: "iriv_modbus" }).map((channel) => {
       const def = ioDefinition(channel);
       return {

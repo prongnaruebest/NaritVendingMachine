@@ -17,6 +17,14 @@ STYLE = "\n".join(
 
 
 class FrontendAcceptanceTests(unittest.TestCase):
+    def test_dashboard_io_summary_declares_raw_inputs_before_use(self) -> None:
+        function = APP_JS.split("function renderDashboardIOSummary()", 1)[1].split(
+            "function renderSystemControl()", 1
+        )[0]
+        declaration = "const rawInputs = MS.payload?.io?.raw_inputs || {};"
+        self.assertIn(declaration, function)
+        self.assertLess(function.index(declaration), function.index("rawInputs.DI10"))
+
     def test_every_required_workspace_has_navigation_and_deep_link_support(self) -> None:
         required = {
             "dashboard", "motion", "slots", "visualization", "diagnostics", "io-status",
