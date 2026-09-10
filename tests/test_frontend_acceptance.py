@@ -237,6 +237,18 @@ class FrontendAcceptanceTests(unittest.TestCase):
         self.assertIn("if (!phaseOrder.length && phase) phaseOrder.push(phase)", APP_JS)
         self.assertNotIn('const phaseOrder = ["VALIDATE_SLOT"', APP_JS)
 
+    def test_sequence_monitor_uses_vertical_responsive_timeline_and_one_live_region(self) -> None:
+        sequence = TEMPLATE.split('data-view-page="sequence-monitor"', 1)[1].split("</section>", 1)[0]
+        self.assertIn('id="sequence-monitor-progress-text"', TEMPLATE)
+        self.assertIn('id="sequence-monitor-progress-bar"', TEMPLATE)
+        self.assertIn('class="sequence-monitor-layout"', TEMPLATE)
+        self.assertIn('role="status" aria-live="polite" aria-atomic="true"', TEMPLATE)
+        self.assertIn(".sequence-monitor-layout { display:grid", STYLE)
+        self.assertIn("grid-template-columns:1fr", STYLE)
+        self.assertIn("prefers-reduced-motion:reduce", STYLE)
+        self.assertNotIn("overflow-x: auto", sequence)
+        self.assertIn('(phaseLabels[item] || [item.replaceAll("_", " ")])[0]', APP_JS)
+
 
 if __name__ == "__main__":
     unittest.main()

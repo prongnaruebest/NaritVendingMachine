@@ -85,6 +85,7 @@ After setup, the Raspberry Pi runs a web server automatically at boot.
 
 - Preferred URL: `http://NaritVendingMachine.local/`
 - On networks with hostname resolution: `http://NaritVendingMachine/`
+- Management LAN and mDNS design: `docs/MANAGEMENT_NETWORK_TH.md`
 
 The web page provides:
 

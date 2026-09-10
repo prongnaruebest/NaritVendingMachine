@@ -2,10 +2,12 @@
 set -euo pipefail
 
 sudo apt update
-sudo apt install -y python3-gpiozero python3-venv avahi-daemon
+sudo apt install -y python3-gpiozero python3-venv avahi-daemon libnss-mdns
 
-sudo hostnamectl set-hostname NaritVendingMachine
+sudo hostnamectl set-hostname naritvendingmachine
 sudo systemctl enable --now avahi-daemon
+sudo install -m 0644 deploy/avahi/narit-vending-http.service /etc/avahi/services/narit-vending-http.service
+sudo systemctl restart avahi-daemon
 
 if [ ! -d .venv ]; then
   python3 -m venv --system-site-packages .venv

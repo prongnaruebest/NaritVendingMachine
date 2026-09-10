@@ -4,12 +4,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="NARIT Vending Machine Industrial Gantry Motion Control HMI">
-  <title>NARIT VENDING — Industrial Gantry HMI</title>
+  <title>NaritVendingMachine — Control HMI</title>
   <link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='favicon-transparent-large.png') }}?v=20260721_v12">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='tokens.css') }}?v=20260909_css_layers_v53">
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=20260909_css_layers_v55">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=20260910_sequence_v60">
   <link rel="stylesheet" href="{{ url_for('static', filename='components.css') }}?v=20260909_css_layers_v55">
   <link rel="stylesheet" href="{{ url_for('static', filename='layout.css') }}?v=20260909_css_layers_v55">
 </head>
@@ -20,7 +20,7 @@
       <div class="sidebar-brand">
         <img src="{{ url_for('static', filename='favicon-transparent.png') }}" class="brand-mark" style="object-fit:contain; padding:2px; background:rgba(40,120,208,0.15); border:1px solid rgba(80,130,190,0.35); box-shadow:0 0 10px rgba(90,170,248,0.25);" alt="NARIT Logo">
         <div class="sidebar-brand-text">
-          NARIT VENDING
+          NaritVendingMachine
           <span id="sidebar-device-label">Checking device...</span>
         </div>
       </div>
@@ -1420,25 +1420,26 @@
       </section>
 
       <section class="workspace-view sequence-monitor-page" data-view-page="sequence-monitor">
-        <div class="page-heading"><div><p class="panel-label">Controller Read-only Monitor</p><h2>Slot Sequence Process</h2></div><span class="page-status-chip" id="sequence-monitor-state">NOT RUNNING</span></div>
-        <div class="sequence-monitor-summary" aria-live="polite">
+        <div class="page-heading"><div><p class="panel-label">Controller-owned workflow</p><h2>Sequence Monitor</h2><p class="page-note">Follow the live Slot workflow. This read-only page never sends a motion command.</p></div><span class="page-status-chip" id="sequence-monitor-state">NOT RUNNING</span></div>
+        <section class="panel page-panel sequence-monitor-hero" role="status" aria-live="polite" aria-atomic="true">
+          <div class="sequence-current-phase"><span>Current phase</span><strong id="sequence-monitor-phase">WAITING</strong><p id="sequence-monitor-message">Waiting for a Slot Sequence</p></div>
+          <div class="sequence-progress"><div><span>Sequence progress</span><strong id="sequence-monitor-progress-text">0 / 0</strong></div><div class="sequence-progress-track" aria-hidden="true"><i id="sequence-monitor-progress-bar"></i></div><p id="sequence-monitor-reason">Sequence phases are reported by the Controller. If no sequence is active, this monitor does not infer a running step.</p></div>
+        </section>
+        <div class="sequence-monitor-summary">
           <div><span>Active command</span><strong id="sequence-monitor-command">NO DATA</strong></div>
-          <div><span>Current phase</span><strong id="sequence-monitor-phase">NO DATA</strong></div>
           <div><span>Active axis</span><strong id="sequence-monitor-axis">NO DATA</strong></div>
           <div><span>Selected slot</span><strong id="sequence-monitor-slot">NO DATA</strong></div>
           <div><span>Elapsed</span><strong id="sequence-monitor-elapsed">NO DATA</strong></div>
         </div>
-        <section class="panel page-panel sequence-monitor-message" aria-live="polite">
-          <div class="panel-head"><div><p class="panel-label">Live Controller Message</p><h2 class="panel-title" id="sequence-monitor-message">Waiting for a Slot Sequence</h2></div><span class="page-note">Read-only · no motion command is sent from this page</span></div>
-          <p id="sequence-monitor-reason">Sequence phases are reported by the Controller. If no sequence is active, this monitor does not infer a running step.</p>
-        </section>
-        <section class="panel page-panel">
-          <div class="panel-head"><div><p class="panel-label">Execution Order</p><h2 class="panel-title" id="sequence-order-title">Controller-reported sequence</h2></div><span class="page-note">Controller-owned workflow</span></div>
-          <ol class="sequence-step-list" id="sequence-step-list" aria-live="polite"></ol>
-        </section>
-        <div class="sequence-monitor-details">
-          <section class="panel page-panel"><div class="panel-head"><div><p class="panel-label">Live Position</p><h2 class="panel-title">Current / Target / Delta</h2></div></div><div class="sequence-position-grid" id="sequence-monitor-position"></div></section>
-          <section class="panel page-panel"><div class="panel-head"><div><p class="panel-label">Safety During Sequence</p><h2 class="panel-title">Controller Guards</h2></div></div><ul class="sequence-guard-list"><li>E-Stop, software stop, alarm and readiness are checked before the sequence begins.</li><li>Each axis move remains guarded by AxisController for E-Stop, stop latch, limits and travel boundary.</li><li>The three-second hold polls E-Stop and software stop; any failed stage stops later stages.</li></ul></section>
+        <div class="sequence-monitor-layout">
+          <section class="panel page-panel sequence-timeline-panel">
+            <div class="panel-head"><div><p class="panel-label">Execution timeline</p><h2 class="panel-title">Controller-reported steps</h2></div><span class="page-note" id="sequence-order-title">Waiting for Controller sequence data</span></div>
+            <ol class="sequence-step-list" id="sequence-step-list"></ol>
+          </section>
+          <aside class="sequence-monitor-side">
+            <section class="panel page-panel"><div class="panel-head"><div><p class="panel-label">Live position</p><h2 class="panel-title">Current / Target / Delta</h2></div></div><div class="sequence-position-grid" id="sequence-monitor-position"></div></section>
+            <section class="panel page-panel"><div class="panel-head"><div><p class="panel-label">Safety status</p><h2 class="panel-title">Controller Guards</h2></div></div><ul class="sequence-guard-list"><li><strong>Pre-start:</strong> E-Stop, Stop, alarm and machine readiness</li><li><strong>During motion:</strong> limits, travel boundary and communication watchdog</li><li><strong>On failure:</strong> later stages are cancelled and motion is stopped</li></ul></section>
+          </aside>
         </div>
       </section>
     </main>
@@ -1713,6 +1714,6 @@
   <script src="{{ url_for('static', filename='motion-target-controller.js') }}?v=20260909_frontend_modules_v58"></script>
   <script src="{{ url_for('static', filename='motion-jog-safety-controller.js') }}?v=20260909_frontend_modules_v59"></script>
   <script src="{{ url_for('static', filename='router.js') }}?v=20260909_frontend_modules_v41"></script>
-  <script src="{{ url_for('static', filename='app.js') }}?v=20260909_frontend_modules_v59"></script>
+  <script src="{{ url_for('static', filename='app.js') }}?v=20260910_sequence_v60"></script>
 </body>
 </html>

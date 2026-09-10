@@ -1274,7 +1274,7 @@
       sidebarDeviceNode.textContent = deviceLabel;
       sidebarDeviceNode.className = deviceClass;
     }
-    if (hasIdentity) document.title = `NARIT VENDING — ${deviceLabel}`;
+    if (hasIdentity) document.title = `NaritVendingMachine — ${deviceLabel}`;
 
     // Connection
     const connNode = el("hdr-connection");
@@ -3160,8 +3160,14 @@
     setText("sequence-monitor-elapsed", sequenceContext && Number.isFinite(Number(command.elapsed_s)) ? `${fmtTime(command.elapsed_s)} s` : "--");
     setText("sequence-monitor-message", sequenceContext ? (message || "Controller is updating sequence state") : "Waiting for a Slot Sequence");
     setText("sequence-monitor-reason", sequenceFailed ? (MS.payload?.last_error || message || "Controller stopped the sequence before it could continue.") : sequenceCompleted ? "Controller reports target and home workflow complete. Review final status and verification before the next command." : sequenceContext ? "Live phase is reported by the Controller. This page is read-only and does not create a motion command." : "No Slot Sequence is active. Start a sequence from Slot Manager or receive a valid MQTT release command; this monitor will then show Controller-reported progress.");
+    const completedSteps = sequenceCompleted
+      ? phaseOrder.length
+      : sequenceContext && activeIndex >= 0 ? activeIndex + 1 : 0;
+    setText("sequence-monitor-progress-text", `${completedSteps} / ${phaseOrder.length}`);
+    const progressBar = el("sequence-monitor-progress-bar");
+    if (progressBar) progressBar.style.width = `${phaseOrder.length ? Math.min(100, (completedSteps / phaseOrder.length) * 100) : 0}%`;
     setText("sequence-order-title", sequenceContext
-      ? phaseOrder.map((item) => phaseLabels[item][0]).join(" → ")
+      ? phaseOrder.map((item) => (phaseLabels[item] || [item.replaceAll("_", " ")])[0]).join(" → ")
       : "Waiting for Controller sequence data");
 
     const steps = el("sequence-step-list");

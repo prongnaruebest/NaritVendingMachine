@@ -180,7 +180,7 @@ class WebAppNewProcessTests(unittest.TestCase):
         response = client.get("/")
         self.assertEqual(response.status_code, 200)
         html = response.get_data(as_text=True)
-        self.assertIn("NARIT VENDING", html)
+        self.assertIn("NaritVendingMachine", html)
 
     def test_mqtt_runtime_control_endpoint(self) -> None:
         from unittest.mock import MagicMock
