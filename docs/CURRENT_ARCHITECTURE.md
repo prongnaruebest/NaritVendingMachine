@@ -102,6 +102,14 @@ remain complete only after their own axis has been stopped by the sensor
 supervisor. This behavior is host-tested but remains behind the disabled runtime
 gate and is not yet exposed through the serial protocol.
 
+The next candidate layer is an X/Y-only Virtual Kp velocity request. It uses
+fixed-point `kp_approach_milliper_s` and remaining emitted-pulse error to produce
+`requested_rate_hz`, clamps at 50,000 Hz, and returns zero for zero remaining
+pulses. With Kp disabled it requests the configured maximum rate. This output is
+not a timer command or a safety constraint: it remains disconnected until the
+S-curve/stopping-feasibility layer can enforce acceleration, deceleration, jerk,
+travel and terminal-pulse requirements. Z is explicitly rejected.
+
 ## Baseline quality status
 
 - Automated suite before structural extraction: 190 tests passed and 18 subtests passed.
