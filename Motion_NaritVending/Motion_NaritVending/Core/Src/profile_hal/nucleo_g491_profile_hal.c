@@ -1,16 +1,17 @@
-#include "nucleo_profile_hal_port.h"
+#include "nucleo_g491_profile_hal.h"
 
 #include <stddef.h>
 #include <string.h>
 
-#define FIRST_COMPARE_DELAY_TICKS 20U
+#define NUCLEO_G491_FIRST_COMPARE_DELAY_TICKS 20U
 
 static uint8_t apply_half_period(void *context, uint8_t axis,
                                  uint32_t half_period_ticks)
 {
-  NucleoProfileHalPort *port = (NucleoProfileHalPort *)context;
+  NucleoG491ProfileHal *port = (NucleoG491ProfileHal *)context;
   uint32_t primask;
-  if ((port == NULL) || (axis > 1U) || (half_period_ticks == 0U)) return 0U;
+  if ((port == NULL) || (axis >= NUCLEO_COMPARE_AXIS_COUNT) ||
+      (half_period_ticks == 0U)) return 0U;
   primask = __get_PRIMASK();
   __disable_irq();
   port->half_period_ticks[axis] = half_period_ticks;
@@ -18,11 +19,11 @@ static uint8_t apply_half_period(void *context, uint8_t axis,
   return 1U;
 }
 
-static void pulse_as_gpio_low(NucleoProfileHalPort *port, uint8_t axis)
+static void pulse_as_gpio_low(NucleoG491ProfileHal *port, uint8_t axis)
 {
   GPIO_InitTypeDef gpio;
   memset(&gpio, 0, sizeof(gpio));
-  (void)HAL_TIM_OC_Stop_IT(port->timer, port->channels[axis]);
+  (void)HAL_TIM_OC_Stop_IT(port->tim1, port->channels[axis]);
   gpio.Pin = port->pulse_pins[axis];
   gpio.Mode = GPIO_MODE_OUTPUT_PP;
   gpio.Pull = GPIO_NOPULL;
@@ -35,24 +36,25 @@ static void pulse_as_gpio_low(NucleoProfileHalPort *port, uint8_t axis)
 
 static uint8_t enable_channel(void *context, uint8_t axis)
 {
-  NucleoProfileHalPort *port = (NucleoProfileHalPort *)context;
+  NucleoG491ProfileHal *port = (NucleoG491ProfileHal *)context;
   GPIO_InitTypeDef gpio;
-  memset(&gpio, 0, sizeof(gpio));
-  if ((port == NULL) || (axis > 1U) ||
+  if ((port == NULL) || (axis >= NUCLEO_COMPARE_AXIS_COUNT) ||
       (port->half_period_ticks[axis] == 0U)) return 0U;
+  memset(&gpio, 0, sizeof(gpio));
   HAL_GPIO_WritePin(port->pulse_ports[axis], port->pulse_pins[axis],
                     GPIO_PIN_RESET);
   gpio.Pin = port->pulse_pins[axis];
   gpio.Mode = GPIO_MODE_AF_PP;
   gpio.Pull = GPIO_NOPULL;
   gpio.Speed = GPIO_SPEED_FREQ_HIGH;
-  gpio.Alternate = port->pulse_alternate;
+  gpio.Alternate = GPIO_AF6_TIM1;
   HAL_GPIO_Init(port->pulse_ports[axis], &gpio);
-  __HAL_TIM_SET_COMPARE(port->timer, port->channels[axis],
-                        __HAL_TIM_GET_COUNTER(port->timer) +
-                            FIRST_COMPARE_DELAY_TICKS);
+  __HAL_TIM_SET_COMPARE(port->tim1, port->channels[axis],
+                        __HAL_TIM_GET_COUNTER(port->tim1) +
+                            NUCLEO_G491_FIRST_COMPARE_DELAY_TICKS);
   port->output_high[axis] = 0U;
-  if (HAL_TIM_OC_Start_IT(port->timer, port->channels[axis]) != HAL_OK) {
+  if (HAL_TIM_OC_Start_IT(port->tim1, port->channels[axis]) != HAL_OK) {
+    /* A failed OC start is a latched adapter fault; STEP remains GPIO-low. */
     pulse_as_gpio_low(port, axis);
     return 0U;
   }
@@ -61,29 +63,28 @@ static uint8_t enable_channel(void *context, uint8_t axis)
 
 static void disable_channel(void *context, uint8_t axis)
 {
-  NucleoProfileHalPort *port = (NucleoProfileHalPort *)context;
-  if ((port == NULL) || (axis > 1U)) return;
+  NucleoG491ProfileHal *port = (NucleoG491ProfileHal *)context;
+  if ((port == NULL) || (axis >= NUCLEO_COMPARE_AXIS_COUNT)) return;
   pulse_as_gpio_low(port, axis);
 }
 
-uint8_t NucleoProfileHalPort_Init(
-    NucleoProfileHalPort *port, TIM_HandleTypeDef *tim1,
+uint8_t NucleoG491ProfileHal_Init(
+    NucleoG491ProfileHal *port, TIM_HandleTypeDef *tim1,
     GPIO_TypeDef *x_port, uint16_t x_pin, GPIO_TypeDef *y_port,
     uint16_t y_pin, uint32_t timer_tick_hz,
-    NucleoProfilePulseFn pulse_completed, void *pulse_context)
+    NucleoG491ProfilePulseFn pulse_completed, void *pulse_context)
 {
   NucleoComparePort compare_port;
   if ((port == NULL) || (tim1 == NULL) || (x_port == NULL) ||
       (y_port == NULL) || (pulse_completed == NULL)) return 0U;
   memset(port, 0, sizeof(*port));
-  port->timer = tim1;
+  port->tim1 = tim1;
   port->channels[0] = TIM_CHANNEL_1;
   port->channels[1] = TIM_CHANNEL_2;
   port->pulse_ports[0] = x_port;
   port->pulse_ports[1] = y_port;
   port->pulse_pins[0] = x_pin;
   port->pulse_pins[1] = y_pin;
-  port->pulse_alternate = GPIO_AF1_TIM1;
   port->pulse_completed = pulse_completed;
   port->pulse_context = pulse_context;
   compare_port.apply_half_period_atomic = apply_half_period;
@@ -94,45 +95,47 @@ uint8_t NucleoProfileHalPort_Init(
                                    compare_port);
 }
 
-void NucleoProfileHalPort_OnCompare(NucleoProfileHalPort *port,
+void NucleoG491ProfileHal_OnCompare(NucleoG491ProfileHal *port,
                                     uint8_t axis)
 {
-  uint32_t half_period;
-  if ((port == NULL) || (axis > 1U)) return;
-  half_period = port->half_period_ticks[axis];
-  if ((half_period == 0U) ||
+  uint32_t half_period_ticks;
+  if ((port == NULL) || (axis >= NUCLEO_COMPARE_AXIS_COUNT)) return;
+  half_period_ticks = port->half_period_ticks[axis];
+  if ((half_period_ticks == 0U) ||
       (port->compare_adapter.enabled[axis] == 0U)) return;
-  __HAL_TIM_SET_COMPARE(port->timer, port->channels[axis],
-                        __HAL_TIM_GET_COMPARE(port->timer,
+  __HAL_TIM_SET_COMPARE(port->tim1, port->channels[axis],
+                        __HAL_TIM_GET_COMPARE(port->tim1,
                                               port->channels[axis]) +
-                            half_period);
+                            half_period_ticks);
   port->output_high[axis] ^= 1U;
+  /* Count one emitted STEP on the falling edge, never when merely queued. */
   if ((port->output_high[axis] == 0U) &&
       (port->pulse_completed(port->pulse_context, axis) == 0U)) {
     NucleoCompareAdapter_DisableAxis(&port->compare_adapter, axis);
   }
 }
 
-void NucleoProfileHalPort_DisableAll(NucleoProfileHalPort *port)
+void NucleoG491ProfileHal_DisableAll(NucleoG491ProfileHal *port)
 {
   if (port == NULL) return;
   NucleoCompareAdapter_DisableAll(&port->compare_adapter);
 }
 
-void NucleoProfileHalPort_SetRateHook(void *context, uint8_t axis,
+void NucleoG491ProfileHal_SetRateHook(void *context, uint8_t axis,
                                       uint32_t rate_millihz)
 {
-  NucleoProfileHalPort *port = (NucleoProfileHalPort *)context;
+  NucleoG491ProfileHal *port = (NucleoG491ProfileHal *)context;
   if ((port != NULL) &&
       (NucleoCompareAdapter_SetRate(&port->compare_adapter, axis,
                                     rate_millihz) == 0U)) {
-    NucleoProfileHalPort_DisableAll(port);
+    /* Invalid rates and HAL failures stop both shared TIM1 channels. */
+    NucleoG491ProfileHal_DisableAll(port);
   }
 }
 
-void NucleoProfileHalPort_DisableAxisHook(void *context, uint8_t axis)
+void NucleoG491ProfileHal_DisableAxisHook(void *context, uint8_t axis)
 {
-  NucleoProfileHalPort *port = (NucleoProfileHalPort *)context;
+  NucleoG491ProfileHal *port = (NucleoG491ProfileHal *)context;
   if (port != NULL) {
     NucleoCompareAdapter_DisableAxis(&port->compare_adapter, axis);
   }

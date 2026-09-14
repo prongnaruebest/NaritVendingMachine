@@ -61,13 +61,19 @@ The active CubeIDE target is `Motion_NaritVending/Motion_NaritVending` for the
 NUCLEO-G491RE. Its current runtime contract remains USB protocol v3 with
 fixed-frequency `MOVE`; no trajectory-profile capability is advertised.
 
-The hardware-neutral profile core is now compiled from
-`Core/Src/profile_core` and exercised by the host C harness. It is staging code:
-there is no G491RE HAL binding, serial dispatch, Controller routing, or runtime
-feature flag connected to it. Keeping the runtime path unreachable is an
-intentional safety gate until timer ownership, bounded watchdog behavior,
-configuration revision checks, and STOP/DISARM semantics are verified together.
-The former F439ZI tree is retained only as a migration reference.
+The hardware-neutral profile core is compiled from `Core/Src/profile_core`.
+The staged `Core/Src/profile_hal/nucleo_g491_profile_hal.*` adapter binds the
+candidate X/Y path to TIM1 CH1/CH2 without changing timer base state when one
+axis stops. Host tests verify exact falling-edge pulse accounting, independent
+channel completion, global disable, and fail-closed handling of a HAL channel
+start failure.
+
+This remains unreachable staging code: there is no serial dispatch, Controller
+routing, runtime callback ownership, or advertised feature flag connected to
+it. Z remains on the established TIM2 runtime. Keeping this boundary closed is
+intentional until the 1 kHz planner tick, watchdog latency, configuration
+revision checks, and STOP/DISARM semantics are verified together. The former
+F439ZI tree is retained only as a migration reference.
 
 ## Baseline quality status
 

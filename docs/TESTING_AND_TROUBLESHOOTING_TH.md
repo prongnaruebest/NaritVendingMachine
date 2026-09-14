@@ -133,3 +133,17 @@ ALM/PEND/DI10, command ID/type/phase, speed/pulse rate, error และ Event Lo
 - KM1 feedback ไม่เปลี่ยนตามคำสั่ง หรือ ALM ไม่หายหลังแก้ต้นเหตุหนึ่งรอบ
 
 หลังหยุด ห้ามสั่งต่อโดยอาศัยค่าตำแหน่งเดิม ให้ตรวจสาเหตุและ Home ใหม่เมื่อปลอดภัย
+
+## 12. การตรวจ Profile HAL ระหว่างการย้ายไป G491RE
+
+ชุดทดสอบ `test_nucleo_profile_firmware_core.py` คอมไพล์ C ด้วย host shim เท่านั้น จึงไม่มีทาง
+เข้าถึง timer, GPIO หรือ serial ของเครื่องจริง โดยตรวจอย่างน้อยว่า:
+
+- X/Y บน TIM1 หยุดแยก channel ได้โดยไม่หยุดอีกแกน
+- นับ emitted STEP ที่ falling edge ไม่ใช่ตอนนำ pulse เข้า queue
+- global disable บังคับทุก STEP กลับเป็น GPIO-low
+- หาก `HAL_TIM_OC_Start_IT()` ล้มเหลว adapter ต้อง latch fault และ disable ทุก channel
+- watchdog ที่หมดอายุหรือ safety permissive หายทำให้ executor เข้าสถานะ safety stop
+
+การผ่าน host test และ CubeIDE build ยังไม่ใช่สิทธิ์ให้ Flash หรือเปิด profile capability ต้องผ่าน
+protocol/callback integration, timing measurement กับ dummy load และ operator commissioning gate ก่อน

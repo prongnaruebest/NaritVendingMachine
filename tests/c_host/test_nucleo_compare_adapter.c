@@ -9,6 +9,7 @@ typedef struct {
   unsigned int disable_count[2];
   uint32_t half_period[2];
   uint8_t apply_ok;
+  uint8_t enable_ok;
 } CompareMock;
 
 static uint8_t apply_atomic(void *context, uint8_t axis, uint32_t half_period)
@@ -19,9 +20,11 @@ static uint8_t apply_atomic(void *context, uint8_t axis, uint32_t half_period)
   return mock->apply_ok;
 }
 
-static void enable(void *context, uint8_t axis)
+static uint8_t enable(void *context, uint8_t axis)
 {
-  ((CompareMock *)context)->enable_count[axis]++;
+  CompareMock *mock = (CompareMock *)context;
+  mock->enable_count[axis]++;
+  return mock->enable_ok;
 }
 
 static void disable(void *context, uint8_t axis)
@@ -32,7 +35,8 @@ static void disable(void *context, uint8_t axis)
 int main(void)
 {
   NucleoCompareAdapter adapter;
-  CompareMock mock = {{0U, 0U}, {0U, 0U}, {0U, 0U}, {0U, 0U}, 1U};
+  CompareMock mock = {
+      {0U, 0U}, {0U, 0U}, {0U, 0U}, {0U, 0U}, 1U, 1U};
   NucleoComparePort port = {apply_atomic, enable, disable, &mock};
 
   /* TIM1 remains at one shared 1 MHz timebase for X CH1 and Y CH2. */
@@ -58,6 +62,14 @@ int main(void)
   assert(NucleoCompareAdapter_SetRate(&adapter, 1U, 1000000U) == 0U);
   assert(adapter.faulted == 1U);
   assert(mock.disable_count[0] == 1U && mock.disable_count[1] == 1U);
+
+  /* A timer/channel start failure latches a fault and disables every axis. */
+  mock.apply_ok = 1U;
+  mock.enable_ok = 0U;
+  assert(NucleoCompareAdapter_Init(&adapter, 1000000U, port) == 1U);
+  assert(NucleoCompareAdapter_SetRate(&adapter, 0U, 1000000U) == 0U);
+  assert(adapter.faulted == 1U && adapter.enabled[0] == 0U &&
+         adapter.enabled[1] == 0U);
 
   puts("nucleo_compare_adapter host tests passed");
   return 0;

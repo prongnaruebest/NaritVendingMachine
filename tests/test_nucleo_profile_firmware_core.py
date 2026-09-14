@@ -168,6 +168,47 @@ def test_shared_tim1_compare_adapter_keeps_xy_channels_independent(tmp_path: Pat
     assert "compare_adapter host tests passed" in run_result.stdout
 
 
+def test_g491_hal_adapter_fails_closed_and_keeps_tim1_channels_independent(
+    tmp_path: Path,
+):
+    compiler = shutil.which("gcc")
+    if compiler is None:
+        pytest.skip("host GCC is unavailable")
+    profile_hal = CORE.parent / "profile_hal"
+    shim = ROOT / "tests" / "c_host" / "g491_hal_shim"
+    executable = tmp_path / "g491_profile_hal_test.exe"
+    sources = [
+        CORE / "nucleo_compare_adapter.c",
+        profile_hal / "nucleo_g491_profile_hal.c",
+        ROOT / "tests" / "c_host" / "test_nucleo_g491_profile_hal.c",
+    ]
+    compile_result = subprocess.run(
+        [
+            compiler,
+            "-std=c99",
+            "-Wall",
+            "-Wextra",
+            "-Werror",
+            f"-I{shim}",
+            f"-I{CORE}",
+            f"-I{profile_hal}",
+            *(str(source) for source in sources),
+            "-o",
+            str(executable),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert compile_result.returncode == 0, compile_result.stdout + compile_result.stderr
+    run_result = subprocess.run(
+        [str(executable)], capture_output=True, text=True, timeout=10, check=False
+    )
+    assert run_result.returncode == 0, run_result.stdout + run_result.stderr
+    assert "G491RE profile HAL host tests passed" in run_result.stdout
+
+
 def test_candidate_hal_port_maps_shared_tim1_channels_without_cross_stop(tmp_path: Path):
     compiler = shutil.which("gcc")
     if compiler is None:

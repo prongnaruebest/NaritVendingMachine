@@ -42,7 +42,12 @@ uint8_t NucleoCompareAdapter_SetRate(NucleoCompareAdapter *adapter,
   }
   adapter->half_period_ticks[axis] = (uint32_t)half_period;
   if (adapter->enabled[axis] == 0U) {
-    adapter->port.enable_channel(adapter->port.context, axis);
+    if (adapter->port.enable_channel(adapter->port.context, axis) == 0U) {
+      /* A failed timer start must never be reported as an enabled axis. */
+      adapter->faulted = 1U;
+      NucleoCompareAdapter_DisableAll(adapter);
+      return 0U;
+    }
     adapter->enabled[axis] = 1U;
   }
   return 1U;

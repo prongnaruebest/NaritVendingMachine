@@ -8,7 +8,7 @@
 
 typedef uint8_t (*NucleoCompareApplyFn)(void *context, uint8_t axis,
                                        uint32_t half_period_ticks);
-typedef void (*NucleoCompareEnableFn)(void *context, uint8_t axis);
+typedef uint8_t (*NucleoCompareEnableFn)(void *context, uint8_t axis);
 typedef void (*NucleoCompareDisableFn)(void *context, uint8_t axis);
 
 typedef struct {

@@ -31,16 +31,19 @@ LD2 as an indicator because PA5 is the Z STEP output.
 
 The hardware-neutral profile buffer, executor, pulse scheduler, compare/timer
 adapters, sensor-stop supervisor, and SHA-256 helper are staged under
-`Core/Src/profile_core`. STM32CubeIDE compiles these sources for the G491RE so
-compiler and memory regressions are visible early, and host tests exercise the
-same source files.
+`Core/Src/profile_core`. The G491RE-specific TIM1 adapter for X/Y is staged
+under `Core/Src/profile_hal`. STM32CubeIDE compiles these sources for the G491RE
+so compiler regressions are visible early, and host tests exercise the same
+source files.
 
-They are deliberately not connected to the G491RE HAL, serial dispatcher, or
+The HAL adapter is deliberately not connected to the serial dispatcher or
 runtime command path yet. Protocol v3 therefore continues to advertise and
-execute only the existing fixed-frequency `MOVE` behavior. This fail-closed
-boundary prevents partially integrated trajectory code from becoming a Web or
-Controller capability before timer ownership, watchdog latency, configuration
-revision, and stop semantics have passed their gates.
+execute only the existing fixed-frequency `MOVE` behavior. The adapter maps X
+to TIM1 CH1/PA8 and Y to TIM1 CH2/PA9, counts emitted pulses on falling edges,
+keeps channel stop operations independent, and latches a fail-closed fault if
+an output-compare channel cannot start. This boundary prevents partially
+integrated trajectory code from becoming a Web or Controller capability before
+watchdog latency, configuration revision, and stop semantics pass together.
 
 ## Build
 
