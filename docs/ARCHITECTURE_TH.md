@@ -31,7 +31,7 @@ flowchart LR
     WEB <-->|"Unix IPC\n/run/narit-vending/ctrl.sock"| CTRL["Controller Process"]
     MQTT["MQTT Broker"] <-->|"command / telemetry"| CTRL
     CTRL <-->|"Modbus TCP\n10.0.0.10:502"| RIO["IRIV IO"]
-    CTRL <-->|"USB VCP\n115200"| NUC["NUCLEO-F439ZI"]
+    CTRL <-->|"USB VCP / LPUART1\n115200"| NUC["NUCLEO-G491RE"]
     RIO --> SENSOR["Limits, Z Home, product sensors, E-stop feedback"]
     RIO --> AUX["Ready / Moving / Alarm / Dispense"]
     NUC -. "candidate STEP/DIR" .-> NMOS["6-channel NMOS sink"]
@@ -140,6 +140,17 @@ HTTP LED demo เพื่อไม่ให้ X-DIR เปลี่ยนโ�
 IRIV IO เป็น SSR auxiliary output ห้ามใช้สร้าง STEP/DIR
 
 ## 6. Firmware states
+
+### NUCLEO-G491RE protocol v3 candidate — build ผ่านแล้วแต่ยังไม่ flash
+
+- source: `Motion_NaritVending/Motion_NaritVending`
+- artifact: `Motion_NaritVending/artifacts/v3/nucleo_g491re_protocol_v3.bin`
+- ST-LINK VCP ใช้ LPUART1 PA2/PA3 ที่ 115200 8-N-1
+- รายงาน identity `NUCLEO-G491RE`, protocol `3`
+- STEP/DIR: X PA8/PB0, Y PA9/PB1, Z PA5/PB2
+- boot แบบ disarmed, STEP/DIR LOW และ watchdog 500 ms
+- จำกัด 10–50,000 Hz และไม่เกิน 1,000,000 steps ต่อคำสั่ง
+- ยังไม่ผ่านการ flash, oscilloscope, watchdog disconnect หรือ motion acceptance บนฮาร์ดแวร์จริง
 
 ### Deployed safe-link v1
 

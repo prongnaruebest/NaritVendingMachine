@@ -1,6 +1,6 @@
-# ผังต่อ IRIV PiControl, IRIV IO และ NUCLEO-F439ZI ล่าสุด
+# ผังต่อ IRIV PiControl, IRIV IO และ NUCLEO-G491RE ล่าสุด
 
-สถานะ ณ 3 กันยายน 2026: ใช้ Nucleo เป็น motion pulse generator และใช้ IRIV IO
+สถานะ migration candidate ณ 14 กันยายน 2026: เปลี่ยน motion controller เป็น NUCLEO-G491RE และใช้ IRIV IO
 เป็น remote digital I/O เท่านั้น เอกสาร Galil/FX5U รุ่นก่อนหน้าไม่ใช่ wiring ที่กำลัง commission
 
 ## เครือข่ายและ USB
@@ -8,13 +8,13 @@
 | อุปกรณ์ | เส้นทาง | ค่าใช้งาน |
 |---|---|---|
 | IRIV PiControl | LAN หลัก `eth0` | `192.168.70.80/24` |
-| NUCLEO-F439ZI | ST-LINK USB VCP | `/dev/serial/by-id/usb-STMicroelectronics_STM32_STLink_0666FF485753667187113533-if02`, 115200 8-N-1; ใช้ control/heartbeat |
+| NUCLEO-G491RE | ST-LINK USB VCP / LPUART1 PA2/PA3 | candidate `/dev/serial/by-id/usb-STMicroelectronics_STM32_STLink_001C00303433510237363934-if02`, 115200 8-N-1; serial นี้ตรวจพบจากบอร์ดบน PC และต้องยืนยันบน IRIV Pi ก่อน deploy |
 | IRIV PiControl | OT LAN `eth1` | `10.0.0.2/24` |
 | IRIV IO | Modbus TCP | `10.0.0.10:502`, Unit ID `255` |
 
 NUCLEO ใช้ USB serial เป็นเส้นทางสื่อสารเพียงช่องทางเดียว เพราะตรวจ device identity ได้แน่นอน
 ไม่ต่อสาย LAN และไม่ initialize Ethernet/LwIP/HTTP เพื่อให้มี control owner เพียงหนึ่งเดียว
-ทั้งนี้ LED1 ใช้ขา `PB0` เดียวกับ X-DIR จึงห้ามเปิด LED/HTTP demo เดิม
+ทั้งนี้ LD2 ใช้ขา `PA5` เดียวกับ Z-PULSE จึงห้าม blink/toggle LED ใน firmware
 
 ## IRIV IO digital inputs
 
@@ -58,9 +58,10 @@ block motion เสมอจนกว่าจะอ่านค่า raw ข�
 `PUL+`/`DIR+` ต่อ Field +24 V ตาม wiring ที่ผู้ใช้ยืนยัน แต่ต้องตรวจ input rating ของ driver
 ตัวจริงก่อน pulse test; Source ของ NMOS และ Nucleo GND ต้องมี signal reference ร่วมกัน
 
-เฟิร์มแวร์ motion candidate เริ่มแบบ disarmed, STEP/DIR LOW, จำกัด 10–1000 Hz และ
-ไม่เกิน 10000 steps ต่อคำสั่ง ต้องรับ `ARM SAFE` และ `HEARTBEAT SAFE` ต่อเนื่อง;
+เฟิร์มแวร์ G491RE protocol v3 เริ่มแบบ disarmed, STEP/DIR LOW, จำกัด 10–50,000 Hz และ
+ไม่เกิน 1,000,000 steps ต่อคำสั่ง ต้องรับ `ARM SAFE` และ `HEARTBEAT SAFE` ต่อเนื่อง;
 ขาด heartbeat เกิน 500 ms จะหยุดและ disarm ไม่มีการเริ่มเคลื่อนเองหลัง boot/reset
+เพดาน 50,000 Hz เป็นข้อจำกัดทาง firmware ไม่ใช่ความเร็วกลไกที่ผ่าน commissioning
 
 ## Safety hold points
 

@@ -37,7 +37,7 @@ class NucleoLinkTests(unittest.TestCase):
         return {"port": "test", "timeout_s": 0.05, "poll_interval_s": 0.1, "stale_after_s": 0.2}
 
     def test_valid_pong_marks_link_online(self):
-        fake = FakeSerial({"type": "pong", "device": "NUCLEO-F439ZI", "protocol": 1, "safe": True})
+        fake = FakeSerial({"type": "pong", "device": "NUCLEO-G491RE", "protocol": 1, "safe": True})
         link = NucleoLink(self.config(), serial_factory=lambda **kwargs: fake)
 
         link._poll_once()
@@ -68,7 +68,7 @@ class NucleoLinkTests(unittest.TestCase):
         link = NucleoLink(self.config(), serial_factory=lambda **kwargs: FakeSerial())
         link._connected = True
         link._last_success_monotonic = time.monotonic()
-        link._last_payload = {"device": "NUCLEO-F439ZI", "protocol": 1, "safe": False}
+        link._last_payload = {"device": "NUCLEO-G491RE", "protocol": 1, "safe": False}
         locked = threading.Event()
         release = threading.Event()
 

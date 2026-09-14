@@ -2170,7 +2170,7 @@
 
     const isIrivBoard = hardware.board_profile === "IRIV_PiControl_CM4" || Boolean(hardware.iriv_io?.enabled) || MS.payload?.io?.enabled === true;
     if (isIrivBoard) {
-      setText("configuration-board-profile", `Profile: IRIV PiControl CM4 · Modbus TCP 10.0.0.10:502 · NUCLEO-F439ZI Motion Engine`);
+      setText("configuration-board-profile", `Profile: IRIV PiControl CM4 · Modbus TCP 10.0.0.10:502 · NUCLEO-G491RE Motion Engine`);
       const pinEditor = el("configuration-pin-editor");
       if (pinEditor) {
         pinEditor.innerHTML = `
@@ -3808,7 +3808,7 @@
     }
     const topoNuc = el("dash-topo-nucleo");
     if (topoNuc) {
-      topoNuc.textContent = `NUCLEO-F439ZI (${MS.payload?.nucleo?.communication_ok ? "SAFE LINK ONLINE" : "OFFLINE"})`;
+      topoNuc.textContent = `NUCLEO-G491RE (${MS.payload?.nucleo?.communication_ok ? "SAFE LINK ONLINE" : "OFFLINE"})`;
     }
     const topoEstop = el("dash-topo-estop");
     if (topoEstop) {

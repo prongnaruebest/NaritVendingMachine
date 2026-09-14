@@ -1,13 +1,13 @@
 # NARIT Vending - ผังต่อ STM32 + NMOS ที่ใช้งานปัจจุบัน
 
 เอกสารนี้แยกเฉพาะทางเดินสัญญาณ `PULSE/DIRECTION` จาก
-`NUCLEO-F439ZI` (Nucleo-144) หรือ `NUCLEO-L476RG` (Nucleo-64) ผ่าน NMOS แบบ low-side/open-drain ไปยังไดรเวอร์มอเตอร์ X/Y/Z
+`NUCLEO-G491RE` (Nucleo-64) ผ่าน NMOS แบบ low-side/open-drain ไปยังไดรเวอร์มอเตอร์ X/Y/Z โดยเก็บข้อมูล `NUCLEO-F439ZI` และ `NUCLEO-L476RG` เดิมไว้เพื่อใช้อ้างอิงการย้ายบอร์ด
 โดยไม่รวม FX5U, Galil หรือ AS218TX-A
 
-> **สถานะเอกสาร: AS-CONNECTED แบบ provisional (รองรับ NUCLEO-F439ZI และ NUCLEO-L476RG)**
+> **สถานะเอกสาร: MIGRATION CANDIDATE สำหรับ NUCLEO-G491RE — ยังไม่ VERIFIED AS-BUILT**
 >
-> ตารางขา STM32 ด้านล่างยืนยันจาก source code ปัจจุบัน (`nucleo_motion.c`), คู่มือ ST UM1974 (Nucleo-144)
-> และคู่มือ ST UM1724 (Nucleo-64 Figure 23)
+> MCU alternate function ยืนยันจาก STM32Cube FW_G4 V1.6.1 ของ ST: PA8/PA9 ใช้ TIM1 AF6 และ PA5 ใช้ TIM2 AF1
+> แต่หมายเลข connector และ continuity ของบอร์ด G491RE ต้องตรวจจาก schematic/บอร์ดจริงก่อนต่อ driver
 > ส่วนรุ่น NMOS, ค่า resistor, แรงดัน `V-PULSE` และ terminal ฝั่ง driver ต้องตรวจจาก
 > อุปกรณ์/สายจริงก่อนเปลี่ยนสถานะเป็น VERIFIED AS-BUILT
 
@@ -18,7 +18,7 @@
 
 ```mermaid
 flowchart LR
-    PI["IRIV PiControl"] <-->|"USB virtual COM\n115200 8-N-1"| ST["NUCLEO-F439ZI / L476RG"]
+    PI["IRIV PiControl"] <-->|"ST-LINK VCP / LPUART1\n115200 8-N-1"| ST["NUCLEO-G491RE"]
     ST -->|"3.3 V PUL/DIR"| Q["6 x NMOS\nlow-side/open-drain"]
     V["V-PULSE\n5 V หรือ 24 V หลังยืนยัน"] --> DX["HBS860H X"]
     V --> DY["Driver Y (HBS860H)"]
@@ -39,6 +39,19 @@ flowchart LR
 - **ไฟ LED บนบอร์ด (LED conflict warning):**
   - บน `NUCLEO-F439ZI`: ขา `PB0` เป็นตำแหน่ง LED1 (Green) จึงต้องปิด LED toggle ในโค้ดไม่ให้กระทบ `X_DIR`
   - บน `NUCLEO-L476RG`: ขา `PA5` เป็นตำแหน่ง LD2 (Green User LED) ซึ่งตรงกับ `Z_PUL` โดยไฟ LD2 จะกะพริบตามจังหวะก้าวแกน Z **ห้ามใส่โค้ด blink/toggle LD2 ในระบบเด็ดขาด** เพื่อไม่ให้สร้างสัญญาณก้าวหลอกเข้าแกน Z
+  - บน `NUCLEO-G491RE`: PA5 ชนกับ LD2 เช่นกัน และเฟิร์มแวร์ใหม่สงวน PA5 เป็น `Z_STEP`; ห้ามใช้ LED blink ทุกกรณี
+
+### NUCLEO-G491RE firmware mapping
+
+| แกน | STEP | DIR | หมายเหตุ |
+|---|---|---|---|
+| X | `PA8 / TIM1_CH1 / AF6` | `PB0` | Timer output compare |
+| Y | `PA9 / TIM1_CH2 / AF6` | `PB1` | Timer output compare |
+| Z | `PA5 / TIM2_CH1 / AF1` | `PB2` | PA5 ใช้ร่วมกับวงจร LD2 บนบอร์ด |
+
+เส้นทาง USB serial เปลี่ยนจาก USART3 ของ F439ZI เป็น `LPUART1 PA2/PA3` ผ่าน ST-LINK VCP
+และ firmware identity เปลี่ยนเป็น `NUCLEO-G491RE` protocol v3 การต่อสายจาก MCU pin ไป NMOS
+ต้องตรวจ continuity ทีละเส้นก่อนจ่ายไฟให้ driver; ห้ามอาศัยหมายเลข connector ของ L476RG โดยไม่ตรวจบอร์ด G491RE จริง
 
 ## 2. STM32 Pin Map เปรียบเทียบ F439ZI (Nucleo-144) vs L476RG (Nucleo-64)
 

@@ -497,13 +497,13 @@ def _validate_nucleo(payload: object, issues: list[ConfigIssue]) -> None:
         )
     if not str(payload.get("port", "")).strip():
         issues.append(ConfigIssue("error", "NUCLEO_PORT_MISSING", "hardware.nucleo.port", "port is required"))
-    if str(payload.get("expected_device", "")) != "NUCLEO-F439ZI":
+    if str(payload.get("expected_device", "")) != "NUCLEO-G491RE":
         issues.append(
             ConfigIssue(
                 "error",
                 "NUCLEO_IDENTITY_INVALID",
                 "hardware.nucleo.expected_device",
-                "must be NUCLEO-F439ZI",
+                "must be NUCLEO-G491RE",
             )
         )
     for field, minimum, maximum in (("baudrate", 1200, 3_000_000), ("protocol_version", 1, 255)):

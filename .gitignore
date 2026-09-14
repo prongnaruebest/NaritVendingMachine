@@ -11,5 +11,7 @@ backups/
 .vscode/
 .agents/
 .stm32-workspace/
+/Motion_NaritVending/Motion_NaritVending/Debug/
+/Motion_NaritVending/Motion_NaritVending/Release/
 *.sqlite3
 *.db

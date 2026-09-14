@@ -1,4 +1,4 @@
-"""Fail-safe NUCLEO-F439ZI USB serial heartbeat and motion backend."""
+"""Fail-safe NUCLEO-G491RE USB serial heartbeat and motion backend."""
 
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ class NucleoLink:
         self.timeout_s = max(0.05, float(config.get("timeout_s", 0.5)))
         self.poll_interval_s = max(0.05, float(config.get("poll_interval_s", 0.5)))
         self.stale_after_s = max(self.poll_interval_s, float(config.get("stale_after_s", 1.5)))
-        self.expected_device = str(config.get("expected_device", "NUCLEO-F439ZI"))
+        self.expected_device = str(config.get("expected_device", "NUCLEO-G491RE"))
         self.expected_protocol = int(config.get("protocol_version", 1))
         self._serial_factory = serial_factory
         self._safety_permissive_fn = safety_permissive_fn

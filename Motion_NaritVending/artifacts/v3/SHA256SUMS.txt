@@ -1,0 +1,2 @@
+0f8f301dc4179bc867a5884e6f36a05614c6b825f67b67929646d393d62aeb7c  nucleo_g491re_protocol_v3.bin
+eaa1351d1bb69b776582d526b7f6674791a63fefbc5d4f33b3e2aae5fe7d35c8  nucleo_g491re_protocol_v3.elf
