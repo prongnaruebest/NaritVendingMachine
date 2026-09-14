@@ -83,6 +83,16 @@ stop. Host tests cover 1 ms cadence, missed-deadline latching, clock regression,
 gate defaults to disabled and no interrupt handler or initialization call is
 installed in the production path yet.
 
+An X/Y-only pulse-domain seven-segment S-curve planner is now compiled in the
+G491RE project as another unreachable candidate. It accepts explicit limits in
+Hz, Hz/s and Hz/s², uses the lower of acceleration/deceleration for its initial
+symmetric implementation, reduces peak rate for short moves, and records the
+integer target pulse in the final phase. Zero-distance is reported as no-motion
+and Z is rejected. This does not yet change the runtime completion contract:
+the executor still reaches its time boundary independently of the emitted-pulse
+counter. Therefore the profile feature remains disabled until completion is
+owned by exact emitted pulses and underrun/quantization behavior is verified.
+
 ## Baseline quality status
 
 - Automated suite before structural extraction: 190 tests passed and 18 subtests passed.

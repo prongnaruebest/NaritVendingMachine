@@ -21,6 +21,38 @@ CORE = (
 HARNESS = ROOT / "tests" / "c_host" / "test_nucleo_profile_buffer.c"
 
 
+def test_scurve_planner_handles_zero_short_long_and_reverse_moves(tmp_path: Path):
+    compiler = shutil.which("gcc")
+    if compiler is None:
+        pytest.skip("host GCC is unavailable")
+    executable = tmp_path / "scurve_planner_test.exe"
+    compile_result = subprocess.run(
+        [
+            compiler,
+            "-std=c99",
+            "-Wall",
+            "-Wextra",
+            "-Werror",
+            f"-I{CORE}",
+            str(CORE / "nucleo_scurve_planner.c"),
+            str(ROOT / "tests" / "c_host" / "test_nucleo_scurve_planner.c"),
+            "-lm",
+            "-o",
+            str(executable),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert compile_result.returncode == 0, compile_result.stdout + compile_result.stderr
+    run_result = subprocess.run(
+        [str(executable)], capture_output=True, text=True, timeout=10, check=False
+    )
+    assert run_result.returncode == 0, run_result.stdout + run_result.stderr
+    assert "S-curve planner host tests passed" in run_result.stdout
+
+
 def test_control_tick_is_fixed_rate_and_fails_closed_on_deadline_loss(
     tmp_path: Path,
 ):
