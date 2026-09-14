@@ -21,6 +21,83 @@ CORE = (
 HARNESS = ROOT / "tests" / "c_host" / "test_nucleo_profile_buffer.c"
 
 
+def test_control_tick_is_fixed_rate_and_fails_closed_on_deadline_loss(
+    tmp_path: Path,
+):
+    compiler = shutil.which("gcc")
+    if compiler is None:
+        pytest.skip("host GCC is unavailable")
+    executable = tmp_path / "control_tick_test.exe"
+    sources = [
+        CORE / "nucleo_control_tick.c",
+        ROOT / "tests" / "c_host" / "test_nucleo_control_tick.c",
+    ]
+    compile_result = subprocess.run(
+        [
+            compiler,
+            "-std=c99",
+            "-Wall",
+            "-Wextra",
+            "-Werror",
+            f"-I{CORE}",
+            *(str(source) for source in sources),
+            "-o",
+            str(executable),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert compile_result.returncode == 0, compile_result.stdout + compile_result.stderr
+    run_result = subprocess.run(
+        [str(executable)], capture_output=True, text=True, timeout=10, check=False
+    )
+    assert run_result.returncode == 0, run_result.stdout + run_result.stderr
+    assert "control tick host tests passed" in run_result.stdout
+
+
+def test_control_tick_drives_profile_runtime_and_propagates_safety_stop(
+    tmp_path: Path,
+):
+    compiler = shutil.which("gcc")
+    if compiler is None:
+        pytest.skip("host GCC is unavailable")
+    executable = tmp_path / "profile_runtime_test.exe"
+    sources = [
+        CORE / "nucleo_control_tick.c",
+        CORE / "nucleo_sha256.c",
+        CORE / "nucleo_profile_buffer.c",
+        CORE / "nucleo_profile_executor.c",
+        CORE / "nucleo_pulse_scheduler.c",
+        CORE / "nucleo_profile_runtime.c",
+        ROOT / "tests" / "c_host" / "test_nucleo_profile_runtime.c",
+    ]
+    compile_result = subprocess.run(
+        [
+            compiler,
+            "-std=c99",
+            "-Wall",
+            "-Wextra",
+            "-Werror",
+            f"-I{CORE}",
+            *(str(source) for source in sources),
+            "-o",
+            str(executable),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert compile_result.returncode == 0, compile_result.stdout + compile_result.stderr
+    run_result = subprocess.run(
+        [str(executable)], capture_output=True, text=True, timeout=10, check=False
+    )
+    assert run_result.returncode == 0, run_result.stdout + run_result.stderr
+    assert "profile runtime host tests passed" in run_result.stdout
+
+
 def test_profile_buffer_core_compiles_and_runs_without_hal(tmp_path: Path):
     compiler = shutil.which("gcc")
     if compiler is None:

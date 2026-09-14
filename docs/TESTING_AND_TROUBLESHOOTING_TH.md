@@ -144,6 +144,8 @@ ALM/PEND/DI10, command ID/type/phase, speed/pulse rate, error และ Event Lo
 - global disable บังคับทุก STEP กลับเป็น GPIO-low
 - หาก `HAL_TIM_OC_Start_IT()` ล้มเหลว adapter ต้อง latch fault และ disable ทุก channel
 - watchdog ที่หมดอายุหรือ safety permissive หายทำให้ executor เข้าสถานะ safety stop
+- control tick ทำงานทุก 1 ms และ latch fault เมื่อ tick ขาดช่วงเกิน 2 ms, เวลาเดินถอยหลัง
+  หรือ heartbeat เกิน 500 ms
 
 การผ่าน host test และ CubeIDE build ยังไม่ใช่สิทธิ์ให้ Flash หรือเปิด profile capability ต้องผ่าน
 protocol/callback integration, timing measurement กับ dummy load และ operator commissioning gate ก่อน

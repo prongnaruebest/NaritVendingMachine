@@ -75,6 +75,14 @@ intentional until the 1 kHz planner tick, watchdog latency, configuration
 revision checks, and STOP/DISARM semantics are verified together. The former
 F439ZI tree is retained only as a migration reference.
 
+The candidate includes a 1 kHz control-tick supervisor and TIM6 adapter. The
+hardware-neutral coordinator connects each accepted tick to the profile
+executor and pulse scheduler and propagates safety loss to an immediate profile
+stop. Host tests cover 1 ms cadence, missed-deadline latching, clock regression,
+500 ms heartbeat timeout, explicit disarm, and safety loss. The TIM6 runtime
+gate defaults to disabled and no interrupt handler or initialization call is
+installed in the production path yet.
+
 ## Baseline quality status
 
 - Automated suite before structural extraction: 190 tests passed and 18 subtests passed.

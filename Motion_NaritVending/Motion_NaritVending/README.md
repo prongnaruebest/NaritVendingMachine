@@ -45,6 +45,13 @@ an output-compare channel cannot start. This boundary prevents partially
 integrated trajectory code from becoming a Web or Controller capability before
 watchdog latency, configuration revision, and stop semantics pass together.
 
+The candidate control path now also contains a hardware-neutral 1 kHz tick
+supervisor, a profile-runtime coordinator, and a TIM6 adapter. The supervisor
+latches a safety stop on a missing deadline, non-monotonic clock, lost safety
+permissive, or heartbeat age over 500 ms. The compile-time gate
+`NUCLEO_G491_PROFILE_RUNTIME_ENABLED` defaults to `0`; TIM6 is not initialized,
+its IRQ is not registered, and the candidate still cannot start at runtime.
+
 ## Build
 
 Import this directory into STM32CubeIDE and build the `Release`
