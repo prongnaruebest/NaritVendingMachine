@@ -285,7 +285,7 @@
     "nucleo":  {
                    "enabled":  true,
                    "transport":  "usb_serial",
-                   "port":  "/dev/serial/by-id/usb-STMicroelectronics_STM32_STLink_001C00303433510237363934-if02",
+                   "port":  "/dev/serial/by-id/usb-STMicroelectronics_STLINK-V3_001C00303433510237363934-if02",
                    "baudrate":  115200,
                    "timeout_s":  0.5,
                    "poll_interval_s":  0.5,

@@ -49,3 +49,17 @@ def test_g491_ioc_records_motion_pins() -> None:
         "PB2.GPIO_Label=Z_DIR",
     }
     assert expected.issubset(set(ioc.splitlines()))
+
+
+def test_iriv_profile_uses_enumerated_g491_stlink_v3_serial_path() -> None:
+    """Keep the deployed path aligned with Linux's stable STLINK-V3 udev name."""
+    import json
+
+    hardware = json.loads(
+        (ROOT / "hardware_config.iriv.json").read_text(encoding="utf-8")
+    )
+
+    assert hardware["nucleo"]["port"] == (
+        "/dev/serial/by-id/"
+        "usb-STMicroelectronics_STLINK-V3_001C00303433510237363934-if02"
+    )
