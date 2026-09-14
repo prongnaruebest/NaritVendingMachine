@@ -78,7 +78,11 @@ int main(void)
   assert(hooks_state.phase_count == 4U);
   NucleoProfileExecutor_Heartbeat(&executor, 5000U, 1U);
   assert(NucleoProfileExecutor_Tick(&executor, 7100U, 1U) ==
-         NUCLEO_PROFILE_COMPLETE);
+         NUCLEO_PROFILE_RUNNING);
+  assert(executor.trajectory_elapsed == 1U);
+  assert(hooks_state.disable_count == 1U);
+  NucleoProfileExecutor_Complete(&executor);
+  assert(buffer.state == NUCLEO_PROFILE_COMPLETE);
   assert(hooks_state.disable_count == 2U);
 
   stage_xy(&buffer, 100000U, 100000U);

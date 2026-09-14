@@ -25,6 +25,7 @@ typedef struct {
   uint64_t last_heartbeat_us;
   uint64_t total_duration_us[NUCLEO_PROFILE_BUFFER_CAPACITY];
   uint8_t phase_index[NUCLEO_PROFILE_BUFFER_CAPACITY];
+  uint8_t trajectory_elapsed;
   uint8_t running;
 } NucleoProfileExecutor;
 
@@ -39,6 +40,8 @@ void NucleoProfileExecutor_Heartbeat(NucleoProfileExecutor *executor,
 NucleoProfileState NucleoProfileExecutor_Tick(
     NucleoProfileExecutor *executor, uint64_t now_us,
     uint8_t safety_permissive);
+void NucleoProfileExecutor_Complete(NucleoProfileExecutor *executor);
+void NucleoProfileExecutor_Fail(NucleoProfileExecutor *executor);
 void NucleoProfileExecutor_SafetyStop(NucleoProfileExecutor *executor);
 
 #endif

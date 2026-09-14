@@ -36,7 +36,17 @@ void NucleoProfileRuntime_ControlTick(void *context, uint64_t now_us)
   state = NucleoProfileExecutor_Tick(runtime->executor, now_us,
                                      runtime->safety_permissive);
   if (state == NUCLEO_PROFILE_RUNNING) {
-    NucleoPulseScheduler_ControlTick(runtime->scheduler, now_us);
+    if (runtime->executor->trajectory_elapsed != 0U) {
+      if (NucleoPulseScheduler_AllComplete(runtime->scheduler) != 0U) {
+        NucleoProfileExecutor_Complete(runtime->executor);
+      } else {
+        /* Never mask a timer underrun as successful terminal completion. */
+        runtime->terminal_fault = NUCLEO_PROFILE_RUNTIME_FAULT_PULSE_UNDERRUN;
+        NucleoPulseScheduler_Fail(runtime->scheduler);
+      }
+    } else {
+      NucleoPulseScheduler_ControlTick(runtime->scheduler, now_us);
+    }
   } else if (state == NUCLEO_PROFILE_SAFETY_STOP) {
     NucleoPulseScheduler_SafetyStop(runtime->scheduler);
   }

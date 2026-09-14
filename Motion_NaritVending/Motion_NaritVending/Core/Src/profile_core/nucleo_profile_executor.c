@@ -61,6 +61,7 @@ NucleoProfileResult NucleoProfileExecutor_Start(
   executor->buffer = buffer;
   executor->started_at_us = now_us;
   executor->last_heartbeat_us = now_us;
+  executor->trajectory_elapsed = 0U;
   executor->running = 1U;
   buffer->state = NUCLEO_PROFILE_RUNNING;
   return NUCLEO_PROFILE_OK;
@@ -110,11 +111,30 @@ NucleoProfileState NucleoProfileExecutor_Tick(
     }
   }
   if (all_complete != 0U) {
-    disable_outputs(executor);
-    executor->running = 0U;
-    executor->buffer->state = NUCLEO_PROFILE_COMPLETE;
+    /*
+     * Elapsed trajectory time is not proof that hardware emitted every STEP.
+     * Runtime owns the terminal decision after consulting the pulse counters.
+     */
+    executor->trajectory_elapsed = 1U;
   }
   return executor->buffer->state;
+}
+
+void NucleoProfileExecutor_Complete(NucleoProfileExecutor *executor)
+{
+  if ((executor == NULL) || (executor->buffer == NULL) ||
+      (executor->running == 0U)) return;
+  disable_outputs(executor);
+  executor->running = 0U;
+  executor->buffer->state = NUCLEO_PROFILE_COMPLETE;
+}
+
+void NucleoProfileExecutor_Fail(NucleoProfileExecutor *executor)
+{
+  if ((executor == NULL) || (executor->buffer == NULL)) return;
+  disable_outputs(executor);
+  executor->running = 0U;
+  executor->buffer->state = NUCLEO_PROFILE_FAILED;
 }
 
 void NucleoProfileExecutor_SafetyStop(NucleoProfileExecutor *executor)

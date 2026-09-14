@@ -124,6 +124,39 @@ void NucleoPulseScheduler_StopAxis(NucleoPulseScheduler *scheduler,
   scheduler->active[axis] = 0U;
 }
 
+uint8_t NucleoPulseScheduler_AllComplete(
+    const NucleoPulseScheduler *scheduler)
+{
+  uint32_t index;
+  const NucleoProfileBuffer *buffer;
+  if ((scheduler == NULL) || (scheduler->executor == NULL) ||
+      (scheduler->executor->buffer == NULL)) return 0U;
+  buffer = scheduler->executor->buffer;
+  for (index = 0U; index < buffer->count; index++) {
+    uint8_t axis = buffer->frames[index].axis;
+    if (axis > 1U) return 0U;
+    if (buffer->frames[index].sensor_terminated != 0U) {
+      if (scheduler->active[axis] != 0U) return 0U;
+    } else if (scheduler->emitted_steps[axis] !=
+               scheduler->target_steps[axis]) {
+      return 0U;
+    }
+  }
+  return 1U;
+}
+
+void NucleoPulseScheduler_Fail(NucleoPulseScheduler *scheduler)
+{
+  uint8_t axis;
+  if (scheduler == NULL) return;
+  for (axis = 0U; axis < 2U; axis++) {
+    NucleoPulseScheduler_StopAxis(scheduler, axis);
+  }
+  if (scheduler->executor != NULL) {
+    NucleoProfileExecutor_Fail(scheduler->executor);
+  }
+}
+
 void NucleoPulseScheduler_SafetyStop(NucleoPulseScheduler *scheduler)
 {
   uint8_t axis;

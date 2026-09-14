@@ -82,6 +82,7 @@ int main(void)
   for (index = 0U; index < 3U; index++) assert(NucleoPulseScheduler_OnPulse(&scheduler, 1U) == 1U);
   assert(NucleoPulseScheduler_OnPulse(&scheduler, 1U) == 0U);
   assert(scheduler.emitted_steps[0] == 5U && scheduler.emitted_steps[1] == 3U);
+  assert(NucleoPulseScheduler_AllComplete(&scheduler) == 1U);
   assert(timer.disables[0] == 1U && timer.disables[1] == 1U);
 
   NucleoProfileBuffer_Init(&buffer);

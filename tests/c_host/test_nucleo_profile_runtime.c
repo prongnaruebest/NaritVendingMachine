@@ -77,6 +77,40 @@ int main(void)
   assert(buffer.state == NUCLEO_PROFILE_SAFETY_STOP);
   assert(mock.global_stops > 0U && mock.disables[0] > 0U);
 
+  /* Time expiry without 70 emitted edges must fail, never report COMPLETE. */
+  NucleoProfileBuffer_Init(&buffer);
+  make_frame(&frame);
+  assert(NucleoProfileBuffer_Stage(&buffer, &frame) == NUCLEO_PROFILE_OK);
+  NucleoProfileExecutor_Init(&executor, executor_hooks);
+  NucleoPulseScheduler_Init(&scheduler, &executor, scheduler_hooks);
+  assert(NucleoProfileRuntime_Init(&runtime, &executor, &scheduler) == 1U);
+  NucleoProfileRuntime_SetSafety(&runtime, 10000ULL, 1U);
+  assert(NucleoProfileExecutor_Start(&executor, &buffer, 10000ULL, 1U) ==
+         NUCLEO_PROFILE_OK);
+  assert(NucleoPulseScheduler_Start(&scheduler) == NUCLEO_PROFILE_OK);
+  NucleoProfileRuntime_ControlTick(&runtime, 17000ULL);
+  assert(buffer.state == NUCLEO_PROFILE_FAILED);
+  assert(runtime.terminal_fault ==
+         NUCLEO_PROFILE_RUNTIME_FAULT_PULSE_UNDERRUN);
+
+  /* Exact emitted count is the only bounded-move completion authority. */
+  NucleoProfileBuffer_Init(&buffer);
+  make_frame(&frame);
+  assert(NucleoProfileBuffer_Stage(&buffer, &frame) == NUCLEO_PROFILE_OK);
+  NucleoProfileExecutor_Init(&executor, executor_hooks);
+  NucleoPulseScheduler_Init(&scheduler, &executor, scheduler_hooks);
+  assert(NucleoProfileRuntime_Init(&runtime, &executor, &scheduler) == 1U);
+  NucleoProfileRuntime_SetSafety(&runtime, 20000ULL, 1U);
+  assert(NucleoProfileExecutor_Start(&executor, &buffer, 20000ULL, 1U) ==
+         NUCLEO_PROFILE_OK);
+  assert(NucleoPulseScheduler_Start(&scheduler) == NUCLEO_PROFILE_OK);
+  for (uint32_t pulse = 0U; pulse < 70U; pulse++) {
+    assert(NucleoPulseScheduler_OnPulse(&scheduler, 0U) == 1U);
+  }
+  NucleoProfileRuntime_ControlTick(&runtime, 27000ULL);
+  assert(buffer.state == NUCLEO_PROFILE_COMPLETE);
+  assert(runtime.terminal_fault == NUCLEO_PROFILE_RUNTIME_FAULT_NONE);
+
   puts("profile runtime host tests passed");
   return 0;
 }

@@ -93,6 +93,15 @@ the executor still reaches its time boundary independently of the emitted-pulse
 counter. Therefore the profile feature remains disabled until completion is
 owned by exact emitted pulses and underrun/quantization behavior is verified.
 
+The candidate runtime now makes that terminal distinction explicitly. Elapsed
+profile time only marks the trajectory envelope as elapsed; bounded moves enter
+`COMPLETE` only when every non-sensor frame's falling-edge counter equals its
+integer target. A missing pulse at the time boundary disables both candidate
+channels, enters `FAILED`, and records `PULSE_UNDERRUN`. Sensor-terminated frames
+remain complete only after their own axis has been stopped by the sensor
+supervisor. This behavior is host-tested but remains behind the disabled runtime
+gate and is not yet exposed through the serial protocol.
+
 ## Baseline quality status
 
 - Automated suite before structural extraction: 190 tests passed and 18 subtests passed.

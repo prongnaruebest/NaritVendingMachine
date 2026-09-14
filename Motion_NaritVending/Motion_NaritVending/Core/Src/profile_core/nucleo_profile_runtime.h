@@ -5,9 +5,15 @@
 
 #include <stdint.h>
 
+typedef enum {
+  NUCLEO_PROFILE_RUNTIME_FAULT_NONE = 0,
+  NUCLEO_PROFILE_RUNTIME_FAULT_PULSE_UNDERRUN
+} NucleoProfileRuntimeFault;
+
 typedef struct {
   NucleoProfileExecutor *executor;
   NucleoPulseScheduler *scheduler;
+  NucleoProfileRuntimeFault terminal_fault;
   uint8_t safety_permissive;
   uint8_t initialized;
 } NucleoProfileRuntime;
