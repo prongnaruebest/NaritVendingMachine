@@ -21,6 +21,40 @@ CORE = (
 HARNESS = ROOT / "tests" / "c_host" / "test_nucleo_profile_buffer.c"
 
 
+@pytest.mark.parametrize("telemetry_enabled", [False, True])
+def test_profile_telemetry_is_bounded_and_capability_gated(
+    tmp_path: Path, telemetry_enabled: bool
+):
+    compiler = shutil.which("gcc")
+    if compiler is None:
+        pytest.skip("host GCC is unavailable")
+    executable = tmp_path / f"profile_telemetry_{int(telemetry_enabled)}.exe"
+    sources = [
+        CORE / "nucleo_sha256.c",
+        CORE / "nucleo_profile_buffer.c",
+        CORE / "nucleo_profile_executor.c",
+        CORE / "nucleo_pulse_scheduler.c",
+        CORE / "nucleo_profile_runtime.c",
+        CORE / "nucleo_profile_telemetry.c",
+        ROOT / "tests" / "c_host" / "test_nucleo_profile_telemetry.c",
+    ]
+    compile_result = subprocess.run(
+        [
+            compiler, "-std=c99", "-Wall", "-Wextra", "-Werror",
+            f"-DNUCLEO_XY_PROFILE_TELEMETRY_ENABLED={int(telemetry_enabled)}",
+            f"-I{CORE}", *(str(source) for source in sources),
+            "-o", str(executable),
+        ],
+        capture_output=True, text=True, timeout=30, check=False,
+    )
+    assert compile_result.returncode == 0, compile_result.stdout + compile_result.stderr
+    run_result = subprocess.run(
+        [str(executable)], capture_output=True, text=True, timeout=10, check=False
+    )
+    assert run_result.returncode == 0, run_result.stdout + run_result.stderr
+    assert "profile telemetry host tests passed" in run_result.stdout
+
+
 def test_scurve_planner_handles_zero_short_long_and_reverse_moves(tmp_path: Path):
     compiler = shutil.which("gcc")
     if compiler is None:

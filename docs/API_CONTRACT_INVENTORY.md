@@ -92,6 +92,14 @@ previous terminal fault. A completed, failed, or safety-stopped command requires
 an explicit reset while safety is permissive; reset clears buffers/counters but
 does not arm or start motion. Reset is rejected while running or unsafe.
 
+The G491RE tree also compiles a bounded read-only `PROFILE_STATUS` candidate.
+Its independent `NUCLEO_XY_PROFILE_TELEMETRY_ENABLED` compile-time gate defaults
+to `0`, and it is intentionally not registered in `nucleo_serial_link.c`.
+Consequently deployed protocol-v3 `PING`/`STATUS` responses and accepted
+commands remain byte-for-byte unchanged. With the candidate enabled in host
+tests, the response exposes the transport-neutral snapshot as bounded JSON;
+unknown/trailing commands and undersized response buffers are rejected.
+
 ## Structured command errors
 
 Rejected or failed Controller commands retain the legacy `ok`, `accepted`,

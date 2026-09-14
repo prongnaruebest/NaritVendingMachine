@@ -117,7 +117,8 @@ Exit criterion: failed health checks roll back safely and no deploy performs mot
 - [x] Add an X/Y-only pulse-domain seven-segment S-curve planner to the G491RE candidate with explicit Hz/Hz/s/Hz/s² limits and host coverage for zero, short, long and reverse-direction moves.
 - [x] Make emitted pulse count, rather than elapsed profile time, authoritative for terminal completion and fail closed with `PULSE_UNDERRUN` when a bounded frame misses its integer target.
 - [x] Define transport-neutral terminal state/reason and emitted-pulse telemetry, plus explicit safe reset/new-command semantics after COMPLETE, FAILED and SAFETY_STOP.
-- [ ] Expose candidate telemetry through a bounded, capability-gated serial command without changing deployed protocol-v3 responses.
+- [x] Add a bounded, independently capability-gated `PROFILE_STATUS` candidate while leaving it unregistered so deployed protocol-v3 responses remain unchanged.
+- [ ] Register profile commands and telemetry only in a protocol-v4 dispatcher after end-to-end STOP/DISARM priority and configuration-revision tests pass.
 - [ ] Build firmware artifact and complete operator-controlled mechanical commissioning.
 
 Exit criterion: X/Y start and stop without segment gaps, all configured kinematic limits are enforced,
