@@ -16,9 +16,9 @@ uint8_t NucleoProfileTelemetry_HandleLine(
   if (NucleoProfileRuntime_GetTelemetry(runtime, &telemetry) == 0U) return 0U;
   written = snprintf(
       response, response_size,
-      "{\"type\":\"profile_status\",\"state\":\"%s\"," 
-      "\"fault\":\"%s\",\"command_id\":\"%s\"," 
-      "\"safety_permissive\":%s,\"trajectory_elapsed\":%s," 
+      "{\"type\":\"profile_status\",\"state\":\"%s\","
+      "\"fault\":\"%s\",\"command_id\":\"%s\","
+      "\"safety_permissive\":%s,\"trajectory_elapsed\":%s,"
       "\"axes\":{\"x\":{\"target_steps\":%lu,\"emitted_steps\":%lu,"
       "\"active\":%s},\"y\":{\"target_steps\":%lu,"
       "\"emitted_steps\":%lu,\"active\":%s}}}",
