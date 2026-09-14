@@ -27,11 +27,27 @@ LD2 as an indicator because PA5 is the Z STEP output.
   Hardwired E-Stop, drive-power removal, alarms, and Controller interlocks must
   remain in service.
 
+## Profile-planner migration state
+
+The hardware-neutral profile buffer, executor, pulse scheduler, compare/timer
+adapters, sensor-stop supervisor, and SHA-256 helper are staged under
+`Core/Src/profile_core`. STM32CubeIDE compiles these sources for the G491RE so
+compiler and memory regressions are visible early, and host tests exercise the
+same source files.
+
+They are deliberately not connected to the G491RE HAL, serial dispatcher, or
+runtime command path yet. Protocol v3 therefore continues to advertise and
+execute only the existing fixed-frequency `MOVE` behavior. This fail-closed
+boundary prevents partially integrated trajectory code from becoming a Web or
+Controller capability before timer ownership, watchdog latency, configuration
+revision, and stop semantics have passed their gates.
+
 ## Build
 
 Import this directory into STM32CubeIDE and build the `Release`
-configuration. The project was generated with STM32Cube FW_G4 V1.5.1 and
-validated with STM32CubeIDE 1.17.0.
+configuration. The project was generated with STM32Cube FW_G4 V1.5.1. The
+profile-core staging build was validated with STM32CubeIDE 1.19.0; this is a
+compile result only and does not authorize flashing or motion.
 
 Do not flash or test with connected drivers until the operator explicitly
 confirms the area is safe and the exact axis, direction, and low test speed.

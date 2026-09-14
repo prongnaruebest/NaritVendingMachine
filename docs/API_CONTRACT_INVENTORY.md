@@ -66,6 +66,20 @@ These are corrected in Phase 1 with distinct Controller-owned handlers and regre
 - Command names cannot be removed until route, MQTT and IPC consumers have migrated.
 - STOP and E-STOP must remain dispatchable without waiting for a normal motion command.
 
+## NUCLEO motion-protocol boundary
+
+The deployed Controller contract currently targets G491RE USB protocol v3:
+`PING`, `STATUS`, `ARM SAFE`, `HEARTBEAT`, `MOVE`, `STOP`, and `DISARM`.
+Although the G491RE build now compiles the hardware-neutral profile core, it
+does not advertise profile capabilities and does not accept profile/configuration
+commands. Web and Controller code must continue to treat the profile path as
+unsupported until a later protocol capability handshake explicitly reports it.
+
+The next integration gate must define configuration revision ACK/NACK,
+idempotent command IDs, emitted-pulse telemetry, bounded parser behavior, and
+priority handling for `STOP`/`DISARM` before any new command is routed from the
+Controller. Compiled presence alone is never a capability signal.
+
 ## Structured command errors
 
 Rejected or failed Controller commands retain the legacy `ok`, `accepted`,

@@ -55,6 +55,20 @@ Machine authority is held by Controller memory and hardware feedback. Browser st
 
 `narit_vending/webapp.py:create_app()` exposes a legacy monolithic Flask route set in addition to the deployed `narit_vending.web` route set. Tests still exercise both paths. It must remain behind characterization tests while functionality is extracted; deleting it before consumers are migrated would create silent API regressions.
 
+## G491RE motion-firmware migration
+
+The active CubeIDE target is `Motion_NaritVending/Motion_NaritVending` for the
+NUCLEO-G491RE. Its current runtime contract remains USB protocol v3 with
+fixed-frequency `MOVE`; no trajectory-profile capability is advertised.
+
+The hardware-neutral profile core is now compiled from
+`Core/Src/profile_core` and exercised by the host C harness. It is staging code:
+there is no G491RE HAL binding, serial dispatch, Controller routing, or runtime
+feature flag connected to it. Keeping the runtime path unreachable is an
+intentional safety gate until timer ownership, bounded watchdog behavior,
+configuration revision checks, and STOP/DISARM semantics are verified together.
+The former F439ZI tree is retained only as a migration reference.
+
 ## Baseline quality status
 
 - Automated suite before structural extraction: 190 tests passed and 18 subtests passed.

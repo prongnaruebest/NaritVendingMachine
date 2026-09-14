@@ -8,7 +8,16 @@ import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
-CORE = ROOT / "firmware" / "nucleo_f439zi" / "profile_core"
+# Exercise the hardware-neutral core from the production G491RE project.  The
+# legacy F439ZI copy remains a migration reference, not the active target.
+CORE = (
+    ROOT
+    / "Motion_NaritVending"
+    / "Motion_NaritVending"
+    / "Core"
+    / "Src"
+    / "profile_core"
+)
 HARNESS = ROOT / "tests" / "c_host" / "test_nucleo_profile_buffer.c"
 
 
@@ -259,3 +268,19 @@ def test_profile_core_is_not_connected_to_cubeide_build_yet():
     assert "nucleo_profile_dispatcher.c" not in project_sources
     assert "nucleo_sensor_stop.c" not in project_sources
     assert "nucleo_sha256.c" not in project_sources
+
+
+def test_g491_profile_core_is_compiled_but_not_advertised_at_runtime():
+    """Compiled candidate code must remain unreachable until its HAL gate exists."""
+    serial = (
+        ROOT
+        / "Motion_NaritVending"
+        / "Motion_NaritVending"
+        / "Core"
+        / "Src"
+        / "nucleo_serial_link.c"
+    ).read_text(encoding="utf-8")
+
+    assert '#define NUCLEO_PROTOCOL_VERSION 3U' in serial
+    assert '"capabilities"' not in serial
+    assert "PROFILE " not in serial
