@@ -41,6 +41,14 @@ void NucleoProfileExecutor_Init(NucleoProfileExecutor *executor,
   executor->phase_index[1] = NUCLEO_PROFILE_NO_PHASE;
 }
 
+void NucleoProfileExecutor_Reset(NucleoProfileExecutor *executor)
+{
+  NucleoProfileExecutorHooks hooks;
+  if (executor == NULL) return;
+  hooks = executor->hooks;
+  NucleoProfileExecutor_Init(executor, hooks);
+}
+
 NucleoProfileResult NucleoProfileExecutor_Start(
     NucleoProfileExecutor *executor, NucleoProfileBuffer *buffer,
     uint64_t now_us, uint8_t safety_permissive)

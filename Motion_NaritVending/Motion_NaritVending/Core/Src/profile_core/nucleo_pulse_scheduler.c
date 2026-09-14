@@ -43,6 +43,16 @@ void NucleoPulseScheduler_Init(NucleoPulseScheduler *scheduler,
   scheduler->frame_for_axis[1] = NUCLEO_PROFILE_NO_PHASE;
 }
 
+void NucleoPulseScheduler_Reset(NucleoPulseScheduler *scheduler)
+{
+  NucleoProfileExecutor *executor;
+  NucleoPulseSchedulerHooks hooks;
+  if (scheduler == NULL) return;
+  executor = scheduler->executor;
+  hooks = scheduler->hooks;
+  NucleoPulseScheduler_Init(scheduler, executor, hooks);
+}
+
 NucleoProfileResult NucleoPulseScheduler_Start(NucleoPulseScheduler *scheduler)
 {
   uint32_t index;

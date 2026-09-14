@@ -116,7 +116,8 @@ Exit criterion: failed health checks roll back safely and no deploy performs mot
 - [x] Verify SHA-256 over canonical ASCII profile fields in the firmware parser and generate the identical wire checksum on Raspberry Pi; reject any altered profile data before staging.
 - [x] Add an X/Y-only pulse-domain seven-segment S-curve planner to the G491RE candidate with explicit Hz/Hz/s/Hz/s² limits and host coverage for zero, short, long and reverse-direction moves.
 - [x] Make emitted pulse count, rather than elapsed profile time, authoritative for terminal completion and fail closed with `PULSE_UNDERRUN` when a bounded frame misses its integer target.
-- [ ] Expose stable terminal state/reason telemetry through the gated serial protocol and prove reset/new-command semantics after COMPLETE, FAILED and SAFETY_STOP.
+- [x] Define transport-neutral terminal state/reason and emitted-pulse telemetry, plus explicit safe reset/new-command semantics after COMPLETE, FAILED and SAFETY_STOP.
+- [ ] Expose candidate telemetry through a bounded, capability-gated serial command without changing deployed protocol-v3 responses.
 - [ ] Build firmware artifact and complete operator-controlled mechanical commissioning.
 
 Exit criterion: X/Y start and stop without segment gaps, all configured kinematic limits are enforced,

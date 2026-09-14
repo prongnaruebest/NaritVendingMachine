@@ -31,6 +31,7 @@ typedef struct {
 
 void NucleoProfileExecutor_Init(NucleoProfileExecutor *executor,
                                 NucleoProfileExecutorHooks hooks);
+void NucleoProfileExecutor_Reset(NucleoProfileExecutor *executor);
 NucleoProfileResult NucleoProfileExecutor_Start(
     NucleoProfileExecutor *executor, NucleoProfileBuffer *buffer,
     uint64_t now_us, uint8_t safety_permissive);

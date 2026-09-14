@@ -66,9 +66,8 @@ int main(void)
   assert(NucleoProfileRuntime_Init(&runtime, &executor, &scheduler) == 1U);
   assert(NucleoControlTick_Init(&control, tick_hooks) == 1U);
   NucleoProfileRuntime_SetSafety(&runtime, 0ULL, 1U);
-  assert(NucleoProfileExecutor_Start(&executor, &buffer, 0ULL, 1U) ==
+  assert(NucleoProfileRuntime_Start(&runtime, &buffer, 0ULL) ==
          NUCLEO_PROFILE_OK);
-  assert(NucleoPulseScheduler_Start(&scheduler) == NUCLEO_PROFILE_OK);
   assert(NucleoControlTick_Arm(&control, 0ULL, 1U) == 1U);
   NucleoControlTick_OnTimer(&control, 1000ULL, 1U);
   assert(mock.rates[0] > 0U);
@@ -93,6 +92,20 @@ int main(void)
   assert(runtime.terminal_fault ==
          NUCLEO_PROFILE_RUNTIME_FAULT_PULSE_UNDERRUN);
 
+  {
+    NucleoProfileRuntimeTelemetry telemetry;
+    assert(NucleoProfileRuntime_GetTelemetry(&runtime, &telemetry) == 1U);
+    assert(telemetry.state == NUCLEO_PROFILE_FAILED);
+    assert(telemetry.terminal_fault ==
+           NUCLEO_PROFILE_RUNTIME_FAULT_PULSE_UNDERRUN);
+    assert(telemetry.target_steps[0] == 70U);
+    assert(telemetry.emitted_steps[0] == 0U);
+    assert(strcmp(telemetry.command_id, "runtime-test") == 0);
+    assert(strcmp(NucleoProfileRuntime_StateName(telemetry.state), "FAILED") == 0);
+    assert(strcmp(NucleoProfileRuntime_FaultName(telemetry.terminal_fault),
+                  "PULSE_UNDERRUN") == 0);
+  }
+
   /* Exact emitted count is the only bounded-move completion authority. */
   NucleoProfileBuffer_Init(&buffer);
   make_frame(&frame);
@@ -110,6 +123,15 @@ int main(void)
   NucleoProfileRuntime_ControlTick(&runtime, 27000ULL);
   assert(buffer.state == NUCLEO_PROFILE_COMPLETE);
   assert(runtime.terminal_fault == NUCLEO_PROFILE_RUNTIME_FAULT_NONE);
+
+  /* A terminal state requires an explicit safe reset before another frame. */
+  assert(NucleoProfileRuntime_Reset(&runtime, &buffer) == NUCLEO_PROFILE_OK);
+  assert(buffer.state == NUCLEO_PROFILE_EMPTY);
+  assert(executor.buffer == NULL);
+  assert(scheduler.target_steps[0] == 0U);
+  NucleoProfileRuntime_SetSafety(&runtime, 28000ULL, 0U);
+  assert(NucleoProfileRuntime_Reset(&runtime, &buffer) ==
+         NUCLEO_PROFILE_ERR_STATE);
 
   puts("profile runtime host tests passed");
   return 0;

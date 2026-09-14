@@ -82,6 +82,16 @@ idempotent command IDs, emitted-pulse telemetry, bounded parser behavior, and
 priority handling for `STOP`/`DISARM` before any new command is routed from the
 Controller. Compiled presence alone is never a capability signal.
 
+The internal candidate now provides a transport-neutral telemetry snapshot with
+`state`, `terminal_fault`, `command_id`, per-axis `target_steps`,
+`emitted_steps`, `axis_active`, `trajectory_elapsed`, and `safety_permissive`.
+Stable state names are `EMPTY`, `BUFFERED`, `RUNNING`, `COMPLETE`,
+`SAFETY_STOP`, and `FAILED`; the first terminal fault is `PULSE_UNDERRUN`.
+This is not yet a serial/API response. Starting a candidate command resets its
+previous terminal fault. A completed, failed, or safety-stopped command requires
+an explicit reset while safety is permissive; reset clears buffers/counters but
+does not arm or start motion. Reset is rejected while running or unsafe.
+
 ## Structured command errors
 
 Rejected or failed Controller commands retain the legacy `ok`, `accepted`,

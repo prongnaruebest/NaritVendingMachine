@@ -27,6 +27,7 @@ typedef struct {
 void NucleoPulseScheduler_Init(NucleoPulseScheduler *scheduler,
                                NucleoProfileExecutor *executor,
                                NucleoPulseSchedulerHooks hooks);
+void NucleoPulseScheduler_Reset(NucleoPulseScheduler *scheduler);
 NucleoProfileResult NucleoPulseScheduler_Start(NucleoPulseScheduler *scheduler);
 void NucleoPulseScheduler_ControlTick(NucleoPulseScheduler *scheduler,
                                       uint64_t now_us);
