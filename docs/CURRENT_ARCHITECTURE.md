@@ -188,6 +188,17 @@ is reported separately. This contract remains unreachable until position is
 set from a successful Controller-owned Home and the dynamic runtime/HAL path is
 verified together.
 
+The transport-neutral dynamic facade now joins that revision-bound protocol to
+the X/Y coordinator. Both axis configurations must be valid before the runtime
+is ready; one or two targets sharing a command ID are staged and then started
+atomically. Absolute estimated position changes only from emitted falling STEP
+edges, and each axis commits its target independently at exact completion.
+Immediate STOP/DISARM/safety loss invalidate the open-loop reference, while a
+controlled stop preserves the emitted coordinate without claiming the original
+target. The facade and its 50 kHz input ceiling are host-tested with fake timer
+hooks and remain outside the production UART dispatcher and CubeIDE feature
+gate.
+
 ## Baseline quality status
 
 - Automated suite before structural extraction: 190 tests passed and 18 subtests passed.

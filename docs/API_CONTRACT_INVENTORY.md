@@ -97,6 +97,16 @@ command-ID retries are idempotent; reuse with different content is a conflict.
 These frames are compiled candidate code only: protocol v3 does not advertise
 or dispatch them and the Controller must not send them yet.
 
+The candidate facade requires valid `DYN_CONFIG` frames for both X and Y before
+it reports runtime-ready. It stages one or both `DYN_TARGET` frames under the
+same command ID and starts the participating axes atomically. The wire velocity
+is bounded to 50,000,000 milliHz (50 kHz); values above that are rejected rather
+than truncated. STOP, DISARM, heartbeat/safety loss clear both position-valid
+flags because drive motion can no longer be inferred safely. `CONTROLLED_STOP`
+retains the coordinate from falling STEP edges but does not commit the target.
+This behavior is host-only until the explicit production feature gate is
+enabled in a later reviewed change.
+
 For the candidate runtime, `emitted_steps` changes only after the HAL confirms
 the falling STEP edge. A 1 kHz planner tick changes the requested timer rate but
 does not change position. Completion therefore means the exact target edge was

@@ -62,6 +62,10 @@ int main(void)
              &state,
              "DYN_CONFIG X 0 100 1000 0 0 1000 1000 1000 1000 bad revision",
              0U) == NUCLEO_DYNAMIC_PROTOCOL_ERR_FORMAT);
+  assert(NucleoDynamicProtocol_ApplyConfig(
+             &state,
+             "DYN_CONFIG X 0 100 1000 1 1000 50000001 1000 1000 1000 cfg-43",
+             0U) == NUCLEO_DYNAMIC_PROTOCOL_ERR_RANGE);
   assert(NucleoDynamicProtocol_ParseTarget(
              &state, "DYN_TARGET", 0U, &target) ==
          NUCLEO_DYNAMIC_PROTOCOL_ERR_FORMAT);

@@ -96,6 +96,7 @@ NucleoDynamicProtocolResult NucleoDynamicProtocol_ApplyConfig(
   }
   if ((values[1] <= values[0]) || (values[2] == 0U) || (values[3] > 1U) ||
       ((values[3] != 0U) && (values[4] == 0U)) || (values[5] == 0U) ||
+      (values[5] > 50000000U) ||
       (values[6] == 0U) || (values[7] == 0U) || (values[8] == 0U)) {
     return NUCLEO_DYNAMIC_PROTOCOL_ERR_RANGE;
   }
