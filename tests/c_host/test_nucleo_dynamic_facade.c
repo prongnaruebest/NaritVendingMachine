@@ -6,6 +6,8 @@
 typedef struct {
   uint32_t rate_millihz[2];
   uint32_t disable_calls;
+  uint32_t direction_calls;
+  uint8_t fail_direction_axis;
 } FacadeMock;
 
 static void set_rate(void *context, uint8_t axis, uint32_t rate_millihz)
@@ -23,6 +25,15 @@ static void disable_all(void *context)
   ++mock->disable_calls;
 }
 
+static uint8_t prepare_direction(void *context, uint8_t axis,
+                                 uint8_t direction)
+{
+  FacadeMock *mock = (FacadeMock *)context;
+  assert(axis < 2U && direction < 2U);
+  ++mock->direction_calls;
+  return axis == mock->fail_direction_axis ? 0U : 1U;
+}
+
 int main(void)
 {
   const char *config_x =
@@ -30,8 +41,9 @@ int main(void)
   const char *config_y =
       "DYN_CONFIG Y 0 1000 100000 1 2500 30000000 60000000 50000000 300000000 cfg-1";
   NucleoDynamicFacade facade;
-  FacadeMock mock = {{0U, 0U}, 0U};
-  NucleoDynamicRuntimeHooks hooks = {set_rate, disable_all, &mock};
+  FacadeMock mock = {{0U, 0U}, 0U, 0U, 0xffU};
+  NucleoDynamicRuntimeHooks hooks = {set_rate, disable_all, &mock,
+                                     prepare_direction};
 
   assert(NucleoDynamicFacade_Init(&facade, hooks) == 1U);
   assert(NucleoDynamicFacade_ApplyConfig(&facade, config_x, 0U) ==
@@ -55,9 +67,17 @@ int main(void)
   assert(NucleoDynamicFacade_StageTarget(
              &facade, "DYN_TARGET move-1 Y 195 cfg-1") ==
          NUCLEO_DYNAMIC_PROTOCOL_OK);
+  mock.fail_direction_axis = 1U;
+  assert(NucleoDynamicFacade_StartLine(
+             &facade, "DYN_START move-1 XY", 0ULL, 1U) ==
+         NUCLEO_DYNAMIC_PROTOCOL_ERR_STATE);
+  assert(facade.coordinator.active_mask == 0U);
+  assert(mock.disable_calls == 1U);
+  mock.fail_direction_axis = 0xffU;
   assert(NucleoDynamicFacade_StartLine(
              &facade, "DYN_START move-1 XY", 0ULL, 1U) ==
          NUCLEO_DYNAMIC_PROTOCOL_OK);
+  assert(mock.direction_calls == 4U);
   NucleoDynamicFacade_ControlTick(&facade, 1000ULL);
   assert(mock.rate_millihz[0] > 0U && mock.rate_millihz[1] > 0U);
 

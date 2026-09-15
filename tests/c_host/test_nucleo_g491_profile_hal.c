@@ -8,6 +8,8 @@ static unsigned int stops[2];
 static unsigned int completed[2];
 static uint32_t primask;
 static int start_result;
+static unsigned int delay_ms;
+static uint32_t gpio_state[4];
 
 uint32_t host_get_primask(void) { return primask; }
 void host_disable_irq(void) { primask = 1U; }
@@ -44,10 +46,10 @@ void HAL_GPIO_Init(GPIO_TypeDef *port, GPIO_InitTypeDef *gpio)
 }
 void HAL_GPIO_WritePin(GPIO_TypeDef *port, uint16_t pin, uint32_t state)
 {
-  (void)port;
-  (void)pin;
-  (void)state;
+  port->marker = pin;
+  gpio_state[pin & 3U] = state;
 }
+void HAL_Delay(uint32_t value_ms) { delay_ms += value_ms; }
 
 static uint8_t pulse_complete(void *context, uint8_t axis)
 {
@@ -67,7 +69,12 @@ int main(void)
 
   assert(NucleoG491ProfileHal_Init(
              &port, &tim1, &gpio_a, 0x0100U, &gpio_a, 0x0200U,
+             &gpio_a, 0x0001U, &gpio_a, 0x0002U,
              1000000U, pulse_complete, limits) == 1U);
+  assert(NucleoG491ProfileHal_PrepareDirectionHook(&port, 0U, 1U) == 1U);
+  assert(NucleoG491ProfileHal_PrepareDirectionHook(&port, 1U, 0U) == 1U);
+  assert(delay_ms == 2U);
+  assert(gpio_state[1] == GPIO_PIN_SET && gpio_state[2] == GPIO_PIN_RESET);
   assert(NucleoCompareAdapter_SetRate(&port.compare_adapter, 0U,
                                       1000000U) == 1U);
   assert(NucleoCompareAdapter_SetRate(&port.compare_adapter, 1U,
@@ -89,6 +96,7 @@ int main(void)
   start_result = 1;
   assert(NucleoG491ProfileHal_Init(
              &failed_port, &tim1, &gpio_a, 0x0100U, &gpio_a, 0x0200U,
+             &gpio_a, 0x0001U, &gpio_a, 0x0002U,
              1000000U, pulse_complete, limits) == 1U);
   assert(NucleoCompareAdapter_SetRate(&failed_port.compare_adapter, 0U,
                                       1000000U) == 0U);

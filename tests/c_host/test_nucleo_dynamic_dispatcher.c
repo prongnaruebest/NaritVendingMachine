@@ -24,12 +24,20 @@ static void disable_all(void *context)
   ++mock->disable_calls;
 }
 
+static uint8_t prepare_direction(void *context, uint8_t axis,
+                                 uint8_t direction)
+{
+  (void)context;
+  return (axis < 2U) && (direction < 2U);
+}
+
 int main(void)
 {
   NucleoDynamicFacade facade;
   NucleoDynamicDispatcher dispatcher;
   DispatcherMock mock = {{0U, 0U}, 0U};
-  NucleoDynamicRuntimeHooks hooks = {set_rate, disable_all, &mock};
+  NucleoDynamicRuntimeHooks hooks = {set_rate, disable_all, &mock,
+                                     prepare_direction};
   char response[128];
 #if NUCLEO_DYNAMIC_PROTOCOL_V4_ENABLED
   char status_response[640];

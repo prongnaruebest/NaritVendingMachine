@@ -24,6 +24,7 @@ typedef struct {
 #define GPIO_SPEED_FREQ_LOW 0U
 #define GPIO_SPEED_FREQ_HIGH 2U
 #define GPIO_PIN_RESET 0U
+#define GPIO_PIN_SET 1U
 
 uint32_t host_get_primask(void);
 void host_disable_irq(void);
@@ -36,6 +37,7 @@ int HAL_TIM_OC_Start_IT(TIM_HandleTypeDef *timer, uint32_t channel);
 int HAL_TIM_OC_Stop_IT(TIM_HandleTypeDef *timer, uint32_t channel);
 void HAL_GPIO_Init(GPIO_TypeDef *port, GPIO_InitTypeDef *gpio);
 void HAL_GPIO_WritePin(GPIO_TypeDef *port, uint16_t pin, uint32_t state);
+void HAL_Delay(uint32_t delay_ms);
 
 #define __get_PRIMASK() host_get_primask()
 #define __disable_irq() host_disable_irq()

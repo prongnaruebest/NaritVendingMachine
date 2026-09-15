@@ -32,7 +32,7 @@ static void start_runtime(NucleoDynamicRuntime *runtime, RuntimeMock *mock,
       {1U, 2500U, 30000U},
       {1000U, 30000U, 60000U, 50000U, 300000U},
       5000U};
-  NucleoDynamicRuntimeHooks hooks = {set_rate, disable_all, mock};
+  NucleoDynamicRuntimeHooks hooks = {set_rate, disable_all, mock, NULL};
   assert(NucleoDynamicRuntime_Init(runtime, &config, hooks) == 1U);
   assert(NucleoDynamicRuntime_Arm(runtime, now_us, 1U) == 1U);
   assert(NucleoDynamicRuntime_Start(runtime, 0U, 1U, 10000U) ==
@@ -54,7 +54,8 @@ int main(void)
         {1U, 2500U, 30000U},
         {1000U, 30000U, 60000U, 50000U, 300000U},
         5000U};
-    NucleoDynamicRuntimeHooks pulse_hooks = {set_rate, disable_all, &mock};
+    NucleoDynamicRuntimeHooks pulse_hooks = {set_rate, disable_all, &mock,
+                                             NULL};
     assert(NucleoDynamicRuntime_Init(&runtime, &pulse_config, pulse_hooks) == 1U);
     assert(NucleoDynamicRuntime_Arm(&runtime, 0ULL, 1U) == 1U);
     assert(NucleoDynamicRuntime_Start(&runtime, 0U, 1U, 2U) ==

@@ -4,6 +4,7 @@
 #include <string.h>
 
 #define NUCLEO_G491_FIRST_COMPARE_DELAY_TICKS 20U
+#define NUCLEO_G491_DIRECTION_SETUP_DELAY_MS 1U
 
 static uint8_t apply_half_period(void *context, uint8_t axis,
                                  uint32_t half_period_ticks)
@@ -71,12 +72,15 @@ static void disable_channel(void *context, uint8_t axis)
 uint8_t NucleoG491ProfileHal_Init(
     NucleoG491ProfileHal *port, TIM_HandleTypeDef *tim1,
     GPIO_TypeDef *x_port, uint16_t x_pin, GPIO_TypeDef *y_port,
-    uint16_t y_pin, uint32_t timer_tick_hz,
+    uint16_t y_pin, GPIO_TypeDef *x_direction_port,
+    uint16_t x_direction_pin, GPIO_TypeDef *y_direction_port,
+    uint16_t y_direction_pin, uint32_t timer_tick_hz,
     NucleoG491ProfilePulseFn pulse_completed, void *pulse_context)
 {
   NucleoComparePort compare_port;
   if ((port == NULL) || (tim1 == NULL) || (x_port == NULL) ||
-      (y_port == NULL) || (pulse_completed == NULL)) return 0U;
+      (y_port == NULL) || (x_direction_port == NULL) ||
+      (y_direction_port == NULL) || (pulse_completed == NULL)) return 0U;
   memset(port, 0, sizeof(*port));
   port->tim1 = tim1;
   port->channels[0] = TIM_CHANNEL_1;
@@ -85,6 +89,10 @@ uint8_t NucleoG491ProfileHal_Init(
   port->pulse_ports[1] = y_port;
   port->pulse_pins[0] = x_pin;
   port->pulse_pins[1] = y_pin;
+  port->direction_ports[0] = x_direction_port;
+  port->direction_ports[1] = y_direction_port;
+  port->direction_pins[0] = x_direction_pin;
+  port->direction_pins[1] = y_direction_pin;
   port->pulse_completed = pulse_completed;
   port->pulse_context = pulse_context;
   compare_port.apply_half_period_atomic = apply_half_period;
@@ -139,4 +147,25 @@ void NucleoG491ProfileHal_DisableAxisHook(void *context, uint8_t axis)
   if (port != NULL) {
     NucleoCompareAdapter_DisableAxis(&port->compare_adapter, axis);
   }
+}
+
+void NucleoG491ProfileHal_DisableAllHook(void *context)
+{
+  NucleoG491ProfileHal_DisableAll((NucleoG491ProfileHal *)context);
+}
+
+uint8_t NucleoG491ProfileHal_PrepareDirectionHook(void *context,
+                                                  uint8_t axis,
+                                                  uint8_t direction)
+{
+  NucleoG491ProfileHal *port = (NucleoG491ProfileHal *)context;
+  if ((port == NULL) || (axis >= NUCLEO_COMPARE_AXIS_COUNT) ||
+      (direction > 1U)) return 0U;
+  if (port->compare_adapter.enabled[axis] != 0U) return 0U;
+  HAL_GPIO_WritePin(port->direction_ports[axis], port->direction_pins[axis],
+                    direction != 0U ? GPIO_PIN_SET : GPIO_PIN_RESET);
+  /* A bounded one-millisecond command-path delay exceeds the 5 us HBS860H
+   * DIR setup requirement without introducing delay-based STEP generation. */
+  HAL_Delay(NUCLEO_G491_DIRECTION_SETUP_DELAY_MS);
+  return 1U;
 }

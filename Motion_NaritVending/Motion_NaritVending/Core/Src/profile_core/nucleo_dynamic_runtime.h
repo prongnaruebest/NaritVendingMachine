@@ -20,11 +20,16 @@ typedef enum {
 typedef void (*NucleoDynamicSetRateFn)(void *context, uint8_t axis,
                                        uint32_t rate_millihz);
 typedef void (*NucleoDynamicDisableAllFn)(void *context);
+typedef uint8_t (*NucleoDynamicPrepareDirectionFn)(void *context,
+                                                   uint8_t axis,
+                                                   uint8_t direction);
 
 typedef struct {
   NucleoDynamicSetRateFn set_rate;
   NucleoDynamicDisableAllFn disable_all;
   void *context;
+  /* The hook must not return until the driver's DIR setup time has elapsed. */
+  NucleoDynamicPrepareDirectionFn prepare_direction;
 } NucleoDynamicRuntimeHooks;
 
 typedef struct {

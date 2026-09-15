@@ -37,7 +37,7 @@ int main(void)
   NucleoDynamicCoordinator coordinator;
   CoordinatorMock mock = {{0U, 0U}, 0U};
   NucleoDynamicConfig configs[2] = {config(), config()};
-  NucleoDynamicRuntimeHooks hooks = {set_rate, disable_all, &mock};
+  NucleoDynamicRuntimeHooks hooks = {set_rate, disable_all, &mock, NULL};
   uint8_t directions[2] = {1U, 0U};
   uint32_t distances[2] = {2U, 3U};
 

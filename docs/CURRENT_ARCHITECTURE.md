@@ -76,7 +76,13 @@ The staged `Core/Src/profile_hal/nucleo_g491_profile_hal.*` adapter binds the
 candidate X/Y path to TIM1 CH1/CH2 without changing timer base state when one
 axis stops. Host tests verify exact falling-edge pulse accounting, independent
 channel completion, global disable, and fail-closed handling of a HAL channel
-start failure.
+start failure. Dynamic start also has an explicit direction-preparation
+contract: every participating X/Y DIR output must be written successfully and
+the HAL must wait at least the driver setup interval before either shared TIM1
+channel can emit STEP. The G491RE adapter currently uses one bounded 1 ms delay
+on the command path, safely exceeding the HBS860H 5 us requirement; this delay
+is not used to generate pulses. A direction-preparation failure inhibits both
+channels and leaves the staged command unstarted.
 
 This remains unreachable staging code: there is no serial dispatch, Controller
 routing, runtime callback ownership, or advertised feature flag connected to

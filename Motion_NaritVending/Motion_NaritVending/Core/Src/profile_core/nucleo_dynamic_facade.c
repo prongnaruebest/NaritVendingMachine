@@ -62,7 +62,9 @@ uint8_t NucleoDynamicFacade_Init(NucleoDynamicFacade *facade,
                                  NucleoDynamicRuntimeHooks hooks)
 {
   if ((facade == NULL) || (hooks.set_rate == NULL) ||
-      (hooks.disable_all == NULL)) return 0U;
+      (hooks.disable_all == NULL) || (hooks.prepare_direction == NULL)) {
+    return 0U;
+  }
   memset(facade, 0, sizeof(*facade));
   facade->hooks = hooks;
   NucleoDynamicProtocol_Init(&facade->protocol);
@@ -157,6 +159,16 @@ NucleoDynamicProtocolResult NucleoDynamicFacade_Start(
       directions[axis] = facade->staged[axis].direction;
       distances[axis] = facade->staged[axis].distance_pulses;
       if (distances[axis] == 0U) moving_mask &= (uint8_t)~(1U << axis);
+    }
+  }
+  /* Direction is prepared for every participating axis before any shared
+   * TIM1 channel starts. The HAL hook owns the driver's setup-time guarantee. */
+  for (axis = 0U; axis < NUCLEO_DYNAMIC_AXIS_COUNT; ++axis) {
+    if (((moving_mask & (1U << axis)) != 0U) &&
+        (facade->hooks.prepare_direction(facade->hooks.context, axis,
+                                         directions[axis]) == 0U)) {
+      facade->hooks.disable_all(facade->hooks.context);
+      return NUCLEO_DYNAMIC_PROTOCOL_ERR_STATE;
     }
   }
   if ((moving_mask != 0U) &&
