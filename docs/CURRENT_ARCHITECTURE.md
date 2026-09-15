@@ -143,6 +143,14 @@ no overshoot. This is evidence for the algorithm only; the module remains
 disconnected from interrupts, timers and serial dispatch until runtime timing
 and safety-priority integration are tested.
 
+The production-facing dynamic runtime no longer advances position from its
+1 kHz calculation tick. Only the TIM1 HAL falling-edge callback may record an
+emitted X/Y STEP pulse. Reaching the integer target stops that channel; reaching
+it above the configured terminal rate fails closed instead of silently claiming
+a smooth completion. The original phase-accumulator path remains isolated as a
+host-only deterministic trajectory simulation. The HAL callback is still not
+registered in the production protocol-v3 runtime.
+
 A HAL-independent dynamic runtime now wraps that simulation behind explicit
 Arm/Start/Reset transitions and fake rate/disable hooks. STOP, DISARM, safety
 loss, the independent 500 ms heartbeat watchdog, and a missed 1 kHz control

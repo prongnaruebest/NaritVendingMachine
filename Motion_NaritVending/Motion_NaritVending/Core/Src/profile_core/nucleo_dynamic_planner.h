@@ -36,5 +36,9 @@ NucleoConstraintResult NucleoDynamicPlanner_Start(
     uint32_t target_pulses, const NucleoDynamicConfig *config);
 NucleoConstraintResult NucleoDynamicPlanner_Tick(
     NucleoDynamicPlanner *planner, const NucleoDynamicConfig *config);
+NucleoConstraintResult NucleoDynamicPlanner_RealtimeTick(
+    NucleoDynamicPlanner *planner, const NucleoDynamicConfig *config);
+NucleoConstraintResult NucleoDynamicPlanner_RecordEmittedPulse(
+    NucleoDynamicPlanner *planner, const NucleoDynamicConfig *config);
 
 #endif

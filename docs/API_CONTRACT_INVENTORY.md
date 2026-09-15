@@ -97,6 +97,12 @@ command-ID retries are idempotent; reuse with different content is a conflict.
 These frames are compiled candidate code only: protocol v3 does not advertise
 or dispatch them and the Controller must not send them yet.
 
+For the candidate runtime, `emitted_steps` changes only after the HAL confirms
+the falling STEP edge. A 1 kHz planner tick changes the requested timer rate but
+does not change position. Completion therefore means the exact target edge was
+emitted at or below the terminal-rate gate; a predicted/queued edge is never
+reported as completed.
+
 The internal candidate now provides a transport-neutral telemetry snapshot with
 `state`, `terminal_fault`, `command_id`, per-axis `target_steps`,
 `emitted_steps`, `axis_active`, `trajectory_elapsed`, and `safety_permissive`.

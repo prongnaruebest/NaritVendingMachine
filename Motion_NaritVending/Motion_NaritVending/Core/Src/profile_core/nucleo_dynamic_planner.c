@@ -33,8 +33,9 @@ NucleoConstraintResult NucleoDynamicPlanner_Start(
   return NUCLEO_CONSTRAINT_OK;
 }
 
-NucleoConstraintResult NucleoDynamicPlanner_Tick(
-    NucleoDynamicPlanner *planner, const NucleoDynamicConfig *config)
+static NucleoConstraintResult planner_tick(
+    NucleoDynamicPlanner *planner, const NucleoDynamicConfig *config,
+    uint8_t simulate_emitted_pulses)
 {
   uint32_t remaining_pulses;
   uint32_t requested_rate_millihz;
@@ -63,6 +64,7 @@ NucleoConstraintResult NucleoDynamicPlanner_Tick(
     return constraint_result;
   }
   planner->output_rate_millihz = planner->constraint.velocity_millihz;
+  if (simulate_emitted_pulses == 0U) return NUCLEO_CONSTRAINT_OK;
   planner->pulse_phase_millihz_us +=
       (uint64_t)planner->output_rate_millihz *
       config->constraints.control_period_us;
@@ -83,6 +85,44 @@ NucleoConstraintResult NucleoDynamicPlanner_Tick(
   }
   planner->emitted_pulses += (uint32_t)pulses_due;
   if (planner->emitted_pulses == planner->target_pulses) {
+    planner->output_rate_millihz = 0U;
+    NucleoConstraint_Init(&planner->constraint);
+    planner->state = NUCLEO_DYNAMIC_COMPLETE;
+  }
+  return NUCLEO_CONSTRAINT_OK;
+}
+
+NucleoConstraintResult NucleoDynamicPlanner_Tick(
+    NucleoDynamicPlanner *planner, const NucleoDynamicConfig *config)
+{
+  /* This deterministic simulator remains useful for host trajectory proofs. */
+  return planner_tick(planner, config, 1U);
+}
+
+NucleoConstraintResult NucleoDynamicPlanner_RealtimeTick(
+    NucleoDynamicPlanner *planner, const NucleoDynamicConfig *config)
+{
+  /* Realtime position advances only from a confirmed falling STEP edge. */
+  return planner_tick(planner, config, 0U);
+}
+
+NucleoConstraintResult NucleoDynamicPlanner_RecordEmittedPulse(
+    NucleoDynamicPlanner *planner, const NucleoDynamicConfig *config)
+{
+  if ((planner == NULL) || (config == NULL)) {
+    return NUCLEO_CONSTRAINT_ERR_ARGUMENT;
+  }
+  if ((planner->state != NUCLEO_DYNAMIC_RUNNING) ||
+      (planner->emitted_pulses >= planner->target_pulses)) {
+    return NUCLEO_CONSTRAINT_ERR_LIMIT;
+  }
+  ++planner->emitted_pulses;
+  if (planner->emitted_pulses == planner->target_pulses) {
+    if (planner->output_rate_millihz > config->terminal_max_rate_millihz) {
+      planner->state = NUCLEO_DYNAMIC_FAILED;
+      planner->output_rate_millihz = 0U;
+      return NUCLEO_CONSTRAINT_ERR_LIMIT;
+    }
     planner->output_rate_millihz = 0U;
     NucleoConstraint_Init(&planner->constraint);
     planner->state = NUCLEO_DYNAMIC_COMPLETE;

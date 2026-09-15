@@ -49,6 +49,29 @@ int main(void)
       NucleoDynamicRuntime_ControlFault,
       &runtime};
 
+  {
+    NucleoDynamicConfig pulse_config = {
+        {1U, 2500U, 30000U},
+        {1000U, 30000U, 60000U, 50000U, 300000U},
+        5000U};
+    NucleoDynamicRuntimeHooks pulse_hooks = {set_rate, disable_all, &mock};
+    assert(NucleoDynamicRuntime_Init(&runtime, &pulse_config, pulse_hooks) == 1U);
+    assert(NucleoDynamicRuntime_Arm(&runtime, 0ULL, 1U) == 1U);
+    assert(NucleoDynamicRuntime_Start(&runtime, 0U, 1U, 2U) ==
+           NUCLEO_CONSTRAINT_OK);
+    NucleoDynamicRuntime_ControlTick(&runtime, 1000ULL);
+    /* A 1 kHz planner tick must not claim pulses which TIM1 never emitted. */
+    assert(runtime.planner.emitted_pulses == 0U);
+    assert(NucleoDynamicRuntime_OnEmittedPulse(&runtime, 0U) == 1U);
+    assert(runtime.planner.emitted_pulses == 1U);
+    assert(NucleoDynamicRuntime_OnEmittedPulse(&runtime, 0U) == 0U);
+    assert(runtime.planner.state == NUCLEO_DYNAMIC_COMPLETE);
+    assert(runtime.planner.emitted_pulses == 2U && runtime.armed == 0U);
+    mock.rates = 0U;
+    mock.disables = 0U;
+    mock.last_rate_millihz = 0U;
+  }
+
   start_runtime(&runtime, &mock, 0ULL);
   NucleoDynamicRuntime_ControlTick(&runtime, 1000ULL);
   assert(mock.rates == 1U && mock.last_rate_millihz > 0U);

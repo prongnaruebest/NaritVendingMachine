@@ -84,7 +84,7 @@ void NucleoDynamicRuntime_ControlTick(void *context, uint64_t now_us)
     latch_fault(runtime, NUCLEO_DYNAMIC_FAULT_WATCHDOG);
     return;
   }
-  if (NucleoDynamicPlanner_Tick(&runtime->planner, &runtime->config) !=
+  if (NucleoDynamicPlanner_RealtimeTick(&runtime->planner, &runtime->config) !=
       NUCLEO_CONSTRAINT_OK) {
     latch_fault(runtime, NUCLEO_DYNAMIC_FAULT_CONTROL_TICK);
     return;
@@ -96,6 +96,26 @@ void NucleoDynamicRuntime_ControlTick(void *context, uint64_t now_us)
     runtime->hooks.set_rate(runtime->hooks.context, runtime->planner.axis,
                             runtime->planner.output_rate_millihz);
   }
+}
+
+uint8_t NucleoDynamicRuntime_OnEmittedPulse(void *context, uint8_t axis)
+{
+  NucleoDynamicRuntime *runtime = (NucleoDynamicRuntime *)context;
+  NucleoConstraintResult result;
+  if ((runtime == NULL) || (runtime->armed == 0U) ||
+      (runtime->planner.state != NUCLEO_DYNAMIC_RUNNING) ||
+      (axis != runtime->planner.axis)) return 0U;
+  result = NucleoDynamicPlanner_RecordEmittedPulse(
+      &runtime->planner, &runtime->config);
+  if (result != NUCLEO_CONSTRAINT_OK) {
+    latch_fault(runtime, NUCLEO_DYNAMIC_FAULT_TERMINAL_RATE);
+    return 0U;
+  }
+  if (runtime->planner.state == NUCLEO_DYNAMIC_COMPLETE) {
+    runtime->armed = 0U;
+    return 0U;
+  }
+  return 1U;
 }
 
 void NucleoDynamicRuntime_Stop(NucleoDynamicRuntime *runtime)

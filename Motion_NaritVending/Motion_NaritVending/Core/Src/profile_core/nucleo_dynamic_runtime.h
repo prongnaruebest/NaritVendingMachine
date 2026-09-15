@@ -13,7 +13,8 @@ typedef enum {
   NUCLEO_DYNAMIC_FAULT_DISARM,
   NUCLEO_DYNAMIC_FAULT_WATCHDOG,
   NUCLEO_DYNAMIC_FAULT_SAFETY,
-  NUCLEO_DYNAMIC_FAULT_CONTROL_TICK
+  NUCLEO_DYNAMIC_FAULT_CONTROL_TICK,
+  NUCLEO_DYNAMIC_FAULT_TERMINAL_RATE
 } NucleoDynamicFault;
 
 typedef void (*NucleoDynamicSetRateFn)(void *context, uint8_t axis,
@@ -50,6 +51,7 @@ void NucleoDynamicRuntime_Heartbeat(NucleoDynamicRuntime *runtime,
                                     uint64_t now_us,
                                     uint8_t safety_permissive);
 void NucleoDynamicRuntime_ControlTick(void *context, uint64_t now_us);
+uint8_t NucleoDynamicRuntime_OnEmittedPulse(void *context, uint8_t axis);
 void NucleoDynamicRuntime_Stop(NucleoDynamicRuntime *runtime);
 void NucleoDynamicRuntime_Disarm(NucleoDynamicRuntime *runtime);
 void NucleoDynamicRuntime_SafetyLoss(NucleoDynamicRuntime *runtime);
