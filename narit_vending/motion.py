@@ -1021,6 +1021,33 @@ class MotionController:
     def axes(self) -> dict[str, AxisController]:
         return {"x": self.x, "y": self.y, "z": self.z}
 
+    def close(self) -> None:
+        """Stop outputs and release each shared GPIO device exactly once."""
+
+        devices: list[object] = [self.estop]
+        for axis in self.axes().values():
+            axis.stop()
+            if axis.enable is not None:
+                axis.enable.off()
+            devices.extend((axis.pulse, axis.direction, axis.head_limit, axis.tail_limit))
+            if axis.enable is not None:
+                devices.append(axis.enable)
+        devices.extend(
+            device for device in (
+                self.led_idle, self.led_moving, self.led_success,
+                self.alarm_warning, self.alarm_buzzer,
+            ) if device is not None
+        )
+        seen: set[int] = set()
+        for device in devices:
+            identity = id(device)
+            if identity in seen:
+                continue
+            seen.add(identity)
+            close = getattr(device, "close", None)
+            if callable(close):
+                close()
+
     def home_axis(self, axis_name: str, progress: Callable[[str, str], None] | None = None) -> None:
         self._homing.home_axis(axis_name, progress=progress)
 

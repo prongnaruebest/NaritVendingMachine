@@ -1324,6 +1324,7 @@ class MotionService:
             self.picontrol_io.close()
         if self.nucleo_link is not None:
             self.nucleo_link.close()
+        self.controller.close()
 
     def save_configuration(self, payload: dict[str, object]) -> dict[str, object]:
         if self.busy:

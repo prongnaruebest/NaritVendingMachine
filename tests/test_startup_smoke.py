@@ -21,8 +21,15 @@ class StartupSmokeTests(unittest.TestCase):
     def tearDown(self) -> None:
         Device.pin_factory.reset()
 
+    def _service(self, config_path: Path, hardware_path: Path) -> MotionService:
+        """Own every background-capable service for the duration of one test."""
+
+        service = MotionService(config_path, hardware_path)
+        self.addCleanup(service.close)
+        return service
+
     def test_real_configuration_starts_on_mock_gpio_without_motion(self) -> None:
-        service = MotionService(ROOT / "machine_config.json", ROOT / "hardware_config.json")
+        service = self._service(ROOT / "machine_config.json", ROOT / "hardware_config.json")
 
         health = service.health_payload()
         effective = service.effective_config_payload()
@@ -47,7 +54,7 @@ class StartupSmokeTests(unittest.TestCase):
             shutil.copy2(ROOT / "hardware_config.json", hardware_path)
             original_machine = machine_path.read_bytes()
             original_hardware = hardware_path.read_bytes()
-            service = MotionService(machine_path, hardware_path)
+            service = self._service(machine_path, hardware_path)
 
             service.save_configuration(service.get_config())
 
@@ -78,7 +85,7 @@ class StartupSmokeTests(unittest.TestCase):
                 hardware["machine_parameters"]["axes"][axis].update(fields)
             machine_path.write_text(json.dumps(machine), encoding="utf-8")
             hardware_path.write_text(json.dumps(hardware), encoding="utf-8")
-            service = MotionService(machine_path, hardware_path)
+            service = self._service(machine_path, hardware_path)
 
             service.save_configuration(service.get_config())
 
@@ -95,7 +102,7 @@ class StartupSmokeTests(unittest.TestCase):
                 service.save_configuration(unsafe)
 
     def test_manually_enabled_scurve_fails_closed_at_motion_entry_points(self) -> None:
-        service = MotionService(ROOT / "machine_config.json", ROOT / "hardware_config.json")
+        service = self._service(ROOT / "machine_config.json", ROOT / "hardware_config.json")
         staged_x = replace(
             service.controller.config.x,
             scurve_enabled=True,
@@ -129,7 +136,10 @@ class StartupSmokeTests(unittest.TestCase):
                     "supports_sensor_terminated_scurve": False,
                 }
 
-        service = MotionService(ROOT / "machine_config.json", ROOT / "hardware_config.json")
+            def close(self) -> None:
+                pass
+
+        service = self._service(ROOT / "machine_config.json", ROOT / "hardware_config.json")
         service.nucleo_link = StatusPayloadOnlyNucleo()
 
         self.assertEqual(service._profile_route_error(("x",), ProfileOperation.HOME), "")
