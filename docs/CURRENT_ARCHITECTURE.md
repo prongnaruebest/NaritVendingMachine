@@ -91,6 +91,21 @@ intentional until the 1 kHz planner tick, watchdog latency, configuration
 revision checks, and STOP/DISARM semantics are verified together. The former
 F439ZI tree is retained only as a migration reference.
 
+`Core/Inc/nucleo_motion_features.h` is the single compile-time authority for
+that boundary. `NUCLEO_G491_DYNAMIC_MOTION_ENABLED` defaults to zero and drives
+both protocol-v4 dispatch and the TIM6 runtime; a mismatched partial enable is
+a compile error. This prevents a build from advertising dynamic commands while
+its deterministic control timer is absent, or starting that timer while the
+Controller can only negotiate protocol v3.
+
+The hardware-neutral `nucleo_dynamic_app.*` bridge now owns the candidate
+facade and serial dispatcher lifecycle. When the shared gate is enabled it
+routes configuration/position/target/start commands and makes legacy pulse
+inhibition occur before any STOP or DISARM acknowledgement. It exposes the
+heartbeat, 1 kHz control-tick and emitted-pulse boundaries needed by the G491RE
+HAL. With the default gate disabled, initialization returns unavailable and the
+production protocol-v3 serial/motion path remains the only reachable runtime.
+
 The candidate includes a 1 kHz control-tick supervisor and TIM6 adapter. The
 hardware-neutral coordinator connects each accepted tick to the profile
 executor and pulse scheduler and propagates safety loss to an immediate profile

@@ -2,13 +2,10 @@
 #define NUCLEO_DYNAMIC_DISPATCHER_H
 
 #include "nucleo_dynamic_facade.h"
+#include "nucleo_motion_features.h"
 
 #include <stddef.h>
 #include <stdint.h>
-
-#ifndef NUCLEO_DYNAMIC_PROTOCOL_V4_ENABLED
-#define NUCLEO_DYNAMIC_PROTOCOL_V4_ENABLED 0
-#endif
 
 #define NUCLEO_DYNAMIC_COMMAND_LINE_MAX 319U
 

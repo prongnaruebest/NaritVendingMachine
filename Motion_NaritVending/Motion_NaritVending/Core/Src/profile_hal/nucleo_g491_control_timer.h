@@ -2,12 +2,9 @@
 #define NUCLEO_G491_CONTROL_TIMER_H
 
 #include "stm32g4xx_hal.h"
+#include "nucleo_motion_features.h"
 
 #include <stdint.h>
-
-#ifndef NUCLEO_G491_PROFILE_RUNTIME_ENABLED
-#define NUCLEO_G491_PROFILE_RUNTIME_ENABLED 0
-#endif
 
 #define NUCLEO_G491_CONTROL_TIMER_HZ 1000U
 

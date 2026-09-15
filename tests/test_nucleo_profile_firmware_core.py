@@ -112,7 +112,9 @@ def test_dynamic_dispatcher_is_bounded_prioritized_and_feature_gated(
     compile_result = subprocess.run(
         [compiler, "-std=c99", "-Wall", "-Wextra", "-Werror",
          f"-DNUCLEO_DYNAMIC_PROTOCOL_V4_ENABLED={int(feature_enabled)}",
-         f"-I{CORE}", *(str(source) for source in sources), "-lm",
+         f"-I{CORE}",
+         f"-I{ROOT / 'Motion_NaritVending' / 'Motion_NaritVending' / 'Core' / 'Inc'}",
+         *(str(source) for source in sources), "-lm",
          "-o", str(executable)],
         capture_output=True, text=True, timeout=30, check=False,
     )
@@ -122,6 +124,59 @@ def test_dynamic_dispatcher_is_bounded_prioritized_and_feature_gated(
     )
     assert run_result.returncode == 0, run_result.stdout + run_result.stderr
     assert "dynamic dispatcher host tests passed" in run_result.stdout
+
+
+def test_g491_dynamic_feature_gate_rejects_partial_enable(tmp_path: Path):
+    compiler = shutil.which("gcc")
+    if compiler is None:
+        pytest.skip("gcc is required for the firmware host harness")
+    source = tmp_path / "feature_gate.c"
+    source.write_text(
+        '#include "nucleo_motion_features.h"\nint main(void) { return 0; }\n',
+        encoding="utf-8",
+    )
+    include_dir = ROOT / "Motion_NaritVending" / "Motion_NaritVending" / "Core" / "Inc"
+    result = subprocess.run(
+        [compiler, "-std=c99", f"-I{include_dir}",
+         "-DNUCLEO_G491_DYNAMIC_MOTION_ENABLED=1",
+         "-DNUCLEO_DYNAMIC_PROTOCOL_V4_ENABLED=0",
+         str(source), "-o", str(tmp_path / "invalid_gate.exe")],
+        capture_output=True, text=True, timeout=30, check=False,
+    )
+    assert result.returncode != 0
+    assert "must share one gate" in result.stderr
+
+
+@pytest.mark.parametrize("feature_enabled", [False, True])
+def test_dynamic_application_bridge_is_gated_and_prioritizes_emergency_inhibit(
+    tmp_path: Path, feature_enabled: bool,
+):
+    compiler = shutil.which("gcc")
+    if compiler is None:
+        pytest.skip("gcc is required for the firmware host harness")
+    executable = tmp_path / f"dynapp_{int(feature_enabled)}.exe"
+    sources = [
+        CORE / "nucleo_virtual_kp.c", CORE / "nucleo_constraint_envelope.c",
+        CORE / "nucleo_dynamic_planner.c", CORE / "nucleo_dynamic_runtime.c",
+        CORE / "nucleo_dynamic_coordinator.c", CORE / "nucleo_dynamic_protocol.c",
+        CORE / "nucleo_dynamic_facade.c", CORE / "nucleo_dynamic_telemetry.c",
+        CORE / "nucleo_dynamic_dispatcher.c", CORE / "nucleo_dynamic_app.c",
+        ROOT / "tests" / "c_host" / "test_nucleo_dynamic_app.c",
+    ]
+    include_dir = ROOT / "Motion_NaritVending" / "Motion_NaritVending" / "Core" / "Inc"
+    result = subprocess.run(
+        [compiler, "-std=c99", "-Wall", "-Wextra", "-Werror",
+         f"-DNUCLEO_G491_DYNAMIC_MOTION_ENABLED={int(feature_enabled)}",
+         f"-I{CORE}", f"-I{include_dir}", *(str(source) for source in sources),
+         "-lm", "-o", str(executable)],
+        capture_output=True, text=True, timeout=30, check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    run_result = subprocess.run(
+        [str(executable)], capture_output=True, text=True, timeout=10, check=False,
+    )
+    assert run_result.returncode == 0, run_result.stdout + run_result.stderr
+    assert "dynamic application bridge host tests passed" in run_result.stdout
 HARNESS = ROOT / "tests" / "c_host" / "test_nucleo_profile_buffer.c"
 
 
