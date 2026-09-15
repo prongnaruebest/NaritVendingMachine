@@ -13,6 +13,11 @@ int main(void)
   assert(requested_rate_hz == 10000U);
   assert(NucleoVirtualKp_RequestRate(1U, 20000U, &config, &requested_rate_hz) == NUCLEO_VIRTUAL_KP_OK);
   assert(requested_rate_hz == 30000U);
+  config.kp_approach_milliper_s = 500U;
+  assert(NucleoVirtualKp_RequestRateMillihz(0U, 1U, &config,
+                                           &requested_rate_hz) ==
+         NUCLEO_VIRTUAL_KP_OK);
+  assert(requested_rate_hz == 500U);
   config.enabled = 0U;
   config.kp_approach_milliper_s = 0U;
   assert(NucleoVirtualKp_RequestRate(0U, 1U, &config, &requested_rate_hz) == NUCLEO_VIRTUAL_KP_OK);

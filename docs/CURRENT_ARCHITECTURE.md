@@ -104,11 +104,21 @@ gate and is not yet exposed through the serial protocol.
 
 The next candidate layer is an X/Y-only Virtual Kp velocity request. It uses
 fixed-point `kp_approach_milliper_s` and remaining emitted-pulse error to produce
-`requested_rate_hz`, clamps at 50,000 Hz, and returns zero for zero remaining
+`requested_rate_millihz`, clamps at 50,000 Hz, and returns zero for zero remaining
 pulses. With Kp disabled it requests the configured maximum rate. This output is
 not a timer command or a safety constraint: it remains disconnected until the
 S-curve/stopping-feasibility layer can enforce acceleration, deceleration, jerk,
 travel and terminal-pulse requirements. Z is explicitly rejected.
+
+A separate 1 kHz constraint-envelope candidate now consumes that request. Its
+stopping estimate includes the jerk ramp from current commanded acceleration to
+maximum deceleration, the following constant-deceleration distance, one control
+period of latency, and one discrete pulse. Acceleration changes by at most the
+configured jerk per tick. A falling Kp request is never applied as an immediate
+velocity clamp; the commanded velocity follows the bounded deceleration state.
+The module is host-tested but is not connected to the timer/runtime. Exact
+finite completion still belongs to the emitted-pulse scheduler, so the runtime
+feature gate remains disabled pending integrated simulation.
 
 ## Baseline quality status
 

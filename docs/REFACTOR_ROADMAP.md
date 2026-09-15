@@ -119,7 +119,8 @@ Exit criterion: failed health checks roll back safely and no deploy performs mot
 - [x] Define transport-neutral terminal state/reason and emitted-pulse telemetry, plus explicit safe reset/new-command semantics after COMPLETE, FAILED and SAFETY_STOP.
 - [x] Add a bounded, independently capability-gated `PROFILE_STATUS` candidate while leaving it unregistered so deployed protocol-v3 responses remain unchanged.
 - [x] Add a deterministic X/Y-only Virtual Kp velocity-request layer in pulse-domain units; keep it disconnected from timer execution and bounded by the 50 kHz candidate ceiling.
-- [ ] Combine the Kp request with jerk-aware stopping feasibility and terminal completion in the 1 kHz planner state.
+- [x] Combine the Kp request with a 1 kHz jerk-aware constraint envelope that includes ramp-to-deceleration, execution latency and pulse quantization without discontinuous velocity clamping.
+- [ ] Integrate Kp, constraint envelope, pulse phase accumulation and exact emitted-pulse completion in a closed-loop host simulation before connecting the candidate runtime.
 - [ ] Register profile commands and telemetry only in a protocol-v4 dispatcher after end-to-end STOP/DISARM priority and configuration-revision tests pass.
 - [ ] Build firmware artifact and complete operator-controlled mechanical commissioning.
 

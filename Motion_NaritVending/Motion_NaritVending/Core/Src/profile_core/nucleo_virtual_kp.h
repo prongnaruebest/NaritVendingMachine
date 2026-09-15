@@ -21,5 +21,8 @@ typedef enum {
 NucleoVirtualKpResult NucleoVirtualKp_RequestRate(
     uint8_t axis, uint32_t remaining_pulses,
     const NucleoVirtualKpConfig *config, uint32_t *requested_rate_hz);
+NucleoVirtualKpResult NucleoVirtualKp_RequestRateMillihz(
+    uint8_t axis, uint32_t remaining_pulses,
+    const NucleoVirtualKpConfig *config, uint32_t *requested_rate_millihz);
 
 #endif
