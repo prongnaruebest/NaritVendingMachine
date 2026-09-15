@@ -13,6 +13,7 @@ from narit_vending.domain.motion_profile import SevenSegmentSCurve, supports_scu
 
 
 PROFILE_PROTOCOL_MIN_VERSION = 4
+NUCLEO_DYNAMIC_MAX_RATE_MILLIHZ = 50_000_000
 _REVISION_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,63}$")
 PROFILE_CAPABILITIES = frozenset(
     {
@@ -80,6 +81,8 @@ class DynamicAxisConfigCommand:
         ):
             if getattr(self, name) == 0:
                 raise ValueError(f"{name} must be greater than zero")
+        if self.max_velocity_millihz > NUCLEO_DYNAMIC_MAX_RATE_MILLIHZ:
+            raise ValueError("max_velocity_millihz exceeds the 50 kHz firmware ceiling")
 
     def wire_line(self) -> str:
         return " ".join(
@@ -119,6 +122,49 @@ class DynamicTargetCommand:
                 str(self.target_position_pulses), self.configuration_revision,
             )
         )
+
+
+@dataclass(frozen=True)
+class DynamicPositionCommand:
+    """Set the post-Home estimated pulse coordinate while motion is disarmed."""
+
+    axis: str
+    estimated_position_pulses: int
+    configuration_revision: str
+
+    def __post_init__(self) -> None:
+        if not supports_scurve(self.axis):
+            raise ValueError("dynamic position is commissioned for X/Y only")
+        _bounded_uint(self.estimated_position_pulses, "estimated_position_pulses")
+        if not _REVISION_PATTERN.fullmatch(self.configuration_revision):
+            raise ValueError("configuration_revision must contain 1-64 safe ASCII identifier characters")
+
+    def wire_line(self) -> str:
+        return (
+            f"DYN_POSITION {self.axis.upper()} {self.estimated_position_pulses} "
+            f"{self.configuration_revision}"
+        )
+
+
+@dataclass(frozen=True)
+class DynamicStartCommand:
+    """Atomically start the staged X/Y subset belonging to one command ID."""
+
+    command_id: str
+    axes: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        if not _COMMAND_ID_PATTERN.fullmatch(self.command_id):
+            raise ValueError("command_id must contain 1-64 safe ASCII identifier characters")
+        normalized = tuple(axis.lower() for axis in self.axes)
+        if not normalized or len(normalized) != len(set(normalized)):
+            raise ValueError("axes must contain a unique X/Y subset")
+        if any(not supports_scurve(axis) for axis in normalized):
+            raise ValueError("dynamic start is commissioned for X/Y only")
+        object.__setattr__(self, "axes", tuple(sorted(normalized)))
+
+    def wire_line(self) -> str:
+        return f"DYN_START {self.command_id} {''.join(axis.upper() for axis in self.axes)}"
 
 
 def _phase_wire_fields(phases: tuple[dict[str, int | str], ...]) -> list[str]:

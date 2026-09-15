@@ -9,6 +9,8 @@ from narit_vending.domain.nucleo_profile_protocol import (
     SENSOR_TERMINATED_PROFILE_CAPABILITIES,
     BufferedProfileCommand,
     DynamicAxisConfigCommand,
+    DynamicPositionCommand,
+    DynamicStartCommand,
     DynamicTargetCommand,
     NucleoCapabilities,
     SensorTerminatedProfileCommand,
@@ -30,12 +32,16 @@ def test_dynamic_protocol_serializes_integer_units_and_revision() -> None:
         command_id="move-123", axis="Y", target_position_pulses=110_000,
         configuration_revision="cfg-42",
     )
+    position = DynamicPositionCommand("x", 0, "cfg-42")
+    start = DynamicStartCommand("move-123", ("y", "x"))
 
     assert config.wire_line() == (
         "DYN_CONFIG X 0 117000 68824 1 2500 2064720 6882400 "
         "6882400 68824000 cfg-42"
     )
     assert target.wire_line() == "DYN_TARGET move-123 Y 110000 cfg-42"
+    assert position.wire_line() == "DYN_POSITION X 0 cfg-42"
+    assert start.wire_line() == "DYN_START move-123 XY"
 
 
 @pytest.mark.parametrize(
@@ -46,6 +52,7 @@ def test_dynamic_protocol_serializes_integer_units_and_revision() -> None:
         ({"pulses_per_mm_milli": 0}, "greater than zero"),
         ({"kp_approach_milliper_s": 0}, "greater than zero"),
         ({"configuration_revision": "bad revision"}, "safe ASCII"),
+        ({"max_velocity_millihz": 50_000_001}, "50 kHz"),
     ],
 )
 def test_dynamic_config_rejects_unsafe_or_unusable_values(
@@ -71,6 +78,15 @@ def test_dynamic_target_rejects_invalid_identity_axis_and_revision() -> None:
         DynamicTargetCommand("move-1", "z", 1, "cfg-42")
     with pytest.raises(ValueError, match="configuration_revision"):
         DynamicTargetCommand("move-1", "x", 1, "bad revision")
+
+
+def test_dynamic_position_and_start_reject_ambiguous_or_unsupported_input() -> None:
+    with pytest.raises(ValueError, match="X/Y only"):
+        DynamicPositionCommand("z", 0, "cfg-42")
+    with pytest.raises(ValueError, match="unique"):
+        DynamicStartCommand("move-1", ("x", "x"))
+    with pytest.raises(ValueError, match="X/Y only"):
+        DynamicStartCommand("move-1", ("z",))
 
 
 def _command(*, axis: str = "x", sequence: int = 0, command_id: str = "move-1") -> BufferedProfileCommand:

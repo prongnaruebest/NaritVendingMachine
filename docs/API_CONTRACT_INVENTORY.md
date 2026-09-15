@@ -86,7 +86,9 @@ The candidate contract now reserves these integer-only protocol-v4 frames:
 
 ```text
 DYN_CONFIG <axis> <travel_min_pulses> <travel_max_pulses> <pulses_per_mm_milli> <kp_enabled> <kp_approach_milliper_s> <max_velocity_millihz> <max_acceleration_millihz_s> <max_deceleration_millihz_s> <max_jerk_millihz_s2> <configuration_revision>
+DYN_POSITION <axis> <estimated_position_pulses> <configuration_revision>
 DYN_TARGET <command_id> <axis> <target_position_pulses> <configuration_revision>
+DYN_START <command_id> <axis_mask>
 ```
 
 Only X/Y are valid. Configuration is disarmed-only and invalidates the
@@ -96,6 +98,13 @@ axis is busy, or when it is outside the configured travel envelope. Identical
 command-ID retries are idempotent; reuse with different content is a conflict.
 These frames are compiled candidate code only: protocol v3 does not advertise
 or dispatch them and the Controller must not send them yet.
+
+`DYN_POSITION` is disarmed-only and may be sent only after the Controller has
+completed a successful Home/reference operation under the same acknowledged
+configuration revision. `DYN_TARGET` stages data but does not begin pulse
+output. `DYN_START` accepts `X`, `Y`, or canonical `XY` and is the sole atomic
+start boundary; every requested axis must already have a staged target with the
+same command ID.
 
 The candidate facade requires valid `DYN_CONFIG` frames for both X and Y before
 it reports runtime-ready. It stages one or both `DYN_TARGET` frames under the
