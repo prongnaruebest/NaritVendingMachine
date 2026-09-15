@@ -40,6 +40,30 @@ def test_dynamic_protocol_enforces_revision_position_and_idempotency(tmp_path: P
     )
     assert run_result.returncode == 0, run_result.stdout + run_result.stderr
     assert "dynamic protocol host tests passed" in run_result.stdout
+
+
+def test_dynamic_coordinator_completes_xy_independently_and_stops_globally(tmp_path: Path):
+    compiler = shutil.which("gcc")
+    if compiler is None:
+        pytest.skip("gcc is required for the firmware host harness")
+    executable = tmp_path / "dynamic_coordinator_test.exe"
+    sources = [
+        CORE / "nucleo_virtual_kp.c", CORE / "nucleo_constraint_envelope.c",
+        CORE / "nucleo_dynamic_planner.c", CORE / "nucleo_dynamic_runtime.c",
+        CORE / "nucleo_dynamic_coordinator.c",
+        ROOT / "tests" / "c_host" / "test_nucleo_dynamic_coordinator.c",
+    ]
+    compile_result = subprocess.run(
+        [compiler, "-std=c99", "-Wall", "-Wextra", "-Werror", f"-I{CORE}",
+         *(str(source) for source in sources), "-lm", "-o", str(executable)],
+        capture_output=True, text=True, timeout=30, check=False,
+    )
+    assert compile_result.returncode == 0, compile_result.stdout + compile_result.stderr
+    run_result = subprocess.run(
+        [str(executable)], capture_output=True, text=True, timeout=10, check=False,
+    )
+    assert run_result.returncode == 0, run_result.stdout + run_result.stderr
+    assert "dynamic coordinator host tests passed" in run_result.stdout
 HARNESS = ROOT / "tests" / "c_host" / "test_nucleo_profile_buffer.c"
 
 

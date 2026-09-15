@@ -151,6 +151,14 @@ a smooth completion. The original phase-accumulator path remains isolated as a
 host-only deterministic trajectory simulation. The HAL callback is still not
 registered in the production protocol-v3 runtime.
 
+An X/Y coordinator now composes two independent dynamic runtimes. A coordinated
+start is atomic at the software boundary: if either axis cannot arm/start, both
+are disarmed and no partial command remains active. Each axis completes from its
+own emitted STEP count, so one axis may finish while the other continues. STOP,
+DISARM, safety loss, watchdog failure, or control-tick failure remain global and
+disable both TIM1 channels. Host tests cover independent completion and global
+safety shutdown; the coordinator is still behind the disabled production gate.
+
 A HAL-independent dynamic runtime now wraps that simulation behind explicit
 Arm/Start/Reset transitions and fake rate/disable hooks. STOP, DISARM, safety
 loss, the independent 500 ms heartbeat watchdog, and a missed 1 kHz control

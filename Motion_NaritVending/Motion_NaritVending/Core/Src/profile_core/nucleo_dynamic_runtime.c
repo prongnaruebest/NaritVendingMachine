@@ -8,7 +8,8 @@ static void latch_fault(NucleoDynamicRuntime *runtime,
 {
   if ((runtime == NULL) || (runtime->initialized == 0U)) return;
   runtime->armed = 0U;
-  runtime->fault = fault;
+  /* Preserve the initiating safety cause when global shutdown reaches peers. */
+  if (runtime->fault == NUCLEO_DYNAMIC_FAULT_NONE) runtime->fault = fault;
   runtime->planner.output_rate_millihz = 0U;
   if (runtime->planner.state == NUCLEO_DYNAMIC_RUNNING) {
     runtime->planner.state = NUCLEO_DYNAMIC_FAILED;
