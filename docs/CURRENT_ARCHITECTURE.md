@@ -133,6 +133,15 @@ no overshoot. This is evidence for the algorithm only; the module remains
 disconnected from interrupts, timers and serial dispatch until runtime timing
 and safety-priority integration are tested.
 
+A HAL-independent dynamic runtime now wraps that simulation behind explicit
+Arm/Start/Reset transitions and fake rate/disable hooks. STOP, DISARM, safety
+loss, the independent 500 ms heartbeat watchdog, and a missed 1 kHz control
+deadline all latch a terminal reason, clear Arm, set output rate to zero, and
+call global disable. No fault path auto-resumes; a safe explicit Reset is
+required and Reset never arms or starts motion. Host tests exercise every stop
+source after motion has begun. The runtime remains unregistered and therefore
+cannot affect the deployed protocol-v3 firmware.
+
 ## Baseline quality status
 
 - Automated suite before structural extraction: 190 tests passed and 18 subtests passed.
