@@ -995,7 +995,12 @@ class MotionService:
         if not isinstance(machine_config, MachineConfig):
             return ""
         nucleo_link = getattr(self, "nucleo_link", None)
-        nucleo_status = nucleo_link.status() if nucleo_link is not None else {}
+        # NucleoLink's public transport contract is status_payload().  Do not
+        # call AxisController.status() semantics on the USB link: the live
+        # G491RE adapter deliberately has no status() method, and doing so used
+        # to reject Home/limit commands before any safety-approved pulse could
+        # be generated.
+        nucleo_status = nucleo_link.status_payload() if nucleo_link is not None else {}
         capability_ready = bool(nucleo_status.get("supports_buffered_scurve", False))
         sensor_termination_ready = bool(nucleo_status.get("supports_sensor_terminated_scurve", False))
         for axis_name in axes:
@@ -1389,7 +1394,7 @@ class MotionService:
                 "scurve_enabled" in axis_payload or current_axis.scurve_enabled is not None
             ):
                 scurve_enabled = _config_boolean(axis_payload, "scurve_enabled")
-                nucleo_status = self.nucleo_link.status() if self.nucleo_link is not None else {}
+                nucleo_status = self.nucleo_link.status_payload() if self.nucleo_link is not None else {}
                 if scurve_enabled and not bool(nucleo_status.get("supports_buffered_scurve", False)):
                     raise APIInputError(
                         f"{axis_name.upper()}: S-curve cannot be enabled until NUCLEO handshake confirms buffered profile support"

@@ -11,6 +11,7 @@ os.environ["GPIOZERO_PIN_FACTORY"] = "mock"
 from gpiozero import Device
 
 from narit_vending.webapp import APIInputError, MotionService
+from narit_vending.domain.motion_profile_routing import ProfileOperation
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -117,6 +118,21 @@ class StartupSmokeTests(unittest.TestCase):
         for result in results:
             self.assertFalse(result["ok"])
             self.assertIn("blocked", result["error"])
+
+    def test_live_nucleo_contract_allows_legacy_home_route(self) -> None:
+        """Regression: an enabled USB link exposes status_payload(), not status()."""
+
+        class StatusPayloadOnlyNucleo:
+            def status_payload(self) -> dict[str, bool]:
+                return {
+                    "supports_buffered_scurve": False,
+                    "supports_sensor_terminated_scurve": False,
+                }
+
+        service = MotionService(ROOT / "machine_config.json", ROOT / "hardware_config.json")
+        service.nucleo_link = StatusPayloadOnlyNucleo()
+
+        self.assertEqual(service._profile_route_error(("x",), ProfileOperation.HOME), "")
 
 
 if __name__ == "__main__":
