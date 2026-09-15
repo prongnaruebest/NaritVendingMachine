@@ -99,6 +99,16 @@ NucleoDynamicProtocolResult NucleoDynamicFacade_SetPosition(
       &facade->protocol, axis, estimated_position_pulses);
 }
 
+NucleoDynamicProtocolResult NucleoDynamicFacade_ApplyPosition(
+    NucleoDynamicFacade *facade, const char *line, uint8_t armed)
+{
+  if ((facade == NULL) || (facade->runtime_ready == 0U) ||
+      (facade->coordinator.active_mask != 0U)) {
+    return NUCLEO_DYNAMIC_PROTOCOL_ERR_STATE;
+  }
+  return NucleoDynamicProtocol_ApplyPosition(&facade->protocol, line, armed);
+}
+
 NucleoDynamicProtocolResult NucleoDynamicFacade_StageTarget(
     NucleoDynamicFacade *facade, const char *line)
 {
@@ -129,12 +139,16 @@ NucleoDynamicProtocolResult NucleoDynamicFacade_Start(
 {
   uint8_t directions[NUCLEO_DYNAMIC_AXIS_COUNT] = {0U, 0U};
   uint32_t distances[NUCLEO_DYNAMIC_AXIS_COUNT] = {0U, 0U};
+  uint8_t moving_mask;
   uint8_t axis;
   if ((facade == NULL) || (command_id == NULL) ||
       (facade->runtime_ready == 0U) || (axis_mask == 0U) ||
-      (axis_mask > 3U) || ((facade->staged_mask & axis_mask) != axis_mask)) {
+      (axis_mask > 3U) || (safety_permissive == 0U) ||
+      (facade->coordinator.active_mask != 0U) ||
+      ((facade->staged_mask & axis_mask) != axis_mask)) {
     return NUCLEO_DYNAMIC_PROTOCOL_ERR_STATE;
   }
+  moving_mask = axis_mask;
   for (axis = 0U; axis < NUCLEO_DYNAMIC_AXIS_COUNT; ++axis) {
     if ((axis_mask & (1U << axis)) != 0U) {
       if (strcmp(facade->staged[axis].command_id, command_id) != 0) {
@@ -142,24 +156,35 @@ NucleoDynamicProtocolResult NucleoDynamicFacade_Start(
       }
       directions[axis] = facade->staged[axis].direction;
       distances[axis] = facade->staged[axis].distance_pulses;
-      if (distances[axis] == 0U) {
-        NucleoDynamicProtocol_CommitTarget(
-            &facade->protocol, &facade->staged[axis]);
-        axis_mask &= (uint8_t)~(1U << axis);
-      }
+      if (distances[axis] == 0U) moving_mask &= (uint8_t)~(1U << axis);
     }
   }
-  if (axis_mask == 0U) {
-    facade->staged_mask = 0U;
-    return NUCLEO_DYNAMIC_PROTOCOL_OK;
-  }
-  if (NucleoDynamicCoordinator_Start(&facade->coordinator, axis_mask,
-                                     directions, distances, now_us,
-                                     safety_permissive) == 0U) {
+  if ((moving_mask != 0U) &&
+      (NucleoDynamicCoordinator_Start(&facade->coordinator, moving_mask,
+                                      directions, distances, now_us, 1U) == 0U)) {
     return NUCLEO_DYNAMIC_PROTOCOL_ERR_STATE;
   }
-  facade->staged_mask = axis_mask;
+  /* Commit no-op axes only after every moving axis starts successfully. */
+  for (axis = 0U; axis < NUCLEO_DYNAMIC_AXIS_COUNT; ++axis) {
+    if (((axis_mask & (1U << axis)) != 0U) && (distances[axis] == 0U)) {
+      NucleoDynamicProtocol_CommitTarget(&facade->protocol,
+                                         &facade->staged[axis]);
+    }
+  }
+  facade->staged_mask = moving_mask;
   return NUCLEO_DYNAMIC_PROTOCOL_OK;
+}
+
+NucleoDynamicProtocolResult NucleoDynamicFacade_StartLine(
+    NucleoDynamicFacade *facade, const char *line, uint64_t now_us,
+    uint8_t safety_permissive)
+{
+  NucleoDynamicStart start;
+  NucleoDynamicProtocolResult result =
+      NucleoDynamicProtocol_ParseStart(line, &start);
+  if (result != NUCLEO_DYNAMIC_PROTOCOL_OK) return result;
+  return NucleoDynamicFacade_Start(facade, start.command_id, start.axis_mask,
+                                   now_us, safety_permissive);
 }
 
 void NucleoDynamicFacade_Heartbeat(NucleoDynamicFacade *facade,

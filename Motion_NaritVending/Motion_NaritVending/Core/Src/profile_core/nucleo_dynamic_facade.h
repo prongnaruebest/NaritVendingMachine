@@ -23,11 +23,16 @@ NucleoDynamicProtocolResult NucleoDynamicFacade_ApplyConfig(
 NucleoDynamicProtocolResult NucleoDynamicFacade_SetPosition(
     NucleoDynamicFacade *facade, uint8_t axis,
     uint32_t estimated_position_pulses);
+NucleoDynamicProtocolResult NucleoDynamicFacade_ApplyPosition(
+    NucleoDynamicFacade *facade, const char *line, uint8_t armed);
 NucleoDynamicProtocolResult NucleoDynamicFacade_StageTarget(
     NucleoDynamicFacade *facade, const char *line);
 NucleoDynamicProtocolResult NucleoDynamicFacade_Start(
     NucleoDynamicFacade *facade, const char *command_id, uint8_t axis_mask,
     uint64_t now_us, uint8_t safety_permissive);
+NucleoDynamicProtocolResult NucleoDynamicFacade_StartLine(
+    NucleoDynamicFacade *facade, const char *line, uint64_t now_us,
+    uint8_t safety_permissive);
 void NucleoDynamicFacade_Heartbeat(NucleoDynamicFacade *facade,
                                    uint64_t now_us,
                                    uint8_t safety_permissive);

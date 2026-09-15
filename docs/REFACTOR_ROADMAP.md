@@ -122,7 +122,7 @@ Exit criterion: failed health checks roll back safely and no deploy performs mot
 - [x] Combine the Kp request with a 1 kHz jerk-aware constraint envelope that includes ramp-to-deceleration, execution latency and pulse quantization without discontinuous velocity clamping.
 - [x] Integrate Kp, constraint envelope, 64-bit fractional pulse phase and exact integer completion in host simulation for zero, one, short and long X/Y moves without overshoot.
 - [x] Connect the dynamic planner to a fake 1 kHz runtime/timer harness and prove STOP, DISARM, safety loss, 500 ms watchdog and deadline-loss priority with latched no-auto-resume behavior.
-- [ ] Add configuration-revision and command-ID ownership to the dynamic runtime before defining any protocol-v4 start command.
+- [x] Add configuration-revision and command-ID ownership to the dynamic runtime before defining any protocol-v4 start command. (`DYN_CONFIG`, disarmed/revision-bound `DYN_POSITION`, staged `DYN_TARGET` and atomic `DYN_START` are joined by a host-tested facade; production dispatch remains gated off.)
 - [ ] Register profile commands and telemetry only in a protocol-v4 dispatcher after end-to-end STOP/DISARM priority and configuration-revision tests pass.
 - [ ] Build firmware artifact and complete operator-controlled mechanical commissioning.
 

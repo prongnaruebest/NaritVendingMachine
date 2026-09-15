@@ -42,6 +42,11 @@ typedef struct {
 } NucleoDynamicTarget;
 
 typedef struct {
+  char command_id[NUCLEO_DYNAMIC_IDENTIFIER_MAX + 1U];
+  uint8_t axis_mask;
+} NucleoDynamicStart;
+
+typedef struct {
   NucleoDynamicAxisProtocolConfig config[NUCLEO_DYNAMIC_AXIS_COUNT];
   uint32_t estimated_position_pulses[NUCLEO_DYNAMIC_AXIS_COUNT];
   uint32_t last_target_position_pulses[NUCLEO_DYNAMIC_AXIS_COUNT];
@@ -56,9 +61,13 @@ NucleoDynamicProtocolResult NucleoDynamicProtocol_ApplyConfig(
 NucleoDynamicProtocolResult NucleoDynamicProtocol_SetPosition(
     NucleoDynamicProtocolState *state, uint8_t axis,
     uint32_t estimated_position_pulses);
+NucleoDynamicProtocolResult NucleoDynamicProtocol_ApplyPosition(
+    NucleoDynamicProtocolState *state, const char *line, uint8_t armed);
 NucleoDynamicProtocolResult NucleoDynamicProtocol_ParseTarget(
     NucleoDynamicProtocolState *state, const char *line, uint8_t busy,
     NucleoDynamicTarget *target);
+NucleoDynamicProtocolResult NucleoDynamicProtocol_ParseStart(
+    const char *line, NucleoDynamicStart *start);
 void NucleoDynamicProtocol_CommitTarget(
     NucleoDynamicProtocolState *state, const NucleoDynamicTarget *target);
 

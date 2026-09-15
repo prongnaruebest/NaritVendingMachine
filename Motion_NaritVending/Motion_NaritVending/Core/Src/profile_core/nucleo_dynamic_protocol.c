@@ -7,6 +7,8 @@
 #define DYNAMIC_LINE_MAX 320U
 #define DYNAMIC_CONFIG_TOKEN_COUNT 12U
 #define DYNAMIC_TARGET_TOKEN_COUNT 5U
+#define DYNAMIC_POSITION_TOKEN_COUNT 4U
+#define DYNAMIC_START_TOKEN_COUNT 3U
 
 static uint8_t valid_identifier(const char *value)
 {
@@ -137,6 +139,37 @@ NucleoDynamicProtocolResult NucleoDynamicProtocol_SetPosition(
   return NUCLEO_DYNAMIC_PROTOCOL_OK;
 }
 
+NucleoDynamicProtocolResult NucleoDynamicProtocol_ApplyPosition(
+    NucleoDynamicProtocolState *state, const char *line, uint8_t armed)
+{
+  char copy[DYNAMIC_LINE_MAX];
+  char *tokens[DYNAMIC_POSITION_TOKEN_COUNT];
+  uint8_t count = 0U;
+  uint8_t axis;
+  uint32_t estimated_position_pulses;
+  if ((state == NULL) || (line == NULL)) {
+    return NUCLEO_DYNAMIC_PROTOCOL_ERR_FORMAT;
+  }
+  if (armed != 0U) return NUCLEO_DYNAMIC_PROTOCOL_ERR_STATE;
+  if ((tokenize(line, copy, tokens, DYNAMIC_POSITION_TOKEN_COUNT, &count) == 0U) ||
+      (count != DYNAMIC_POSITION_TOKEN_COUNT) ||
+      (strcmp(tokens[0], "DYN_POSITION") != 0)) {
+    return NUCLEO_DYNAMIC_PROTOCOL_ERR_FORMAT;
+  }
+  if (parse_axis(tokens[1], &axis) == 0U) {
+    return NUCLEO_DYNAMIC_PROTOCOL_ERR_AXIS;
+  }
+  if (parse_u32(tokens[2], &estimated_position_pulses) == 0U) {
+    return NUCLEO_DYNAMIC_PROTOCOL_ERR_RANGE;
+  }
+  if ((state->config[axis].valid == 0U) ||
+      (strcmp(tokens[3], state->config[axis].configuration_revision) != 0)) {
+    return NUCLEO_DYNAMIC_PROTOCOL_ERR_REVISION;
+  }
+  return NucleoDynamicProtocol_SetPosition(state, axis,
+                                           estimated_position_pulses);
+}
+
 NucleoDynamicProtocolResult NucleoDynamicProtocol_ParseTarget(
     NucleoDynamicProtocolState *state, const char *line, uint8_t busy,
     NucleoDynamicTarget *target)
@@ -198,4 +231,27 @@ void NucleoDynamicProtocol_CommitTarget(
   state->last_target_position_pulses[axis] = target->target_position_pulses;
   strcpy(state->last_command_id[axis], target->command_id);
   strcpy(state->last_command_revision[axis], target->configuration_revision);
+}
+
+NucleoDynamicProtocolResult NucleoDynamicProtocol_ParseStart(
+    const char *line, NucleoDynamicStart *start)
+{
+  char copy[DYNAMIC_LINE_MAX];
+  char *tokens[DYNAMIC_START_TOKEN_COUNT];
+  uint8_t count = 0U;
+  if ((line == NULL) || (start == NULL)) {
+    return NUCLEO_DYNAMIC_PROTOCOL_ERR_FORMAT;
+  }
+  if ((tokenize(line, copy, tokens, DYNAMIC_START_TOKEN_COUNT, &count) == 0U) ||
+      (count != DYNAMIC_START_TOKEN_COUNT) ||
+      (strcmp(tokens[0], "DYN_START") != 0) ||
+      (valid_identifier(tokens[1]) == 0U)) {
+    return NUCLEO_DYNAMIC_PROTOCOL_ERR_FORMAT;
+  }
+  if (strcmp(tokens[2], "X") == 0) start->axis_mask = 1U;
+  else if (strcmp(tokens[2], "Y") == 0) start->axis_mask = 2U;
+  else if (strcmp(tokens[2], "XY") == 0) start->axis_mask = 3U;
+  else return NUCLEO_DYNAMIC_PROTOCOL_ERR_AXIS;
+  strcpy(start->command_id, tokens[1]);
+  return NUCLEO_DYNAMIC_PROTOCOL_OK;
 }

@@ -43,9 +43,11 @@ int main(void)
   assert(NucleoDynamicFacade_ApplyConfig(&facade, config_x, 1U) ==
          NUCLEO_DYNAMIC_PROTOCOL_ERR_STATE);
 
-  assert(NucleoDynamicFacade_SetPosition(&facade, 0U, 100U) ==
+  assert(NucleoDynamicFacade_ApplyPosition(
+             &facade, "DYN_POSITION X 100 cfg-1", 0U) ==
          NUCLEO_DYNAMIC_PROTOCOL_OK);
-  assert(NucleoDynamicFacade_SetPosition(&facade, 1U, 200U) ==
+  assert(NucleoDynamicFacade_ApplyPosition(
+             &facade, "DYN_POSITION Y 200 cfg-1", 0U) ==
          NUCLEO_DYNAMIC_PROTOCOL_OK);
   assert(NucleoDynamicFacade_StageTarget(
              &facade, "DYN_TARGET move-1 X 103 cfg-1") ==
@@ -53,7 +55,8 @@ int main(void)
   assert(NucleoDynamicFacade_StageTarget(
              &facade, "DYN_TARGET move-1 Y 195 cfg-1") ==
          NUCLEO_DYNAMIC_PROTOCOL_OK);
-  assert(NucleoDynamicFacade_Start(&facade, "move-1", 3U, 0ULL, 1U) ==
+  assert(NucleoDynamicFacade_StartLine(
+             &facade, "DYN_START move-1 XY", 0ULL, 1U) ==
          NUCLEO_DYNAMIC_PROTOCOL_OK);
   NucleoDynamicFacade_ControlTick(&facade, 1000ULL);
   assert(mock.rate_millihz[0] > 0U && mock.rate_millihz[1] > 0U);
@@ -82,9 +85,22 @@ int main(void)
          NUCLEO_DYNAMIC_PROTOCOL_ERR_RANGE);
 
   assert(NucleoDynamicFacade_StageTarget(
+             &facade, "DYN_TARGET no-op X 103 cfg-1") ==
+         NUCLEO_DYNAMIC_PROTOCOL_OK);
+  assert(NucleoDynamicFacade_StartLine(
+             &facade, "DYN_START no-op X", 2000ULL, 0U) ==
+         NUCLEO_DYNAMIC_PROTOCOL_ERR_STATE);
+  assert(facade.protocol.last_command_id[0][0] != 'n');
+  assert(NucleoDynamicFacade_StartLine(
+             &facade, "DYN_START no-op X", 2000ULL, 1U) ==
+         NUCLEO_DYNAMIC_PROTOCOL_OK);
+  assert(facade.protocol.last_command_id[0][0] == 'n');
+
+  assert(NucleoDynamicFacade_StageTarget(
              &facade, "DYN_TARGET move-2 X 500 cfg-1") ==
          NUCLEO_DYNAMIC_PROTOCOL_OK);
-  assert(NucleoDynamicFacade_Start(&facade, "move-2", 1U, 2000ULL, 1U) ==
+  assert(NucleoDynamicFacade_StartLine(
+             &facade, "DYN_START move-2 X", 3000ULL, 1U) ==
          NUCLEO_DYNAMIC_PROTOCOL_OK);
   NucleoDynamicFacade_Stop(&facade);
   assert(facade.protocol.position_valid[0] == 0U);

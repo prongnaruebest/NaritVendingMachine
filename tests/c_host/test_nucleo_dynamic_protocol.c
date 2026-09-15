@@ -21,6 +21,15 @@ int main(void)
   assert(NucleoDynamicProtocol_ParseTarget(
              &state, "DYN_TARGET move-1 X 100000 cfg-42", 0U, &target) ==
          NUCLEO_DYNAMIC_PROTOCOL_ERR_POSITION);
+  assert(NucleoDynamicProtocol_ApplyPosition(
+             &state, "DYN_POSITION X 500 stale", 0U) ==
+         NUCLEO_DYNAMIC_PROTOCOL_ERR_REVISION);
+  assert(NucleoDynamicProtocol_ApplyPosition(
+             &state, "DYN_POSITION X 500 cfg-42", 1U) ==
+         NUCLEO_DYNAMIC_PROTOCOL_ERR_STATE);
+  assert(NucleoDynamicProtocol_ApplyPosition(
+             &state, "DYN_POSITION X 500 cfg-42", 0U) ==
+         NUCLEO_DYNAMIC_PROTOCOL_OK);
   assert(NucleoDynamicProtocol_SetPosition(&state, 0U, 500U) ==
          NUCLEO_DYNAMIC_PROTOCOL_OK);
   assert(NucleoDynamicProtocol_ParseTarget(
@@ -69,6 +78,14 @@ int main(void)
   assert(NucleoDynamicProtocol_ParseTarget(
              &state, "DYN_TARGET", 0U, &target) ==
          NUCLEO_DYNAMIC_PROTOCOL_ERR_FORMAT);
+  {
+    NucleoDynamicStart start;
+    assert(NucleoDynamicProtocol_ParseStart(
+               "DYN_START move-1 XY", &start) == NUCLEO_DYNAMIC_PROTOCOL_OK);
+    assert(start.axis_mask == 3U && strcmp(start.command_id, "move-1") == 0);
+    assert(NucleoDynamicProtocol_ParseStart(
+               "DYN_START move-1 YX", &start) == NUCLEO_DYNAMIC_PROTOCOL_ERR_AXIS);
+  }
   puts("dynamic protocol host tests passed");
   return 0;
 }
