@@ -13,6 +13,7 @@ from narit_vending.domain.motion_profile import SevenSegmentSCurve, supports_scu
 
 
 PROFILE_PROTOCOL_MIN_VERSION = 4
+_REVISION_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,63}$")
 PROFILE_CAPABILITIES = frozenset(
     {
         "continuous_profile",
@@ -26,6 +27,98 @@ SENSOR_TERMINATED_PROFILE_CAPABILITIES = frozenset(
     {"sensor_terminated_profile", "axis_sensor_stop", "profile_watchdog"}
 )
 _COMMAND_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,63}$")
+
+
+def _bounded_uint(value: int, name: str, maximum: int = 0xFFFFFFFF) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= maximum:
+        raise ValueError(f"{name} must be an integer within 0-{maximum}")
+    return value
+
+
+@dataclass(frozen=True)
+class DynamicAxisConfigCommand:
+    """Integer-only protocol-v4 X/Y planner configuration.
+
+    The Controller performs all engineering-unit conversion before serialization;
+    integer pulse-domain fields keep the firmware parser deterministic and avoid
+    locale-dependent floating-point input on the machine boundary.
+    """
+
+    axis: str
+    travel_min_pulses: int
+    travel_max_pulses: int
+    pulses_per_mm_milli: int
+    kp_enabled: bool
+    kp_approach_milliper_s: int
+    max_velocity_millihz: int
+    max_acceleration_millihz_s: int
+    max_deceleration_millihz_s: int
+    max_jerk_millihz_s2: int
+    configuration_revision: str
+
+    def __post_init__(self) -> None:
+        if not supports_scurve(self.axis):
+            raise ValueError("dynamic motion configuration is commissioned for X/Y only")
+        if not _REVISION_PATTERN.fullmatch(self.configuration_revision):
+            raise ValueError("configuration_revision must contain 1-64 safe ASCII identifier characters")
+        for name in (
+            "travel_min_pulses", "travel_max_pulses", "pulses_per_mm_milli",
+            "kp_approach_milliper_s", "max_velocity_millihz",
+            "max_acceleration_millihz_s", "max_deceleration_millihz_s",
+            "max_jerk_millihz_s2",
+        ):
+            _bounded_uint(getattr(self, name), name)
+        if self.travel_max_pulses <= self.travel_min_pulses:
+            raise ValueError("travel_max_pulses must be greater than travel_min_pulses")
+        if self.pulses_per_mm_milli == 0:
+            raise ValueError("pulses_per_mm_milli must be greater than zero")
+        if self.kp_enabled and self.kp_approach_milliper_s == 0:
+            raise ValueError("kp_approach_milliper_s must be greater than zero when Kp is enabled")
+        for name in (
+            "max_velocity_millihz", "max_acceleration_millihz_s",
+            "max_deceleration_millihz_s", "max_jerk_millihz_s2",
+        ):
+            if getattr(self, name) == 0:
+                raise ValueError(f"{name} must be greater than zero")
+
+    def wire_line(self) -> str:
+        return " ".join(
+            (
+                "DYN_CONFIG", self.axis.upper(), str(self.travel_min_pulses),
+                str(self.travel_max_pulses), str(self.pulses_per_mm_milli),
+                "1" if self.kp_enabled else "0", str(self.kp_approach_milliper_s),
+                str(self.max_velocity_millihz), str(self.max_acceleration_millihz_s),
+                str(self.max_deceleration_millihz_s), str(self.max_jerk_millihz_s2),
+                self.configuration_revision,
+            )
+        )
+
+
+@dataclass(frozen=True)
+class DynamicTargetCommand:
+    """Absolute pulse target tied to one acknowledged configuration revision."""
+
+    command_id: str
+    axis: str
+    target_position_pulses: int
+    configuration_revision: str
+
+    def __post_init__(self) -> None:
+        if not _COMMAND_ID_PATTERN.fullmatch(self.command_id):
+            raise ValueError("command_id must contain 1-64 safe ASCII identifier characters")
+        if not supports_scurve(self.axis):
+            raise ValueError("dynamic target motion is commissioned for X/Y only")
+        _bounded_uint(self.target_position_pulses, "target_position_pulses")
+        if not _REVISION_PATTERN.fullmatch(self.configuration_revision):
+            raise ValueError("configuration_revision must contain 1-64 safe ASCII identifier characters")
+
+    def wire_line(self) -> str:
+        return " ".join(
+            (
+                "DYN_TARGET", self.command_id, self.axis.upper(),
+                str(self.target_position_pulses), self.configuration_revision,
+            )
+        )
 
 
 def _phase_wire_fields(phases: tuple[dict[str, int | str], ...]) -> list[str]:

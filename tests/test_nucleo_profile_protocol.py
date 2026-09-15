@@ -8,11 +8,69 @@ from narit_vending.domain.nucleo_profile_protocol import (
     PROFILE_CAPABILITIES,
     SENSOR_TERMINATED_PROFILE_CAPABILITIES,
     BufferedProfileCommand,
+    DynamicAxisConfigCommand,
+    DynamicTargetCommand,
     NucleoCapabilities,
     SensorTerminatedProfileCommand,
     validate_profile_sequence,
 )
 from narit_vending.nucleo import NucleoLink
+
+
+def test_dynamic_protocol_serializes_integer_units_and_revision() -> None:
+    config = DynamicAxisConfigCommand(
+        axis="x", travel_min_pulses=0, travel_max_pulses=117_000,
+        pulses_per_mm_milli=68_824, kp_enabled=True,
+        kp_approach_milliper_s=2_500, max_velocity_millihz=2_064_720,
+        max_acceleration_millihz_s=6_882_400,
+        max_deceleration_millihz_s=6_882_400,
+        max_jerk_millihz_s2=68_824_000, configuration_revision="cfg-42",
+    )
+    target = DynamicTargetCommand(
+        command_id="move-123", axis="Y", target_position_pulses=110_000,
+        configuration_revision="cfg-42",
+    )
+
+    assert config.wire_line() == (
+        "DYN_CONFIG X 0 117000 68824 1 2500 2064720 6882400 "
+        "6882400 68824000 cfg-42"
+    )
+    assert target.wire_line() == "DYN_TARGET move-123 Y 110000 cfg-42"
+
+
+@pytest.mark.parametrize(
+    ("changes", "message"),
+    [
+        ({"axis": "z"}, "X/Y only"),
+        ({"travel_max_pulses": 0}, "greater than"),
+        ({"pulses_per_mm_milli": 0}, "greater than zero"),
+        ({"kp_approach_milliper_s": 0}, "greater than zero"),
+        ({"configuration_revision": "bad revision"}, "safe ASCII"),
+    ],
+)
+def test_dynamic_config_rejects_unsafe_or_unusable_values(
+    changes: dict[str, object], message: str,
+) -> None:
+    values: dict[str, object] = {
+        "axis": "x", "travel_min_pulses": 0, "travel_max_pulses": 117_000,
+        "pulses_per_mm_milli": 68_824, "kp_enabled": True,
+        "kp_approach_milliper_s": 2_500, "max_velocity_millihz": 2_064_720,
+        "max_acceleration_millihz_s": 6_882_400,
+        "max_deceleration_millihz_s": 6_882_400,
+        "max_jerk_millihz_s2": 68_824_000, "configuration_revision": "cfg-42",
+    }
+    values.update(changes)
+    with pytest.raises(ValueError, match=message):
+        DynamicAxisConfigCommand(**values)  # type: ignore[arg-type]
+
+
+def test_dynamic_target_rejects_invalid_identity_axis_and_revision() -> None:
+    with pytest.raises(ValueError, match="command_id"):
+        DynamicTargetCommand("bad command", "x", 1, "cfg-42")
+    with pytest.raises(ValueError, match="X/Y only"):
+        DynamicTargetCommand("move-1", "z", 1, "cfg-42")
+    with pytest.raises(ValueError, match="configuration_revision"):
+        DynamicTargetCommand("move-1", "x", 1, "bad revision")
 
 
 def _command(*, axis: str = "x", sequence: int = 0, command_id: str = "move-1") -> BufferedProfileCommand:

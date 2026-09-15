@@ -152,6 +152,19 @@ required and Reset never arms or starts motion. Host tests exercise every stop
 source after motion has begun. The runtime remains unregistered and therefore
 cannot affect the deployed protocol-v3 firmware.
 
+The next protocol-v4 boundary is now defined and host-tested without being
+registered in the production UART dispatcher. `DYN_CONFIG` carries X/Y travel,
+scale, Virtual-Kp, velocity, acceleration, deceleration and jerk values as
+explicit integer pulse-domain units plus a configuration revision. It is
+accepted only while disarmed and invalidates the open-loop position reference.
+`DYN_TARGET` carries an idempotent command ID, absolute pulse target and the
+same acknowledged revision. The candidate rejects stale revisions, unknown
+positions, out-of-travel targets, commands while busy, malformed identifiers,
+and reuse of an ID with different content. A duplicate with identical content
+is reported separately. This contract remains unreachable until position is
+set from a successful Controller-owned Home and the dynamic runtime/HAL path is
+verified together.
+
 ## Baseline quality status
 
 - Automated suite before structural extraction: 190 tests passed and 18 subtests passed.

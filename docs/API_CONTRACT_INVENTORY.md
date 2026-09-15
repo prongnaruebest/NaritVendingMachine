@@ -82,6 +82,21 @@ idempotent command IDs, emitted-pulse telemetry, bounded parser behavior, and
 priority handling for `STOP`/`DISARM` before any new command is routed from the
 Controller. Compiled presence alone is never a capability signal.
 
+The candidate contract now reserves these integer-only protocol-v4 frames:
+
+```text
+DYN_CONFIG <axis> <travel_min_pulses> <travel_max_pulses> <pulses_per_mm_milli> <kp_enabled> <kp_approach_milliper_s> <max_velocity_millihz> <max_acceleration_millihz_s> <max_deceleration_millihz_s> <max_jerk_millihz_s2> <configuration_revision>
+DYN_TARGET <command_id> <axis> <target_position_pulses> <configuration_revision>
+```
+
+Only X/Y are valid. Configuration is disarmed-only and invalidates the
+firmware's estimated pulse coordinate. A target is rejected until a successful
+Home has established that coordinate, when its revision is stale, while the
+axis is busy, or when it is outside the configured travel envelope. Identical
+command-ID retries are idempotent; reuse with different content is a conflict.
+These frames are compiled candidate code only: protocol v3 does not advertise
+or dispatch them and the Controller must not send them yet.
+
 The internal candidate now provides a transport-neutral telemetry snapshot with
 `state`, `terminal_fault`, `command_id`, per-axis `target_steps`,
 `emitted_steps`, `axis_active`, `trajectory_elapsed`, and `safety_permissive`.
