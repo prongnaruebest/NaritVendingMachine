@@ -74,8 +74,8 @@ NucleoConstraintResult NucleoConstraint_Tick(
       velocity_hz, acceleration_hz_s,
       (double)limits->max_deceleration_hz_s,
       (double)limits->max_jerk_hz_s2);
-  /* Include one control-period of execution latency plus one discrete edge. */
-  latency_pulses = velocity_hz * dt_s + 1.0;
+  /* Discrete final-edge ownership belongs to the pulse-phase accumulator. */
+  latency_pulses = velocity_hz * dt_s;
   state->stopping_distance_millipulses =
       (uint32_t)ceil((stop_pulses + latency_pulses) * NUCLEO_MILLI_UNITS);
   state->braking = ((stop_pulses + latency_pulses) >= remaining_pulses) ? 1U : 0U;

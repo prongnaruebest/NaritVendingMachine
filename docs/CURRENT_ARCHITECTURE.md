@@ -113,12 +113,25 @@ travel and terminal-pulse requirements. Z is explicitly rejected.
 A separate 1 kHz constraint-envelope candidate now consumes that request. Its
 stopping estimate includes the jerk ramp from current commanded acceleration to
 maximum deceleration, the following constant-deceleration distance, one control
-period of latency, and one discrete pulse. Acceleration changes by at most the
+period of latency. Discrete final-edge quantization is handled by the pulse
+phase accumulator rather than added as a full-pulse braking margin, because a
+full-pulse margin prevents a stationary one-pulse move from ever starting.
+Acceleration changes by at most the
 configured jerk per tick. A falling Kp request is never applied as an immediate
 velocity clamp; the commanded velocity follows the bounded deceleration state.
 The module is host-tested but is not connected to the timer/runtime. Exact
 finite completion still belongs to the emitted-pulse scheduler, so the runtime
 feature gate remains disabled pending integrated simulation.
+
+The hardware-neutral dynamic-planner simulation now composes Virtual Kp,
+the jerk-aware constraint envelope and a 64-bit fractional pulse-phase
+accumulator. Pulse phase is integrated in milliHz·µs, emitted counts are clamped
+to the integer target, and the final edge is held until the commanded rate is at
+or below the configured terminal threshold. Host scenarios cover zero, one,
+short and 170,000-pulse moves on both X/Y directions with monotonic counts and
+no overshoot. This is evidence for the algorithm only; the module remains
+disconnected from interrupts, timers and serial dispatch until runtime timing
+and safety-priority integration are tested.
 
 ## Baseline quality status
 
