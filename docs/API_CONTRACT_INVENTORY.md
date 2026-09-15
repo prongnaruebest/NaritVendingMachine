@@ -116,6 +116,13 @@ retains the coordinate from falling STEP edges but does not commit the target.
 This behavior is host-only until the explicit production feature gate is
 enabled in a later reviewed change.
 
+Candidate dispatcher responses are bounded JSON ACK/error objects. Successful
+states are `configured`, `position_set`, `staged`, `duplicate`, `running`,
+`stopping`, `stopped`, and `disarmed`; stable rejection codes are `FORMAT`,
+`AXIS`, `RANGE`, `STATE`, `REVISION`, `POSITION`, and `CONFLICT`. `STOP` and
+`DISARM` are checked before feature-gated dynamic frames. This dispatcher is
+compiled but remains unregistered in the production v3 serial loop.
+
 For the candidate runtime, `emitted_steps` changes only after the HAL confirms
 the falling STEP edge. A 1 kHz planner tick changes the requested timer rate but
 does not change position. Completion therefore means the exact target edge was

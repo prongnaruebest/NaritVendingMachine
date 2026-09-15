@@ -199,6 +199,15 @@ target. The facade and its 50 kHz input ceiling are host-tested with fake timer
 hooks and remain outside the production UART dispatcher and CubeIDE feature
 gate.
 
+A bounded transport-neutral dispatcher now defines the candidate UART routing
+for `DYN_CONFIG`, `DYN_POSITION`, `DYN_TARGET`, and `DYN_START`. Its independent
+`NUCLEO_DYNAMIC_PROTOCOL_V4_ENABLED` gate defaults to `0`; with the gate off,
+dynamic commands cannot reach the facade. Exact `STOP` and `DISARM` remain
+recognized with higher priority even when the dynamic feature is disabled.
+Host builds exercise both gate states, unsafe-start rejection, malformed and
+oversized frames, and global disarm. The production serial link still advertises
+protocol v3 and does not call this dispatcher.
+
 ## Baseline quality status
 
 - Automated suite before structural extraction: 190 tests passed and 18 subtests passed.

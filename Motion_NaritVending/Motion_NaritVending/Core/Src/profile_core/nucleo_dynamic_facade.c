@@ -248,6 +248,8 @@ void NucleoDynamicFacade_Stop(NucleoDynamicFacade *facade)
 {
   if (facade == NULL) return;
   NucleoDynamicCoordinator_StopAll(&facade->coordinator);
+  /* STOP is an unconditional physical pulse inhibit, including while idle. */
+  facade->hooks.disable_all(facade->hooks.context);
   invalidate_all_positions(facade);
 }
 
@@ -262,5 +264,7 @@ void NucleoDynamicFacade_Disarm(NucleoDynamicFacade *facade)
 {
   if (facade == NULL) return;
   NucleoDynamicCoordinator_DisarmAll(&facade->coordinator);
+  /* DISARM must leave shared timer channels low even after a reset/race. */
+  facade->hooks.disable_all(facade->hooks.context);
   invalidate_all_positions(facade);
 }
