@@ -29,6 +29,8 @@ void NucleoDynamicCoordinator_ControlTick(NucleoDynamicCoordinator *coordinator,
                                           uint64_t now_us);
 uint8_t NucleoDynamicCoordinator_OnEmittedPulse(void *context, uint8_t axis);
 void NucleoDynamicCoordinator_StopAll(NucleoDynamicCoordinator *coordinator);
+void NucleoDynamicCoordinator_ControlledStopAll(
+    NucleoDynamicCoordinator *coordinator);
 void NucleoDynamicCoordinator_DisarmAll(NucleoDynamicCoordinator *coordinator);
 void NucleoDynamicCoordinator_SafetyLoss(NucleoDynamicCoordinator *coordinator);
 

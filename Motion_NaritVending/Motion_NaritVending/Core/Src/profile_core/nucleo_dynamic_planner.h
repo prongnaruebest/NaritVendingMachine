@@ -9,6 +9,8 @@
 typedef enum {
   NUCLEO_DYNAMIC_IDLE = 0,
   NUCLEO_DYNAMIC_RUNNING,
+  NUCLEO_DYNAMIC_STOPPING,
+  NUCLEO_DYNAMIC_STOPPED,
   NUCLEO_DYNAMIC_COMPLETE,
   NUCLEO_DYNAMIC_FAILED
 } NucleoDynamicState;
@@ -40,5 +42,6 @@ NucleoConstraintResult NucleoDynamicPlanner_RealtimeTick(
     NucleoDynamicPlanner *planner, const NucleoDynamicConfig *config);
 NucleoConstraintResult NucleoDynamicPlanner_RecordEmittedPulse(
     NucleoDynamicPlanner *planner, const NucleoDynamicConfig *config);
+void NucleoDynamicPlanner_RequestControlledStop(NucleoDynamicPlanner *planner);
 
 #endif

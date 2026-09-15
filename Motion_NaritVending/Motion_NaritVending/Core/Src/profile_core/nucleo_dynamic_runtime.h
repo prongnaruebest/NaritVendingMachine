@@ -53,6 +53,7 @@ void NucleoDynamicRuntime_Heartbeat(NucleoDynamicRuntime *runtime,
 void NucleoDynamicRuntime_ControlTick(void *context, uint64_t now_us);
 uint8_t NucleoDynamicRuntime_OnEmittedPulse(void *context, uint8_t axis);
 void NucleoDynamicRuntime_Stop(NucleoDynamicRuntime *runtime);
+void NucleoDynamicRuntime_ControlledStop(NucleoDynamicRuntime *runtime);
 void NucleoDynamicRuntime_Disarm(NucleoDynamicRuntime *runtime);
 void NucleoDynamicRuntime_SafetyLoss(NucleoDynamicRuntime *runtime);
 void NucleoDynamicRuntime_ControlFault(void *context);

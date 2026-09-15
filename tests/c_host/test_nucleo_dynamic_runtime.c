@@ -82,6 +82,25 @@ int main(void)
   assert(NucleoDynamicRuntime_Reset(&runtime, 1U) == 1U);
 
   start_runtime(&runtime, &mock, 10000ULL);
+  NucleoDynamicRuntime_ControlTick(&runtime, 11000ULL);
+  assert(mock.last_rate_millihz > 0U);
+  NucleoDynamicRuntime_ControlledStop(&runtime);
+  {
+    uint64_t now_us = 12000ULL;
+    uint32_t ticks = 0U;
+    while ((runtime.planner.state != NUCLEO_DYNAMIC_STOPPED) &&
+           (ticks++ < 10000U)) {
+      NucleoDynamicRuntime_ControlTick(&runtime, now_us);
+      now_us += 1000ULL;
+      NucleoDynamicRuntime_Heartbeat(&runtime, now_us, 1U);
+    }
+    assert(runtime.planner.state == NUCLEO_DYNAMIC_STOPPED);
+    assert(runtime.planner.output_rate_millihz == 0U);
+    assert(runtime.fault == NUCLEO_DYNAMIC_FAULT_NONE);
+    assert(runtime.armed == 0U && mock.last_rate_millihz == 0U);
+  }
+
+  start_runtime(&runtime, &mock, 10000ULL);
   NucleoDynamicRuntime_Disarm(&runtime);
   assert(runtime.fault == NUCLEO_DYNAMIC_FAULT_DISARM);
 

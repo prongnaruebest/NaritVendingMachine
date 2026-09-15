@@ -80,6 +80,10 @@ void NucleoDynamicCoordinator_ControlTick(NucleoDynamicCoordinator *coordinator,
         NucleoDynamicCoordinator_StopAll(coordinator);
         return;
       }
+      if ((coordinator->axes[axis].planner.state == NUCLEO_DYNAMIC_COMPLETE) ||
+          (coordinator->axes[axis].planner.state == NUCLEO_DYNAMIC_STOPPED)) {
+        coordinator->active_mask &= (uint8_t)~(1U << axis);
+      }
     }
   }
 }
@@ -112,6 +116,18 @@ void NucleoDynamicCoordinator_StopAll(NucleoDynamicCoordinator *coordinator)
     }
   }
   coordinator->active_mask = 0U;
+}
+
+void NucleoDynamicCoordinator_ControlledStopAll(
+    NucleoDynamicCoordinator *coordinator)
+{
+  uint8_t axis;
+  if ((coordinator == NULL) || (coordinator->initialized == 0U)) return;
+  for (axis = 0U; axis < NUCLEO_DYNAMIC_COORDINATED_AXIS_COUNT; ++axis) {
+    if ((coordinator->active_mask & (1U << axis)) != 0U) {
+      NucleoDynamicRuntime_ControlledStop(&coordinator->axes[axis]);
+    }
+  }
 }
 
 void NucleoDynamicCoordinator_DisarmAll(NucleoDynamicCoordinator *coordinator)

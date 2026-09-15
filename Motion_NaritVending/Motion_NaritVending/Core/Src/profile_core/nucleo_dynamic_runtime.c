@@ -75,7 +75,8 @@ void NucleoDynamicRuntime_ControlTick(void *context, uint64_t now_us)
 {
   NucleoDynamicRuntime *runtime = (NucleoDynamicRuntime *)context;
   if ((runtime == NULL) || (runtime->armed == 0U) ||
-      (runtime->planner.state != NUCLEO_DYNAMIC_RUNNING)) return;
+      ((runtime->planner.state != NUCLEO_DYNAMIC_RUNNING) &&
+       (runtime->planner.state != NUCLEO_DYNAMIC_STOPPING))) return;
   if ((runtime->safety_permissive == 0U) ||
       (now_us < runtime->last_heartbeat_us)) {
     latch_fault(runtime, NUCLEO_DYNAMIC_FAULT_SAFETY);
@@ -90,9 +91,10 @@ void NucleoDynamicRuntime_ControlTick(void *context, uint64_t now_us)
     latch_fault(runtime, NUCLEO_DYNAMIC_FAULT_CONTROL_TICK);
     return;
   }
-  if (runtime->planner.state == NUCLEO_DYNAMIC_COMPLETE) {
+  if ((runtime->planner.state == NUCLEO_DYNAMIC_COMPLETE) ||
+      (runtime->planner.state == NUCLEO_DYNAMIC_STOPPED)) {
     runtime->armed = 0U;
-    runtime->hooks.disable_all(runtime->hooks.context);
+    runtime->hooks.set_rate(runtime->hooks.context, runtime->planner.axis, 0U);
   } else {
     runtime->hooks.set_rate(runtime->hooks.context, runtime->planner.axis,
                             runtime->planner.output_rate_millihz);
@@ -122,6 +124,14 @@ uint8_t NucleoDynamicRuntime_OnEmittedPulse(void *context, uint8_t axis)
 void NucleoDynamicRuntime_Stop(NucleoDynamicRuntime *runtime)
 {
   latch_fault(runtime, NUCLEO_DYNAMIC_FAULT_STOP);
+}
+
+void NucleoDynamicRuntime_ControlledStop(NucleoDynamicRuntime *runtime)
+{
+  if ((runtime != NULL) && (runtime->initialized != 0U) &&
+      (runtime->armed != 0U)) {
+    NucleoDynamicPlanner_RequestControlledStop(&runtime->planner);
+  }
 }
 
 void NucleoDynamicRuntime_Disarm(NucleoDynamicRuntime *runtime)

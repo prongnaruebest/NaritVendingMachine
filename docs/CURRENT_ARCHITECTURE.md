@@ -159,6 +159,13 @@ DISARM, safety loss, watchdog failure, or control-tick failure remain global and
 disable both TIM1 channels. Host tests cover independent completion and global
 safety shutdown; the coordinator is still behind the disabled production gate.
 
+The candidate also separates controlled and safety stopping. A controlled stop
+changes the planner request to zero and continues applying the configured jerk
+and deceleration envelope until commanded velocity and acceleration are both
+zero, ending in `STOPPED` without claiming the original target was reached.
+Immediate `STOP`, `DISARM`, watchdog expiry and safety loss still bypass that
+ramp and disable both pulse channels at once. No stopped command auto-resumes.
+
 A HAL-independent dynamic runtime now wraps that simulation behind explicit
 Arm/Start/Reset transitions and fake rate/disable hooks. STOP, DISARM, safety
 loss, the independent 500 ms heartbeat watchdog, and a missed 1 kHz control

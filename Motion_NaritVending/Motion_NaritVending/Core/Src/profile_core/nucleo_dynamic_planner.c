@@ -45,15 +45,20 @@ static NucleoConstraintResult planner_tick(
   if ((planner == NULL) || (config == NULL)) {
     return NUCLEO_CONSTRAINT_ERR_ARGUMENT;
   }
-  if (planner->state != NUCLEO_DYNAMIC_RUNNING) return NUCLEO_CONSTRAINT_OK;
+  if ((planner->state != NUCLEO_DYNAMIC_RUNNING) &&
+      (planner->state != NUCLEO_DYNAMIC_STOPPING)) return NUCLEO_CONSTRAINT_OK;
   remaining_pulses = planner->target_pulses - planner->emitted_pulses;
-  kp_result = NucleoVirtualKp_RequestRateMillihz(
-      planner->axis, remaining_pulses, &config->kp,
-      &requested_rate_millihz);
-  if (kp_result != NUCLEO_VIRTUAL_KP_OK) {
-    planner->state = NUCLEO_DYNAMIC_FAILED;
-    planner->output_rate_millihz = 0U;
-    return NUCLEO_CONSTRAINT_ERR_LIMIT;
+  if (planner->state == NUCLEO_DYNAMIC_STOPPING) {
+    requested_rate_millihz = 0U;
+  } else {
+    kp_result = NucleoVirtualKp_RequestRateMillihz(
+        planner->axis, remaining_pulses, &config->kp,
+        &requested_rate_millihz);
+    if (kp_result != NUCLEO_VIRTUAL_KP_OK) {
+      planner->state = NUCLEO_DYNAMIC_FAILED;
+      planner->output_rate_millihz = 0U;
+      return NUCLEO_CONSTRAINT_ERR_LIMIT;
+    }
   }
   constraint_result = NucleoConstraint_Tick(
       &planner->constraint, &config->constraints, remaining_pulses,
@@ -64,6 +69,12 @@ static NucleoConstraintResult planner_tick(
     return constraint_result;
   }
   planner->output_rate_millihz = planner->constraint.velocity_millihz;
+  if ((planner->state == NUCLEO_DYNAMIC_STOPPING) &&
+      (planner->constraint.velocity_millihz == 0U) &&
+      (planner->constraint.acceleration_millihz_s == 0)) {
+    planner->state = NUCLEO_DYNAMIC_STOPPED;
+    return NUCLEO_CONSTRAINT_OK;
+  }
   if (simulate_emitted_pulses == 0U) return NUCLEO_CONSTRAINT_OK;
   planner->pulse_phase_millihz_us +=
       (uint64_t)planner->output_rate_millihz *
@@ -92,6 +103,13 @@ static NucleoConstraintResult planner_tick(
   return NUCLEO_CONSTRAINT_OK;
 }
 
+void NucleoDynamicPlanner_RequestControlledStop(NucleoDynamicPlanner *planner)
+{
+  if ((planner != NULL) && (planner->state == NUCLEO_DYNAMIC_RUNNING)) {
+    planner->state = NUCLEO_DYNAMIC_STOPPING;
+  }
+}
+
 NucleoConstraintResult NucleoDynamicPlanner_Tick(
     NucleoDynamicPlanner *planner, const NucleoDynamicConfig *config)
 {
@@ -112,7 +130,8 @@ NucleoConstraintResult NucleoDynamicPlanner_RecordEmittedPulse(
   if ((planner == NULL) || (config == NULL)) {
     return NUCLEO_CONSTRAINT_ERR_ARGUMENT;
   }
-  if ((planner->state != NUCLEO_DYNAMIC_RUNNING) ||
+  if (((planner->state != NUCLEO_DYNAMIC_RUNNING) &&
+       (planner->state != NUCLEO_DYNAMIC_STOPPING)) ||
       (planner->emitted_pulses >= planner->target_pulses)) {
     return NUCLEO_CONSTRAINT_ERR_LIMIT;
   }
