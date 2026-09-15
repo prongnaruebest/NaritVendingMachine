@@ -1,4 +1,5 @@
 #include "nucleo_dynamic_dispatcher.h"
+#include "nucleo_dynamic_telemetry.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -83,6 +84,10 @@ uint8_t NucleoDynamicDispatcher_HandleLine(
   }
 #if NUCLEO_DYNAMIC_PROTOCOL_V4_ENABLED
   NucleoDynamicProtocolResult result;
+  if (strcmp(line, "DYN_STATUS") == 0) {
+    return NucleoDynamicTelemetry_Write(dispatcher->facade, response,
+                                        response_size);
+  }
   if (strcmp(line, "CONTROLLED_STOP") == 0) {
     NucleoDynamicFacade_ControlledStop(dispatcher->facade);
     return write_ack(response, response_size, "stopping");

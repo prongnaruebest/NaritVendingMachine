@@ -31,6 +31,10 @@ int main(void)
   DispatcherMock mock = {{0U, 0U}, 0U};
   NucleoDynamicRuntimeHooks hooks = {set_rate, disable_all, &mock};
   char response[128];
+#if NUCLEO_DYNAMIC_PROTOCOL_V4_ENABLED
+  char status_response[640];
+  char tiny[8] = {'x', '\0'};
+#endif
   char oversized[321];
 
   assert(NucleoDynamicFacade_Init(&facade, hooks) == 1U);
@@ -43,6 +47,10 @@ int main(void)
   assert(mock.disable_calls > 0U);
 
 #if NUCLEO_DYNAMIC_PROTOCOL_V4_ENABLED
+  assert(NucleoDynamicDispatcher_HandleLine(
+             &dispatcher, "DYN_STATUS", 0ULL, 1U, 0U,
+             status_response, sizeof(status_response)) == 1U);
+  assert(strstr(status_response, "\"runtime_ready\":false") != NULL);
   assert(NucleoDynamicDispatcher_HandleLine(
              &dispatcher,
              "DYN_CONFIG X 0 1000 100000 1 2500 30000000 60000000 50000000 300000000 cfg-1",
@@ -77,11 +85,26 @@ int main(void)
              response, sizeof(response)) == 1U);
   assert(strstr(response, "running") != NULL);
   assert(facade.coordinator.active_mask == 3U);
+  NucleoDynamicFacade_ControlTick(&facade, 1000ULL);
+  assert(NucleoDynamicDispatcher_HandleLine(
+             &dispatcher, "DYN_STATUS", 1000ULL, 1U, 1U,
+             status_response, sizeof(status_response)) == 1U);
+  assert(strstr(status_response, "\"runtime_ready\":true") != NULL);
+  assert(strstr(status_response, "\"active_mask\":3") != NULL);
+  assert(strstr(status_response, "\"state\":\"RUNNING\"") != NULL);
+  assert(NucleoDynamicDispatcher_HandleLine(
+             &dispatcher, "DYN_STATUS", 1000ULL, 1U, 1U,
+             tiny, sizeof(tiny)) == 0U);
+  assert(tiny[0] == '\0');
   assert(NucleoDynamicDispatcher_HandleLine(
              &dispatcher, "DISARM", 1ULL, 1U, 1U,
              response, sizeof(response)) == 1U);
   assert(facade.coordinator.active_mask == 0U);
 #else
+  assert(NucleoDynamicDispatcher_HandleLine(
+             &dispatcher, "DYN_STATUS", 0ULL, 1U, 0U,
+             response, sizeof(response)) == 1U);
+  assert(strstr(response, "\"code\":\"STATE\"") != NULL);
   assert(NucleoDynamicDispatcher_HandleLine(
              &dispatcher,
              "DYN_CONFIG X 0 1000 100000 1 2500 30000000 60000000 50000000 300000000 cfg-1",

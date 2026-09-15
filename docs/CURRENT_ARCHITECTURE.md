@@ -208,6 +208,14 @@ Host builds exercise both gate states, unsafe-start rejection, malformed and
 oversized frames, and global disarm. The production serial link still advertises
 protocol v3 and does not call this dispatcher.
 
+The same gated dispatcher exposes a bounded `DYN_STATUS` snapshot for X/Y.
+It reports runtime readiness, active-axis mask, position-reference validity,
+absolute pulse coordinate, command-relative emitted pulses, target, requested
+timer rate, planner state, and latched fault. This telemetry is authoritative
+for firmware execution state but remains open-loop; it must never be presented
+as encoder-measured carriage position. Undersized response buffers fail closed
+without emitting partial JSON.
+
 ## Baseline quality status
 
 - Automated suite before structural extraction: 190 tests passed and 18 subtests passed.

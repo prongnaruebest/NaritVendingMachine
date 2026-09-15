@@ -89,6 +89,7 @@ DYN_CONFIG <axis> <travel_min_pulses> <travel_max_pulses> <pulses_per_mm_milli> 
 DYN_POSITION <axis> <estimated_position_pulses> <configuration_revision>
 DYN_TARGET <command_id> <axis> <target_position_pulses> <configuration_revision>
 DYN_START <command_id> <axis_mask>
+DYN_STATUS
 ```
 
 Only X/Y are valid. Configuration is disarmed-only and invalidates the
@@ -122,6 +123,14 @@ states are `configured`, `position_set`, `staged`, `duplicate`, `running`,
 `AXIS`, `RANGE`, `STATE`, `REVISION`, `POSITION`, and `CONFLICT`. `STOP` and
 `DISARM` are checked before feature-gated dynamic frames. This dispatcher is
 compiled but remains unregistered in the production v3 serial loop.
+
+When the v4 gate is enabled, `DYN_STATUS` returns bounded JSON containing
+`runtime_ready`, `active_mask`, and per-axis `position_valid`,
+`position_pulses`, `target_pulses`, `emitted_pulses`, `rate_millihz`, `state`,
+and `fault`. `position_pulses` is an open-loop coordinate derived only from
+confirmed falling STEP edges; it is not encoder-measured mechanical position.
+The response is rejected rather than truncated when the caller's output buffer
+is too small. With the feature gate off, `DYN_STATUS` returns `STATE`.
 
 For the candidate runtime, `emitted_steps` changes only after the HAL confirms
 the falling STEP edge. A 1 kHz planner tick changes the requested timer rate but

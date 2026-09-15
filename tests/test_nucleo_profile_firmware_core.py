@@ -105,7 +105,8 @@ def test_dynamic_dispatcher_is_bounded_prioritized_and_feature_gated(
         CORE / "nucleo_virtual_kp.c", CORE / "nucleo_constraint_envelope.c",
         CORE / "nucleo_dynamic_planner.c", CORE / "nucleo_dynamic_runtime.c",
         CORE / "nucleo_dynamic_coordinator.c", CORE / "nucleo_dynamic_protocol.c",
-        CORE / "nucleo_dynamic_facade.c", CORE / "nucleo_dynamic_dispatcher.c",
+        CORE / "nucleo_dynamic_facade.c", CORE / "nucleo_dynamic_telemetry.c",
+        CORE / "nucleo_dynamic_dispatcher.c",
         ROOT / "tests" / "c_host" / "test_nucleo_dynamic_dispatcher.c",
     ]
     compile_result = subprocess.run(
