@@ -579,10 +579,27 @@ class AxisController:
 
         if self.motion_backend is not None and getattr(self.motion_backend, "expected_protocol", 1) >= 2:
             speed_hz = max(10.0, min(self.config.max_pulse_hz, homing_speed * self.config.steps_per_mm))
-            # Protocol v2 monitors E-stop, software stop, and the home input every
-            # 80 ms while a MOVE is active. Use the firmware's full move window
-            # instead of flooding its serial task with 10 MOVE commands/second.
-            chunk_steps = 10_000
+            # Use one continuous firmware frame whenever the negotiated limit
+            # can cover the complete bounded search.  The live G491RE advertises
+            # a 1,000,000-pulse frame, so a normal 1,700 mm X/Y search no longer
+            # pauses at legacy 10,000-pulse USB boundaries.  Older firmware keeps
+            # its advertised smaller frames and therefore remains compatible.
+            search_frame_steps = min(
+                max_steps,
+                max(1, int(getattr(self.motion_backend, "max_move_steps", NUCLEO_MOVE_CHUNK_STEPS))),
+            )
+
+            def search_stop_requested() -> bool:
+                # The long frame must retain the Controller-owned sensor and
+                # time watchdog.  A missing sensor may never leave the NUCLEO
+                # running until its entire pulse budget expires.
+                return bool(
+                    self.estop.value
+                    or self.stop_requested()
+                    or self.head_limit.value
+                    or monotonic() >= search_deadline
+                )
+
             while not limit_active:
                 if monotonic() >= search_deadline:
                     raise LimitTriggeredError(f"{self.config.name}: home sensor not reached within {self.config.homing_timeout_s:g} seconds")
@@ -594,18 +611,22 @@ class AxisController:
                     res = self.motion_backend.move(
                         axis=self.config.name,
                         direction=self.config.home_direction,
-                        steps=chunk_steps,
+                        steps=search_frame_steps,
                         speed_hz=speed_hz,
-                        stop_requested=lambda: bool(self.estop.value or self.stop_requested() or self.head_limit.value),
+                        stop_requested=search_stop_requested,
                     )
-                    chunk_moved = int(res.get("steps", chunk_steps))
+                    chunk_moved = int(res.get("steps", search_frame_steps))
                     moved += chunk_moved
                 except NucleoError:
                     if self.head_limit.value:
                         break
                     raise
                 limit_active = self.head_limit.value
-                if limit_active or chunk_moved < chunk_steps:
+                if monotonic() >= search_deadline and not limit_active:
+                    raise LimitTriggeredError(
+                        f"{self.config.name}: home sensor not reached within {self.config.homing_timeout_s:g} seconds"
+                    )
+                if limit_active or chunk_moved < search_frame_steps:
                     break
 
             sleep(self.config.settle_delay)
@@ -621,11 +642,11 @@ class AxisController:
                         res = self.motion_backend.move(
                             axis=self.config.name,
                             direction=release_direction,
-                            steps=min(chunk_steps, effective_backoff - released),
+                            steps=min(search_frame_steps, effective_backoff - released),
                             speed_hz=speed_hz,
                             stop_requested=lambda: bool(self.estop.value or self.stop_requested() or not self.head_limit.value),
                         )
-                        chunk_released = int(res.get("steps", chunk_steps))
+                        chunk_released = int(res.get("steps", min(search_frame_steps, effective_backoff - released)))
                         released += chunk_released
                     except NucleoError:
                         if not self.head_limit.value:

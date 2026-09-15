@@ -61,6 +61,16 @@ The active CubeIDE target is `Motion_NaritVending/Motion_NaritVending` for the
 NUCLEO-G491RE. Its current runtime contract remains USB protocol v3 with
 fixed-frequency `MOVE`; no trajectory-profile capability is advertised.
 
+Repository Home execution sizes its search frame from the NUCLEO
+`max_move_steps` handshake instead of forcing a 10,000-pulse boundary. On the
+G491RE a normal full X/Y search therefore remains one continuous timer command;
+legacy firmware retains its smaller advertised frame size. The Controller
+continues polling E-Stop, software Stop and the IRIV Home input during that
+frame, and the Home deadline is part of the stop callback so a missing sensor
+cannot turn the larger pulse budget into an unbounded search. Parallel Home All
+remains protocol-v3-gated and stops an individual axis when its Min sensor is
+observed while a global safety failure stops all axes.
+
 The hardware-neutral profile core is compiled from `Core/Src/profile_core`.
 The staged `Core/Src/profile_hal/nucleo_g491_profile_hal.*` adapter binds the
 candidate X/Y path to TIM1 CH1/CH2 without changing timer base state when one

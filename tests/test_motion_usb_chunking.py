@@ -29,6 +29,8 @@ class MotionUsbChunkingTests(unittest.TestCase):
             commissioned_max_speed_mm_s=100.0,
             max_pulse_hz=50_000.0,
             homing_timeout_s=30.0,
+            homing_search_speed_mm_s=20.0,
+            homing_latch_speed_mm_s=5.0,
         )
         axis.direction = SimpleNamespace(value=False)
         axis.pulse = MagicMock()
@@ -112,6 +114,34 @@ class MotionUsbChunkingTests(unittest.TestCase):
         self.assertEqual(axis._execute_plan(plan), 110_000)
         self.assertEqual(axis.motion_backend.move.call_count, 1)
         self.assertEqual(axis.motion_backend.move.call_args.kwargs["steps"], 110_000)
+
+    def test_new_firmware_home_search_uses_one_continuous_frame(self):
+        axis = self.make_axis(segment_limit=1_000_000)
+        calls = {"count": 0}
+
+        def sensor_sequence(**kwargs):
+            calls["count"] += 1
+            if calls["count"] == 1:  # continuous search reaches Min
+                axis.head_limit.value = True
+                self.assertTrue(kwargs["stop_requested"]())
+                return {"steps": 110_000, "stopped": True}
+            if calls["count"] == 2:  # back off until Min releases
+                axis.head_limit.value = False
+                self.assertTrue(kwargs["stop_requested"]())
+                return {"steps": 500, "stopped": True}
+            axis.head_limit.value = True  # precision latch finds Min again
+            self.assertTrue(kwargs["stop_requested"]())
+            return {"steps": 500, "stopped": True}
+
+        axis.motion_backend.move.side_effect = sensor_sequence
+
+        moved = axis.home(backoff_steps=1_000, max_steps=200_000)
+
+        self.assertEqual(moved, 110_000)
+        self.assertTrue(axis.is_homed)
+        self.assertEqual(axis.motion_backend.move.call_count, 3)
+        self.assertEqual(axis.motion_backend.move.call_args_list[0].kwargs["steps"], 200_000)
+        self.assertGreater(axis.motion_backend.move.call_args_list[0].kwargs["steps"], 10_000)
 
     def test_hold_release_accounts_completed_steps_and_exits_as_controlled_stop(self):
         axis = self.make_axis(segment_limit=1_000_000)

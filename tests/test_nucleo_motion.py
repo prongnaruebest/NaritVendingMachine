@@ -225,15 +225,16 @@ class NucleoMotionTests(unittest.TestCase):
         self.assertTrue(link.arm(safety_permissive=True))
         self.assertTrue(link.is_armed)
 
-    def test_homing_does_not_flood_nucleo_with_short_move_commands(self):
+    def test_homing_uses_negotiated_continuous_move_window(self):
         motion_source = (
             __import__("pathlib").Path(__file__).resolve().parents[1]
             / "narit_vending"
             / "motion.py"
         ).read_text(encoding="utf-8")
 
-        self.assertIn("chunk_steps = 10_000", motion_source)
-        self.assertNotIn("chunk_steps = min(100,", motion_source)
+        self.assertIn("search_frame_steps = min(", motion_source)
+        self.assertIn('getattr(self.motion_backend, "max_move_steps"', motion_source)
+        self.assertNotIn("chunk_steps = 10_000", motion_source)
 
 
 if __name__ == "__main__":
