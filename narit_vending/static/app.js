@@ -1271,10 +1271,13 @@
       deviceNode.title = deviceLabel;
     }
     if (sidebarDeviceNode) {
-      sidebarDeviceNode.textContent = deviceLabel;
-      sidebarDeviceNode.className = deviceClass;
+      const isOnline = Boolean(MS.online);
+      sidebarDeviceNode.className = isOnline ? "online" : "offline";
+      sidebarDeviceNode.innerHTML = `<span class="status-dot" aria-hidden="true"></span> ${isOnline ? "ONLINE" : "OFFLINE"}`;
+      sidebarDeviceNode.setAttribute("aria-label", `Controller ${isOnline ? "Online" : "Offline"}`);
+      sidebarDeviceNode.title = `Controller ${isOnline ? "Online" : "Offline"}`;
     }
-    if (hasIdentity) document.title = `NaritVendingMachine — ${deviceLabel}`;
+    if (hasIdentity) document.title = `NaritVendingMachine — ${MS.online ? "ONLINE" : "OFFLINE"}`;
 
     // Connection
     const connNode = el("hdr-connection");

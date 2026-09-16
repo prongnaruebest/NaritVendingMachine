@@ -257,6 +257,12 @@ class FrontendAcceptanceTests(unittest.TestCase):
         self.assertNotIn("overflow-x: auto", sequence)
         self.assertIn('(phaseLabels[item] || [item.replaceAll("_", " ")])[0]', APP_JS)
 
+    def test_sidebar_brand_displays_online_offline_status(self) -> None:
+        self.assertIn('id="sidebar-device-label"', TEMPLATE)
+        self.assertIn("sidebarDeviceNode.innerHTML =", APP_JS)
+        self.assertIn(".sidebar-brand-text span.online", STYLE)
+        self.assertIn(".sidebar-brand-text span.offline", STYLE)
+
 
 if __name__ == "__main__":
     unittest.main()
