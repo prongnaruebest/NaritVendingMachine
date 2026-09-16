@@ -225,4 +225,9 @@ void TIM2_IRQHandler(void)
   NucleoMotion_TIM2_IRQHandler();
 }
 
+void TIM6_DAC_IRQHandler(void)
+{
+  NucleoMotion_TIM6_IRQHandler();
+}
+
 /* USER CODE END 1 */

@@ -110,9 +110,11 @@ The candidate includes a 1 kHz control-tick supervisor and TIM6 adapter. The
 hardware-neutral coordinator connects each accepted tick to the profile
 executor and pulse scheduler and propagates safety loss to an immediate profile
 stop. Host tests cover 1 ms cadence, missed-deadline latching, clock regression,
-500 ms heartbeat timeout, explicit disarm, and safety loss. The TIM6 runtime
-gate defaults to disabled and no interrupt handler or initialization call is
-installed in the production path yet.
+500 ms heartbeat timeout, explicit disarm, and safety loss. The TIM6 control
+timer (`TIM6_DAC_IRQHandler`) and dynamic runtime (`NucleoG491ProfileHal` on TIM1)
+are now integrated into `nucleo_motion.c` and `stm32g4xx_it.c` behind the
+`NUCLEO_G491_DYNAMIC_MOTION_ENABLED` gate, while remaining completely inert in the
+default configuration.
 
 An X/Y-only pulse-domain seven-segment S-curve planner is now compiled in the
 G491RE project as another unreachable candidate. It accepts explicit limits in

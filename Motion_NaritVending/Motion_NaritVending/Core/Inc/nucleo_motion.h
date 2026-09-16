@@ -43,6 +43,7 @@ NucleoMotionResult Stepper_Move(uint8_t axis, uint8_t dir,
 uint8_t Stepper_IsMoving(uint8_t axis);
 void NucleoMotion_TIM1_IRQHandler(void);
 void NucleoMotion_TIM2_IRQHandler(void);
+void NucleoMotion_TIM6_IRQHandler(void);
 
 #ifdef __cplusplus
 }

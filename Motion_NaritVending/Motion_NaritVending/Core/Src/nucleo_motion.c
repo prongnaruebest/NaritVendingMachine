@@ -1,6 +1,13 @@
 #include "nucleo_motion.h"
 
 #include "main.h"
+#include "nucleo_motion_features.h"
+
+#if NUCLEO_G491_DYNAMIC_MOTION_ENABLED
+#include "profile_core/nucleo_dynamic_app.h"
+#include "profile_hal/nucleo_g491_control_timer.h"
+#include "profile_hal/nucleo_g491_profile_hal.h"
+#endif
 
 #include <string.h>
 
@@ -26,6 +33,14 @@ static StepperState steppers[AXIS_COUNT];
 static volatile uint8_t motion_armed;
 static volatile uint8_t watchdog_healthy;
 static volatile uint32_t last_heartbeat_ms;
+
+#if NUCLEO_G491_DYNAMIC_MOTION_ENABLED
+static NucleoDynamicApp dynamic_app;
+static NucleoG491ProfileHal dynamic_profile_hal;
+static NucleoG491ControlTimer dynamic_control_timer;
+static volatile uint64_t dynamic_now_us;
+static uint8_t dynamic_hal_ready;
+#endif
 
 static uint32_t timer_clock_hz(TIM_TypeDef *instance)
 {
@@ -70,6 +85,81 @@ static void pulse_as_timer_output(StepperState *stepper)
   gpio.Alternate = stepper->pulse_alternate;
   HAL_GPIO_Init(stepper->pulse_port, &gpio);
 }
+
+static void physical_stop_all(void)
+{
+  uint32_t axis;
+  uint32_t primask = __get_PRIMASK();
+
+  __disable_irq();
+  for (axis = 0U; axis < AXIS_COUNT; ++axis) {
+    pulse_as_gpio_low(&steppers[axis]);
+  }
+#if NUCLEO_G491_DYNAMIC_MOTION_ENABLED
+  if (dynamic_hal_ready != 0U) {
+    NucleoG491ProfileHal_DisableAll(&dynamic_profile_hal);
+  }
+#endif
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0 | GPIO_PIN_1 | GPIO_PIN_2,
+                    GPIO_PIN_RESET);
+  if (primask == 0U) {
+    __enable_irq();
+  }
+}
+
+#if NUCLEO_G491_DYNAMIC_MOTION_ENABLED
+static uint64_t dynamic_time_us(void)
+{
+  uint64_t now_us;
+  uint32_t primask = __get_PRIMASK();
+  __disable_irq();
+  now_us = dynamic_now_us;
+  if (primask == 0U) __enable_irq();
+  return now_us;
+}
+
+static void dynamic_emergency_inhibit(void *context)
+{
+  (void)context;
+  physical_stop_all();
+}
+
+static void dynamic_control_tick(void *context)
+{
+  (void)context;
+  dynamic_now_us += 1000ULL;
+  NucleoDynamicApp_ControlTick(&dynamic_app, dynamic_now_us);
+}
+
+static void dynamic_runtime_init(void)
+{
+  NucleoDynamicRuntimeHooks hooks;
+  dynamic_hal_ready = NucleoG491ProfileHal_Init(
+      &dynamic_profile_hal, &htim1_motion,
+      GPIOA, GPIO_PIN_8, GPIOA, GPIO_PIN_9,
+      GPIOB, GPIO_PIN_0, GPIOB, GPIO_PIN_1,
+      TIMER_TICK_HZ, NucleoDynamicApp_OnEmittedPulse, &dynamic_app);
+  if (dynamic_hal_ready == 0U) return;
+
+  hooks.set_rate = NucleoG491ProfileHal_SetRateHook;
+  hooks.disable_all = NucleoG491ProfileHal_DisableAllHook;
+  hooks.context = &dynamic_profile_hal;
+  hooks.prepare_direction = NucleoG491ProfileHal_PrepareDirectionHook;
+  if (NucleoDynamicApp_Init(&dynamic_app, hooks, dynamic_emergency_inhibit,
+                            NULL) == 0U) {
+    physical_stop_all();
+    dynamic_hal_ready = 0U;
+    return;
+  }
+  dynamic_now_us = (uint64_t)HAL_GetTick() * 1000ULL;
+  if ((NucleoG491ControlTimer_Init(&dynamic_control_timer,
+                                   dynamic_control_tick, NULL) == 0U) ||
+      (NucleoG491ControlTimer_Start(&dynamic_control_timer) == 0U)) {
+    NucleoDynamicApp_EmergencyStop(&dynamic_app);
+    dynamic_hal_ready = 0U;
+  }
+}
+#endif
 
 static void timer_init(TIM_HandleTypeDef *htim, TIM_TypeDef *instance,
                        uint32_t period)
@@ -141,6 +231,10 @@ void NucleoMotion_Init(void)
   HAL_NVIC_SetPriority(TIM2_IRQn, 5U, 0U);
   HAL_NVIC_EnableIRQ(TIM2_IRQn);
 
+#if NUCLEO_G491_DYNAMIC_MOTION_ENABLED
+  dynamic_runtime_init();
+#endif
+
   motion_armed = 0U;
   watchdog_healthy = 0U;
   last_heartbeat_ms = HAL_GetTick();
@@ -169,29 +263,33 @@ void NucleoMotion_Heartbeat(uint8_t safety_permissive)
 
   last_heartbeat_ms = HAL_GetTick();
   watchdog_healthy = 1U;
+#if NUCLEO_G491_DYNAMIC_MOTION_ENABLED
+  if (dynamic_hal_ready != 0U) {
+    NucleoDynamicApp_Heartbeat(&dynamic_app, dynamic_time_us(), 1U);
+  }
+#endif
 }
 
 void NucleoMotion_Disarm(void)
 {
   motion_armed = 0U;
   watchdog_healthy = 0U;
-  NucleoMotion_StopAll();
+  physical_stop_all();
+#if NUCLEO_G491_DYNAMIC_MOTION_ENABLED
+  if (dynamic_hal_ready != 0U) {
+    NucleoDynamicFacade_Disarm(&dynamic_app.facade);
+  }
+#endif
 }
 
 void NucleoMotion_StopAll(void)
 {
-  uint32_t axis;
-  uint32_t primask = __get_PRIMASK();
-
-  __disable_irq();
-  for (axis = 0U; axis < AXIS_COUNT; ++axis) {
-    pulse_as_gpio_low(&steppers[axis]);
+  physical_stop_all();
+#if NUCLEO_G491_DYNAMIC_MOTION_ENABLED
+  if (dynamic_hal_ready != 0U) {
+    NucleoDynamicFacade_Stop(&dynamic_app.facade);
   }
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0 | GPIO_PIN_1 | GPIO_PIN_2,
-                    GPIO_PIN_RESET);
-  if (primask == 0U) {
-    __enable_irq();
-  }
+#endif
 }
 
 void NucleoMotion_Poll(void)
@@ -231,6 +329,11 @@ NucleoMotionResult Stepper_Move(uint8_t axis, uint8_t dir,
       (speed_hz > NUCLEO_MOTION_MAX_SPEED_HZ)) {
     return NUCLEO_MOTION_ERR_ARGUMENT;
   }
+#if NUCLEO_G491_DYNAMIC_MOTION_ENABLED
+  /* TIM1 belongs exclusively to the dynamic runtime when its shared gate is
+   * enabled. Legacy MOVE remains available for Z on TIM2 only. */
+  if (axis != AXIS_Z) return NUCLEO_MOTION_ERR_ARGUMENT;
+#endif
   if (steppers[axis].toggles_remaining != 0U) {
     return NUCLEO_MOTION_ERR_BUSY;
   }
@@ -253,6 +356,15 @@ void NucleoMotion_StopAxis(uint8_t axis)
   if (axis >= AXIS_COUNT) {
     return;
   }
+#if NUCLEO_G491_DYNAMIC_MOTION_ENABLED
+  if ((axis != AXIS_Z) && (dynamic_hal_ready != 0U)) {
+    /* Until the v4 protocol exposes per-axis dynamic stop, a limit-triggered
+     * X/Y stop is conservatively global rather than allowing another axis to
+     * continue under ambiguous ownership. */
+    NucleoDynamicApp_EmergencyStop(&dynamic_app);
+    return;
+  }
+#endif
   steppers[axis].toggles_remaining = 0U;
   (void)HAL_TIM_OC_Stop_IT(steppers[axis].htim, steppers[axis].channel);
   pulse_as_gpio_low(&steppers[axis]);
@@ -260,6 +372,11 @@ void NucleoMotion_StopAxis(uint8_t axis)
 
 uint8_t Stepper_IsMoving(uint8_t axis)
 {
+#if NUCLEO_G491_DYNAMIC_MOTION_ENABLED
+  if ((axis < AXIS_Z) && (dynamic_hal_ready != 0U)) {
+    return (dynamic_app.facade.coordinator.active_mask & (1U << axis)) != 0U;
+  }
+#endif
   return (axis < AXIS_COUNT) && (steppers[axis].toggles_remaining != 0U);
 }
 
@@ -282,6 +399,13 @@ void HAL_TIM_OC_DelayElapsedCallback(TIM_HandleTypeDef *htim)
     return;
   }
 
+#if NUCLEO_G491_DYNAMIC_MOTION_ENABLED
+  if ((axis < AXIS_Z) && (dynamic_hal_ready != 0U)) {
+    NucleoG491ProfileHal_OnCompare(&dynamic_profile_hal, axis);
+    return;
+  }
+#endif
+
   stepper = &steppers[axis];
   if (stepper->toggles_remaining > 0U) {
     --stepper->toggles_remaining;
@@ -303,4 +427,13 @@ void NucleoMotion_TIM1_IRQHandler(void)
 void NucleoMotion_TIM2_IRQHandler(void)
 {
   HAL_TIM_IRQHandler(&htim2_motion);
+}
+
+void NucleoMotion_TIM6_IRQHandler(void)
+{
+#if NUCLEO_G491_DYNAMIC_MOTION_ENABLED
+  if (dynamic_hal_ready != 0U) {
+    NucleoG491ControlTimer_IRQHandler(&dynamic_control_timer);
+  }
+#endif
 }
