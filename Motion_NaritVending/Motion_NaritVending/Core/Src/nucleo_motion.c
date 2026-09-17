@@ -37,7 +37,6 @@ static volatile uint32_t last_heartbeat_ms;
 #if NUCLEO_G491_DYNAMIC_MOTION_ENABLED
 static NucleoDynamicApp dynamic_app;
 static NucleoG491ProfileHal dynamic_profile_hal;
-static NucleoG491ControlTimer dynamic_control_timer;
 static volatile uint64_t dynamic_now_us;
 static uint8_t dynamic_hal_ready;
 #endif
@@ -124,13 +123,6 @@ static void dynamic_emergency_inhibit(void *context)
   physical_stop_all();
 }
 
-static void dynamic_control_tick(void *context)
-{
-  (void)context;
-  dynamic_now_us += 1000ULL;
-  NucleoDynamicApp_ControlTick(&dynamic_app, dynamic_now_us);
-}
-
 static void dynamic_runtime_init(void)
 {
   NucleoDynamicRuntimeHooks hooks;
@@ -170,12 +162,6 @@ static void dynamic_runtime_init(void)
         &dynamic_app.facade.coordinator, configs, dynamic_app.facade.hooks);
   }
   dynamic_now_us = (uint64_t)HAL_GetTick() * 1000ULL;
-  if ((NucleoG491ControlTimer_Init(&dynamic_control_timer,
-                                   dynamic_control_tick, NULL) == 0U) ||
-      (NucleoG491ControlTimer_Start(&dynamic_control_timer) == 0U)) {
-    NucleoDynamicApp_EmergencyStop(&dynamic_app);
-    dynamic_hal_ready = 0U;
-  }
 }
 #endif
 
@@ -312,11 +298,21 @@ void NucleoMotion_StopAll(void)
 
 void NucleoMotion_Poll(void)
 {
+  uint32_t now_ms = HAL_GetTick();
   if ((motion_armed != 0U) &&
-      ((uint32_t)(HAL_GetTick() - last_heartbeat_ms) >
+      ((uint32_t)(now_ms - last_heartbeat_ms) >
        NUCLEO_MOTION_WATCHDOG_MS)) {
     NucleoMotion_Disarm();
   }
+#if NUCLEO_G491_DYNAMIC_MOTION_ENABLED
+  if (dynamic_hal_ready != 0U) {
+    uint64_t now_us = (uint64_t)now_ms * 1000ULL;
+    if (now_us >= (dynamic_now_us + 1000ULL)) {
+      dynamic_now_us = now_us;
+      NucleoDynamicApp_ControlTick(&dynamic_app, dynamic_now_us);
+    }
+  }
+#endif
 }
 
 uint8_t NucleoMotion_IsArmed(void)
@@ -472,11 +468,6 @@ void NucleoMotion_TIM2_IRQHandler(void)
 
 void NucleoMotion_TIM6_IRQHandler(void)
 {
-#if NUCLEO_G491_DYNAMIC_MOTION_ENABLED
-  if (dynamic_hal_ready != 0U) {
-    NucleoG491ControlTimer_IRQHandler(&dynamic_control_timer);
-  }
-#endif
 }
 
 #if NUCLEO_G491_DYNAMIC_MOTION_ENABLED

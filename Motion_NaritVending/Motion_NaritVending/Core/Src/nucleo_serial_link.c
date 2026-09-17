@@ -223,6 +223,7 @@ void NucleoSerialLink_Poll(void)
   if (serial_uart == NULL) {
     return;
   }
+  __HAL_UART_CLEAR_OREFLAG(serial_uart);
   while (HAL_UART_Receive(serial_uart, &byte, 1U, 0U) == HAL_OK) {
     if ((byte == '\r') || (byte == '\n')) {
       if (receive_length > 0U) {
