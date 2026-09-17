@@ -398,7 +398,8 @@ class AxisController:
         if self.estop.value or self.stop_requested():
             self._guard_before_move(direction, 0)
 
-        speed = self.clamp_speed(speed_mm_s)
+        raw_speed = self.clamp_speed(speed_mm_s)
+        speed = min(raw_speed, getattr(self.config, "homing_search_speed_mm_s", 50.0))
         speed_hz = max(10.0, min(self.config.max_pulse_hz, speed * self.config.steps_per_mm))
         # Search up to twice the configured stroke at the effective speed plus
         # a fixed allowance. This prevents the normal homing timeout from
@@ -1024,6 +1025,9 @@ class MotionController:
         if backend is not None and getattr(backend, "supports_buffered_scurve", False) and hasattr(backend, "configure_dynamic_axis"):
             try:
                 from narit_vending.domain.nucleo_profile_protocol import DynamicAxisConfigCommand
+                was_armed = getattr(backend, "is_armed", False)
+                if was_armed and hasattr(backend, "disarm"):
+                    backend.disarm()
                 for axis_name in ("x", "y"):
                     axis_cfg = getattr(self.config, axis_name)
                     cmd = DynamicAxisConfigCommand(
@@ -1040,6 +1044,8 @@ class MotionController:
                         configuration_revision=self._dynamic_revision,
                     )
                     backend.configure_dynamic_axis(cmd)
+                if was_armed and hasattr(backend, "arm"):
+                    backend.arm(safety_permissive=True)
             except Exception as exc:
                 logging.getLogger(__name__).warning("Failed to sync dynamic config: %s", exc)
 
@@ -1054,9 +1060,14 @@ class MotionController:
         if backend is not None and getattr(backend, "supports_buffered_scurve", False) and hasattr(backend, "set_dynamic_position"):
             try:
                 from narit_vending.domain.nucleo_profile_protocol import DynamicPositionCommand
+                was_armed = getattr(backend, "is_armed", False)
+                if was_armed and hasattr(backend, "disarm"):
+                    backend.disarm()
                 pos_steps = int(round(axis.position_mm * axis.config.steps_per_mm))
                 cmd = DynamicPositionCommand(axis_key, pos_steps, self._dynamic_revision)
                 backend.set_dynamic_position(cmd)
+                if was_armed and hasattr(backend, "arm"):
+                    backend.arm(safety_permissive=True)
             except Exception as exc:
                 logging.getLogger(__name__).warning("Failed to sync dynamic position for %s: %s", axis_key, exc)
 

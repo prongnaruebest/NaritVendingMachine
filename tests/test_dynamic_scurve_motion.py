@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import unittest
 from types import SimpleNamespace
@@ -24,6 +24,15 @@ class MockBackend:
         self.staged_targets: list[DynamicTargetCommand] = []
         self.started_motions: list[DynamicStartCommand] = []
         self.mock_start_result = {"status": "ok", "stopped": False}
+        self.is_armed = False
+
+    def arm(self, safety_permissive: bool = True) -> bool:
+        self.is_armed = True
+        return True
+
+    def disarm(self) -> bool:
+        self.is_armed = False
+        return True
 
     def configure_dynamic_axis(self, cmd: DynamicAxisConfigCommand) -> dict:
         self.configured_axes.append(cmd)

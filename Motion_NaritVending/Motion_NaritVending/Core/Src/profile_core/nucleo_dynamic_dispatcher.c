@@ -1,5 +1,6 @@
 #include "nucleo_dynamic_dispatcher.h"
 #include "nucleo_dynamic_telemetry.h"
+#include "nucleo_motion_features.h"
 
 #include <stdio.h>
 #include <string.h>

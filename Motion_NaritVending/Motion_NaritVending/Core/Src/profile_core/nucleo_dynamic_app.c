@@ -1,4 +1,5 @@
 #include "nucleo_dynamic_app.h"
+#include "nucleo_motion_features.h"
 
 #include <string.h>
 
