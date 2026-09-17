@@ -1633,12 +1633,15 @@
   function renderAxisSpeedBanks() {
     $$('[data-axis-speed-bank]').forEach((bank) => {
       if (bank.dataset.ready === "true") return;
-      bank.innerHTML = AXES.map((axis) => `<label class="axis-speed-row">
+      bank.innerHTML = AXES.map((axis) => {
+        const limit = axisSpeedLimit(axis);
+        return `<label class="axis-speed-row">
         <strong>${axis.toUpperCase()}</strong>
-        <input type="range" min="0.1" max="250" step="0.1" data-axis-speed-range="${axis}" aria-label="${axis.toUpperCase()} axis speed">
-        <input type="number" min="0.1" max="250" step="0.1" data-axis-speed-number="${axis}" aria-label="${axis.toUpperCase()} axis speed value">
+        <input type="range" min="0.1" max="${limit}" step="0.1" data-axis-speed-range="${axis}" aria-label="${axis.toUpperCase()} axis speed">
+        <input type="number" min="0.1" max="${limit}" step="0.1" data-axis-speed-number="${axis}" aria-label="${axis.toUpperCase()} axis speed value">
         <span>mm/s</span><small data-axis-speed-conversion="${axis}">-- pulse/s · -- rpm</small>
-      </label>`).join("") + '<p class="axis-speed-note">Single-axis commands use that axis value. Coordinated XYZ and slot moves use the lowest participating-axis value.</p>';
+      </label>`;
+      }).join("") + '<p class="axis-speed-note">Single-axis commands use that axis value. Coordinated XYZ and slot moves use the lowest participating-axis value.</p>';
       bank.dataset.ready = "true";
     });
     syncAxisSpeedBanks();

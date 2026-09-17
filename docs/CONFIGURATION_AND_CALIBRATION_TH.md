@@ -25,9 +25,8 @@ Effective configuration ถูกประกอบตามลำดับ:
 | Y | lead screw/effective calibration | 1,600 | 64.705882 | 1,700 mm | 5 mm/s | 20 / 5 mm/s |
 | Z | timing belt/pulley | 1,600 | 9.0 | 160 mm | 2 mm/s | 20 / 5 mm/s |
 
-ทั้งสามแกนบันทึก `commissioned_max_speed_mm_s = 100` แต่ห้ามตีความว่า 100 mm/s ผ่านการทดสอบแล้ว
-หากไม่มี commissioning record ที่ตรวจ driver alarm, PEND, position error และกลไก ให้ลดค่าลงเป็น
-ความเร็วที่พิสูจน์แล้วก่อนใช้งาน production
+แกน X และ Y กำหนด `commissioned_max_speed_mm_s = 200` (~485 rpm, 12,941 pulse/s) ส่วนแกน Z ถูกจำกัดความปลอดภัยไว้ที่ `commissioned_max_speed_mm_s = 60` เพื่อป้องกันอันตรายจากอัตราทดสายพานและระยะชักสั้น 160 mm
+แต่ห้ามตีความว่าความเร็วสูงสุดผ่านการทดสอบกับโหลดจริงแล้ว หากไม่มี commissioning record ที่ตรวจ driver alarm, PEND, position error และกลไก ให้เริ่มทดสอบจากความเร็วต่ำเสมอ
 
 ## 3. สูตรมาตรฐาน
 
