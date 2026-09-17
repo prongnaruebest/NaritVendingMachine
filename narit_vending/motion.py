@@ -1057,27 +1057,46 @@ class MotionController:
             except Exception as exc:
                 logging.getLogger(__name__).warning("Failed to sync dynamic config: %s", exc)
 
+    def _sync_dynamic_positions(self, axis_names: Iterable[str] | None = None) -> None:
+        """Synchronize dynamic positions for homed axes without intermediate disarm/arm cycles.
+
+        Firmware invariant: NucleoMotion_Disarm() invalidates dynamic positions for ALL axes.
+        DYN_POSITION requires the backend to be disarmed (motion_armed == 0).
+        Therefore:
+        1. If the backend is armed, disarm it once before updating any axis.
+        2. Set dynamic position for requested homed axes.
+        3. Do not re-arm here; backend.start_dynamic_motion() arms atomically before moving.
+        """
+        keys = tuple(
+            str(k).lower()
+            for k in (axis_names if axis_names is not None else ("x", "y"))
+            if str(k).lower() in ("x", "y")
+        )
+        if not keys:
+            return
+        backend = None
+        for k in keys:
+            ax = self.axes().get(k)
+            if ax and getattr(ax, "motion_backend", None):
+                backend = ax.motion_backend
+                break
+        if backend is None or not getattr(backend, "supports_buffered_scurve", False) or not hasattr(backend, "set_dynamic_position"):
+            return
+        try:
+            from narit_vending.domain.nucleo_profile_protocol import DynamicPositionCommand
+            if getattr(backend, "is_armed", False) and hasattr(backend, "disarm"):
+                backend.disarm()
+            for k in keys:
+                ax = self.axes().get(k)
+                if ax is not None and getattr(ax, "is_homed", False):
+                    pos_steps = int(round(ax.position_mm * ax.config.steps_per_mm))
+                    cmd = DynamicPositionCommand(k, pos_steps, self._dynamic_revision)
+                    backend.set_dynamic_position(cmd)
+        except Exception as exc:
+            logging.getLogger(__name__).warning("Failed to sync dynamic positions for %s: %s", keys, exc)
+
     def _sync_dynamic_position(self, axis_name: str) -> None:
-        axis_key = str(axis_name).lower()
-        if axis_key not in ("x", "y"):
-            return
-        axis = self.axes().get(axis_key)
-        if axis is None:
-            return
-        backend = getattr(axis, "motion_backend", None)
-        if backend is not None and getattr(backend, "supports_buffered_scurve", False) and hasattr(backend, "set_dynamic_position"):
-            try:
-                from narit_vending.domain.nucleo_profile_protocol import DynamicPositionCommand
-                was_armed = getattr(backend, "is_armed", False)
-                if was_armed and hasattr(backend, "disarm"):
-                    backend.disarm()
-                pos_steps = int(round(axis.position_mm * axis.config.steps_per_mm))
-                cmd = DynamicPositionCommand(axis_key, pos_steps, self._dynamic_revision)
-                backend.set_dynamic_position(cmd)
-                if was_armed and hasattr(backend, "arm"):
-                    backend.arm(safety_permissive=True)
-            except Exception as exc:
-                logging.getLogger(__name__).warning("Failed to sync dynamic position for %s: %s", axis_key, exc)
+        self._sync_dynamic_positions((axis_name,))
 
     def axes(self) -> dict[str, AxisController]:
         return {"x": self.x, "y": self.y, "z": self.z}
@@ -1117,8 +1136,7 @@ class MotionController:
     def home_all(self, progress: Callable[[str, str], None] | None = None) -> None:
         self._sync_dynamic_config()
         self._homing.home_all(progress=progress)
-        self._sync_dynamic_position("x")
-        self._sync_dynamic_position("y")
+        self._sync_dynamic_positions(("x", "y"))
 
     def move_by_mm(
         self,
@@ -1426,6 +1444,7 @@ class MotionController:
                 )
                 if not getattr(self, "_dynamic_config_synced", False):
                     self._sync_dynamic_config()
+                self._sync_dynamic_positions(plan.axes.keys())
                 cmd_id = f"cmd-{int(monotonic() * 1000) % 1000000}"
                 for axis_name, axis_plan in plan.axes.items():
                     target_pulses = int(round(axis_plan.target_mm * axes[axis_name].config.steps_per_mm))

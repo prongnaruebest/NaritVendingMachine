@@ -1141,11 +1141,10 @@
     `;
   }
 
-  /* ── RENDER: GLOBAL ALARM BANNER & QUICK-RESET ────────────────── */
-  function renderGlobalAlarmBanner() {
-    const banner = el("global-alarm-banner");
-    const slotBanner = el("slot-alarm-banner");
-    if (!banner && !slotBanner) return;
+  /* ── RENDER: SYSTEM-CONTROL X/Y DRIVE ALARM ALERT ───────────── */
+  function renderSystemControlAlarmAlert() {
+    const alertBox = el("system-drive-alarm-alert");
+    if (!alertBox) return;
 
     const faultChannels = alarmChannels().filter((channel) => channel.active && channel.level === "fault");
     const status = getStatus();
@@ -1162,8 +1161,7 @@
     );
 
     if (!hasAlarm) {
-      if (banner) banner.hidden = true;
-      if (slotBanner) slotBanner.hidden = true;
+      alertBox.hidden = true;
       return;
     }
 
@@ -1175,11 +1173,11 @@
       title = "CLOSED-LOOP STEPPER DRIVER ALARM";
       badge = "DRIVE ALARM";
       const axes = [xAlarm ? "X-Axis (DI0)" : null, yAlarm ? "Y-Axis (DI1)" : null].filter(Boolean).join(" & ");
-      message = `Driver Following Error / Protection Alarm detected on ${axes}. Click "POWER-CYCLE X/Y DRIVES" to reset driver power via KM1 relay without physical power switch.`;
+      message = `Driver Following Error / Protection Alarm detected on ${axes}. Click "QUICK RESET DRIVES (KM1)" to reset driver power via KM1 relay without physical power switch.`;
     } else if (status.estop || MS.payload?.machine_state === "E_STOP") {
       title = "EMERGENCY STOP ACTIVE";
       badge = "E-STOP";
-      message = "Emergency Stop input (DI10) is active. Release the physical E-Stop button, then click Reset Alarms.";
+      message = "Emergency Stop input (DI10) is active. Release the physical E-Stop button, then click Clear Alarms.";
     } else if (MS.payload?.last_error) {
       title = "MOTION ERROR / CONTROLLER FAULT";
       badge = "FAULT";
@@ -1187,24 +1185,17 @@
     } else if (MS.payload?.safety?.stop_requested) {
       title = "SOFTWARE STOP LATCH ACTIVE";
       badge = "STOPPED";
-      message = "Motion locked by Software Stop Latch. Click 'RESET ALARMS' to clear and re-enable motion.";
+      message = "Motion locked by Software Stop Latch. Click 'CLEAR ALARMS' to clear and re-enable motion.";
     } else if (faultChannels.length > 0) {
       title = "SAFETY INTERLOCK ACTIVE";
       badge = "INTERLOCK";
       message = faultChannels.map((c) => `${c.label}: ${c.detail}`).join(" · ");
     }
 
-    if (banner) {
-      banner.hidden = false;
-      setText("alarm-banner-title", title);
-      setText("alarm-banner-badge", badge);
-      setText("alarm-banner-message", message);
-    }
-
-    if (slotBanner) {
-      slotBanner.hidden = false;
-      setText("slot-alarm-message", `${title}: ${message}`);
-    }
+    alertBox.hidden = false;
+    setText("system-drive-alarm-title", title);
+    setText("system-drive-alarm-badge", badge);
+    setText("system-drive-alarm-message", message);
   }
 
   /* ── RENDER: SAFETY STRIP ───────────────────────────────────── */
@@ -4310,7 +4301,7 @@
     updateFeedOverride();
     renderMotionCommand();
     renderWorkspacePages();
-    renderGlobalAlarmBanner();
+    renderSystemControlAlarmAlert();
   }
 
   function render(payload) {
@@ -4327,7 +4318,7 @@
     renderSlotTable();
     loadSelectedSlotEditor();
     renderAlarmSummary();
-    renderGlobalAlarmBanner();
+    renderSystemControlAlarmAlert();
     renderPreview(MS.validation.plan);
     updateAllUI();
 
@@ -4518,15 +4509,9 @@
         runSystemAction("/api/system/drives/reset-power", "X/Y drive power reset complete. Motion remains disabled; Home X/Y before use.");
       }
     };
-    const onBannerHomeAll = () => {
-      homeAllAxes();
-    };
 
-    el("banner-clear-alarm")?.addEventListener("click", onClearAlarm);
-    el("slot-clear-alarm")?.addEventListener("click", onClearAlarm);
-    el("banner-reset-drive-power")?.addEventListener("click", onResetDrivePower);
-    el("slot-reset-drive-power")?.addEventListener("click", onResetDrivePower);
-    el("banner-home-all")?.addEventListener("click", onBannerHomeAll);
+    el("system-drive-clear-alarm")?.addEventListener("click", onClearAlarm);
+    el("system-drive-quick-power-reset")?.addEventListener("click", onResetDrivePower);
 
     /* --- Hold-to-Run Manual Jog Engine --- */
     beginManualJog = function (axis, dir, btn, event) {

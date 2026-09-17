@@ -7358,41 +7358,37 @@ select:focus-visible {
   .motion-slot-panel .selected-slot-actions { grid-template-columns: 1fr; }
 }
 
-/* ── GLOBAL INDUSTRIAL ALARM BANNER ──────────────────────────── */
-.global-alarm-banner {
+/* ── SYSTEM CONTROL: X/Y DRIVE ALARM ALERT ───────────────────── */
+.system-drive-alarm-alert {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 12px 18px;
-  background: linear-gradient(135deg, rgba(225, 29, 72, 0.25) 0%, rgba(159, 18, 57, 0.35) 100%);
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  background: linear-gradient(135deg, rgba(225, 29, 72, 0.22) 0%, rgba(159, 18, 57, 0.32) 100%);
   border: 2px solid #e11d48;
   border-radius: 8px;
   color: #fff;
   margin-bottom: 14px;
-  box-shadow: 0 4px 14px rgba(225, 29, 72, 0.35);
-  animation: alarm-banner-pulse 2s infinite ease-in-out;
-  flex-wrap: wrap;
+  box-shadow: 0 4px 14px rgba(225, 29, 72, 0.3);
+  animation: system-alarm-alert-pulse 2s infinite ease-in-out;
 }
 
-.global-alarm-banner[hidden],
-.slot-alarm-banner[hidden] {
+.system-drive-alarm-alert[hidden] {
   display: none !important;
 }
 
-@keyframes alarm-banner-pulse {
-  0%, 100% { border-color: #e11d48; box-shadow: 0 0 10px rgba(225, 29, 72, 0.3); }
-  50% { border-color: #fb7185; box-shadow: 0 0 20px rgba(244, 63, 94, 0.6); }
+@keyframes system-alarm-alert-pulse {
+  0%, 100% { border-color: #e11d48; box-shadow: 0 0 8px rgba(225, 29, 72, 0.3); }
+  50% { border-color: #fb7185; box-shadow: 0 0 18px rgba(244, 63, 94, 0.55); }
 }
 
-.alarm-banner-content {
+.system-drive-alarm-head {
   display: flex;
   align-items: center;
-  gap: 14px;
-  flex: 1 1 320px;
+  gap: 10px;
 }
 
-.alarm-banner-icon {
+.system-drive-alarm-icon {
   color: #fb7185;
   display: flex;
   align-items: center;
@@ -7400,27 +7396,22 @@ select:focus-visible {
   flex-shrink: 0;
 }
 
-.alarm-banner-text {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.alarm-banner-header {
+.system-drive-alarm-title-group {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
-.alarm-banner-title {
-  font-size: 15px;
+.system-drive-alarm-title {
+  font-size: 14px;
   font-weight: 700;
   letter-spacing: 0.5px;
   color: #fff;
   text-transform: uppercase;
 }
 
-.alarm-banner-badge {
+.system-drive-alarm-badge {
   font-size: 11px;
   font-weight: 700;
   padding: 2px 8px;
@@ -7430,23 +7421,24 @@ select:focus-visible {
   letter-spacing: 0.5px;
 }
 
-.alarm-banner-message {
+.system-drive-alarm-message {
   margin: 0;
   font-size: 13px;
   color: #fecdd3;
-  line-height: 1.4;
+  line-height: 1.45;
   word-break: break-word;
 }
 
-.alarm-banner-actions {
+.system-drive-alarm-actions {
   display: flex;
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
+  margin-top: 4px;
 }
 
 .btn-alarm-action {
-  min-height: 44px;
+  min-height: 40px;
   min-width: 44px;
   padding: 8px 16px;
   font-size: 13px;
@@ -7467,12 +7459,6 @@ select:focus-visible {
   outline-offset: 2px;
 }
 
-.btn-alarm-action.btn-sm {
-  min-height: 36px;
-  padding: 6px 12px;
-  font-size: 12px;
-}
-
 .btn-alarm-reset {
   background: #e11d48;
   color: #ffffff;
@@ -7489,42 +7475,4 @@ select:focus-visible {
 }
 .btn-alarm-power:hover {
   background: #475569;
-}
-
-.btn-alarm-home {
-  background: #1e293b;
-  color: #38bdf8;
-  border-color: #0284c7;
-}
-.btn-alarm-home:hover {
-  background: #0f172a;
-}
-
-/* ── SLOT PAGE ALARM CALLOUT ─────────────────────────────────── */
-.slot-alarm-banner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 14px;
-  margin-bottom: 12px;
-  background: rgba(225, 29, 72, 0.2);
-  border: 1px solid #e11d48;
-  border-radius: 6px;
-  color: #fecdd3;
-  flex-wrap: wrap;
-}
-
-.slot-alarm-content {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 600;
-  font-size: 13px;
-}
-
-.slot-alarm-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
 }

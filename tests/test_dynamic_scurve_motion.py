@@ -208,7 +208,47 @@ class TestDynamicScurveMotion(unittest.TestCase):
         self.assertEqual(len(self.backend.configured_axes), 0)
         self.assertEqual(len(self.backend.staged_targets), 1)
 
+    def test_sync_dynamic_positions_multiple_axes(self) -> None:
+        self.mock_x.is_homed = True
+        self.mock_x.position_mm = 150.0
+        self.mock_y.is_homed = True
+        self.mock_y.position_mm = 250.0
+        self.backend.positions.clear()
+
+        self.mc._sync_dynamic_positions(("x", "y"))
+        pos_axes = {cmd.axis: cmd.estimated_position_pulses for cmd in self.backend.positions}
+        self.assertIn("x", pos_axes)
+        self.assertIn("y", pos_axes)
+        self.assertEqual(pos_axes["x"], int(round(150.0 * self.mock_x.config.steps_per_mm)))
+        self.assertEqual(pos_axes["y"], int(round(250.0 * self.mock_y.config.steps_per_mm)))
+
+    def test_coordinated_move_syncs_positions_before_staging(self) -> None:
+        self.backend.positions.clear()
+        self.backend.staged_targets.clear()
+        self.mock_x.is_homed = True
+        self.mock_x.position_mm = 120.0
+        self.mock_y.is_homed = True
+        self.mock_y.position_mm = 340.0
+
+        plan = CoordinatedMovePlan(
+            axes={
+                "x": AxisMovePlan(axis="x", current_mm=120.0, target_mm=220.0, distance_mm=100.0, direction=0, steps=6471, speed_mm_s=50.0, duration_s=2.0),
+                "y": AxisMovePlan(axis="y", current_mm=340.0, target_mm=440.0, distance_mm=100.0, direction=0, steps=6471, speed_mm_s=50.0, duration_s=2.0),
+            },
+            duration_s=2.0,
+            mode="speed",
+        )
+        self.mc._execute_coordinated_plan(plan)
+
+        # Confirm positions were synced
+        pos_axes = {cmd.axis: cmd.estimated_position_pulses for cmd in self.backend.positions}
+        self.assertIn("x", pos_axes)
+        self.assertIn("y", pos_axes)
+        self.assertEqual(pos_axes["x"], int(round(120.0 * self.mock_x.config.steps_per_mm)))
+        self.assertEqual(pos_axes["y"], int(round(340.0 * self.mock_y.config.steps_per_mm)))
+
 
 if __name__ == "__main__":
     unittest.main()
+
 

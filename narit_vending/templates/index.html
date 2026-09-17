@@ -199,34 +199,6 @@
 
     <!-- ── MAIN WORKSPACE (CENTER) ─────────────────────────────── -->
     <main class="hmi-workspace">
-      <!-- ── GLOBAL INDUSTRIAL ALARM BANNER ──────────────────────── -->
-      <aside class="global-alarm-banner" id="global-alarm-banner" role="alert" aria-live="assertive" hidden>
-        <div class="alarm-banner-content">
-          <div class="alarm-banner-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" width="28" height="28">
-              <path fill="currentColor" d="M12 2L1 21h22L12 2zm0 3.8l8.5 14.7H3.5L12 5.8zM11 10v4h2v-4h-2zm0 6v2h2v-2h-2z"/>
-            </svg>
-          </div>
-          <div class="alarm-banner-text">
-            <div class="alarm-banner-header">
-              <strong class="alarm-banner-title" id="alarm-banner-title">MACHINE FAULT / ALARM ACTIVE</strong>
-              <span class="alarm-banner-badge" id="alarm-banner-badge">FAULT</span>
-            </div>
-            <p class="alarm-banner-message" id="alarm-banner-message">Motion locked: An alarm or error has occurred.</p>
-          </div>
-        </div>
-        <div class="alarm-banner-actions">
-          <button type="button" class="btn-alarm-action btn-alarm-reset" id="banner-clear-alarm" title="Reset controller software alarm latch">
-            RESET ALARMS
-          </button>
-          <button type="button" class="btn-alarm-action btn-alarm-power" id="banner-reset-drive-power" title="Cycle KM1 relay to power-cycle stepper drives for 3 seconds">
-            POWER-CYCLE X/Y DRIVES (KM1)
-          </button>
-          <button type="button" class="btn-alarm-action btn-alarm-home" id="banner-home-all" title="Reference all axes after clearing alarm">
-            HOME ALL AXES
-          </button>
-        </div>
-      </aside>
 
       <section class="workspace-view active" data-view-page="motion">
       <!-- Top Row: Homing Controls -->
@@ -378,18 +350,6 @@
 
       <!-- Slot positioning Table Panel -->
       <section class="workspace-view" data-view-page="slots">
-      <div class="slot-alarm-banner" id="slot-alarm-banner" role="alert" hidden>
-        <div class="slot-alarm-content">
-          <span class="slot-alarm-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M12 2L1 21h22L12 2zm0 3.8l8.5 14.7H3.5L12 5.8zM11 10v4h2v-4h-2zm0 6v2h2v-2h-2z"/></svg>
-          </span>
-          <span class="slot-alarm-message" id="slot-alarm-message">Machine is in ALARM state. Reset alarms to enable slot motion.</span>
-        </div>
-        <div class="slot-alarm-actions">
-          <button type="button" class="btn-alarm-action btn-alarm-reset btn-sm" id="slot-clear-alarm">RESET ALARMS</button>
-          <button type="button" class="btn-alarm-action btn-alarm-power btn-sm" id="slot-reset-drive-power">POWER-CYCLE DRIVES (KM1)</button>
-        </div>
-      </div>
       <div class="panel linked-speed-panel">
         <div class="linked-speed-head"><div><p class="panel-label">Linked Motion Parameters</p><h2 class="panel-title">Axis Speed for Slot Commands</h2></div><span>Shared with every motion page</span></div>
         <div class="axis-speed-bank" data-axis-speed-bank aria-label="Linked axis speed settings for slot commands"></div>
@@ -1274,7 +1234,7 @@
         <div class="system-control-grid">
           <section class="panel page-panel"><div class="panel-head"><div><p class="panel-label">Motion Authority</p><h2 class="panel-title">Enable / Disable Future Motion</h2></div><span class="page-status-chip" id="system-motion-state">UNKNOWN</span></div><div class="system-control-body"><p>Disable sends STOP and DISARM, then inhibits every future motion command. Enable only clears the inhibit after DI10, IRIV I/O and NUCLEO checks pass; it never starts motion.</p><div class="system-action-row"><button class="btn-secondary" id="system-motion-enable" type="button">ENABLE MOTION</button><button class="btn-estop" id="system-motion-disable" type="button">DISABLE MOTION</button></div><p class="system-action-result" id="system-action-result">No system-control command sent.</p></div></section>
           <section class="panel page-panel"><div class="panel-head"><div><p class="panel-label">STM32 / USB Recovery</p><h2 class="panel-title">Reset USB Link &amp; Handshake</h2></div><span class="page-status-chip" id="system-nucleo-state">UNKNOWN</span></div><div class="system-control-body"><p>This action first stops and disarms all axes, closes and reopens USB Serial, then verifies firmware/protocol identity. It does <strong>not</strong> toggle the physical NRST pin.</p><button class="btn-secondary" id="system-nucleo-reset" type="button">RESET USB LINK</button></div></section>
-          <section class="panel page-panel"><div class="panel-head"><div><p class="panel-label">X/Y Drive Power</p><h2 class="panel-title">KM1 / HBS860H Power Control</h2></div><span class="page-status-chip" id="system-drive-power-state">OFF / UNKNOWN</span></div><div class="system-control-body"><p>Normal state is DO0 ON. Every action stops and disarms motion. E-Stop NC remains physically in series, so software cannot bypass it.</p><div class="system-action-row"><button class="btn-estop" id="system-drive-power-cut" type="button" aria-label="Cut power to X and Y motor drives">CUT POWER</button><button class="btn-secondary" id="system-drive-power-reset" type="button" aria-label="Power cycle X and Y motor drives">RESET DRIVES</button><button class="btn-secondary" id="system-drive-power-restore" type="button" aria-label="Restore power to X and Y motor drives">RESTORE POWER</button></div><p class="page-note">Reset cuts power for 3 seconds and restores it. Motion remains disabled and X/Y must be homed afterwards.</p></div></section>
+          <section class="panel page-panel system-drive-power-panel"><div class="panel-head"><div><p class="panel-label">X/Y Drive Power</p><h2 class="panel-title">KM1 / HBS860H Power Control</h2></div><span class="page-status-chip" id="system-drive-power-state">OFF / UNKNOWN</span></div><div class="system-control-body"><div class="system-drive-alarm-alert" id="system-drive-alarm-alert" role="alert" hidden><div class="system-drive-alarm-head"><span class="system-drive-alarm-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M12 2L1 21h22L12 2zm0 3.8l8.5 14.7H3.5L12 5.8zM11 10v4h2v-4h-2zm0 6v2h2v-2h-2z"/></svg></span><div class="system-drive-alarm-title-group"><strong class="system-drive-alarm-title" id="system-drive-alarm-title">DRIVE ALARM ACTIVE</strong><span class="system-drive-alarm-badge" id="system-drive-alarm-badge">ALARM</span></div></div><p class="system-drive-alarm-message" id="system-drive-alarm-message">X/Y stepper drive alarm detected.</p><div class="system-drive-alarm-actions"><button type="button" class="btn-alarm-action btn-alarm-power" id="system-drive-quick-power-reset" title="Cycle KM1 relay to power-cycle stepper drives for 3 seconds">QUICK RESET DRIVES (KM1)</button><button type="button" class="btn-alarm-action btn-alarm-reset" id="system-drive-clear-alarm" title="Reset controller software alarm latch">CLEAR ALARMS</button></div></div><p>Normal state is DO0 ON. Every action stops and disarms motion. E-Stop NC remains physically in series, so software cannot bypass it.</p><div class="system-action-row"><button class="btn-estop" id="system-drive-power-cut" type="button" aria-label="Cut power to X and Y motor drives">CUT POWER</button><button class="btn-secondary" id="system-drive-power-reset" type="button" aria-label="Power cycle X and Y motor drives">RESET DRIVES</button><button class="btn-secondary" id="system-drive-power-restore" type="button" aria-label="Restore power to X and Y motor drives">RESTORE POWER</button></div><p class="page-note">Reset cuts power for 3 seconds and restores it. Motion remains disabled and X/Y must be homed afterwards.</p></div></section>
           <section class="panel page-panel system-safety-coverage"><div class="panel-head"><div><p class="panel-label">Emergency-stop coverage</p><h2 class="panel-title">DI10 All-axis Stop Path</h2></div><span class="page-status-chip" id="system-di10-state">UNKNOWN</span></div><div class="system-control-body"><dl class="system-detail-list"><div><dt>DI10 logical state</dt><dd id="system-di10-logical">--</dd></div><div><dt>DI10 raw contact</dt><dd id="system-di10-raw">--</dd></div><div><dt>X/Y protection</dt><dd>Physical 60 V removal + pulse stop</dd></div><div><dt>Z protection</dt><dd class="warning-text">Software STEP pulse stop only</dd></div></dl><p class="system-warning">Z is not protected from Controller, USB, STM32, or driver failure by software alone. Wire the Z driver enable or power stage through a safety-rated relay/contactor for a complete emergency-stop function.</p></div></section>
           <section class="panel page-panel system-action-history-panel"><div class="panel-head"><div><p class="panel-label">Recent Control Activity</p><h2 class="panel-title">System / Safety Event History</h2></div><span class="page-note">Read-only · current session</span></div><ol id="system-action-history" class="system-action-history"></ol></section>
         </div>
