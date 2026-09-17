@@ -10,7 +10,13 @@ from datetime import datetime, timezone
 from typing import Any, Callable
 
 from narit_vending.domain.errors import MotionError, NucleoError
-from narit_vending.domain.nucleo_profile_protocol import NucleoCapabilities
+from narit_vending.domain.nucleo_profile_protocol import (
+    DynamicAxisConfigCommand,
+    DynamicPositionCommand,
+    DynamicStartCommand,
+    DynamicTargetCommand,
+    NucleoCapabilities,
+)
 
 _log = logging.getLogger(__name__)
 
@@ -402,6 +408,112 @@ class NucleoLink:
     def controlled_stop(self) -> dict[str, Any]:
         """Request smooth S-curve controlled stop."""
         return self.send_dynamic_line("CONTROLLED_STOP")
+
+    def configure_dynamic_axis(self, command: DynamicAxisConfigCommand) -> dict[str, Any]:
+        resp = self.send_dynamic_line(command.wire_line())
+        if resp.get("type") != "ack" or resp.get("status") != "configured":
+            raise NucleoError(f"Dynamic config rejected on {command.axis.upper()}: {resp}")
+        return resp
+
+    def set_dynamic_position(self, command: DynamicPositionCommand) -> dict[str, Any]:
+        resp = self.send_dynamic_line(command.wire_line())
+        if resp.get("type") != "ack" or resp.get("status") != "position_set":
+            raise NucleoError(f"Dynamic position set rejected on {command.axis.upper()}: {resp}")
+        return resp
+
+    def stage_dynamic_target(self, command: DynamicTargetCommand) -> dict[str, Any]:
+        resp = self.send_dynamic_line(command.wire_line())
+        if resp.get("type") != "ack" or resp.get("status") not in ("staged", "duplicate"):
+            raise NucleoError(f"Dynamic target rejected on {command.axis.upper()}: {resp}")
+        return resp
+
+    def start_dynamic_motion(
+        self,
+        command: DynamicStartCommand,
+        *,
+        timeout_s: float,
+        stop_requested: Callable[[], bool] | None = None,
+    ) -> dict[str, Any]:
+        """Start and supervise an atomic X/Y dynamic S-curve move."""
+        with self._lock:
+            if not self.communication_ok:
+                raise NucleoError("Nucleo communication link is not online")
+            if not self.arm(safety_permissive=True):
+                raise NucleoError("Failed to arm Nucleo for dynamic motion")
+            serial_port = self._open_serial()
+            try:
+                serial_port.reset_input_buffer()
+            except Exception:
+                pass
+            cmd = (command.wire_line() + "\n").encode("ascii")
+            _log.info("Nucleo DYN TX: %s", command.wire_line())
+            serial_port.write(cmd)
+            serial_port.flush()
+            ack = self._read_json_response(serial_port, time.monotonic() + self.timeout_s, expected_types={"ack"})
+            if not ack or ack.get("type") != "ack" or ack.get("status") != "running":
+                self.disarm()
+                raise NucleoError(f"Dynamic start rejected: {ack}")
+
+            started = time.monotonic()
+            deadline = started + max(1.0, float(timeout_s))
+            participating = set(command.axes)
+
+            try:
+                while time.monotonic() < deadline:
+                    time.sleep(0.08)
+
+                    if stop_requested is not None and stop_requested():
+                        serial_port.write(b"CONTROLLED_STOP\n")
+                        serial_port.flush()
+                        stop_ack = self._read_json_response(serial_port, time.monotonic() + 0.5, expected_types={"ack"})
+                        _log.info("Nucleo CONTROLLED_STOP ACK: %r", stop_ack)
+                        stop_deadline = time.monotonic() + 3.0
+                        while time.monotonic() < stop_deadline:
+                            time.sleep(0.05)
+                            serial_port.write(b"HEARTBEAT SAFE\n")
+                            serial_port.flush()
+                            hb = self._read_json_response(serial_port, time.monotonic() + 0.2, expected_types={"heartbeat"})
+                            if hb:
+                                moving = hb.get("moving", {})
+                                if isinstance(moving, dict) and all(not moving.get(a, 0) for a in participating):
+                                    break
+                        self.disarm()
+                        elapsed = max(0.0, time.monotonic() - started)
+                        return {"ok": True, "command_id": command.command_id, "stopped": True, "duration_s": elapsed}
+
+                    serial_port.write(b"HEARTBEAT SAFE\n")
+                    serial_port.flush()
+                    hb = self._read_json_response(serial_port, time.monotonic() + 0.2, expected_types={"heartbeat"})
+                    if hb:
+                        self._last_success_monotonic = time.monotonic()
+                        self._last_payload = dict(hb)
+                        moving = hb.get("moving", {})
+                        if isinstance(moving, dict) and all(not moving.get(a, 0) for a in participating):
+                            break
+                else:
+                    serial_port.write(b"STOP\n")
+                    serial_port.flush()
+                    self.disarm()
+                    raise NucleoError(f"Dynamic move timed out after {timeout_s:.1f} seconds")
+
+                if not self.disarm():
+                    raise NucleoError("Dynamic move completed but Nucleo failed to disarm")
+
+                elapsed = max(0.0, time.monotonic() - started)
+                return {
+                    "ok": True,
+                    "command_id": command.command_id,
+                    "duration_s": elapsed,
+                    "stopped": False,
+                }
+            except Exception:
+                try:
+                    serial_port.write(b"STOP\n")
+                    serial_port.flush()
+                except Exception:
+                    pass
+                self.disarm()
+                raise
 
     def move(
         self,

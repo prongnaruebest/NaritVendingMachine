@@ -52,6 +52,7 @@ def decide_profile_route(
     capability_ready: bool,
     runtime_ready: bool,
     sensor_termination_ready: bool = False,
+    allow_host_supervised_homing: bool = True,
 ) -> ProfileRouteDecision:
     """Choose legacy/buffered/blocked without silently downgrading enabled profiles."""
 
@@ -68,16 +69,26 @@ def decide_profile_route(
             axis, selected_operation, False, capability_ready, runtime_ready,
             "legacy", True, "S-curve is disabled in effective configuration",
         )
+    sensor_terminated = selected_operation in (ProfileOperation.HOME, ProfileOperation.LIMIT_SEEK)
+    if sensor_terminated:
+        if sensor_termination_ready:
+            return ProfileRouteDecision(
+                axis, selected_operation, True, True, True,
+                "sensor_terminated_scurve", True, "Sensor-terminated X/Y profile route is available",
+            )
+        if allow_host_supervised_homing:
+            return ProfileRouteDecision(
+                axis, selected_operation, True, capability_ready, runtime_ready,
+                "legacy", True, "Host-supervised homing uses the legacy motion path with IRIV sensor monitoring",
+            )
+        return ProfileRouteDecision(
+            axis, selected_operation, True, True, runtime_ready,
+            "blocked", False, "NUCLEO handshake does not advertise sensor-terminated profile support",
+        )
     if not capability_ready:
         return ProfileRouteDecision(
             axis, selected_operation, True, False, runtime_ready,
             "blocked", False, "NUCLEO handshake does not advertise buffered S-curve support",
-        )
-    sensor_terminated = selected_operation in (ProfileOperation.HOME, ProfileOperation.LIMIT_SEEK)
-    if sensor_terminated and not sensor_termination_ready:
-        return ProfileRouteDecision(
-            axis, selected_operation, True, True, runtime_ready,
-            "blocked", False, "NUCLEO handshake does not advertise sensor-terminated profile support",
         )
     if not runtime_ready:
         return ProfileRouteDecision(
@@ -86,7 +97,7 @@ def decide_profile_route(
         )
     return ProfileRouteDecision(
         axis, selected_operation, True, True, True,
-        "sensor_terminated_scurve" if sensor_terminated else "buffered_scurve",
+        "buffered_scurve",
         True,
-        "Sensor-terminated X/Y profile route is available" if sensor_terminated else "Buffered X/Y profile route is available",
+        "Buffered X/Y profile route is available",
     )

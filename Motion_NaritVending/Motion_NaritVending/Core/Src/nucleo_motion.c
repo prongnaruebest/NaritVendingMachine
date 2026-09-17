@@ -344,31 +344,9 @@ NucleoMotionResult Stepper_Move(uint8_t axis, uint8_t dir,
     return NUCLEO_MOTION_ERR_ARGUMENT;
   }
 #if NUCLEO_G491_DYNAMIC_MOTION_ENABLED
-  if (axis < AXIS_Z) {
-    uint8_t directions[NUCLEO_DYNAMIC_COORDINATED_AXIS_COUNT] = {0U, 0U};
-    uint32_t distances[NUCLEO_DYNAMIC_COORDINATED_AXIS_COUNT] = {0U, 0U};
-
-    if ((dynamic_hal_ready == 0U) || (dynamic_app.facade.runtime_ready == 0U)) {
-      return NUCLEO_MOTION_ERR_ARGUMENT;
-    }
-    if ((dynamic_app.facade.coordinator.active_mask & (1U << axis)) != 0U) {
-      return NUCLEO_MOTION_ERR_BUSY;
-    }
-    if (dynamic_app.facade.hooks.prepare_direction(
-            dynamic_app.facade.hooks.context, axis, dir) == 0U) {
-      return NUCLEO_MOTION_ERR_ARGUMENT;
-    }
-    dynamic_app.facade.coordinator.axes[axis].config.constraints.max_velocity_hz = speed_hz;
-    dynamic_app.facade.coordinator.axes[axis].config.kp.max_velocity_hz = speed_hz;
-    directions[axis] = dir != 0U ? 1U : 0U;
-    distances[axis] = steps;
-
-    if (NucleoDynamicCoordinator_Start(
-            &dynamic_app.facade.coordinator, (uint8_t)(1U << axis), directions,
-            distances, dynamic_time_us(), 1U) == 0U) {
-      return NUCLEO_MOTION_ERR_BUSY;
-    }
-    return NUCLEO_MOTION_OK;
+  if ((axis < AXIS_Z) && (dynamic_hal_ready != 0U) &&
+      ((dynamic_app.facade.coordinator.active_mask & (1U << axis)) != 0U)) {
+    return NUCLEO_MOTION_ERR_BUSY;
   }
 #endif
   if (steppers[axis].toggles_remaining != 0U) {
@@ -394,12 +372,9 @@ void NucleoMotion_StopAxis(uint8_t axis)
     return;
   }
 #if NUCLEO_G491_DYNAMIC_MOTION_ENABLED
-  if ((axis != AXIS_Z) && (dynamic_hal_ready != 0U)) {
-    /* Until the v4 protocol exposes per-axis dynamic stop, a limit-triggered
-     * X/Y stop is conservatively global rather than allowing another axis to
-     * continue under ambiguous ownership. */
-    NucleoDynamicApp_EmergencyStop(&dynamic_app);
-    return;
+  if ((axis < AXIS_Z) && (dynamic_hal_ready != 0U) &&
+      ((dynamic_app.facade.coordinator.active_mask & (1U << axis)) != 0U)) {
+    NucleoDynamicCoordinator_StopAll(&dynamic_app.facade.coordinator);
   }
 #endif
   steppers[axis].toggles_remaining = 0U;
@@ -410,8 +385,9 @@ void NucleoMotion_StopAxis(uint8_t axis)
 uint8_t Stepper_IsMoving(uint8_t axis)
 {
 #if NUCLEO_G491_DYNAMIC_MOTION_ENABLED
-  if ((axis < AXIS_Z) && (dynamic_hal_ready != 0U)) {
-    return (dynamic_app.facade.coordinator.active_mask & (1U << axis)) != 0U;
+  if ((axis < AXIS_Z) && (dynamic_hal_ready != 0U) &&
+      ((dynamic_app.facade.coordinator.active_mask & (1U << axis)) != 0U)) {
+    return 1U;
   }
 #endif
   return (axis < AXIS_COUNT) && (steppers[axis].toggles_remaining != 0U);
@@ -437,7 +413,8 @@ void HAL_TIM_OC_DelayElapsedCallback(TIM_HandleTypeDef *htim)
   }
 
 #if NUCLEO_G491_DYNAMIC_MOTION_ENABLED
-  if ((axis < AXIS_Z) && (dynamic_hal_ready != 0U)) {
+  if ((axis < AXIS_Z) && (dynamic_hal_ready != 0U) &&
+      ((dynamic_app.facade.coordinator.active_mask & (1U << axis)) != 0U)) {
     NucleoG491ProfileHal_OnCompare(&dynamic_profile_hal, axis);
     return;
   }

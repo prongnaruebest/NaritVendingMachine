@@ -1015,8 +1015,50 @@ class MotionController:
         self.timer_seconds: float = 0.0
         self.last_plan: CoordinatedMovePlan | None = None
         self._state_name = "idle"
+        self._dynamic_revision = "cfg-1"
         self._homing = HomingOrchestrator(axes=self.axes, home_order=self.config.home_order)
         self.set_state("idle")
+
+    def _sync_dynamic_config(self) -> None:
+        backend = getattr(self.x, "motion_backend", None)
+        if backend is not None and getattr(backend, "supports_buffered_scurve", False) and hasattr(backend, "configure_dynamic_axis"):
+            try:
+                from narit_vending.domain.nucleo_profile_protocol import DynamicAxisConfigCommand
+                for axis_name in ("x", "y"):
+                    axis_cfg = getattr(self.config, axis_name)
+                    cmd = DynamicAxisConfigCommand(
+                        axis=axis_name,
+                        travel_min_pulses=0,
+                        travel_max_pulses=int(round(axis_cfg.max_travel_mm * axis_cfg.steps_per_mm)),
+                        pulses_per_mm_milli=int(round(axis_cfg.steps_per_mm * 1000)),
+                        kp_enabled=False,
+                        kp_approach_milliper_s=1000,
+                        max_velocity_millihz=min(50_000_000, int(round(axis_cfg.max_speed_mm_s * axis_cfg.steps_per_mm * 1000))),
+                        max_acceleration_millihz_s=int(round(axis_cfg.acceleration * axis_cfg.steps_per_mm * 1000)),
+                        max_deceleration_millihz_s=int(round(axis_cfg.deceleration * axis_cfg.steps_per_mm * 1000)),
+                        max_jerk_millihz_s2=int(round((getattr(axis_cfg, "scurve_max_jerk_mm_s3", None) or 1500.0) * axis_cfg.steps_per_mm * 1000)),
+                        configuration_revision=self._dynamic_revision,
+                    )
+                    backend.configure_dynamic_axis(cmd)
+            except Exception as exc:
+                logging.getLogger(__name__).warning("Failed to sync dynamic config: %s", exc)
+
+    def _sync_dynamic_position(self, axis_name: str) -> None:
+        axis_key = str(axis_name).lower()
+        if axis_key not in ("x", "y"):
+            return
+        axis = self.axes().get(axis_key)
+        if axis is None:
+            return
+        backend = getattr(axis, "motion_backend", None)
+        if backend is not None and getattr(backend, "supports_buffered_scurve", False) and hasattr(backend, "set_dynamic_position"):
+            try:
+                from narit_vending.domain.nucleo_profile_protocol import DynamicPositionCommand
+                pos_steps = int(round(axis.position_mm * axis.config.steps_per_mm))
+                cmd = DynamicPositionCommand(axis_key, pos_steps, self._dynamic_revision)
+                backend.set_dynamic_position(cmd)
+            except Exception as exc:
+                logging.getLogger(__name__).warning("Failed to sync dynamic position for %s: %s", axis_key, exc)
 
     def axes(self) -> dict[str, AxisController]:
         return {"x": self.x, "y": self.y, "z": self.z}
@@ -1049,10 +1091,15 @@ class MotionController:
                 close()
 
     def home_axis(self, axis_name: str, progress: Callable[[str, str], None] | None = None) -> None:
+        self._sync_dynamic_config()
         self._homing.home_axis(axis_name, progress=progress)
+        self._sync_dynamic_position(axis_name)
 
     def home_all(self, progress: Callable[[str, str], None] | None = None) -> None:
+        self._sync_dynamic_config()
         self._homing.home_all(progress=progress)
+        self._sync_dynamic_position("x")
+        self._sync_dynamic_position("y")
 
     def move_by_mm(
         self,
@@ -1162,9 +1209,15 @@ class MotionController:
 
         if len(plan.axes) == 1:
             single_plan = next(iter(plan.axes.values()))
-            self.axes()[single_plan.axis]._execute_plan(single_plan)
-            self.last_plan = plan
-            return plan
+            single_axis = self.axes()[single_plan.axis]
+            if not (
+                single_plan.axis in ("x", "y")
+                and getattr(single_axis.config, "scurve_enabled", False)
+                and getattr(single_axis.motion_backend, "supports_buffered_scurve", False)
+            ):
+                single_axis._execute_plan(single_plan)
+                self.last_plan = plan
+                return plan
 
         self._execute_coordinated_plan(plan)
         self.last_plan = plan
@@ -1325,17 +1378,7 @@ class MotionController:
         # through to Raspberry Pi placeholder GPIO for a coordinated move.
         backends = {id(axis.motion_backend): axis.motion_backend for axis in axes.values() if axis.motion_backend is not None}
         backend = next(iter(backends.values())) if len(backends) == 1 else None
-        if backend is not None and getattr(backend, "expected_protocol", 1) >= 3 and hasattr(backend, "move_parallel"):
-            backend_plans = {
-                axis_name: {
-                    "direction": axis_plan.direction,
-                    "steps": axis_plan.steps,
-                    "speed_hz": max(10.0, axis_plan.steps / max(plan.duration_s, 0.001)),
-                }
-                for axis_name, axis_plan in plan.axes.items()
-                if axis_plan.steps > 0
-            }
-
+        if backend is not None and getattr(backend, "expected_protocol", 1) >= 3:
             def coordinated_stop() -> bool:
                 if self.emergency_stop_active() or self.stop_requested() or self.controlled_stop_requested():
                     return True
@@ -1350,28 +1393,81 @@ class MotionController:
                     for name, axis_plan in plan.axes.items()
                 )
 
-            result = backend.move_parallel(
-                backend_plans,
-                timeout_s=plan.duration_s + 4.0,
-                stop_requested=coordinated_stop,
+            use_dynamic_scurve = (
+                getattr(backend, "supports_buffered_scurve", False)
+                and all(getattr(axes[name].config, "scurve_enabled", False) for name in plan.axes if name in ("x", "y"))
+                and set(plan.axes.keys()).issubset({"x", "y"})
+                and hasattr(backend, "start_dynamic_motion")
             )
-            completed = dict(result.get("steps", {}))
-            for axis_name, axis_plan in plan.axes.items():
-                count = int(completed.get(axis_name, axis_plan.steps))
-                axes[axis_name].position_steps += count if axis_plan.direction == axes[axis_name].config.forward_direction else -count
-            if result.get("stopped"):
-                if self.emergency_stop_active():
-                    raise EmergencyStopError("emergency stop during coordinated move")
-                if self.stop_requested():
-                    raise StopRequestedError("stop requested during coordinated move")
-                if self.controlled_stop_requested():
-                    raise ControlledStopError("coordinated controlled stop completed")
-                for axis in axes.values():
-                    axis.is_homed = False
-                raise LimitTriggeredError("physical limit triggered during coordinated move")
-            sleep(max(axis.config.settle_delay for axis in axes.values()))
-            self._verify_completion(completion_tokens)
-            return
+
+            if use_dynamic_scurve:
+                from narit_vending.domain.nucleo_profile_protocol import (
+                    DynamicStartCommand,
+                    DynamicTargetCommand,
+                )
+                self._sync_dynamic_config()
+                cmd_id = f"cmd-{int(monotonic() * 1000) % 1000000}"
+                for axis_name, axis_plan in plan.axes.items():
+                    target_pulses = int(round(axis_plan.target_mm * axes[axis_name].config.steps_per_mm))
+                    backend.stage_dynamic_target(
+                        DynamicTargetCommand(cmd_id, axis_name, target_pulses, self._dynamic_revision)
+                    )
+                start_cmd = DynamicStartCommand(cmd_id, tuple(plan.axes.keys()))
+                result = backend.start_dynamic_motion(
+                    start_cmd,
+                    timeout_s=plan.duration_s + 4.0,
+                    stop_requested=coordinated_stop,
+                )
+                if result.get("stopped"):
+                    if self.emergency_stop_active():
+                        raise EmergencyStopError("emergency stop during coordinated move")
+                    if self.stop_requested():
+                        raise StopRequestedError("stop requested during coordinated move")
+                    if self.controlled_stop_requested():
+                        raise ControlledStopError("coordinated controlled stop completed")
+                    for axis in axes.values():
+                        axis.is_homed = False
+                    raise LimitTriggeredError("physical limit triggered during coordinated move")
+                for axis_name, axis_plan in plan.axes.items():
+                    target_pulses = int(round(axis_plan.target_mm * axes[axis_name].config.steps_per_mm))
+                    axes[axis_name].position_steps = target_pulses
+                sleep(max(axis.config.settle_delay for axis in axes.values()))
+                self._verify_completion(completion_tokens)
+                return
+
+            if hasattr(backend, "move_parallel"):
+                backend_plans = {
+                    axis_name: {
+                        "direction": axis_plan.direction,
+                        "steps": axis_plan.steps,
+                        "speed_hz": max(10.0, axis_plan.steps / max(plan.duration_s, 0.001)),
+                    }
+                    for axis_name, axis_plan in plan.axes.items()
+                    if axis_plan.steps > 0
+                }
+
+                result = backend.move_parallel(
+                    backend_plans,
+                    timeout_s=plan.duration_s + 4.0,
+                    stop_requested=coordinated_stop,
+                )
+                completed = dict(result.get("steps", {}))
+                for axis_name, axis_plan in plan.axes.items():
+                    count = int(completed.get(axis_name, axis_plan.steps))
+                    axes[axis_name].position_steps += count if axis_plan.direction == axes[axis_name].config.forward_direction else -count
+                if result.get("stopped"):
+                    if self.emergency_stop_active():
+                        raise EmergencyStopError("emergency stop during coordinated move")
+                    if self.stop_requested():
+                        raise StopRequestedError("stop requested during coordinated move")
+                    if self.controlled_stop_requested():
+                        raise ControlledStopError("coordinated controlled stop completed")
+                    for axis in axes.values():
+                        axis.is_homed = False
+                    raise LimitTriggeredError("physical limit triggered during coordinated move")
+                sleep(max(axis.config.settle_delay for axis in axes.values()))
+                self._verify_completion(completion_tokens)
+                return
 
         accumulators = {name: 0 for name in plan.axes}
         half_periods = _build_half_periods(master_steps, plan.duration_s, ramp_ratio=1.6)
