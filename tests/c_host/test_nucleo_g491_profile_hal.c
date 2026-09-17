@@ -74,7 +74,7 @@ int main(void)
   assert(NucleoG491ProfileHal_PrepareDirectionHook(&port, 0U, 1U) == 1U);
   assert(NucleoG491ProfileHal_PrepareDirectionHook(&port, 1U, 0U) == 1U);
   assert(delay_ms == 2U);
-  assert(gpio_state[1] == GPIO_PIN_SET && gpio_state[2] == GPIO_PIN_RESET);
+  assert(gpio_state[1] == GPIO_PIN_RESET && gpio_state[2] == GPIO_PIN_SET);
   assert(NucleoCompareAdapter_SetRate(&port.compare_adapter, 0U,
                                       1000000U) == 1U);
   assert(NucleoCompareAdapter_SetRate(&port.compare_adapter, 1U,

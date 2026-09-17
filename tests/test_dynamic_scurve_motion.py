@@ -247,6 +247,38 @@ class TestDynamicScurveMotion(unittest.TestCase):
         self.assertEqual(pos_axes["x"], int(round(120.0 * self.mock_x.config.steps_per_mm)))
         self.assertEqual(pos_axes["y"], int(round(340.0 * self.mock_y.config.steps_per_mm)))
 
+    def test_dynamic_target_direction_polarity_contract(self) -> None:
+        """Verify dynamic target staging pulses and documented physical DIR polarity invariant."""
+        self.backend.positions.clear()
+        self.backend.staged_targets.clear()
+        self.mock_x.is_homed = True
+        self.mock_x.position_mm = 0.0
+        self.mock_y.is_homed = True
+        self.mock_y.position_mm = 0.0
+
+        # Plan move to Slot 21 (X=850.0 mm, Y=880.0 mm)
+        plan = CoordinatedMovePlan(
+            axes={
+                "x": AxisMovePlan(axis="x", current_mm=0.0, target_mm=850.0, distance_mm=850.0, direction=0, steps=55000, speed_mm_s=200.0, duration_s=4.25),
+                "y": AxisMovePlan(axis="y", current_mm=0.0, target_mm=880.0, distance_mm=880.0, direction=0, steps=56941, speed_mm_s=200.0, duration_s=4.4),
+            },
+            duration_s=4.4,
+            mode="speed",
+        )
+        self.mc._execute_coordinated_plan(plan)
+
+        staged = {target.axis: target.target_position_pulses for target in self.backend.staged_targets}
+        self.assertEqual(staged["x"], 55000)
+        self.assertEqual(staged["y"], 56941)
+
+        # Hardware invariant:
+        # In machine_config.iriv.json, forward_direction is 0 (GPIO LOW) and home_direction is 1 (GPIO HIGH).
+        # In STM32 nucleo_g491_profile_hal.c:
+        #   target >= current (direction=1) -> GPIO_PIN_RESET (LOW / forward)
+        #   target < current  (direction=0) -> GPIO_PIN_SET   (HIGH / reverse)
+        self.assertEqual(self.mock_x.config.forward_direction, 0)
+        self.assertEqual(self.mock_x.config.home_direction, 1)
+
 
 if __name__ == "__main__":
     unittest.main()

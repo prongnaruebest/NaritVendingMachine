@@ -162,8 +162,13 @@ uint8_t NucleoG491ProfileHal_PrepareDirectionHook(void *context,
   if ((port == NULL) || (axis >= NUCLEO_COMPARE_AXIS_COUNT) ||
       (direction > 1U)) return 0U;
   if (port->compare_adapter.enabled[axis] != 0U) return 0U;
+  /* Direction polarity for Narit Vending Machine:
+   *   direction 1U = positive displacement (+mm, target >= current) -> drives GPIO_PIN_RESET (LOW / forward)
+   *   direction 0U = negative displacement (-mm, target < current)  -> drives GPIO_PIN_SET (HIGH / reverse)
+   * This matches machine_config.iriv.json (forward_direction = 0, home_direction = 1)
+   * and legacy NucleoMotion_StartMove behavior. */
   HAL_GPIO_WritePin(port->direction_ports[axis], port->direction_pins[axis],
-                    direction != 0U ? GPIO_PIN_SET : GPIO_PIN_RESET);
+                    direction != 0U ? GPIO_PIN_RESET : GPIO_PIN_SET);
   /* A bounded one-millisecond command-path delay exceeds the 5 us HBS860H
    * DIR setup requirement without introducing delay-based STEP generation. */
   HAL_Delay(NUCLEO_G491_DIRECTION_SETUP_DELAY_MS);
