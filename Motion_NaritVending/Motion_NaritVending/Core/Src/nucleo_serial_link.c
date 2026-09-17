@@ -203,7 +203,7 @@ static void process_line(char *line)
 #if NUCLEO_G491_DYNAMIC_MOTION_ENABLED
   } else if ((strncmp(line, "DYN_", 4U) == 0) ||
              (strcmp(line, "CONTROLLED_STOP") == 0)) {
-    char response[360];
+    char response[512];
     if (NucleoMotion_HandleDynamicLine(line, response, sizeof(response)) != 0U) {
       transmit_text(response);
       transmit_text("\r\n");

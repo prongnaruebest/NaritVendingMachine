@@ -1031,6 +1031,7 @@ class MotionController:
                     backend.disarm()
                 for axis_name in ("x", "y"):
                     axis_cfg = getattr(self.config, axis_name)
+                    safe_max_speed = getattr(axis_cfg, "commissioned_max_speed_mm_s", None) or axis_cfg.max_speed_mm_s
                     cmd = DynamicAxisConfigCommand(
                         axis=axis_name,
                         travel_min_pulses=0,
@@ -1038,7 +1039,7 @@ class MotionController:
                         pulses_per_mm_milli=int(round(axis_cfg.steps_per_mm * 1000)),
                         kp_enabled=False,
                         kp_approach_milliper_s=1000,
-                        max_velocity_millihz=min(50_000_000, int(round(axis_cfg.max_speed_mm_s * axis_cfg.steps_per_mm * 1000))),
+                        max_velocity_millihz=min(50_000_000, int(round(safe_max_speed * axis_cfg.steps_per_mm * 1000))),
                         max_acceleration_millihz_s=int(round(axis_cfg.acceleration * axis_cfg.steps_per_mm * 1000)),
                         max_deceleration_millihz_s=int(round(axis_cfg.deceleration * axis_cfg.steps_per_mm * 1000)),
                         max_jerk_millihz_s2=int(round((getattr(axis_cfg, "scurve_max_jerk_mm_s3", None) or 1500.0) * axis_cfg.steps_per_mm * 1000)),
