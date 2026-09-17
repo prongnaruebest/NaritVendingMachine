@@ -151,6 +151,24 @@ static void dynamic_runtime_init(void)
     dynamic_hal_ready = 0U;
     return;
   }
+  {
+    NucleoDynamicConfig configs[NUCLEO_DYNAMIC_AXIS_COUNT];
+    uint8_t a;
+    for (a = 0U; a < NUCLEO_DYNAMIC_AXIS_COUNT; ++a) {
+      memset(&configs[a], 0, sizeof(configs[a]));
+      configs[a].kp.enabled = 0U;
+      configs[a].kp.kp_approach_milliper_s = 2500U;
+      configs[a].kp.max_velocity_hz = NUCLEO_MOTION_MAX_SPEED_HZ;
+      configs[a].constraints.control_period_us = 1000U;
+      configs[a].constraints.max_velocity_hz = NUCLEO_MOTION_MAX_SPEED_HZ;
+      configs[a].constraints.max_acceleration_hz_s = 20000U;
+      configs[a].constraints.max_deceleration_hz_s = 20000U;
+      configs[a].constraints.max_jerk_hz_s2 = 100000U;
+      configs[a].terminal_max_rate_millihz = 5000U;
+    }
+    dynamic_app.facade.runtime_ready = NucleoDynamicCoordinator_Init(
+        &dynamic_app.facade.coordinator, configs, dynamic_app.facade.hooks);
+  }
   dynamic_now_us = (uint64_t)HAL_GetTick() * 1000ULL;
   if ((NucleoG491ControlTimer_Init(&dynamic_control_timer,
                                    dynamic_control_tick, NULL) == 0U) ||
@@ -330,9 +348,32 @@ NucleoMotionResult Stepper_Move(uint8_t axis, uint8_t dir,
     return NUCLEO_MOTION_ERR_ARGUMENT;
   }
 #if NUCLEO_G491_DYNAMIC_MOTION_ENABLED
-  /* TIM1 belongs exclusively to the dynamic runtime when its shared gate is
-   * enabled. Legacy MOVE remains available for Z on TIM2 only. */
-  if (axis != AXIS_Z) return NUCLEO_MOTION_ERR_ARGUMENT;
+  if (axis < AXIS_Z) {
+    uint8_t directions[NUCLEO_DYNAMIC_COORDINATED_AXIS_COUNT] = {0U, 0U};
+    uint32_t distances[NUCLEO_DYNAMIC_COORDINATED_AXIS_COUNT] = {0U, 0U};
+
+    if ((dynamic_hal_ready == 0U) || (dynamic_app.facade.runtime_ready == 0U)) {
+      return NUCLEO_MOTION_ERR_ARGUMENT;
+    }
+    if ((dynamic_app.facade.coordinator.active_mask & (1U << axis)) != 0U) {
+      return NUCLEO_MOTION_ERR_BUSY;
+    }
+    if (dynamic_app.facade.hooks.prepare_direction(
+            dynamic_app.facade.hooks.context, axis, dir) == 0U) {
+      return NUCLEO_MOTION_ERR_ARGUMENT;
+    }
+    dynamic_app.facade.coordinator.axes[axis].config.constraints.max_velocity_hz = speed_hz;
+    dynamic_app.facade.coordinator.axes[axis].config.kp.max_velocity_hz = speed_hz;
+    directions[axis] = dir != 0U ? 1U : 0U;
+    distances[axis] = steps;
+
+    if (NucleoDynamicCoordinator_Start(
+            &dynamic_app.facade.coordinator, (uint8_t)(1U << axis), directions,
+            distances, dynamic_time_us(), 1U) == 0U) {
+      return NUCLEO_MOTION_ERR_BUSY;
+    }
+    return NUCLEO_MOTION_OK;
+  }
 #endif
   if (steppers[axis].toggles_remaining != 0U) {
     return NUCLEO_MOTION_ERR_BUSY;
@@ -437,3 +478,15 @@ void NucleoMotion_TIM6_IRQHandler(void)
   }
 #endif
 }
+
+#if NUCLEO_G491_DYNAMIC_MOTION_ENABLED
+uint8_t NucleoMotion_HandleDynamicLine(const char *line, char *response,
+                                       size_t response_size)
+{
+  if (dynamic_hal_ready == 0U) return 0U;
+  return NucleoDynamicApp_HandleLine(
+      &dynamic_app, line, dynamic_time_us(),
+      watchdog_healthy != 0U, motion_armed != 0U,
+      response, response_size);
+}
+#endif

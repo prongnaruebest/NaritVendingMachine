@@ -62,7 +62,10 @@ uint8_t NucleoDynamicApp_OnEmittedPulse(void *context, uint8_t axis)
 {
   NucleoDynamicApp *app = (NucleoDynamicApp *)context;
   if ((app == NULL) || (app->initialized == 0U)) return 0U;
-  return NucleoDynamicFacade_OnEmittedPulse(&app->facade, axis);
+  if ((app->facade.staged_mask & (1U << axis)) != 0U) {
+    return NucleoDynamicFacade_OnEmittedPulse(&app->facade, axis);
+  }
+  return NucleoDynamicCoordinator_OnEmittedPulse(&app->facade.coordinator, axis);
 }
 
 void NucleoDynamicApp_EmergencyStop(NucleoDynamicApp *app)

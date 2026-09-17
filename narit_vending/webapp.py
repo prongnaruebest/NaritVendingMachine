@@ -110,8 +110,7 @@ class MotionService:
         self.motor_test_armed = False
         self.motor_test_armed_until: float | None = None
         self.motion_enabled = True
-        # Candidate buffered transport is not connected to production serial yet.
-        self.profile_runtime_ready = False
+        self._profile_runtime_ready: bool | None = None
         self._safety_trip_latched = False
         self._safety_monitor_stop = threading.Event()
         self._safety_monitor_thread: threading.Thread | None = None
@@ -196,6 +195,18 @@ class MotionService:
         mqtt_config = hw_config.get("mqtt", {})
         self.mqtt_service = MQTTService(self, mqtt_config)
         self.mqtt_service.start()
+
+    @property
+    def profile_runtime_ready(self) -> bool:
+        if self._profile_runtime_ready is not None:
+            return self._profile_runtime_ready
+        if self.nucleo_link is None:
+            return False
+        return bool(self.nucleo_link.communication_ok and self.nucleo_link.supports_buffered_scurve)
+
+    @profile_runtime_ready.setter
+    def profile_runtime_ready(self, value: bool | None) -> None:
+        self._profile_runtime_ready = value
 
     def status_payload(self) -> dict[str, object]:
         with self.lock:

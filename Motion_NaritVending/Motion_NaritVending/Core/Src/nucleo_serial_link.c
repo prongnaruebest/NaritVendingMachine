@@ -1,12 +1,23 @@
 #include "nucleo_serial_link.h"
 
 #include "nucleo_motion.h"
+#include "nucleo_motion_features.h"
 
 #include <stdio.h>
 #include <string.h>
 
+#if NUCLEO_G491_DYNAMIC_MOTION_ENABLED
+#define NUCLEO_PROTOCOL_VERSION 4U
+#define NUCLEO_CAPABILITIES_JSON \
+  "\"capabilities\":[\"continuous_profile\",\"seven_segment_s_curve\"," \
+  "\"buffered_segments\",\"profile_sequence\",\"profile_telemetry\"," \
+  "\"dynamic_motion\"],"
+#else
 #define NUCLEO_PROTOCOL_VERSION 3U
-#define SERIAL_LINE_MAX 96U
+#define NUCLEO_CAPABILITIES_JSON ""
+#endif
+
+#define SERIAL_LINE_MAX 160U
 
 static UART_HandleTypeDef *serial_uart;
 static char receive_line[SERIAL_LINE_MAX];
@@ -26,13 +37,14 @@ static uint8_t any_axis_moving(void)
 
 static void transmit_status(const char *type)
 {
-  char response[240];
+  char response[360];
   uint8_t moving = any_axis_moving();
   uint8_t armed = NucleoMotion_IsArmed();
   int length = snprintf(
       response, sizeof(response),
       "{\"type\":\"%s\",\"device\":\"NUCLEO-G491RE\","
-      "\"protocol\":%lu,\"safe\":%s,\"armed\":%s,"
+      "\"protocol\":%lu," NUCLEO_CAPABILITIES_JSON
+      "\"safe\":%s,\"armed\":%s,"
       "\"watchdog\":%s,\"uptime_ms\":%lu,\"max_move_steps\":%lu,"
       "\"moving\":{\"x\":%u,\"y\":%u,\"z\":%u}}\r\n",
       type,
@@ -188,6 +200,17 @@ static void process_line(char *line)
     transmit_text("{\"type\":\"ack\",\"status\":\"disarmed\"}\r\n");
   } else if (strncmp(line, "MOVE ", 5U) == 0) {
     process_move(line);
+#if NUCLEO_G491_DYNAMIC_MOTION_ENABLED
+  } else if ((strncmp(line, "DYN_", 4U) == 0) ||
+             (strcmp(line, "CONTROLLED_STOP") == 0)) {
+    char response[360];
+    if (NucleoMotion_HandleDynamicLine(line, response, sizeof(response)) != 0U) {
+      transmit_text(response);
+      transmit_text("\r\n");
+    } else {
+      transmit_text("{\"type\":\"error\",\"error\":\"DYNAMIC_REJECTED\"}\r\n");
+    }
+#endif
   } else if (line[0] != '\0') {
     transmit_text("{\"type\":\"error\",\"error\":\"UNKNOWN_COMMAND\"}\r\n");
   }
@@ -224,5 +247,11 @@ void NucleoSerialLink_Start(UART_HandleTypeDef *uart)
   receive_length = 0U;
   transmit_text(
       "{\"type\":\"boot\",\"device\":\"NUCLEO-G491RE\","
-      "\"protocol\":3,\"safe\":true,\"armed\":false}\r\n");
+      "\"protocol\":"
+#if NUCLEO_G491_DYNAMIC_MOTION_ENABLED
+      "4," NUCLEO_CAPABILITIES_JSON
+#else
+      "3,"
+#endif
+      "\"safe\":true,\"armed\":false}\r\n");
 }

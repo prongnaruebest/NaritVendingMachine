@@ -254,8 +254,12 @@ class NucleoLink:
                     raise NucleoError("Nucleo heartbeat timed out")
                 if payload.get("device") != self.expected_device:
                     raise NucleoError(f"Unexpected Nucleo identity: {payload.get('device')!r}")
-                if int(payload.get("protocol", -1)) != self.expected_protocol:
-                    raise NucleoError(f"Unsupported Nucleo protocol: {payload.get('protocol')!r}")
+                reported_protocol = int(payload.get("protocol", -1))
+                if self.expected_protocol >= 3:
+                    if reported_protocol not in (3, 4):
+                        raise NucleoError(f"Unsupported Nucleo protocol: {reported_protocol!r}")
+                elif reported_protocol != self.expected_protocol:
+                    raise NucleoError(f"Unsupported Nucleo protocol: {reported_protocol!r}")
 
                 if self.expected_protocol == 1:
                     if payload.get("safe") is not True:
@@ -369,6 +373,35 @@ class NucleoLink:
                 "communication_ok": self.communication_ok,
                 "error": self._last_error or None,
             }
+
+    def send_dynamic_line(self, line: str, timeout_s: float | None = None) -> dict[str, Any]:
+        """Send a protocol v4 dynamic command line and return parsed JSON response."""
+        with self._lock:
+            if not self.communication_ok:
+                raise NucleoError("Nucleo communication link is not online")
+            serial_port = self._open_serial()
+            try:
+                serial_port.reset_input_buffer()
+            except Exception:
+                pass
+            cmd = (line.strip() + "\n").encode("ascii")
+            _log.info("Nucleo DYN TX: %s", line.strip())
+            serial_port.write(cmd)
+            serial_port.flush()
+            deadline = time.monotonic() + (timeout_s or self.timeout_s)
+            resp = self._read_json_response(serial_port, deadline)
+            _log.info("Nucleo DYN RX: %r", resp)
+            if resp is None:
+                raise NucleoError(f"Dynamic command timed out: {line.strip()}")
+            return dict(resp)
+
+    def dynamic_status(self) -> dict[str, Any]:
+        """Query DYN_STATUS telemetry."""
+        return self.send_dynamic_line("DYN_STATUS")
+
+    def controlled_stop(self) -> dict[str, Any]:
+        """Request smooth S-curve controlled stop."""
+        return self.send_dynamic_line("CONTROLLED_STOP")
 
     def move(
         self,

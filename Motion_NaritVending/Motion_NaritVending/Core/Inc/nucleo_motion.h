@@ -2,6 +2,7 @@
 #define NUCLEO_MOTION_H
 
 #include <stdint.h>
+#include <stddef.h>
 
 #include "stm32g4xx_hal.h"
 
@@ -44,6 +45,8 @@ uint8_t Stepper_IsMoving(uint8_t axis);
 void NucleoMotion_TIM1_IRQHandler(void);
 void NucleoMotion_TIM2_IRQHandler(void);
 void NucleoMotion_TIM6_IRQHandler(void);
+uint8_t NucleoMotion_HandleDynamicLine(const char *line, char *response,
+                                       size_t response_size);
 
 #ifdef __cplusplus
 }

@@ -291,7 +291,7 @@
     "poll_interval_s": 0.5,
     "stale_after_s": 1.5,
     "expected_device": "NUCLEO-G491RE",
-    "protocol_version": 3
+    "protocol_version": 4
   },
   "machine_parameters": {
     "home_order": [
@@ -327,7 +327,7 @@
         "travel_safety_margin_mm": 10.0,
         "pulley_pitch_mm": null,
         "pulley_teeth": null,
-        "scurve_enabled": false,
+        "scurve_enabled": true,
         "scurve_profile_type": "seven_segment_s_curve",
         "scurve_start_speed_mm_s": 0.0,
         "scurve_end_speed_mm_s": 0.0,
@@ -360,7 +360,7 @@
         "travel_safety_margin_mm": 10.0,
         "pulley_pitch_mm": null,
         "pulley_teeth": null,
-        "scurve_enabled": false,
+        "scurve_enabled": true,
         "scurve_profile_type": "seven_segment_s_curve",
         "scurve_start_speed_mm_s": 0.0,
         "scurve_end_speed_mm_s": 0.0,
