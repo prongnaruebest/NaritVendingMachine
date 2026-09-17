@@ -1017,6 +1017,7 @@ class MotionController:
         self.last_plan: CoordinatedMovePlan | None = None
         self._state_name = "idle"
         self._dynamic_revision = "cfg-1"
+        self._dynamic_config_synced = False
         self._homing = HomingOrchestrator(axes=self.axes, home_order=self.config.home_order)
         self.set_state("idle")
 
@@ -1024,7 +1025,7 @@ class MotionController:
         backend = getattr(self.x, "motion_backend", None)
         if backend is not None and getattr(backend, "supports_buffered_scurve", False) and hasattr(backend, "configure_dynamic_axis"):
             try:
-                from narit_vending.domain.nucleo_profile_protocol import DynamicAxisConfigCommand
+                from narit_vending.domain.nucleo_profile_protocol import DynamicAxisConfigCommand, DynamicPositionCommand
                 was_armed = getattr(backend, "is_armed", False)
                 if was_armed and hasattr(backend, "disarm"):
                     backend.disarm()
@@ -1044,8 +1045,15 @@ class MotionController:
                         configuration_revision=self._dynamic_revision,
                     )
                     backend.configure_dynamic_axis(cmd)
+                    axis_obj = self.axes().get(axis_name)
+                    if axis_obj is not None and getattr(axis_obj, "is_homed", False) and hasattr(backend, "set_dynamic_position"):
+                        pos_steps = int(round(axis_obj.position_mm * axis_obj.config.steps_per_mm))
+                        backend.set_dynamic_position(
+                            DynamicPositionCommand(axis_name, pos_steps, self._dynamic_revision)
+                        )
                 if was_armed and hasattr(backend, "arm"):
                     backend.arm(safety_permissive=True)
+                self._dynamic_config_synced = True
             except Exception as exc:
                 logging.getLogger(__name__).warning("Failed to sync dynamic config: %s", exc)
 
@@ -1416,7 +1424,8 @@ class MotionController:
                     DynamicStartCommand,
                     DynamicTargetCommand,
                 )
-                self._sync_dynamic_config()
+                if not getattr(self, "_dynamic_config_synced", False):
+                    self._sync_dynamic_config()
                 cmd_id = f"cmd-{int(monotonic() * 1000) % 1000000}"
                 for axis_name, axis_plan in plan.axes.items():
                     target_pulses = int(round(axis_plan.target_mm * axes[axis_name].config.steps_per_mm))

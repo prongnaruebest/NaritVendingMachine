@@ -177,8 +177,38 @@ class TestDynamicScurveMotion(unittest.TestCase):
         with self.assertRaises(LimitTriggeredError):
             self.mc._execute_coordinated_plan(plan)
 
-        self.assertFalse(self.mock_x.is_homed)
+    def test_dynamic_config_sync_preserves_position_for_homed_axes(self) -> None:
+        self.mock_x.is_homed = True
+        self.mock_x.position_mm = 50.0
+        self.mock_y.is_homed = True
+        self.mock_y.position_mm = 75.0
+
+        self.mc._sync_dynamic_config()
+
+        # Both axes should have had DYN_POSITION called right after DYN_CONFIG
+        pos_axes = {cmd.axis: cmd.estimated_position_pulses for cmd in self.backend.positions}
+        self.assertIn("x", pos_axes)
+        self.assertIn("y", pos_axes)
+        self.assertEqual(pos_axes["x"], int(round(50.0 * self.mock_x.config.steps_per_mm)))
+        self.assertEqual(pos_axes["y"], int(round(75.0 * self.mock_y.config.steps_per_mm)))
+        self.assertTrue(self.mc._dynamic_config_synced)
+
+    def test_consecutive_coordinated_moves_do_not_redundantly_reconfigure(self) -> None:
+        self.mc._dynamic_config_synced = True
+        self.backend.configured_axes.clear()
+
+        plan = CoordinatedMovePlan(
+            axes={"x": AxisMovePlan(axis="x", current_mm=100.0, target_mm=200.0, distance_mm=100.0, direction=0, steps=6471, speed_mm_s=50.0, duration_s=2.0)},
+            duration_s=2.0,
+            mode="speed",
+        )
+        self.mc._execute_coordinated_plan(plan)
+
+        # Config should NOT be sent again because _dynamic_config_synced is True
+        self.assertEqual(len(self.backend.configured_axes), 0)
+        self.assertEqual(len(self.backend.staged_targets), 1)
 
 
 if __name__ == "__main__":
     unittest.main()
+
