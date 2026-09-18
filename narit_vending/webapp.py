@@ -1975,7 +1975,15 @@ def create_app(config_path: str = "machine_config.json", hw_config_path: str = "
         except (TypeError, ValueError):
             return jsonify({"ok": False, "error": "distance_mm, speed_mm_s, and time_s must be numbers"}), 400
         allow_unhomed = bool(payload.get("allow_unhomed", False))
-        result = service.jog(axis, distance_mm, speed_mm_s=speed_mm_s, time_s=time_s, allow_unhomed=allow_unhomed)
+        continuous = bool(payload.get("continuous", False))
+        result = service.jog(
+            axis,
+            distance_mm,
+            speed_mm_s=speed_mm_s,
+            time_s=time_s,
+            allow_unhomed=allow_unhomed,
+            continuous=continuous,
+        )
         status_code = 200 if result["ok"] else 400
         return jsonify(result | service.status_payload()), status_code
 

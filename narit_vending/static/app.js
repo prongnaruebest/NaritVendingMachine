@@ -1692,13 +1692,25 @@
       if (bank.dataset.ready === "true") return;
       bank.innerHTML = AXES.map((axis) => {
         const limit = axisSpeedLimit(axis);
-        return `<label class="axis-speed-row">
+        const cfg = MS.config?.axes?.[axis] || {};
+        const pitch = Number(cfg.lead_screw_pitch_mm || 24.727273);
+        const maxRpm = pitch > 0 ? Math.round(limit * 60 / pitch) : 600;
+        return `<div class="axis-speed-row">
         <strong>${axis.toUpperCase()}</strong>
-        <input type="range" min="0.1" max="${limit}" step="0.1" data-axis-speed-range="${axis}" aria-label="${axis.toUpperCase()} axis speed">
-        <input type="number" min="0.1" max="${limit}" step="0.1" data-axis-speed-number="${axis}" aria-label="${axis.toUpperCase()} axis speed value">
-        <span>mm/s</span><small data-axis-speed-conversion="${axis}">-- pulse/s · -- rpm</small>
-      </label>`;
-      }).join("") + '<p class="axis-speed-note">Single-axis commands use that axis value. Coordinated XYZ and slot moves use the lowest participating-axis value.</p>';
+        <input type="range" min="0.1" max="${limit}" step="0.1" data-axis-speed-range="${axis}" aria-label="${axis.toUpperCase()} axis speed slider">
+        <div class="axis-speed-inputs">
+          <label class="axis-speed-field">
+            <input type="number" min="0.1" max="${limit}" step="0.1" data-axis-speed-number="${axis}" aria-label="${axis.toUpperCase()} axis speed mm/s">
+            <span class="speed-unit-lbl">mm/s</span>
+          </label>
+          <label class="axis-speed-field">
+            <input type="number" min="1" max="${maxRpm}" step="1" data-axis-speed-rpm="${axis}" aria-label="${axis.toUpperCase()} axis speed RPM">
+            <span class="speed-unit-lbl">RPM</span>
+          </label>
+        </div>
+        <small data-axis-speed-conversion="${axis}">-- pulse/s</small>
+      </div>`;
+      }).join("") + '<p class="axis-speed-note">Adjust either mm/s or RPM. Single-axis commands use that axis value. Coordinated XYZ and slot moves use the lowest participating-axis value.</p>';
       bank.dataset.ready = "true";
     });
     syncAxisSpeedBanks();
@@ -1716,8 +1728,14 @@
       const cfg = MS.config?.axes?.[axis] || {};
       const ppm = Number(cfg.steps_per_mm || 0);
       const ppr = Number(cfg.motor_steps_per_rev || 0) * Number(cfg.driver_microsteps || 0);
+      const pitch = Number(cfg.lead_screw_pitch_mm || (ppm > 0 && ppr > 0 ? ppr / ppm : 24.727273));
       const pulse = speed * ppm;
-      const rpm = ppr > 0 ? pulse * 60 / ppr : NaN;
+      const rpm = pitch > 0 ? speed * 60 / pitch : (ppr > 0 ? pulse * 60 / ppr : NaN);
+      const maxRpm = pitch > 0 ? Math.round(max * 60 / pitch) : 600;
+      $$(`[data-axis-speed-rpm="${axis}"]`).forEach((input) => {
+        input.max = String(maxRpm);
+        if (document.activeElement !== input) input.value = Number.isFinite(rpm) ? Math.round(rpm) : "";
+      });
       $$(`[data-axis-speed-conversion="${axis}"]`).forEach((node) => {
         node.textContent = `${Math.round(pulse).toLocaleString()} pulse/s · ${Number.isFinite(rpm) ? rpm.toFixed(1) : "--"} rpm`;
       });
@@ -1725,6 +1743,9 @@
     const coordinated = effectiveMotionSpeed();
     MS.selectedJogSpeed = coordinated;
     setText("jog-speed-display", coordinated.toFixed(1));
+    $$(".speed-preset").forEach((b) => {
+      b.classList.toggle("active", Math.abs(Number(b.dataset.speed) - coordinated) < 0.2);
+    });
   }
 
   function setAxisSpeed(axis, rawValue, invalidate = true) {
@@ -4608,11 +4629,25 @@
       });
     });
 
-    document.addEventListener("input", (event) => {
+    const handleSpeedInput = (event) => {
+      const rpmControl = event.target.closest?.("[data-axis-speed-rpm]");
+      if (rpmControl) {
+        const axis = rpmControl.dataset.axisSpeedRpm;
+        const rpm = Number(rpmControl.value);
+        if (Number.isFinite(rpm) && rpm > 0) {
+          const cfg = MS.config?.axes?.[axis] || {};
+          const pitch = Number(cfg.lead_screw_pitch_mm || 24.727273);
+          const mm_s = rpm * pitch / 60;
+          setAxisSpeed(axis, mm_s);
+        }
+        return;
+      }
       const control = event.target.closest?.("[data-axis-speed-range], [data-axis-speed-number]");
       if (!control) return;
       setAxisSpeed(control.dataset.axisSpeedRange || control.dataset.axisSpeedNumber, control.value);
-    });
+    };
+    document.addEventListener("input", handleSpeedInput);
+    document.addEventListener("change", handleSpeedInput);
     $$('[data-setup-tab]').forEach((button) => {
       button.addEventListener('click', () => {
         if (MS.currentView !== "configuration") switchWorkspace("configuration");

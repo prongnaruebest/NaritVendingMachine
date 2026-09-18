@@ -35,28 +35,40 @@
 .jog-axis-speed-bank { margin-top: 8px; }
 .axis-speed-row {
   display: grid;
-  grid-template-columns: 24px minmax(90px, 1fr) 72px 38px;
+  grid-template-columns: 24px minmax(70px, 1fr) auto;
   align-items: center;
   gap: 8px;
   min-width: 0;
-  padding: 10px;
+  padding: 8px 10px;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--surf-2);
 }
 .axis-speed-row > strong { color: var(--blue-lt); font-size: 15px; }
 .axis-speed-row input[type="range"] { width: 100%; min-width: 0; accent-color: var(--blue); }
-.axis-speed-row input[type="number"] {
-  width: 72px;
-  min-height: 40px;
-  padding: 6px;
+.axis-speed-inputs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.axis-speed-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin: 0;
+}
+.axis-speed-field input[type="number"] {
+  width: 62px;
+  min-height: 36px;
+  padding: 4px 5px;
   color: var(--text);
   background: var(--surf-1);
   border: 1px solid var(--border-med);
   border-radius: 6px;
-  font: 600 13px var(--font-mono);
+  font: 600 12px var(--font-mono);
+  text-align: right;
 }
-.axis-speed-row > span { color: var(--text-muted); font-size: 11px; }
+.axis-speed-field .speed-unit-lbl { color: var(--text-muted); font-size: 10px; white-space: nowrap; }
 .axis-speed-row > small {
   grid-column: 2 / -1;
   color: var(--text-muted);

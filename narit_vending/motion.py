@@ -399,7 +399,8 @@ class AxisController:
             self._guard_before_move(direction, 0)
 
         raw_speed = self.clamp_speed(speed_mm_s)
-        speed = min(raw_speed, getattr(self.config, "homing_search_speed_mm_s", 50.0))
+        # Honour explicit caller speed up to commissioned limit; use search speed only as default
+        speed = raw_speed if speed_mm_s is not None else min(raw_speed, getattr(self.config, "homing_search_speed_mm_s", 50.0))
         speed_hz = max(10.0, min(self.config.max_pulse_hz, speed * self.config.steps_per_mm))
         # Search up to twice the configured stroke at the effective speed plus
         # a fixed allowance. This prevents the normal homing timeout from
