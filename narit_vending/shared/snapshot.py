@@ -81,6 +81,7 @@ class MachineSnapshot:
     picontrol_io_status: dict[str, Any] = field(default_factory=dict)
     nucleo_status: dict[str, Any] = field(default_factory=dict)
     demo_status: dict[str, Any] = field(default_factory=dict)
+    motion_profile_routing: dict[str, Any] = field(default_factory=dict)
     snapshot_at: str = field(default_factory=_now_iso)
 
     def to_dict(self) -> dict[str, Any]:
@@ -122,6 +123,7 @@ class MachineSnapshot:
             picontrol_io_status=dict(data.get("picontrol_io_status", {})),
             nucleo_status=dict(data.get("nucleo_status", {})),
             demo_status=dict(data.get("demo_status", {})),
+            motion_profile_routing=dict(data.get("motion_profile_routing", {})),
             snapshot_at=str(data.get("snapshot_at", _now_iso())),
         )
 
@@ -150,4 +152,5 @@ class MachineSnapshot:
             controlled_stop_requested=False,
             speed_override=None,
             motion_enabled=False,
+            motion_profile_routing={},
         )

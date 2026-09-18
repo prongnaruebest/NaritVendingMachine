@@ -49,6 +49,7 @@ def _normalize_machine_state(
     ).value
 
 
+
 def _build_snapshot(service: Any) -> MachineSnapshot:
     """Convert MotionService state into a MachineSnapshot."""
     from narit_vending.shared.snapshot import AxisSnapshot, MachineSnapshot
@@ -114,6 +115,7 @@ def _build_snapshot(service: Any) -> MachineSnapshot:
         io_registry=build_io_registry(io_status, picontrol_io_status),
         nucleo_status=dict(status.get("nucleo", {})),
         demo_status=dict(status.get("demo", {})),
+        motion_profile_routing=dict(status.get("motion_profile_routing", {})),
     )
 
 

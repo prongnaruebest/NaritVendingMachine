@@ -101,6 +101,7 @@ def _status_from_snapshot(snap) -> dict:
         "nucleo": snap.nucleo_status,
         "demo": snap.demo_status,
         "slots": snap.slots,
+        "motion_profile_routing": getattr(snap, "motion_profile_routing", {}),
     }
 
 

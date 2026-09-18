@@ -1773,11 +1773,13 @@
     const travelFields = new Set(["motor_steps_per_rev", "driver_microsteps", "lead_screw_pitch_mm", "steps_per_mm", "max_travel_mm"]);
     const motorPanel = $(".motor-pulse-config-panel");
     const travelPanel = $(".travel-calibration-panel");
+    const scurvePanel = $("#scurve-config-panel");
     const pinPanel = $(".configuration-pin-panel");
     const showMotorPanel = tabName === "motor" || tabName === "homing" || tabName === "travel";
     if (motorPanel) motorPanel.hidden = !showMotorPanel;
     if (travelPanel) travelPanel.hidden = tabName !== "travel";
-    if (pinPanel) pinPanel.hidden = showMotorPanel;
+    if (scurvePanel) scurvePanel.hidden = tabName !== "scurve";
+    if (pinPanel) pinPanel.hidden = showMotorPanel || tabName === "scurve";
     $$("[data-motor-card] label").forEach((label) => {
       const field = label.querySelector("[data-config-field]")?.dataset.configField;
       label.hidden = tabName === "homing" ? !homingFields.has(field) : tabName === "travel" ? !travelFields.has(field) : tabName === "motor" ? !motorFields.has(field) : false;
@@ -2188,8 +2190,348 @@
     AXES.forEach((axis) => { el(`visual-slot-${axis}`).readOnly = !MS.visualEditMode; });
   }
 
-  function configurationNumberInput(axis, field, value, step = "0.1") {
-    return `<input class="config-input" type="number" step="${step}" value="${esc(value)}" data-config-axis="${axis}" data-config-field="${field}" aria-label="${axis.toUpperCase()} ${field.replaceAll("_", " ")}">`;
+  function drawScurveSvg(axis, vStart, vCruise, vEnd) {
+    const svg = el(`scurve-svg-${axis}`);
+    if (!svg) return;
+
+    vCruise = Math.max(Number(vCruise) || 60, 1);
+    vStart = Math.max(0, Math.min(Number(vStart) || 0, vCruise));
+    vEnd = Math.max(0, Math.min(Number(vEnd) || 0, vCruise));
+
+    // SVG coordinate space: 500w x 90h
+    // Y maps from top=16 (vCruise) to bottom=78 (0 speed)
+    const getY = (v) => 78 - ((v / vCruise) * 62);
+
+    const yStart = getY(vStart);
+    const yCruise = getY(vCruise); // ~16
+    const yEnd = getY(vEnd);
+
+    const p1x = 40, p1y = yStart;
+    const p2x = 180, p2y = yCruise;
+    const p3x = 320, p3y = yCruise;
+    const p4x = 460, p4y = yEnd;
+
+    // Cubic Bézier S-curve inflection
+    const cp1x = 110, cp1y = yStart;
+    const cp2x = 110, cp2y = yCruise;
+    const cp3x = 390, cp3y = yCruise;
+    const cp4x = 390, cp4y = yEnd;
+
+    const curvePath = `M ${p1x} ${p1y} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${p2x} ${p2y} L ${p3x} ${p3y} C ${cp3x} ${cp3y}, ${cp4x} ${cp4y}, ${p4x} ${p4y}`;
+    const fillPath = `${curvePath} L ${p4x} 78 L ${p1x} 78 Z`;
+
+    svg.innerHTML = `
+      <defs>
+        <linearGradient id="scurve-grad-${axis}" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#10b981" stop-opacity="0.38"/>
+          <stop offset="100%" stop-color="#10b981" stop-opacity="0.03"/>
+        </linearGradient>
+      </defs>
+      <!-- Horizontal Guideline 0 mm/s -->
+      <line x1="20" y1="78" x2="480" y2="78" stroke="#334155" stroke-width="1.2" stroke-dasharray="3,3"/>
+      <!-- Horizontal Guideline vCruise -->
+      <line x1="20" y1="16" x2="480" y2="16" stroke="#334155" stroke-width="1" stroke-dasharray="4,4"/>
+      <!-- Shaded Area -->
+      <path d="${fillPath}" fill="url(#scurve-grad-${axis})"/>
+      <!-- S-Curve Outline -->
+      <path d="${curvePath}" fill="none" stroke="#10b981" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+      <!-- Anchor Points -->
+      <circle cx="${p1x}" cy="${p1y}" r="4" fill="#38bdf8"/>
+      <circle cx="${p2x}" cy="${p2y}" r="3.5" fill="#10b981"/>
+      <circle cx="${p3x}" cy="${p3y}" r="3.5" fill="#10b981"/>
+      <circle cx="${p4x}" cy="${p4y}" r="4" fill="#f59e0b"/>
+      <!-- Speed Labels -->
+      <text x="${p1x}" y="${Math.min(p1y - 7, 70)}" fill="#38bdf8" font-size="10" font-weight="700" text-anchor="middle">${vStart.toFixed(1)} mm/s</text>
+      <text x="250" y="12" fill="#10b981" font-size="10" font-weight="700" text-anchor="middle">v_max: ${vCruise.toFixed(0)} mm/s</text>
+      <text x="${p4x}" y="${Math.min(p4y - 7, 70)}" fill="#f59e0b" font-size="10" font-weight="700" text-anchor="middle">${vEnd.toFixed(1)} mm/s</text>
+    `;
+  }
+
+  function renderScurvePanel() {
+    const grid = el("scurve-axis-grid");
+    if (!grid || !MS.config) return;
+
+    const nucleoSupported = Boolean(MS.payload?.nucleo?.supports_buffered_scurve);
+    const nucleoBadge = el("scurve-nucleo-badge");
+    if (nucleoBadge) {
+      nucleoBadge.textContent = nucleoSupported ? "NUCLEO BUFFERED S-CURVE ACTIVE" : "NUCLEO PROFILE NOT DETECTED";
+      nucleoBadge.className = `chip ${nucleoSupported ? "chip-ok" : "chip-warn"}`;
+    }
+
+    let allEnabled = true;
+    let anyEnabled = false;
+
+    grid.innerHTML = ["x", "y"].map((axis) => {
+      const config = MS.config.axes?.[axis] || {};
+      const enabled = Boolean(config.scurve_enabled);
+      if (enabled) anyEnabled = true;
+      else allEnabled = false;
+
+      const pitch = Number(config.lead_screw_pitch_mm || 24.727273);
+      const rpmFactor = 60 / Math.max(pitch, 0.001); // 2.4265 for X/Y
+      const startSpeed = Number(config.scurve_start_speed_mm_s ?? 0);
+      const startRpm = (startSpeed * rpmFactor).toFixed(1);
+      const endSpeed = Number(config.scurve_end_speed_mm_s ?? 0);
+      const endRpm = (endSpeed * rpmFactor).toFixed(1);
+      const cruiseSpeed = Number(config.commissioned_max_speed_mm_s ?? config.max_speed_mm_s ?? 60);
+      const cruiseRpm = (cruiseSpeed * rpmFactor).toFixed(0);
+      const jerk = Number(config.scurve_max_jerk_mm_s3 ?? 250);
+      const accel = Number(config.acceleration ?? 120);
+      const decel = Number(config.deceleration ?? 120);
+      const periodUs = Number(config.scurve_control_period_us ?? 1000);
+
+      const title = axis === "x" ? "AXIS X (HORIZONTAL · รางเลื่อนแนวนอน)" : "AXIS Y (VERTICAL · เสายกแนวตั้ง)";
+
+      return `<article class="scurve-axis-card ${enabled ? "is-enabled" : "is-disabled"}" data-scurve-card="${axis}">
+        <div class="scurve-card-head">
+          <div class="scurve-card-title">
+            <h3>${title}</h3>
+            <span class="scurve-card-subtitle">Lead Screw: ${pitch.toFixed(2)} mm/rev · 1,600 pulses/rev (HBS860H)</span>
+          </div>
+          <div class="scurve-head-toggle">
+            <label class="scurve-toggle-switch" title="Toggle S-Curve for ${axis.toUpperCase()} axis">
+              <input type="checkbox" data-config-axis="${axis}" data-config-field="scurve_enabled" id="scurve-toggle-${axis}" ${enabled ? "checked" : ""}>
+              <span class="scurve-slider"></span>
+              <span class="scurve-switch-label" id="scurve-label-${axis}">${enabled ? "ACTIVE (เปิด)" : "BYPASS (ปิด)"}</span>
+            </label>
+            <input type="hidden" value="seven_segment_s_curve" data-config-axis="${axis}" data-config-field="scurve_profile_type" data-config-type="string">
+          </div>
+        </div>
+
+        <div class="scurve-card-body">
+          <!-- Section 1: Speeds (Start, End, Cruising) -->
+          <div class="scurve-section">
+            <div class="scurve-section-title">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16"><circle cx="8" cy="8" r="7"/><polyline points="8 4 8 8 11 11"/></svg>
+              <span>1. Speed Parameters (การตั้งค่าความเร็ว)</span>
+            </div>
+            <div class="scurve-fields-row">
+              <!-- Start Speed -->
+              <div class="scurve-field-card">
+                <div class="scurve-field-head">
+                  <strong>Start Speed (ความเร็วเริ่มต้น)</strong>
+                  <small>Speed at t=0 (ตอนออกตัว)</small>
+                </div>
+                <div class="scurve-input-pair">
+                  <div class="unit-input-wrap">
+                    <input class="config-input scurve-speed-mms" type="number" step="0.5" min="0" max="60"
+                           id="scurve-start-${axis}" data-config-axis="${axis}" data-config-field="scurve_start_speed_mm_s"
+                           value="${startSpeed}">
+                    <span class="unit-badge">mm/s</span>
+                  </div>
+                  <div class="unit-input-wrap">
+                    <input class="config-input scurve-speed-rpm" type="number" step="0.5" min="0" max="150"
+                           id="scurve-start-rpm-${axis}" data-scurve-rpm-axis="${axis}" data-scurve-rpm-field="scurve_start_speed_mm_s"
+                           value="${startRpm}">
+                    <span class="unit-badge">RPM</span>
+                  </div>
+                </div>
+                <div class="scurve-chip-row" data-chip-axis="${axis}" data-chip-field="scurve_start_speed_mm_s">
+                  <span class="chip-hint">Presets:</span>
+                  <button type="button" class="scurve-preset-chip ${startSpeed === 0 ? "active" : ""}" data-val="0">0 mm/s</button>
+                  <button type="button" class="scurve-preset-chip ${startSpeed === 5 ? "active" : ""}" data-val="5">5 mm/s (แนะนำ)</button>
+                  <button type="button" class="scurve-preset-chip ${startSpeed === 10 ? "active" : ""}" data-val="10">10 mm/s</button>
+                  <button type="button" class="scurve-preset-chip ${startSpeed === 15 ? "active" : ""}" data-val="15">15 mm/s</button>
+                </div>
+              </div>
+
+              <!-- End Speed -->
+              <div class="scurve-field-card">
+                <div class="scurve-field-head">
+                  <strong>End Speed (ความเร็วช่วงใกล้จบ)</strong>
+                  <small>Docking speed (ก่อนเข้าจุดหยุด)</small>
+                </div>
+                <div class="scurve-input-pair">
+                  <div class="unit-input-wrap">
+                    <input class="config-input scurve-speed-mms" type="number" step="0.5" min="0" max="60"
+                           id="scurve-end-${axis}" data-config-axis="${axis}" data-config-field="scurve_end_speed_mm_s"
+                           value="${endSpeed}">
+                    <span class="unit-badge">mm/s</span>
+                  </div>
+                  <div class="unit-input-wrap">
+                    <input class="config-input scurve-speed-rpm" type="number" step="0.5" min="0" max="150"
+                           id="scurve-end-rpm-${axis}" data-scurve-rpm-axis="${axis}" data-scurve-rpm-field="scurve_end_speed_mm_s"
+                           value="${endRpm}">
+                    <span class="unit-badge">RPM</span>
+                  </div>
+                </div>
+                <div class="scurve-chip-row" data-chip-axis="${axis}" data-chip-field="scurve_end_speed_mm_s">
+                  <span class="chip-hint">Presets:</span>
+                  <button type="button" class="scurve-preset-chip ${endSpeed === 0 ? "active" : ""}" data-val="0">0 mm/s</button>
+                  <button type="button" class="scurve-preset-chip ${endSpeed === 2 ? "active" : ""}" data-val="2">2 mm/s (แนะนำ)</button>
+                  <button type="button" class="scurve-preset-chip ${endSpeed === 5 ? "active" : ""}" data-val="5">5 mm/s</button>
+                  <button type="button" class="scurve-preset-chip ${endSpeed === 10 ? "active" : ""}" data-val="10">10 mm/s</button>
+                </div>
+              </div>
+
+              <!-- Cruising Speed -->
+              <div class="scurve-field-card">
+                <div class="scurve-field-head">
+                  <strong>Cruising Speed (ความเร็วเดินทางสูงสุด)</strong>
+                  <small>Safe range: 30 – 80 mm/s</small>
+                </div>
+                <div class="scurve-input-pair">
+                  <div class="unit-input-wrap">
+                    <input class="config-input scurve-speed-mms" type="number" step="1" min="5" max="100"
+                           id="scurve-cruise-${axis}" data-config-axis="${axis}" data-config-field="commissioned_max_speed_mm_s"
+                           value="${cruiseSpeed}">
+                    <span class="unit-badge">mm/s</span>
+                  </div>
+                  <div class="unit-input-wrap">
+                    <input class="config-input scurve-speed-rpm" type="number" step="1" min="10" max="250"
+                           id="scurve-cruise-rpm-${axis}" data-scurve-rpm-axis="${axis}" data-scurve-rpm-field="commissioned_max_speed_mm_s"
+                           value="${cruiseRpm}">
+                    <span class="unit-badge">RPM</span>
+                  </div>
+                </div>
+                <div class="scurve-chip-row" data-chip-axis="${axis}" data-chip-field="commissioned_max_speed_mm_s">
+                  <span class="chip-hint">Presets:</span>
+                  <button type="button" class="scurve-preset-chip ${cruiseSpeed === 30 ? "active" : ""}" data-val="30">30 mm/s</button>
+                  <button type="button" class="scurve-preset-chip ${cruiseSpeed === 50 ? "active" : ""}" data-val="50">50 mm/s</button>
+                  <button type="button" class="scurve-preset-chip ${cruiseSpeed === 60 ? "active" : ""}" data-val="60">60 mm/s (แนะนำ)</button>
+                  <button type="button" class="scurve-preset-chip ${cruiseSpeed === 80 ? "active" : ""}" data-val="80">80 mm/s</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Section 2: Dynamics (Jerk, Accel, Decel, Period) -->
+          <div class="scurve-section">
+            <div class="scurve-section-title">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16"><path d="M2 14L6 4l4 6 4-8"/></svg>
+              <span>2. Jerk Limit &amp; Acceleration Dynamics (อัตราเร่งและเจิร์ก)</span>
+            </div>
+            <div class="scurve-fields-row">
+              <!-- Max Jerk -->
+              <div class="scurve-field-card">
+                <div class="scurve-field-head">
+                  <strong>Max Jerk (อัตราเร่งของความเร่ง)</strong>
+                  <small>Jerk limit (แนะนำ 100 – 500 mm/s³)</small>
+                </div>
+                <div class="unit-input-wrap full-width">
+                  <input class="config-input" type="number" step="10" min="10" max="2000"
+                         id="scurve-jerk-${axis}" data-config-axis="${axis}" data-config-field="scurve_max_jerk_mm_s3"
+                         value="${jerk}">
+                  <span class="unit-badge">mm/s³</span>
+                </div>
+                <div class="scurve-chip-row" data-chip-axis="${axis}" data-chip-field="scurve_max_jerk_mm_s3">
+                  <span class="chip-hint">Presets:</span>
+                  <button type="button" class="scurve-preset-chip ${jerk === 100 ? "active" : ""}" data-val="100">100 (นุ่มมาก)</button>
+                  <button type="button" class="scurve-preset-chip ${jerk === 250 ? "active" : ""}" data-val="250">250 (มาตรฐาน)</button>
+                  <button type="button" class="scurve-preset-chip ${jerk === 500 ? "active" : ""}" data-val="500">500 (เร็ว)</button>
+                </div>
+              </div>
+
+              <!-- Acceleration -->
+              <div class="scurve-field-card">
+                <div class="scurve-field-head">
+                  <strong>Acceleration (อัตราเร่ง)</strong>
+                  <small>Safe range: 100 – 150 mm/s²</small>
+                </div>
+                <div class="unit-input-wrap full-width">
+                  <input class="config-input" type="number" step="5" min="10" max="250"
+                         id="scurve-accel-${axis}" data-config-axis="${axis}" data-config-field="acceleration"
+                         value="${accel}">
+                  <span class="unit-badge">mm/s²</span>
+                </div>
+                <div class="scurve-chip-row" data-chip-axis="${axis}" data-chip-field="acceleration">
+                  <span class="chip-hint">Presets:</span>
+                  <button type="button" class="scurve-preset-chip ${accel === 100 ? "active" : ""}" data-val="100">100 mm/s²</button>
+                  <button type="button" class="scurve-preset-chip ${accel === 120 ? "active" : ""}" data-val="120">120 mm/s²</button>
+                  <button type="button" class="scurve-preset-chip ${accel === 150 ? "active" : ""}" data-val="150">150 mm/s²</button>
+                </div>
+              </div>
+
+              <!-- Deceleration -->
+              <div class="scurve-field-card">
+                <div class="scurve-field-head">
+                  <strong>Deceleration (อัตราเบรก)</strong>
+                  <small>Safe range: 100 – 150 mm/s²</small>
+                </div>
+                <div class="unit-input-wrap full-width">
+                  <input class="config-input" type="number" step="5" min="10" max="250"
+                         id="scurve-decel-${axis}" data-config-axis="${axis}" data-config-field="deceleration"
+                         value="${decel}">
+                  <span class="unit-badge">mm/s²</span>
+                </div>
+                <div class="scurve-chip-row" data-chip-axis="${axis}" data-chip-field="deceleration">
+                  <span class="chip-hint">Presets:</span>
+                  <button type="button" class="scurve-preset-chip ${decel === 100 ? "active" : ""}" data-val="100">100 mm/s²</button>
+                  <button type="button" class="scurve-preset-chip ${decel === 120 ? "active" : ""}" data-val="120">120 mm/s²</button>
+                  <button type="button" class="scurve-preset-chip ${decel === 150 ? "active" : ""}" data-val="150">150 mm/s²</button>
+                </div>
+              </div>
+
+              <!-- Control Period -->
+              <div class="scurve-field-card">
+                <div class="scurve-field-head">
+                  <strong>Control Period (รอบเวลาควบคุม)</strong>
+                  <small>NUCLEO tick rate (1000 µs = 1.0 ms)</small>
+                </div>
+                <div class="unit-input-wrap full-width">
+                  <input class="config-input" type="number" step="100" min="100" max="10000"
+                         id="scurve-period-${axis}" data-config-axis="${axis}" data-config-field="scurve_control_period_us"
+                         value="${periodUs}">
+                  <span class="unit-badge">µs</span>
+                </div>
+                <div class="scurve-chip-row" data-chip-axis="${axis}" data-chip-field="scurve_control_period_us">
+                  <span class="chip-hint">Presets:</span>
+                  <button type="button" class="scurve-preset-chip ${periodUs === 500 ? "active" : ""}" data-val="500">500 µs</button>
+                  <button type="button" class="scurve-preset-chip ${periodUs === 1000 ? "active" : ""}" data-val="1000">1000 µs (มาตรฐาน)</button>
+                  <button type="button" class="scurve-preset-chip ${periodUs === 2000 ? "active" : ""}" data-val="2000">2000 µs</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Section 3: Live Profile Diagnostics & Visual Curve -->
+          <div class="scurve-diagnostics-box" id="scurve-diag-${axis}">
+            <div class="scurve-metrics-bar">
+              <div class="metric-block">
+                <span class="metric-title">Jerk Transition (Tj)</span>
+                <strong class="metric-num" id="scurve-metric-tj-${axis}">-- ms</strong>
+              </div>
+              <div class="metric-block">
+                <span class="metric-title">Peak Pulse Rate</span>
+                <strong class="metric-num" id="scurve-metric-freq-${axis}">-- Hz</strong>
+              </div>
+              <div class="metric-block">
+                <span class="metric-title">Control Rate</span>
+                <strong class="metric-num" id="scurve-metric-rate-${axis}">-- kHz</strong>
+              </div>
+              <div class="metric-block status-block">
+                <span class="metric-title">Profile Safety</span>
+                <strong class="metric-badge ok" id="scurve-metric-status-${axis}">SAFE ENVELOPE</strong>
+              </div>
+            </div>
+            <!-- Dynamic SVG Velocity Diagram -->
+            <div class="scurve-diagram-wrap">
+              <svg class="scurve-profile-svg" id="scurve-svg-${axis}" viewBox="0 0 500 90" preserveAspectRatio="none">
+                <!-- S-curve profile path drawn by updateConfigurationDerived -->
+              </svg>
+            </div>
+            <div class="scurve-phase-labels">
+              <span>① Accel Jerk</span>
+              <span>② Const Accel</span>
+              <span>③ Accel Taper</span>
+              <span>④ Cruising (v_max)</span>
+              <span>⑤ Decel Jerk</span>
+              <span>⑥ Const Decel</span>
+              <span>⑦ Decel Taper (v_end)</span>
+            </div>
+          </div>
+        </div>
+      </article>`;
+    }).join("");
+
+    // Sync Master Toggle
+    const masterToggle = el("scurve-master-toggle");
+    const masterText = el("scurve-master-status-text");
+    if (masterToggle && masterText) {
+      masterToggle.checked = allEnabled && anyEnabled;
+      masterToggle.indeterminate = anyEnabled && !allEnabled;
+      masterText.textContent = masterToggle.checked ? "ALL ACTIVE (เปิดทั้งหมด)" : masterToggle.indeterminate ? "PARTIAL (เปิดบางแกน)" : "OFF (TRAPEZOIDAL)";
+    }
   }
 
   function renderConfigurationEditor(force = false) {
@@ -2201,27 +2543,10 @@
       const pulsesPerRev = Number(config.motor_steps_per_rev || 0) * Number(config.driver_microsteps || 0);
       const theoreticalSteps = pulsesPerRev / Math.max(Number(config.lead_screw_pitch_mm || 1), .0001);
       const pulseFrequency = Number(config.steps_per_mm || 0) * Number(config.max_speed_mm_s || 0);
-      const scurveRoute = MS.payload?.motion_profile_routing?.[axis]?.move || {};
-      const scurveSupported = Boolean(MS.payload?.nucleo?.supports_buffered_scurve);
-      const scurveRuntimeReady = Boolean(scurveRoute.runtime_ready);
-      const scurveAvailable = scurveSupported && scurveRuntimeReady;
-      const scurveSection = axis === "z" ? "" : `<section class="scurve-config" aria-label="Axis ${axis.toUpperCase()} staged S-curve profile">
-        <div class="scurve-config-head">
-          <div><strong>S-CURVE START / STOP</strong><small>Seven-segment profile · X/Y only</small></div>
-          <label class="config-switch scurve-enable" title="${scurveAvailable ? "Enable after validation" : esc(scurveRoute.reason || "Requires NUCLEO capability and production runtime")} ">
-            <input type="checkbox" data-config-axis="${axis}" data-config-field="scurve_enabled" ${config.scurve_enabled ? "checked" : ""} ${scurveAvailable ? "" : "disabled"}>
-            <span>${scurveAvailable ? "ENABLE" : "STAGED · NOT AVAILABLE"}</span>
-          </label>
-          <input type="hidden" value="seven_segment_s_curve" data-config-axis="${axis}" data-config-field="scurve_profile_type" data-config-type="string">
-        </div>
-        <div class="scurve-fields">
-          <label><span>Start Speed</span>${configurationNumberInput(axis, "scurve_start_speed_mm_s", config.scurve_start_speed_mm_s ?? 0)}<small>mm/s</small></label>
-          <label><span>End Speed</span>${configurationNumberInput(axis, "scurve_end_speed_mm_s", config.scurve_end_speed_mm_s ?? 0)}<small>mm/s</small></label>
-          <label><span>Maximum Jerk</span>${configurationNumberInput(axis, "scurve_max_jerk_mm_s3", config.scurve_max_jerk_mm_s3 ?? 100)}<small>mm/s³</small></label>
-          <label><span>Control Period</span>${configurationNumberInput(axis, "scurve_control_period_us", config.scurve_control_period_us ?? 1000, "1")}<small>µs</small></label>
-        </div>
-        <div class="scurve-preview" id="scurve-preview-${axis}" role="status">Profile preview awaiting values.</div>
-      </section>`;
+      const scurveSummary = axis === "z" ? "" : `<div class="motor-scurve-summary">
+        <span>S-Curve Profile: <b>${config.scurve_enabled ? "ACTIVE (เปิดใช้งาน)" : "BYPASS (ปิดใช้งาน)"}</b></span>
+        <button type="button" class="btn-sm btn-secondary" data-goto-scurve="${axis}">Configure S-Curve</button>
+      </div>`;
       return `<article class="motor-config-card" data-motor-card="${axis}">
         <div class="motor-config-head"><strong>AXIS ${axis.toUpperCase()}</strong><span>${fmt(pulseFrequency / 1000, 2)} kHz MAX</span></div>
         <div class="motor-config-fields">
@@ -2246,9 +2571,10 @@
           <label><span>Forward Direction</span><select class="config-select" data-config-axis="${axis}" data-config-field="forward_direction"><option value="0" ${Number(config.forward_direction) === 0 ? "selected" : ""}>LOW / 0</option><option value="1" ${Number(config.forward_direction) === 1 ? "selected" : ""}>HIGH / 1</option></select></label>
         </div>
         <div class="motor-derived"><span>Theoretical <b id="config-theoretical-${axis}">${fmt(theoreticalSteps, 3)} pulse/mm</b></span><span>Pulse Frequency <b id="config-frequency-${axis}">${fmt(pulseFrequency, 0)} Hz</b></span><span>Pulses / Rev <b id="config-ppr-${axis}">${fmt(pulsesPerRev, 0)}</b></span></div>
-        ${scurveSection}
+        ${scurveSummary}
       </article>`;
     }).join("");
+    renderScurvePanel();
     updateConfigurationDerived();
     renderTravelCalibration();
 
@@ -2334,11 +2660,34 @@
         const jerk = value("scurve_max_jerk_mm_s3");
         const acceleration = value("acceleration");
         const periodUs = value("scurve_control_period_us");
-        const transitionMs = jerk > 0 ? (acceleration / jerk) * 1000 : Number.NaN;
-        const valid = jerk > 0 && Number.isInteger(periodUs) && periodUs >= 100 && periodUs <= 10000;
-        setText(`scurve-preview-${axis}`, valid
-          ? `Preview · jerk transition ${fmt(transitionMs, 1)} ms · control ${(periodUs / 1000).toFixed(3)} ms · gated by capability and runtime`
-          : "Invalid profile · jerk must be > 0 and control period must be 100–10,000 µs.");
+        const startSpeed = value("scurve_start_speed_mm_s");
+        const endSpeed = value("scurve_end_speed_mm_s");
+        const cruiseSpeed = value("commissioned_max_speed_mm_s") || value("max_speed_mm_s") || 60;
+        const stepsPerMm = value("steps_per_mm") || 64.705882;
+        const pulseHz = cruiseSpeed * stepsPerMm;
+
+        const transitionMs = jerk > 0 ? (acceleration / jerk) * 1000 : 0;
+        const controlKhz = periodUs > 0 ? 1000 / (periodUs / 1000) : 0;
+
+        setText(`scurve-metric-tj-${axis}`, jerk > 0 ? `${fmt(transitionMs, 1)} ms` : "--");
+        setText(`scurve-metric-freq-${axis}`, `${fmt(pulseHz, 0)} Hz`);
+        setText(`scurve-metric-rate-${axis}`, `${fmt(controlKhz / 1000, 1)} kHz`);
+
+        const statusNode = el(`scurve-metric-status-${axis}`);
+        if (statusNode) {
+          if (cruiseSpeed > 100) {
+            statusNode.textContent = "WARN: > 100 mm/s";
+            statusNode.className = "metric-badge warn";
+          } else if (jerk <= 0 || periodUs < 100 || periodUs > 10000) {
+            statusNode.textContent = "INVALID PARAMETERS";
+            statusNode.className = "metric-badge fault";
+          } else {
+            statusNode.textContent = "SAFE ENVELOPE";
+            statusNode.className = "metric-badge ok";
+          }
+        }
+
+        drawScurveSvg(axis, startSpeed, cruiseSpeed, endSpeed);
       }
     });
   }
@@ -2353,6 +2702,20 @@
     el("configuration-save").disabled = !MS.configDirty || MS.configSaving || Boolean(MS.payload?.busy);
     el("configuration-reset").disabled = !MS.configDirty || MS.configSaving;
     el("configuration-apply").disabled = !restartRequired || MS.configSaving || Boolean(MS.payload?.busy);
+
+    const scurveSaveBtn = el("scurve-save-btn");
+    const scurveApplyBtn = el("scurve-apply-btn");
+    const scurveMsg = el("scurve-panel-status-msg");
+    if (scurveSaveBtn) scurveSaveBtn.disabled = !MS.configDirty || MS.configSaving || Boolean(MS.payload?.busy);
+    if (scurveApplyBtn) scurveApplyBtn.disabled = !restartRequired || MS.configSaving || Boolean(MS.payload?.busy);
+    if (scurveMsg) {
+      scurveMsg.textContent = message || (MS.configDirty
+        ? "Unsaved S-Curve configuration — Click SAVE S-CURVE TO PI to validate and store on Raspberry Pi."
+        : restartRequired
+          ? "S-Curve saved on Raspberry Pi. Click APPLY & RESTART to load new motion profile."
+          : "S-Curve configuration is active on Raspberry Pi.");
+    }
+
     const validation = el("configuration-validation");
     if (validation) {
       validation.textContent = message || (MS.configDirty
@@ -4778,6 +5141,166 @@
     el("configuration-reset").addEventListener("click", () => renderConfigurationEditor(true));
     el("configuration-save").addEventListener("click", saveControllerConfiguration);
     el("configuration-apply").addEventListener("click", applyControllerConfiguration);
+
+    // S-Curve preset chips and tab switch
+    configurationPage.addEventListener("click", (event) => {
+      const chip = event.target.closest(".scurve-preset-chip");
+      if (chip) {
+        const row = chip.closest("[data-chip-axis]");
+        if (!row) return;
+        const axis = row.dataset.chipAxis;
+        const field = row.dataset.chipField;
+        const val = Number(chip.dataset.val);
+
+        row.querySelectorAll(".scurve-preset-chip").forEach((c) => c.classList.toggle("active", c === chip));
+
+        const targetInput = document.querySelector(`[data-config-axis="${axis}"][data-config-field="${field}"]`);
+        if (targetInput) {
+          targetInput.value = val;
+          const pitch = Number(MS.config?.axes?.[axis]?.lead_screw_pitch_mm || 24.727273);
+          const rpmFactor = 60 / Math.max(pitch, 0.001);
+          const rpmInput = document.querySelector(`[data-scurve-rpm-axis="${axis}"][data-scurve-rpm-field="${field}"]`);
+          if (rpmInput) {
+            rpmInput.value = (val * rpmFactor).toFixed(1);
+          }
+          MS.configDirty = true;
+          updateConfigurationDerived();
+          updateConfigurationState();
+        }
+        return;
+      }
+
+      const gotoScurveBtn = event.target.closest("[data-goto-scurve], [data-open-scurve-tab]");
+      if (gotoScurveBtn) {
+        applySetupTab("scurve");
+        return;
+      }
+    });
+
+    // S-Curve RPM input changed -> update mm/s
+    configurationPage.addEventListener("input", (event) => {
+      const rpmInput = event.target.closest("[data-scurve-rpm-axis]");
+      if (!rpmInput) return;
+      const axis = rpmInput.dataset.scurveRpmAxis;
+      const field = rpmInput.dataset.scurveRpmField;
+      const rpmVal = Number(rpmInput.value) || 0;
+      const pitch = Number(MS.config?.axes?.[axis]?.lead_screw_pitch_mm || 24.727273);
+      const rpmFactor = 60 / Math.max(pitch, 0.001);
+      const mmsVal = rpmVal / rpmFactor;
+
+      const mmsInput = document.querySelector(`[data-config-axis="${axis}"][data-config-field="${field}"]`);
+      if (mmsInput) {
+        mmsInput.value = mmsVal.toFixed(1);
+      }
+      MS.configDirty = true;
+      updateConfigurationDerived();
+      updateConfigurationState();
+    });
+
+    // S-Curve mm/s speed input changed -> update RPM input
+    configurationPage.addEventListener("input", (event) => {
+      const mmsInput = event.target.closest(".scurve-speed-mms");
+      if (!mmsInput) return;
+      const axis = mmsInput.dataset.configAxis;
+      const field = mmsInput.dataset.configField;
+      const mmsVal = Number(mmsInput.value) || 0;
+      const pitch = Number(MS.config?.axes?.[axis]?.lead_screw_pitch_mm || 24.727273);
+      const rpmFactor = 60 / Math.max(pitch, 0.001);
+      const rpmInput = document.querySelector(`[data-scurve-rpm-axis="${axis}"][data-scurve-rpm-field="${field}"]`);
+      if (rpmInput) {
+        rpmInput.value = (mmsVal * rpmFactor).toFixed(1);
+      }
+    });
+
+    // S-Curve per-axis toggle change
+    configurationPage.addEventListener("change", (event) => {
+      const scurveToggle = event.target.closest('[data-config-field="scurve_enabled"]');
+      if (scurveToggle) {
+        const axis = scurveToggle.dataset.configAxis;
+        const label = el(`scurve-label-${axis}`);
+        if (label) {
+          label.textContent = scurveToggle.checked ? "ACTIVE (เปิด)" : "BYPASS (ปิด)";
+        }
+        const card = document.querySelector(`[data-scurve-card="${axis}"]`);
+        if (card) {
+          card.classList.toggle("is-enabled", scurveToggle.checked);
+          card.classList.toggle("is-disabled", !scurveToggle.checked);
+        }
+        const summaryCard = document.querySelector(`[data-motor-card="${axis}"] .motor-scurve-summary b`);
+        if (summaryCard) {
+          summaryCard.textContent = scurveToggle.checked ? "ACTIVE (เปิดใช้งาน)" : "BYPASS (ปิดใช้งาน)";
+        }
+        const xChecked = document.querySelector('[data-config-axis="x"][data-config-field="scurve_enabled"]')?.checked;
+        const yChecked = document.querySelector('[data-config-axis="y"][data-config-field="scurve_enabled"]')?.checked;
+        const masterToggle = el("scurve-master-toggle");
+        const masterText = el("scurve-master-status-text");
+        if (masterToggle && masterText) {
+          masterToggle.checked = Boolean(xChecked && yChecked);
+          masterToggle.indeterminate = Boolean((xChecked || yChecked) && !(xChecked && yChecked));
+          masterText.textContent = masterToggle.checked ? "ALL ACTIVE (เปิดทั้งหมด)" : masterToggle.indeterminate ? "PARTIAL (เปิดบางแกน)" : "OFF (TRAPEZOIDAL)";
+        }
+      }
+    });
+
+    // Master S-Curve toggle
+    el("scurve-master-toggle")?.addEventListener("change", (event) => {
+      const checked = event.target.checked;
+      ["x", "y"].forEach((axis) => {
+        const toggle = document.querySelector(`[data-config-axis="${axis}"][data-config-field="scurve_enabled"]`);
+        if (toggle) {
+          toggle.checked = checked;
+          const label = el(`scurve-label-${axis}`);
+          if (label) label.textContent = checked ? "ACTIVE (เปิด)" : "BYPASS (ปิด)";
+          const card = document.querySelector(`[data-scurve-card="${axis}"]`);
+          if (card) {
+            card.classList.toggle("is-enabled", checked);
+            card.classList.toggle("is-disabled", !checked);
+          }
+          const summaryCard = document.querySelector(`[data-motor-card="${axis}"] .motor-scurve-summary b`);
+          if (summaryCard) {
+            summaryCard.textContent = checked ? "ACTIVE (เปิดใช้งาน)" : "BYPASS (ปิดใช้งาน)";
+          }
+        }
+      });
+      const masterText = el("scurve-master-status-text");
+      if (masterText) masterText.textContent = checked ? "ALL ACTIVE (เปิดทั้งหมด)" : "OFF (TRAPEZOIDAL)";
+      MS.configDirty = true;
+      updateConfigurationDerived();
+      updateConfigurationState();
+    });
+
+    // Reset safe defaults
+    el("scurve-reset-safe-defaults")?.addEventListener("click", () => {
+      if (!window.confirm("Reset S-Curve parameters for X and Y to factory safe defaults?")) return;
+      const setField = (axis, field, val) => {
+        const input = document.querySelector(`[data-config-axis="${axis}"][data-config-field="${field}"]`);
+        if (input) input.value = val;
+      };
+      ["x", "y"].forEach((axis) => {
+        setField(axis, "scurve_start_speed_mm_s", 5.0);
+        setField(axis, "scurve_end_speed_mm_s", 2.0);
+        setField(axis, "commissioned_max_speed_mm_s", 60.0);
+        setField(axis, "scurve_max_jerk_mm_s3", 250.0);
+        setField(axis, "acceleration", 120.0);
+        setField(axis, "deceleration", 120.0);
+        setField(axis, "scurve_control_period_us", 1000);
+        const pitch = Number(MS.config?.axes?.[axis]?.lead_screw_pitch_mm || 24.727273);
+        const rpmFactor = 60 / Math.max(pitch, 0.001);
+        const startRpm = document.querySelector(`[data-scurve-rpm-axis="${axis}"][data-scurve-rpm-field="scurve_start_speed_mm_s"]`);
+        if (startRpm) startRpm.value = (5.0 * rpmFactor).toFixed(1);
+        const endRpm = document.querySelector(`[data-scurve-rpm-axis="${axis}"][data-scurve-rpm-field="scurve_end_speed_mm_s"]`);
+        if (endRpm) endRpm.value = (2.0 * rpmFactor).toFixed(1);
+        const cruiseRpm = document.querySelector(`[data-scurve-rpm-axis="${axis}"][data-scurve-rpm-field="commissioned_max_speed_mm_s"]`);
+        if (cruiseRpm) cruiseRpm.value = (60.0 * rpmFactor).toFixed(0);
+      });
+      MS.configDirty = true;
+      updateConfigurationDerived();
+      updateConfigurationState("Safe default S-Curve values loaded. Click SAVE S-CURVE TO PI.");
+    });
+
+    // Direct save/apply buttons inside S-curve panel
+    el("scurve-save-btn")?.addEventListener("click", saveControllerConfiguration);
+    el("scurve-apply-btn")?.addEventListener("click", applyControllerConfiguration);
 
     el("dashboard-slot-grid").addEventListener("click", (event) => {
       const slotButton = event.target.closest("[data-dashboard-slot]");

@@ -89,3 +89,458 @@
   .linked-speed-head > span { display: block; margin-top: 6px; text-align: left; }
   .axis-speed-row { grid-template-columns: 24px minmax(70px, 1fr) 68px 36px; }
 }
+
+/* ==========================================================================
+   Dedicated S-Curve Motion Profile Panel & Controls
+   ========================================================================== */
+
+.scurve-config-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px 18px;
+}
+
+.scurve-panel-badges {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* --- Master S-Curve Bar --- */
+.scurve-master-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 18px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--surf-2) 90%, #10b981 10%), var(--surf-2));
+  border: 1px solid color-mix(in srgb, var(--border-med) 70%, #10b981 30%);
+  border-radius: var(--r-md, 8px);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.scurve-master-info strong {
+  display: block;
+  font-size: 13px;
+  color: var(--text-0, #f8fafc);
+  letter-spacing: 0.02em;
+}
+
+.scurve-master-info p {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: var(--text-muted, #94a3b8);
+  line-height: 1.4;
+}
+
+.scurve-master-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-shrink: 0;
+}
+
+/* --- Industrial Toggle Switch --- */
+.scurve-toggle-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: var(--surf-1, #0f172a);
+  border: 1px solid var(--border, #334155);
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.2s ease;
+}
+
+.scurve-toggle-switch:hover {
+  border-color: var(--blue-lt, #38bdf8);
+}
+
+.scurve-toggle-switch input[type="checkbox"] {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.scurve-slider {
+  position: relative;
+  display: inline-block;
+  width: 46px;
+  height: 24px;
+  background: #334155;
+  border-radius: 12px;
+  transition: background-color 0.25s ease, box-shadow 0.25s ease;
+  flex-shrink: 0;
+}
+
+.scurve-slider::after {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.scurve-toggle-switch input[type="checkbox"]:checked + .scurve-slider {
+  background: #10b981;
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.5);
+}
+
+.scurve-toggle-switch input[type="checkbox"]:checked + .scurve-slider::after {
+  transform: translateX(22px);
+}
+
+.scurve-toggle-switch input[type="checkbox"]:indeterminate + .scurve-slider {
+  background: #f59e0b;
+}
+
+.scurve-toggle-switch input[type="checkbox"]:indeterminate + .scurve-slider::after {
+  transform: translateX(11px);
+}
+
+.scurve-switch-label {
+  font: 700 11px var(--font-mono, monospace);
+  color: var(--text-2, #cbd5e1);
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
+.scurve-toggle-switch:has(input:checked) .scurve-switch-label {
+  color: #34d399;
+}
+
+/* --- S-Curve Axis Grid (X and Y side by side) --- */
+.scurve-axis-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.scurve-axis-card {
+  display: flex;
+  flex-direction: column;
+  background: var(--surf-1, #1e293b);
+  border: 1px solid var(--border-med, #475569);
+  border-radius: var(--r-md, 8px);
+  overflow: hidden;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.scurve-axis-card.is-enabled {
+  border-color: color-mix(in srgb, #10b981 65%, var(--border));
+  box-shadow: 0 0 16px rgba(16, 185, 129, 0.12);
+}
+
+.scurve-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--surf-2, #0f172a);
+  border-bottom: 1px solid var(--border, #334155);
+}
+
+.scurve-card-title h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-0, #f8fafc);
+  letter-spacing: 0.03em;
+}
+
+.scurve-card-subtitle {
+  display: block;
+  margin-top: 2px;
+  font-size: 10px;
+  color: var(--text-muted, #94a3b8);
+}
+
+.scurve-card-body {
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* --- Sections inside card --- */
+.scurve-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.scurve-section-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--blue-lt, #38bdf8);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.scurve-fields-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.scurve-field-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  background: var(--surf-2, #0f172a);
+  border: 1px solid var(--border, #334155);
+  border-radius: 6px;
+}
+
+.scurve-field-head strong {
+  display: block;
+  font-size: 11px;
+  color: var(--text-1, #f1f5f9);
+}
+
+.scurve-field-head small {
+  display: block;
+  font-size: 9px;
+  color: var(--text-muted, #94a3b8);
+}
+
+/* --- Input Pairs (mm/s + RPM) --- */
+.scurve-input-pair {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.unit-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1;
+}
+
+.unit-input-wrap.full-width {
+  width: 100%;
+}
+
+.unit-input-wrap input.config-input {
+  width: 100%;
+  min-height: 38px;
+  padding: 6px 36px 6px 8px;
+  background: var(--surf-1, #1e293b);
+  border: 1px solid var(--border-med, #475569);
+  border-radius: 5px;
+  color: var(--text-0, #f8fafc);
+  font: 700 13px var(--font-mono, monospace);
+  text-align: right;
+}
+
+.unit-input-wrap input.config-input:focus {
+  border-color: var(--blue-lt, #38bdf8);
+  outline: none;
+}
+
+.unit-badge {
+  position: absolute;
+  right: 8px;
+  font: 700 9px var(--font-mono, monospace);
+  color: var(--text-muted, #94a3b8);
+  pointer-events: none;
+  text-transform: uppercase;
+}
+
+/* --- Presets row --- */
+.scurve-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.chip-hint {
+  font-size: 9px;
+  color: var(--text-muted, #94a3b8);
+  text-transform: uppercase;
+  margin-right: 2px;
+}
+
+.scurve-preset-chip {
+  min-height: 24px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: var(--surf-3, #334155);
+  border: 1px solid var(--border, #475569);
+  color: var(--text-2, #cbd5e1);
+  font: 600 10px var(--font-mono, monospace);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.scurve-preset-chip:hover {
+  border-color: var(--blue-lt, #38bdf8);
+  color: #ffffff;
+  background: color-mix(in srgb, var(--blue) 30%, var(--surf-3));
+}
+
+.scurve-preset-chip.active {
+  background: var(--blue-dim, rgba(56, 189, 248, 0.2));
+  border-color: var(--blue-lt, #38bdf8);
+  color: #38bdf8;
+  font-weight: 700;
+}
+
+/* --- Diagnostics & Diagram --- */
+.scurve-diagnostics-box {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--surf-2, #0f172a);
+  border: 1px solid var(--border-med, #334155);
+  border-radius: 6px;
+}
+
+.scurve-metrics-bar {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.metric-block {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.metric-title {
+  font-size: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted, #94a3b8);
+}
+
+.metric-num {
+  font: 700 13px var(--font-mono, monospace);
+  color: var(--text-0, #f8fafc);
+}
+
+.metric-badge {
+  display: inline-block;
+  font: 700 10px var(--font-mono, monospace);
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-align: center;
+}
+
+.metric-badge.ok {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.35);
+}
+
+.metric-badge.warn {
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+}
+
+.metric-badge.fault {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.35);
+}
+
+.scurve-diagram-wrap {
+  width: 100%;
+  height: 90px;
+  background: #090d16;
+  border: 1px solid #1e293b;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.scurve-profile-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.scurve-phase-labels {
+  display: flex;
+  justify-content: space-between;
+  font: 9px var(--font-mono, monospace);
+  color: var(--text-muted, #64748b);
+  overflow-x: auto;
+  gap: 4px;
+}
+
+/* --- Panel Bottom Toolbar --- */
+.scurve-panel-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 16px;
+  background: var(--surf-2, #0f172a);
+  border: 1px solid var(--border, #334155);
+  border-radius: var(--r-md, 8px);
+}
+
+.scurve-toolbar-info {
+  font-size: 11px;
+  color: var(--text-muted, #94a3b8);
+}
+
+.scurve-toolbar-buttons {
+  display: flex;
+  gap: 10px;
+}
+
+.motor-scurve-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: var(--surf-2, #0f172a);
+  border: 1px solid var(--border, #334155);
+  font-size: 11px;
+  color: var(--text-1, #f1f5f9);
+}
+
+.motor-scurve-summary b {
+  color: #10b981;
+  font-family: var(--font-mono, monospace);
+}
+
+@media (max-width: 900px) {
+  .scurve-axis-grid {
+    grid-template-columns: 1fr;
+  }
+  .scurve-master-bar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .scurve-metrics-bar {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+

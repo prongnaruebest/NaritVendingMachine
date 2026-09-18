@@ -96,6 +96,7 @@
           </button>
           <div class="nav-submenu" aria-label="Machine setup pages">
             <button class="nav-subitem active" data-setup-sidebar="motor" data-setup-tab="motor"><span>Motor Settings</span></button>
+            <button class="nav-subitem" data-setup-sidebar="scurve" data-setup-tab="scurve"><span>S-Curve Profile</span></button>
             <button class="nav-subitem" data-setup-sidebar="travel" data-setup-tab="travel"><span>Travel &amp; Drive Setup</span></button>
             <button class="nav-subitem" data-setup-sidebar="homing" data-setup-tab="homing"><span>Homing Settings</span></button>
             <button class="nav-subitem" data-setup-sidebar="io" data-setup-tab="io"><span>I/O Configuration</span></button>
@@ -958,6 +959,7 @@
         <div class="page-heading"><div><p class="panel-label">Controller Configuration</p><h2>Motor Pulse, GPIO &amp; Sensors</h2></div><span class="page-status-chip" id="configuration-save-status">LOADED</span></div>
         <nav class="setup-tabs" aria-label="Machine setup sections" role="tablist">
           <button type="button" class="active" data-setup-tab="motor" role="tab">Motor Settings</button>
+          <button type="button" data-setup-tab="scurve" role="tab">S-Curve Profile</button>
           <button type="button" data-setup-tab="travel" role="tab">Travel &amp; Drive Setup</button>
           <button type="button" data-setup-tab="homing" role="tab">Homing Settings</button>
           <button type="button" data-setup-tab="io" role="tab">I/O Configuration</button>
@@ -981,6 +983,51 @@
             <div class="panel-head"><div><p class="panel-label">Measured Stroke Calibration</p><h2 class="panel-title">Convert Physical Measurement to Software Travel</h2></div><span class="page-note">No motion is started from this panel</span></div>
             <p class="travel-calibration-intro">Home the axis, move toward the physical Max sensor under operator control, record the measured stroke, then subtract a safety margin. Applying a result only edits Maximum Travel; SAVE and APPLY are still required.</p>
             <div class="travel-calibration-grid" id="travel-calibration-grid"></div>
+          </div>
+          <!-- S-Curve Motion Profile & Jerk Control Panel -->
+          <div class="panel page-panel scurve-config-panel" id="scurve-config-panel" hidden>
+            <div class="panel-head">
+              <div>
+                <p class="panel-label">S-Curve Motion Profile &amp; Jerk Control</p>
+                <h2 class="panel-title">Seven-Segment S-Curve Dynamic Profiling (X &amp; Y)</h2>
+              </div>
+              <div class="scurve-panel-badges">
+                <span class="chip chip-info" id="scurve-nucleo-badge">NUCLEO BUFFERED S-CURVE</span>
+                <span class="chip chip-ok" id="scurve-profile-status-badge">READY</span>
+              </div>
+            </div>
+
+            <!-- Master S-Curve Bar -->
+            <div class="scurve-master-bar">
+              <div class="scurve-master-info">
+                <strong>Master S-Curve Switch (เปิด / ปิด การควบคุม S-Curve ทั้งหมด)</strong>
+                <p>When enabled, NUCLEO hardware executes smooth 7-segment jerk-limited profiles. When disabled, axes run standard synchronized trapezoidal moves.</p>
+              </div>
+              <div class="scurve-master-actions">
+                <label class="scurve-toggle-switch scurve-master-switch" title="Toggle S-curve for both X and Y axes">
+                  <input type="checkbox" id="scurve-master-toggle">
+                  <span class="scurve-slider"></span>
+                  <span class="scurve-switch-label" id="scurve-master-status-text">OFF (TRAPEZOIDAL)</span>
+                </label>
+                <button type="button" class="btn-secondary btn-sm" id="scurve-reset-safe-defaults" title="Reset X/Y to factory safe parameters (5 mm/s start, 2 mm/s end, 60 mm/s cruise, 250 mm/s³ jerk)">
+                  RESET SAFE DEFAULTS
+                </button>
+              </div>
+            </div>
+
+            <!-- Axis Grid rendered / hydrated by app.js -->
+            <div class="scurve-axis-grid" id="scurve-axis-grid"></div>
+
+            <!-- S-Curve Toolbar -->
+            <div class="scurve-panel-toolbar">
+              <div class="scurve-toolbar-info">
+                <span id="scurve-panel-status-msg">Changes must be saved to the Raspberry Pi and applied by restarting the controller service.</span>
+              </div>
+              <div class="scurve-toolbar-buttons">
+                <button type="button" class="btn-slot-save" id="scurve-save-btn">SAVE S-CURVE TO PI</button>
+                <button type="button" class="btn-execute" id="scurve-apply-btn" disabled>APPLY &amp; RESTART</button>
+              </div>
+            </div>
           </div>
           <div class="panel page-panel configuration-pin-panel">
             <div class="panel-head"><div><p class="panel-label">Raspberry Pi GPIO</p><h2 class="panel-title">Pin Configuration &amp; Sensors</h2></div><span class="page-note" id="configuration-board-profile">Board: --</span></div>
