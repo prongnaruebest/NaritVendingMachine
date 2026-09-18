@@ -34,6 +34,9 @@ uint8_t NucleoCompareAdapter_SetRate(NucleoCompareAdapter *adapter,
   half_period = ((uint64_t)adapter->timer_tick_hz * 1000ULL +
                  denominator / 2ULL) / denominator;
   if ((half_period == 0ULL) || (half_period > 0xffffffffULL)) return 0U;
+  if (half_period > 65535ULL) {
+    half_period = 65535ULL;
+  }
   if (adapter->port.apply_half_period_atomic(
           adapter->port.context, axis, (uint32_t)half_period) == 0U) {
     adapter->faulted = 1U;

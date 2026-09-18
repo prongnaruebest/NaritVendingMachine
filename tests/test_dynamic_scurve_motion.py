@@ -336,6 +336,31 @@ class TestDynamicScurveMotion(unittest.TestCase):
             self.assertEqual(staged_min["x"], 0)
             self.assertEqual(len(self.backend.started_motions), 1)
 
+    def test_dynamic_motion_failure_invalidates_homed_and_raises(self) -> None:
+        """Verify is_homed is invalidated across participating axes when dynamic motion fails."""
+        from narit_vending.domain.errors import NucleoError
+        self.mock_x.is_homed = True
+        self.mock_y.is_homed = True
+
+        def failing_start(cmd, timeout_s, stop_requested):
+            raise NucleoError("Dynamic move failed on axis X: state=FAILED, fault=CONTROL_TICK")
+
+        self.backend.start_dynamic_motion = failing_start
+
+        plan = CoordinatedMovePlan(
+            axes={
+                "x": AxisMovePlan(axis="x", current_mm=100.0, target_mm=200.0, distance_mm=100.0, direction=0, steps=6471, speed_mm_s=50.0, duration_s=2.0),
+                "y": AxisMovePlan(axis="y", current_mm=100.0, target_mm=200.0, distance_mm=100.0, direction=0, steps=6471, speed_mm_s=50.0, duration_s=2.0),
+            },
+            duration_s=2.0,
+            mode="speed",
+        )
+        with self.assertRaises(NucleoError):
+            self.mc._execute_coordinated_plan(plan)
+
+        self.assertFalse(self.mock_x.is_homed)
+        self.assertFalse(self.mock_y.is_homed)
+
 
 if __name__ == "__main__":
     unittest.main()

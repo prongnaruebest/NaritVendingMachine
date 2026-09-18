@@ -4,7 +4,7 @@
 #include <string.h>
 
 #define DYNAMIC_CONTROL_PERIOD_US 1000U
-#define DYNAMIC_TERMINAL_RATE_MILLIHZ 5000U
+#define DYNAMIC_TERMINAL_RATE_MILLIHZ 1000000U
 
 static uint32_t conservative_whole_units(uint32_t milli_units)
 {

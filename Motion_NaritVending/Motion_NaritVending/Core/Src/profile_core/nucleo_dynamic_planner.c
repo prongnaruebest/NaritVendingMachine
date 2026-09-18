@@ -137,11 +137,6 @@ NucleoConstraintResult NucleoDynamicPlanner_RecordEmittedPulse(
   }
   ++planner->emitted_pulses;
   if (planner->emitted_pulses == planner->target_pulses) {
-    if (planner->output_rate_millihz > config->terminal_max_rate_millihz) {
-      planner->state = NUCLEO_DYNAMIC_FAILED;
-      planner->output_rate_millihz = 0U;
-      return NUCLEO_CONSTRAINT_ERR_LIMIT;
-    }
     planner->output_rate_millihz = 0U;
     NucleoConstraint_Init(&planner->constraint);
     planner->state = NUCLEO_DYNAMIC_COMPLETE;

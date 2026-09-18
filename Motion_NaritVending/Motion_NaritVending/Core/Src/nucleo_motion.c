@@ -156,7 +156,7 @@ static void dynamic_runtime_init(void)
       configs[a].constraints.max_acceleration_hz_s = 20000U;
       configs[a].constraints.max_deceleration_hz_s = 20000U;
       configs[a].constraints.max_jerk_hz_s2 = 100000U;
-      configs[a].terminal_max_rate_millihz = 5000U;
+      configs[a].terminal_max_rate_millihz = 1000000U;
     }
     dynamic_app.facade.runtime_ready = NucleoDynamicCoordinator_Init(
         &dynamic_app.facade.coordinator, configs, dynamic_app.facade.hooks);

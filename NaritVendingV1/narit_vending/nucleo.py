@@ -466,6 +466,7 @@ class NucleoLink:
             started = time.monotonic()
             deadline = started + max(1.0, float(timeout_s))
             participating = set(command.axes)
+            has_started = False
 
             try:
                 while time.monotonic() < deadline:
@@ -497,13 +498,36 @@ class NucleoLink:
                         self._last_success_monotonic = time.monotonic()
                         self._last_payload = dict(hb)
                         moving = hb.get("moving", {})
-                        if isinstance(moving, dict) and all(not moving.get(a, 0) for a in participating):
-                            break
+                        if isinstance(moving, dict):
+                            if any(bool(moving.get(a, 0)) for a in participating):
+                                has_started = True
+                            if (has_started or (time.monotonic() - started >= 0.35)) and all(not moving.get(a, 0) for a in participating):
+                                break
                 else:
                     serial_port.write(b"STOP\n")
                     serial_port.flush()
                     self.disarm()
                     raise NucleoError(f"Dynamic move timed out after {timeout_s:.1f} seconds")
+
+                # Verify dynamic motion outcome before disarming
+                serial_port.write(b"DYN_STATUS\n")
+                serial_port.flush()
+                dyn_status = self._read_json_response(serial_port, time.monotonic() + 0.5, expected_types={"dynamic_status"})
+                _log.info("Nucleo post-dynamic status: %r", dyn_status)
+
+                if dyn_status and isinstance(dyn_status.get("axes"), dict):
+                    status_axes = dyn_status["axes"]
+                    for a in participating:
+                        axis_info = status_axes.get(a, {})
+                        axis_state = axis_info.get("state", "UNKNOWN")
+                        axis_fault = axis_info.get("fault", "NONE")
+                        if axis_state == "FAILED" or axis_fault not in ("NONE", ""):
+                            self.disarm()
+                            raise NucleoError(
+                                f"Dynamic move failed on axis {a.upper()}: "
+                                f"state={axis_state}, fault={axis_fault}, "
+                                f"emitted={axis_info.get('emitted_pulses')}/{axis_info.get('target_pulses')}"
+                            )
 
                 if not self.disarm():
                     raise NucleoError("Dynamic move completed but Nucleo failed to disarm")
@@ -516,6 +540,7 @@ class NucleoLink:
                     "command_id": command.command_id,
                     "duration_s": elapsed,
                     "stopped": False,
+                    "telemetry": dyn_status,
                 }
             except Exception:
                 try:

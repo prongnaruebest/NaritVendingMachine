@@ -54,6 +54,7 @@ static uint8_t enable_channel(void *context, uint8_t axis)
                         __HAL_TIM_GET_COUNTER(port->tim1) +
                             NUCLEO_G491_FIRST_COMPARE_DELAY_TICKS);
   port->output_high[axis] = 0U;
+  (void)HAL_TIM_OC_Stop_IT(port->tim1, port->channels[axis]);
   if (HAL_TIM_OC_Start_IT(port->tim1, port->channels[axis]) != HAL_OK) {
     /* A failed OC start is a latched adapter fault; STEP remains GPIO-low. */
     pulse_as_gpio_low(port, axis);
