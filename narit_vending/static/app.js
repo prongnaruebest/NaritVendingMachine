@@ -1801,6 +1801,10 @@
       if (active) button.setAttribute("aria-current", "page");
       else button.removeAttribute("aria-current");
     });
+    if (tabName === "scurve") {
+      renderScurvePanel();
+      updateConfigurationDerived();
+    }
   }
 
   function renderVisualization() {
@@ -2188,6 +2192,10 @@
     if (editor) editor.classList.toggle("view-only", !MS.visualEditMode);
     setText("visual-edit-mode-state", MS.visualEditMode ? "ENGINEERING EDIT" : "VIEW ONLY");
     AXES.forEach((axis) => { el(`visual-slot-${axis}`).readOnly = !MS.visualEditMode; });
+  }
+
+  function configurationNumberInput(axis, field, value, step = "0.1") {
+    return `<input class="config-input" type="number" step="${step}" value="${esc(value)}" data-config-axis="${axis}" data-config-field="${field}" aria-label="${axis.toUpperCase()} ${field.replaceAll("_", " ")}">`;
   }
 
   function drawScurveSvg(axis, vStart, vCruise, vEnd) {
