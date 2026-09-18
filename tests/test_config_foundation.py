@@ -94,7 +94,7 @@ class ConfigFoundationTests(unittest.TestCase):
 
         self.assertTrue(report.valid)
 
-    def test_iriv_scurve_configuration_is_disabled_and_xy_only(self) -> None:
+    def test_iriv_scurve_configuration_is_xy_only(self) -> None:
         machine = json.loads((ROOT / "machine_config.iriv.json").read_text(encoding="utf-8"))
         hardware = json.loads((ROOT / "hardware_config.iriv.json").read_text(encoding="utf-8"))
 
@@ -103,7 +103,7 @@ class ConfigFoundationTests(unittest.TestCase):
         self.assertTrue(report.valid, [issue.code for issue in report.issues])
         for axis in ("x", "y"):
             effective = report.effective_axes[axis]
-            self.assertFalse(effective["scurve_enabled"])
+            self.assertTrue(effective["scurve_enabled"])
             self.assertEqual(effective["scurve_profile_type"], "seven_segment_s_curve")
             self.assertEqual(effective["scurve_control_period_us"], 1000)
         self.assertFalse(any(key.startswith("scurve_") for key in report.effective_axes["z"]))

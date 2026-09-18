@@ -333,8 +333,11 @@ class NucleoLink:
                 serial_port.write(b"DISARM\n")
                 serial_port.flush()
                 deadline = time.monotonic() + self.timeout_s
-                self._read_json_response(serial_port, deadline, expected_types={"ack"})
+                resp = self._read_json_response(serial_port, deadline, expected_types={"ack"})
                 self._armed = False
+                if resp:
+                    self._last_success_monotonic = time.monotonic()
+                    self._last_success_at = datetime.now(timezone.utc).isoformat()
                 return True
             except Exception:
                 return False
@@ -352,8 +355,11 @@ class NucleoLink:
                 serial_port.write(b"STOP\n")
                 serial_port.flush()
                 deadline = time.monotonic() + self.timeout_s
-                self._read_json_response(serial_port, deadline, expected_types={"ack"})
+                resp = self._read_json_response(serial_port, deadline, expected_types={"ack"})
                 self._armed = False
+                if resp:
+                    self._last_success_monotonic = time.monotonic()
+                    self._last_success_at = datetime.now(timezone.utc).isoformat()
                 return True
             except Exception:
                 return False
@@ -450,6 +456,9 @@ class NucleoLink:
             serial_port.write(cmd)
             serial_port.flush()
             ack = self._read_json_response(serial_port, time.monotonic() + self.timeout_s, expected_types={"ack"})
+            if ack:
+                self._last_success_monotonic = time.monotonic()
+                self._last_success_at = datetime.now(timezone.utc).isoformat()
             if not ack or ack.get("type") != "ack" or ack.get("status") != "running":
                 self.disarm()
                 raise NucleoError(f"Dynamic start rejected: {ack}")
@@ -499,6 +508,8 @@ class NucleoLink:
                 if not self.disarm():
                     raise NucleoError("Dynamic move completed but Nucleo failed to disarm")
 
+                self._last_success_monotonic = time.monotonic()
+                self._last_success_at = datetime.now(timezone.utc).isoformat()
                 elapsed = max(0.0, time.monotonic() - started)
                 return {
                     "ok": True,
