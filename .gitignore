@@ -9,8 +9,9 @@ backups/
 .pytest_cache/
 .ruff_cache/
 .vscode/
-.agents/
 .stm32-workspace/
+!.agents/
+!.agents/**
 /Motion_NaritVending/Motion_NaritVending/Debug/
 /Motion_NaritVending/Motion_NaritVending/Release/
 *.sqlite3
