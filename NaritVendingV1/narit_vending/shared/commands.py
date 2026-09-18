@@ -27,6 +27,7 @@ CommandType = Literal[
     "HOME_ALL",
     "JOG",
     "MOVE_TO",
+    "MOVE_TO_LIMIT",
     "MOVE_TO_SLOT",
     "RUN_SLOT_SEQUENCE",
     "DISPENSE",
@@ -37,11 +38,14 @@ CommandType = Literal[
     "DISARM_MOTOR_TEST",
     "RUN_MOTOR_TEST",
     "SET_SPEED",
+    "SET_TIMER",
+    "PLAN_MOVE",
     "VALIDATE_TARGET",
     "ARM_MOVE",
     "EXECUTE_ARMED_MOVE",
     "SAVE_SLOT",
     "SAVE_SLOT_FROM_CURRENT",
+    "SAVE_SLOT_SEQUENCE",
     "SAVE_CONFIG",
     "SCHEDULE_RESTART",
     "CONTROLLED_STOP",
@@ -64,6 +68,30 @@ CommandSource = Literal["http", "mqtt", "system"]
 
 
 @dataclass(frozen=True)
+class CommandMetadata:
+    """Versioned request context that never carries motion authority."""
+
+    schema_version: int = 1
+    correlation_id: str = ""
+    actor: str = ""
+    client_revision: str = ""
+
+    def __post_init__(self) -> None:
+        if self.schema_version != 1:
+            raise ValueError(f"Unsupported command metadata schema_version: {self.schema_version}")
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any] | None) -> "CommandMetadata":
+        payload = data or {}
+        return cls(
+            schema_version=int(payload.get("schema_version", 1)),
+            correlation_id=str(payload.get("correlation_id", "")),
+            actor=str(payload.get("actor", "")),
+            client_revision=str(payload.get("client_revision", "")),
+        )
+
+
+@dataclass(frozen=True)
 class CommandEnvelope:
     """Immutable command submitted to the controller command bus.
 
@@ -78,6 +106,13 @@ class CommandEnvelope:
     idempotency_key: str = field(default_factory=_new_id)
     requested_at: str = field(default_factory=_now_iso)
     config_revision: str = ""
+    metadata: CommandMetadata = field(default_factory=CommandMetadata)
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.parameters, dict):
+            raise TypeError("Command parameters must be an object")
+        if not isinstance(self.metadata, CommandMetadata):
+            object.__setattr__(self, "metadata", CommandMetadata.from_dict(self.metadata))
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -92,6 +127,7 @@ class CommandEnvelope:
             idempotency_key=data.get("idempotency_key", _new_id()),
             requested_at=data.get("requested_at", _now_iso()),
             config_revision=data.get("config_revision", ""),
+            metadata=CommandMetadata.from_dict(data.get("metadata")),
         )
 
 
@@ -106,6 +142,7 @@ class CommandResult:
     result: Any = None  # arbitrary result payload
     started_at: str | None = None
     completed_at: str | None = None
+    error: dict[str, Any] | None = None
 
     def ok(self) -> bool:
         return self.accepted and self.state in ("ACCEPTED", "COMPLETED")
@@ -120,16 +157,31 @@ class CommandResult:
             "result": self.result,
             "started_at": self.started_at,
             "completed_at": self.completed_at,
+            "error": self.error,
         }
 
     @classmethod
-    def rejected(cls, command_id: str, reason: str) -> "CommandResult":
+    def rejected(
+        cls,
+        command_id: str,
+        reason: str,
+        *,
+        code: str = "COMMAND_REJECTED",
+        details: dict[str, Any] | None = None,
+        retryable: bool = False,
+    ) -> "CommandResult":
         return cls(
             accepted=False,
             command_id=command_id,
             state="REJECTED",
             reason=reason,
             completed_at=_now_iso(),
+            error={
+                "code": code,
+                "message": reason,
+                "details": details or {},
+                "retryable": retryable,
+            },
         )
 
     @classmethod
@@ -139,6 +191,12 @@ class CommandResult:
             command_id=command_id,
             state="BUSY",
             reason="Machine is busy with another command",
+            error={
+                "code": "MACHINE_BUSY",
+                "message": "Machine is busy with another command",
+                "details": {},
+                "retryable": True,
+            },
         )
 
     @classmethod
@@ -161,4 +219,5 @@ class CommandResult:
             result=data.get("result"),
             started_at=data.get("started_at"),
             completed_at=data.get("completed_at"),
+            error=data.get("error"),
         )

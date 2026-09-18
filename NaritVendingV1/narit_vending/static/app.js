@@ -482,10 +482,65 @@
     if (toggle) toggle.checked = enabled;
     setText("slot-sequence-state", enabled ? "ON" : "OFF");
     setText("slot-sequence-description", enabled
-      ? "ON — X → Y → Z target, 3 s hold, then Home Z → Y → X."
-      : "OFF — GO TO uses the standard Controller motion.");
+      ? "ON — 9-Stage Vending Dispense Sequence with Home Return."
+      : "OFF — GO TO uses the standard single-move motion.");
     const summary = el("slot-sequence-summary");
     if (summary) summary.classList.toggle("active", enabled);
+
+    const mgrToggle = el("slot-mgr-sequence-toggle");
+    if (mgrToggle) mgrToggle.checked = enabled;
+    setText("slot-mgr-sequence-state", enabled ? "ON" : "OFF");
+  }
+
+  function populateSlotSequenceSettings(cfg) {
+    const seq = cfg || MS.config?.slot_sequence || {};
+    const setVal = (id, fallback) => {
+      const input = el(id);
+      if (input && seq[fallback.key] !== undefined) {
+        input.value = Number(seq[fallback.key]);
+      } else if (input && input.value === "") {
+        input.value = fallback.def;
+      }
+    };
+    setVal("slot-seq-standby-z", { key: "z_standby_mm", def: 85.0 });
+    setVal("slot-seq-pick-z", { key: "z_pick_mm", def: 20.0 });
+    setVal("slot-seq-lift-delta-y", { key: "y_lift_delta_mm", def: 30.0 });
+    setVal("slot-seq-pick-hold", { key: "pick_hold_seconds", def: 3.0 });
+    setVal("slot-seq-parking-x", { key: "parking_x_mm", def: 50.0 });
+    setVal("slot-seq-parking-y", { key: "parking_y_mm", def: 50.0 });
+    setVal("slot-seq-drop-z", { key: "z_drop_mm", def: 150.0 });
+    setVal("slot-seq-drop-hold", { key: "drop_hold_seconds", def: 3.0 });
+  }
+
+  async function saveSlotSequenceSettings() {
+    const btn = el("save-slot-sequence-btn");
+    if (btn) btn.disabled = true;
+    try {
+      const payload = {
+        enabled: Boolean(MS.slotSequenceMode),
+        z_standby_mm: parseFloat(el("slot-seq-standby-z")?.value ?? "85.0"),
+        z_pick_mm: parseFloat(el("slot-seq-pick-z")?.value ?? "20.0"),
+        y_lift_delta_mm: parseFloat(el("slot-seq-lift-delta-y")?.value ?? "30.0"),
+        pick_hold_seconds: parseFloat(el("slot-seq-pick-hold")?.value ?? "3.0"),
+        parking_x_mm: parseFloat(el("slot-seq-parking-x")?.value ?? "50.0"),
+        parking_y_mm: parseFloat(el("slot-seq-parking-y")?.value ?? "50.0"),
+        z_drop_mm: parseFloat(el("slot-seq-drop-z")?.value ?? "150.0"),
+        drop_hold_seconds: parseFloat(el("slot-seq-drop-hold")?.value ?? "3.0"),
+      };
+      const res = await apiCall("/api/slots/sequence-config", "POST", payload);
+      if (res && res.accepted !== false) {
+        if (!MS.config) MS.config = {};
+        MS.config.slot_sequence = payload;
+        toast("Slot sequence configuration saved successfully.", "ok");
+        log("Saved slot sequence configuration", "info", "SYSTEM");
+      } else {
+        toast(`Failed to save slot sequence: ${res?.reason || "unknown error"}`, "error");
+      }
+    } catch (err) {
+      toast(`Error saving slot sequence: ${err.message}`, "error");
+    } finally {
+      if (btn) btn.disabled = false;
+    }
   }
 
   function fillManualTarget(coordinates, message) {
@@ -4832,6 +4887,11 @@
       updateFeedOverride();
       renderConfigurationEditor(true);
       loadMotorTestAxisConfig();
+      if (MS.config?.slot_sequence) {
+        MS.slotSequenceMode = Boolean(MS.config.slot_sequence.enabled);
+        updateSlotSequenceMode();
+        populateSlotSequenceSettings(MS.config.slot_sequence);
+      }
       log("Machine configuration loaded", "info", "SYSTEM");
     } catch (err) {
       log(`Config load failed: ${err.message}`, "error", "SYSTEM");
@@ -5468,7 +5528,7 @@
           `Target: X ${fmtPos(slot.x_mm)} · Y ${fmtPos(slot.y_mm)} · Z ${fmtPos(slot.z_mm)} mm`,
           `Speed: ${fmtSpd(targetSpeedPayload().speed_mm_s)} mm/s`,
           slotSequenceEnabled()
-            ? "Sequence: X → Y → Z → hold 3 s → Home Z → Home Y → Home X."
+            ? "Sequence: Standby Z (85mm) → Move XY → Extend Z (20mm) → Y Lift (+30mm) & Hold → Retract Z → Parking XY → Extend Z Drop & Hold → Retract Z → Safe Return Home."
             : "Confirm the travel area is clear before continuing.",
           "Confirm the travel area is clear before continuing.",
         ].join("\n");
@@ -5492,6 +5552,8 @@
           { requireHome: true });
         if (result) delete MS.slotDrafts[code];
       },
+      onSequenceToggle: setSlotSequenceMode,
+      onSaveSequenceSettings: saveSlotSequenceSettings,
       onError: (error) => console.error("[HMI] Slot table action failed", error),
     }));
     const selectedSlotControls = window.NaritSelectedSlotController.create({

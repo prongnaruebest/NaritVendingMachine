@@ -329,5 +329,16 @@
       "product_name": "",
       "dispense_delay_ms": 0
     }
+  },
+  "slot_sequence": {
+    "enabled": true,
+    "z_standby_mm": 85.0,
+    "z_pick_mm": 20.0,
+    "y_lift_delta_mm": 30.0,
+    "pick_hold_seconds": 3.0,
+    "parking_x_mm": 50.0,
+    "parking_y_mm": 50.0,
+    "z_drop_mm": 150.0,
+    "drop_hold_seconds": 3.0
   }
 }

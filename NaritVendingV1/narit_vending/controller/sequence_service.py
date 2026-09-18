@@ -9,16 +9,16 @@ from __future__ import annotations
 import time
 from typing import Any, Callable
 
-from narit_vending.motion import ControlledStopError, EmergencyStopError, MotionError
+from narit_vending.domain.errors import ControlledStopError, EmergencyStopError, MotionError
+from narit_vending.motion import SlotSequenceConfig
 
 
 PhaseCallback = Callable[[str, dict[str, object]], None]
 
 
 class SequenceService:
-    """Execute the guarded X/Y/Z slot cycle and sensor-based return home."""
+    """Execute the guarded 9-stage vending dispense cycle and sensor-based return home."""
 
-    HOLD_SECONDS = 3.0
     HOLD_POLL_SECONDS = 0.1
     POSITION_TOLERANCE_MM = 0.05
 
@@ -35,6 +35,16 @@ class SequenceService:
         request_id: str | None = None,
         phase_callback: PhaseCallback | None = None,
     ) -> dict[str, object]:
+        self._check_stop()
+
+        axes = self._motion.controller.axes()
+        if not all(getattr(axes[axis], "is_homed", False) for axis in ("x", "y", "z")):
+            return {
+                "ok": False,
+                "error": "All axes must be homed before running slot sequence",
+                "failed_phase": "VALIDATE_READY",
+            }
+
         slot = self._motion.controller.config.slots.get(str(slot_code))
         if slot is None:
             return {"ok": False, "error": f"unknown slot '{slot_code}'", "failed_phase": "VALIDATE_SLOT"}
@@ -46,39 +56,99 @@ class SequenceService:
 
     def _execute(self, slot: Any, *, speed_mm_s: float | None, phase_callback: PhaseCallback | None) -> dict[str, object]:
         completed: list[str] = []
-        for axis_name in ("x", "y", "z"):
+        cfg = getattr(self._motion.controller.config, "slot_sequence", None) or SlotSequenceConfig()
+        controller = self._motion.controller
+        speed = speed_mm_s or controller.speed_override
+        axes = controller.axes()
+
+        # Initial / Validation: Ensure Z is at Z_standby before lateral moves
+        current_pos = controller.current_position()
+        if abs(current_pos.get("z_mm", 0.0) - cfg.z_standby_mm) > self.POSITION_TOLERANCE_MM:
             self._check_stop()
-            phase = f"MOVE_{axis_name.upper()}"
-            self._set_phase(phase, axis_name, f"Moving {axis_name.upper()} axis to Slot {slot.code}", phase_callback)
-            self._motion.controller.axes()[axis_name].move_to_mm(
-                getattr(slot, f"{axis_name}_mm"),
-                speed_mm_s=speed_mm_s or self._motion.controller.speed_override,
-            )
+            phase = "MOVE_Z_STANDBY"
+            self._set_phase(phase, "z", f"Moving Z to standby position ({cfg.z_standby_mm:.1f} mm)", phase_callback)
+            axes["z"].move_to_mm(cfg.z_standby_mm, speed_mm_s=speed)
             completed.append(phase)
 
-        target_position = self._motion.controller.current_position()
-        target_verification = self._target_verification(slot, target_position)
-        if not target_verification["target_reached"]:
-            raise MotionError("Target position verification failed")
+        # Stage 1 - Move XY to Slot Target (Z stays at Z_standby)
+        self._check_stop()
+        phase = "MOVE_XY_TARGET"
+        self._set_phase(phase, None, f"Stage 1: Moving XY to Slot {slot.code} ({slot.x_mm:.1f}, {slot.y_mm:.1f})", phase_callback)
+        controller.move_to(x_mm=slot.x_mm, y_mm=slot.y_mm, speed_mm_s=speed)
+        completed.append(phase)
 
-        self._set_phase("DISPENSE", None, "Activating IRIV IO dispense output", phase_callback)
-        self._motion.activate_dispense()
-        completed.append("DISPENSE")
+        # Stage 2 - Extend Z into Slot (Min Limit Direction -> Z_pick)
+        self._check_stop()
+        phase = "EXTEND_Z_PICK"
+        self._set_phase(phase, "z", f"Stage 2: Extending Z to pick position ({cfg.z_pick_mm:.1f} mm)", phase_callback)
+        axes["z"].move_to_mm(cfg.z_pick_mm, speed_mm_s=speed)
+        completed.append(phase)
 
-        self._set_phase("HOLD_AT_TARGET", None, "Holding at slot target for 3 seconds", phase_callback)
-        for _ in range(round(self.HOLD_SECONDS / self.HOLD_POLL_SECONDS)):
+        # Stage 3 - Y Lift & Dwell (Hook/Pickup)
+        self._check_stop()
+        y_max = getattr(axes["y"].config, "max_travel_mm", 2000.0)
+        y_target = min(slot.y_mm + cfg.y_lift_delta_mm, y_max)
+        phase = "Y_LIFT_PICK"
+        self._set_phase(phase, "y", f"Stage 3: Lifting Y by +{cfg.y_lift_delta_mm:.1f} mm to hook product", phase_callback)
+        axes["y"].move_to_mm(y_target, speed_mm_s=speed)
+        completed.append(phase)
+
+        phase = "HOLD_AT_PICK"
+        self._set_phase(phase, None, f"Holding at pick position for {cfg.pick_hold_seconds:.1f} s", phase_callback)
+        for _ in range(round(cfg.pick_hold_seconds / self.HOLD_POLL_SECONDS)):
             self._check_stop()
             time.sleep(self.HOLD_POLL_SECONDS)
-        completed.append("HOLD_AT_TARGET")
+        completed.append(phase)
 
-        for axis_name in ("z", "y", "x"):
+        # Stage 4 - Retract Z to Standby
+        self._check_stop()
+        phase = "RETRACT_Z_STANDBY"
+        self._set_phase(phase, "z", f"Stage 4: Retracting Z to standby ({cfg.z_standby_mm:.1f} mm)", phase_callback)
+        axes["z"].move_to_mm(cfg.z_standby_mm, speed_mm_s=speed)
+        completed.append(phase)
+
+        # Stage 5 - Move XY to Parking Position
+        self._check_stop()
+        phase = "MOVE_XY_PARKING"
+        self._set_phase(phase, None, f"Stage 5: Moving XY to parking position ({cfg.parking_x_mm:.1f}, {cfg.parking_y_mm:.1f})", phase_callback)
+        controller.move_to(x_mm=cfg.parking_x_mm, y_mm=cfg.parking_y_mm, speed_mm_s=speed)
+        completed.append(phase)
+
+        # Stage 6 - Extend Z at Parking (Drop Position)
+        self._check_stop()
+        phase = "EXTEND_Z_DROP"
+        self._set_phase(phase, "z", f"Stage 6: Extending Z to drop position ({cfg.z_drop_mm:.1f} mm)", phase_callback)
+        axes["z"].move_to_mm(cfg.z_drop_mm, speed_mm_s=speed)
+        completed.append(phase)
+
+        # Trigger dispense output pulse if available
+        if hasattr(self._motion, "activate_dispense") and callable(self._motion.activate_dispense):
+            self._motion.activate_dispense()
+
+        phase = "HOLD_AT_DROP"
+        self._set_phase(phase, None, f"Holding at drop position for {cfg.drop_hold_seconds:.1f} s", phase_callback)
+        for _ in range(round(cfg.drop_hold_seconds / self.HOLD_POLL_SECONDS)):
+            self._check_stop()
+            time.sleep(self.HOLD_POLL_SECONDS)
+        completed.append(phase)
+
+        # Stage 7 - Retract Z to Standby
+        self._check_stop()
+        phase = "RETRACT_Z_DROP"
+        self._set_phase(phase, "z", f"Stage 7: Retracting Z to standby ({cfg.z_standby_mm:.1f} mm)", phase_callback)
+        axes["z"].move_to_mm(cfg.z_standby_mm, speed_mm_s=speed)
+        completed.append(phase)
+
+        # Stage 8 - Return Home (All Axes in safe order)
+        home_order = getattr(controller.config, "home_order", ("z", "y", "x"))
+        for axis_name in home_order:
             self._check_stop()
             phase = f"HOME_{axis_name.upper()}"
             self._set_phase(phase, axis_name, f"Homing {axis_name.upper()} axis", phase_callback)
-            self._motion.controller.home_axis(axis_name, progress=self._motion._home_progress)
+            controller.home_axis(axis_name, progress=self._motion._home_progress)
             completed.append(phase)
 
-        home_position = self._motion.controller.current_position()
+        home_position = controller.current_position()
         home_verification = self._home_verification(home_position)
         if not home_verification["home_reached"]:
             raise MotionError("Home position verification failed")
@@ -86,9 +156,9 @@ class SequenceService:
         self._set_phase("COMPLETED", None, "Slot sequence completed; all axes returned home", phase_callback)
         return {
             "slot_code": str(slot.code),
-            "hold_s": int(self.HOLD_SECONDS),
             "sequence": completed,
-            "target_verification": target_verification,
+            "pick_hold_s": cfg.pick_hold_seconds,
+            "drop_hold_s": cfg.drop_hold_seconds,
             "home_verification": home_verification,
         }
 
@@ -101,8 +171,19 @@ class SequenceService:
     ) -> None:
         self._motion.set_sequence_operation(phase, axis, message)
         if callback is not None:
-            state = "moving" if phase.startswith("MOVE_") else "homing" if phase.startswith("HOME_") else "running"
-            callback(state, {"phase": phase, "active_axis": axis})
+            state = (
+                "moving"
+                if (
+                    phase.startswith("MOVE_")
+                    or phase.startswith("EXTEND_")
+                    or phase.startswith("RETRACT_")
+                    or phase.startswith("Y_LIFT_")
+                )
+                else "homing"
+                if phase.startswith("HOME_")
+                else "running"
+            )
+            callback(state, {"phase": phase, "active_axis": axis, "message": message})
 
     def _check_stop(self) -> None:
         if self._motion.controller.emergency_stop_active():

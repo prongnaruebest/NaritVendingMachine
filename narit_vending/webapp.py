@@ -30,6 +30,7 @@ from .motion import (
     LimitTriggeredError,
     MachineConfig,
     MotionError,
+    SlotSequenceConfig,
     TravelBoundaryError,
     build_controller,
     build_default_machine_config,
@@ -1032,6 +1033,10 @@ class MotionService:
         route_error = MotionService._profile_route_error(self, ("x", "y", "z"), ProfileOperation.MOVE)
         if route_error:
             return {"ok": False, "error": route_error}
+        seq_cfg = getattr(self.controller.config, "slot_sequence", None)
+        seq_enabled = bool(getattr(seq_cfg, "enabled", True))
+        if seq_enabled:
+            return self.run_slot_sequence(slot_code, speed_mm_s=speed_mm_s)
         def action():
             slot = self.controller.move_to_slot(slot_code, speed_mm_s=speed_mm_s, time_s=time_s)
             self.activate_dispense()
@@ -1191,13 +1196,9 @@ class MotionService:
         request_id: str | None = None,
         phase_callback=None,
     ) -> dict[str, object]:
-        # MQTT supplies a request ID/callback. Treat that as an explicit request
-        # for the Controller-owned return-home sequence. Direct HMI Go To Slot
-        # calls retain their standard positioning behaviour.
-        route_error = MotionService._profile_route_error(self, ("x", "y", "z"), ProfileOperation.MOVE)
-        if route_error:
-            return {"ok": False, "error": route_error}
-        if request_id is not None or phase_callback is not None:
+        seq_cfg = getattr(self.controller.config, "slot_sequence", None)
+        seq_enabled = bool(getattr(seq_cfg, "enabled", True))
+        if seq_enabled or request_id is not None or phase_callback is not None:
             return self.run_slot_sequence(
                 slot_code,
                 speed_mm_s=speed_mm_s,
@@ -1286,6 +1287,37 @@ class MotionService:
             return current
 
         return self._run(f"save_current_slot_{slot_code}", action, motion_command=False)
+
+    def save_slot_sequence(self, payload: dict[str, Any]) -> dict[str, object]:
+        def action():
+            current_cfg = getattr(self.controller.config, "slot_sequence", None) or SlotSequenceConfig()
+            merged = {
+                "enabled": payload.get("enabled", current_cfg.enabled),
+                "z_standby_mm": payload.get("z_standby_mm", current_cfg.z_standby_mm),
+                "z_pick_mm": payload.get("z_pick_mm", current_cfg.z_pick_mm),
+                "y_lift_delta_mm": payload.get("y_lift_delta_mm", current_cfg.y_lift_delta_mm),
+                "pick_hold_seconds": payload.get("pick_hold_seconds", current_cfg.pick_hold_seconds),
+                "parking_x_mm": payload.get("parking_x_mm", current_cfg.parking_x_mm),
+                "parking_y_mm": payload.get("parking_y_mm", current_cfg.parking_y_mm),
+                "z_drop_mm": payload.get("z_drop_mm", current_cfg.z_drop_mm),
+                "drop_hold_seconds": payload.get("drop_hold_seconds", current_cfg.drop_hold_seconds),
+            }
+            new_slot_seq = SlotSequenceConfig.from_dict(merged)
+            previous_config = self.controller.config
+            self.controller.config = replace(self.controller.config, slot_sequence=new_slot_seq)
+            if self.config_path.exists():
+                try:
+                    data = json.loads(self.config_path.read_text(encoding="utf-8"))
+                    data["slot_sequence"] = new_slot_seq.to_dict()
+                    temporary = self.config_path.with_name(f".{self.config_path.name}.seq.tmp")
+                    temporary.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+                    os.replace(temporary, self.config_path)
+                except Exception:
+                    self.controller.config = previous_config
+                    raise
+            return {"ok": True, "slot_sequence": new_slot_seq.to_dict()}
+
+        return self._run("save_slot_sequence", action, motion_command=False)
 
     def move_to(
         self,
@@ -1643,6 +1675,12 @@ class MotionService:
             tail_pin = int(updated_hardware["digital_inputs"][f"lim_{axis_name}_tail"]["pin"])
             updated_axes[axis_name] = replace(updated_axes[axis_name], head_limit_pin=head_pin, tail_limit_pin=tail_pin)
 
+        slot_seq_payload = payload.get("slot_sequence")
+        if slot_seq_payload is not None and isinstance(slot_seq_payload, dict):
+            updated_slot_seq = SlotSequenceConfig.from_dict(slot_seq_payload)
+        else:
+            updated_slot_seq = getattr(self.controller.config, "slot_sequence", None) or SlotSequenceConfig()
+
         updated_config = MachineConfig(
             x=updated_axes["x"],
             y=updated_axes["y"],
@@ -1650,6 +1688,7 @@ class MotionService:
             home_order=self.controller.config.home_order,
             slots=self.controller.config.slots,
             safe_z_mm=self.controller.config.safe_z_mm,
+            slot_sequence=updated_slot_seq,
         )
         candidate_report = validate_configuration_payloads(updated_config.to_dict(), updated_hardware)
         if not candidate_report.valid:

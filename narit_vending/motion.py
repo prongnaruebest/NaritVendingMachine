@@ -231,6 +231,48 @@ class SlotPosition:
 
 
 @dataclass(frozen=True)
+class SlotSequenceConfig:
+    enabled: bool = True
+    z_standby_mm: float = 85.0
+    z_pick_mm: float = 20.0
+    y_lift_delta_mm: float = 30.0
+    pick_hold_seconds: float = 3.0
+    parking_x_mm: float = 50.0
+    parking_y_mm: float = 50.0
+    z_drop_mm: float = 150.0
+    drop_hold_seconds: float = 3.0
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "enabled": self.enabled,
+            "z_standby_mm": self.z_standby_mm,
+            "z_pick_mm": self.z_pick_mm,
+            "y_lift_delta_mm": self.y_lift_delta_mm,
+            "pick_hold_seconds": self.pick_hold_seconds,
+            "parking_x_mm": self.parking_x_mm,
+            "parking_y_mm": self.parking_y_mm,
+            "z_drop_mm": self.z_drop_mm,
+            "drop_hold_seconds": self.drop_hold_seconds,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any] | None) -> "SlotSequenceConfig":
+        if not data or not isinstance(data, dict):
+            return cls()
+        return cls(
+            enabled=bool(data.get("enabled", True)),
+            z_standby_mm=float(data.get("z_standby_mm", 85.0)),
+            z_pick_mm=float(data.get("z_pick_mm", 20.0)),
+            y_lift_delta_mm=float(data.get("y_lift_delta_mm", 30.0)),
+            pick_hold_seconds=float(data.get("pick_hold_seconds", 3.0)),
+            parking_x_mm=float(data.get("parking_x_mm", 50.0)),
+            parking_y_mm=float(data.get("parking_y_mm", 50.0)),
+            z_drop_mm=float(data.get("z_drop_mm", 150.0)),
+            drop_hold_seconds=float(data.get("drop_hold_seconds", 3.0)),
+        )
+
+
+@dataclass(frozen=True)
 class MachineConfig:
     x: AxisConfig
     y: AxisConfig
@@ -238,12 +280,27 @@ class MachineConfig:
     home_order: tuple[str, ...] = ("z", "y", "x")
     slots: dict[str, SlotPosition] = field(default_factory=dict)
     safe_z_mm: float = 10.0
+    slot_sequence: SlotSequenceConfig = field(default_factory=SlotSequenceConfig)
 
     def __post_init__(self) -> None:
         if len(self.home_order) != 3 or set(self.home_order) != {"x", "y", "z"}:
             raise MotionError("home_order must contain x, y, and z exactly once")
         if not math.isfinite(self.safe_z_mm) or not 0 <= self.safe_z_mm <= self.z.max_travel_mm:
             raise MotionError(f"safe_z_mm must be within 0-{self.z.max_travel_mm:.2f} mm")
+        if not (0 <= self.slot_sequence.z_standby_mm <= self.z.max_travel_mm):
+            raise MotionError(f"slot_sequence.z_standby_mm must be within 0-{self.z.max_travel_mm:.2f} mm")
+        if not (0 <= self.slot_sequence.z_pick_mm <= self.z.max_travel_mm):
+            raise MotionError(f"slot_sequence.z_pick_mm must be within 0-{self.z.max_travel_mm:.2f} mm")
+        if not (0 <= self.slot_sequence.z_drop_mm <= self.z.max_travel_mm):
+            raise MotionError(f"slot_sequence.z_drop_mm must be within 0-{self.z.max_travel_mm:.2f} mm")
+        if not (0 <= self.slot_sequence.parking_x_mm <= self.x.max_travel_mm):
+            raise MotionError(f"slot_sequence.parking_x_mm must be within 0-{self.x.max_travel_mm:.2f} mm")
+        if not (0 <= self.slot_sequence.parking_y_mm <= self.y.max_travel_mm):
+            raise MotionError(f"slot_sequence.parking_y_mm must be within 0-{self.y.max_travel_mm:.2f} mm")
+        if self.slot_sequence.pick_hold_seconds < 0:
+            raise MotionError("slot_sequence.pick_hold_seconds cannot be negative")
+        if self.slot_sequence.drop_hold_seconds < 0:
+            raise MotionError("slot_sequence.drop_hold_seconds cannot be negative")
         limits = {"x": self.x.max_travel_mm, "y": self.y.max_travel_mm, "z": self.z.max_travel_mm}
         for code, slot in self.slots.items():
             for axis_name in ("x", "y", "z"):
@@ -264,6 +321,7 @@ class MachineConfig:
             },
             "home_order": list(self.home_order),
             "safe_z_mm": self.safe_z_mm,
+            "slot_sequence": self.slot_sequence.to_dict(),
             "slots": {
                 code: {
                     "x_mm": slot.x_mm,
@@ -1333,6 +1391,7 @@ class MotionController:
             home_order=self.config.home_order,
             slots=new_slots,
             safe_z_mm=self.config.safe_z_mm,
+            slot_sequence=self.config.slot_sequence,
         )
 
     def request_stop(self) -> None:
@@ -1442,6 +1501,7 @@ class MotionController:
             use_dynamic_scurve = (
                 getattr(backend, "supports_buffered_scurve", False)
                 and all(getattr(axes[name].config, "scurve_enabled", False) for name in plan.axes if name in ("x", "y"))
+                and all(getattr(axes[name], "is_homed", False) for name in plan.axes if name in ("x", "y"))
                 and set(plan.axes.keys()).issubset({"x", "y"})
                 and hasattr(backend, "start_dynamic_motion")
             )
@@ -1463,22 +1523,30 @@ class MotionController:
                         DynamicTargetCommand(cmd_id, axis_name, target_pulses, self._dynamic_revision)
                     )
                 start_cmd = DynamicStartCommand(cmd_id, tuple(plan.axes.keys()))
-                result = backend.start_dynamic_motion(
-                    start_cmd,
-                    timeout_s=max(plan.duration_s * 2.0 + 5.0, 10.0),
-                    stop_requested=coordinated_stop,
-                )
+                try:
+                    result = backend.start_dynamic_motion(
+                        start_cmd,
+                        timeout_s=max(plan.duration_s * 2.0 + 5.0, 10.0),
+                        stop_requested=coordinated_stop,
+                    )
+                except Exception:
+                    self._dynamic_config_synced = False
+                    for axis in axes.values():
+                        axis.is_homed = False
+                    raise
+
                 if result.get("stopped"):
                     self._dynamic_config_synced = False
+                    for axis in axes.values():
+                        axis.is_homed = False
                     if self.emergency_stop_active():
                         raise EmergencyStopError("emergency stop during coordinated move")
                     if self.stop_requested():
                         raise StopRequestedError("stop requested during coordinated move")
                     if self.controlled_stop_requested():
                         raise ControlledStopError("coordinated controlled stop completed")
-                    for axis in axes.values():
-                        axis.is_homed = False
                     raise LimitTriggeredError("physical limit triggered during coordinated move")
+
                 for axis_name, axis_plan in plan.axes.items():
                     target_pulses = int(round(axis_plan.target_mm * axes[axis_name].config.steps_per_mm))
                     axes[axis_name].position_steps = target_pulses
@@ -1813,6 +1881,7 @@ def load_machine_config(path: str | Path) -> MachineConfig:
         home_order=tuple(payload.get("home_order", ["z", "y", "x"])),
         slots=slots,
         safe_z_mm=float(payload.get("safe_z_mm", 10.0)),
+        slot_sequence=SlotSequenceConfig.from_dict(payload.get("slot_sequence")),
     )
 
 
@@ -1898,6 +1967,7 @@ def build_controller(
         home_order=tuple(machine_params.get("home_order", config.home_order)),
         slots=config.slots,
         safe_z_mm=float(machine_params.get("safe_z_mm", config.safe_z_mm)),
+        slot_sequence=config.slot_sequence,
     )
 
     controller_ref: dict[str, MotionController] = {}

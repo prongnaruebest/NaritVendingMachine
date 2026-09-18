@@ -82,4 +82,12 @@ def make_slots_bp(ctrl: "ControllerClient") -> Blueprint:
         from narit_vending.web.routes.status import _status_from_snapshot
         return jsonify(r | _status_from_snapshot(snap)), 200 if r.get("accepted") else 400
 
+    @bp.post("/api/slots/sequence-config")
+    def api_save_slot_sequence_config():
+        payload = _json_payload()
+        r = _submit(ctrl, "SAVE_SLOT_SEQUENCE", payload)
+        snap = ctrl.snapshot()
+        from narit_vending.web.routes.status import _status_from_snapshot
+        return jsonify(r | _status_from_snapshot(snap)), 200 if r.get("accepted") else 400
+
     return bp

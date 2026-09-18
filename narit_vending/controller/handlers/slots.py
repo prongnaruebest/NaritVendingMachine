@@ -1,4 +1,4 @@
-﻿"""Slot management command handlers."""
+"""Slot management command handlers."""
 
 from __future__ import annotations
 
@@ -43,6 +43,27 @@ def make_save_slot_handler(motion_service: Any):
         except Exception as exc:
             _log.warning("Save slot failed: %s", exc)
             return CommandResult.rejected(envelope.command_id, f"Save slot error: {exc}")
+
+    return handle
+
+
+def make_save_slot_sequence_handler(motion_service: Any):
+    from narit_vending.shared.commands import CommandResult
+
+    def handle(envelope: "CommandEnvelope") -> "CommandResult":
+        params = envelope.parameters
+        try:
+            result = motion_service.save_slot_sequence(payload=params)
+            return CommandResult(
+                accepted=result.get("ok", True) if isinstance(result, dict) else True,
+                command_id=envelope.command_id,
+                state="COMPLETED",
+                result=result,
+                completed_at=_now(),
+            )
+        except Exception as exc:
+            _log.warning("Save slot sequence failed: %s", exc)
+            return CommandResult.rejected(envelope.command_id, f"Save slot sequence error: {exc}")
 
     return handle
 

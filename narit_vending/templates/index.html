@@ -355,6 +355,60 @@
         <div class="linked-speed-head"><div><p class="panel-label">Linked Motion Parameters</p><h2 class="panel-title">Axis Speed for Slot Commands</h2></div><span>Shared with every motion page</span></div>
         <div class="axis-speed-bank" data-axis-speed-bank aria-label="Linked axis speed settings for slot commands"></div>
       </div>
+      <div class="panel slot-sequence-panel">
+        <div class="panel-head">
+          <div>
+            <p class="panel-label">Vending Sequence Automation</p>
+            <h2 class="panel-title">Go To Slot · 9-Stage Cycle Settings</h2>
+          </div>
+          <label class="sequence-switch" for="slot-mgr-sequence-toggle" style="margin: 0;">
+            <input id="slot-mgr-sequence-toggle" type="checkbox" role="switch" aria-label="Enable vending slot sequence mode">
+            <span class="sequence-switch-track" aria-hidden="true"></span>
+            <b id="slot-mgr-sequence-state">ON</b>
+          </label>
+        </div>
+        <p class="section-desc" style="margin-bottom: 12px; color: var(--text-muted, #888); font-size: 13px;">
+          When Sequence Mode is enabled, ordering a slot executes:
+          <strong>Standby Z (85mm) &rarr; Move XY &rarr; Extend Z into Slot (20mm) &rarr; Y Lift (+30mm) &amp; Hold &rarr; Retract Z &rarr; Move XY to Parking &rarr; Extend Z Drop &amp; Hold &rarr; Retract Z &rarr; Safe Return Home</strong>.
+        </p>
+        <div class="slot-sequence-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 12px;">
+          <label class="param-card">
+            <span style="font-size: 11px; text-transform: uppercase; color: var(--text-muted, #888);">Standby Z (mm)</span>
+            <input id="slot-seq-standby-z" class="hmi-input" type="number" step="0.1" min="0" value="85.0">
+          </label>
+          <label class="param-card">
+            <span style="font-size: 11px; text-transform: uppercase; color: var(--text-muted, #888);">Pick Z (mm)</span>
+            <input id="slot-seq-pick-z" class="hmi-input" type="number" step="0.1" min="0" value="20.0">
+          </label>
+          <label class="param-card">
+            <span style="font-size: 11px; text-transform: uppercase; color: var(--text-muted, #888);">Y Lift Delta (mm)</span>
+            <input id="slot-seq-lift-delta-y" class="hmi-input" type="number" step="0.1" min="0" value="30.0">
+          </label>
+          <label class="param-card">
+            <span style="font-size: 11px; text-transform: uppercase; color: var(--text-muted, #888);">Pick Dwell (s)</span>
+            <input id="slot-seq-pick-hold" class="hmi-input" type="number" step="0.1" min="0" value="3.0">
+          </label>
+          <label class="param-card">
+            <span style="font-size: 11px; text-transform: uppercase; color: var(--text-muted, #888);">Parking X (mm)</span>
+            <input id="slot-seq-parking-x" class="hmi-input" type="number" step="0.1" min="0" value="50.0">
+          </label>
+          <label class="param-card">
+            <span style="font-size: 11px; text-transform: uppercase; color: var(--text-muted, #888);">Parking Y (mm)</span>
+            <input id="slot-seq-parking-y" class="hmi-input" type="number" step="0.1" min="0" value="50.0">
+          </label>
+          <label class="param-card">
+            <span style="font-size: 11px; text-transform: uppercase; color: var(--text-muted, #888);">Drop Z (mm)</span>
+            <input id="slot-seq-drop-z" class="hmi-input" type="number" step="0.1" min="0" value="150.0">
+          </label>
+          <label class="param-card">
+            <span style="font-size: 11px; text-transform: uppercase; color: var(--text-muted, #888);">Drop Dwell (s)</span>
+            <input id="slot-seq-drop-hold" class="hmi-input" type="number" step="0.1" min="0" value="3.0">
+          </label>
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 8px;">
+          <button id="save-slot-sequence-btn" class="btn-primary" style="min-width: 180px;">SAVE SEQUENCE SETTINGS</button>
+        </div>
+      </div>
       <div class="panel slot-panel page-fill-panel">
         <div class="panel-head">
           <div>

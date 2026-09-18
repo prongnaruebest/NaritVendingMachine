@@ -195,9 +195,11 @@ def _register_handlers(bus: Any, service: Any) -> None:
     from narit_vending.controller.handlers.slots import (
         make_save_slot_handler,
         make_save_slot_from_current_handler,
+        make_save_slot_sequence_handler,
     )
     bus.register("SAVE_SLOT", make_save_slot_handler(service))
     bus.register("SAVE_SLOT_FROM_CURRENT", make_save_slot_from_current_handler(service))
+    bus.register("SAVE_SLOT_SEQUENCE", make_save_slot_sequence_handler(service))
     _log.info("Registered %d command handlers", len(bus._handlers))
 
 

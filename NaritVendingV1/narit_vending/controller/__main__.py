@@ -21,6 +21,7 @@ import logging
 import os
 import signal
 import sys
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -37,35 +38,22 @@ def _normalize_machine_state(
     active_command: str | None,
     axes_homed: bool,
 ) -> str:
-    if estop:
-        return "E_STOP"
-    if busy:
-        command = str(active_command or "").lower()
-        if command.startswith("home"):
-            return "HOMING"
-        if command.startswith("dispense"):
-            return "DISPENSING"
-        return "MOVING"
+    from narit_vending.domain.machine_state import normalize_machine_state
 
-    normalized = {
-        "success": "READY",
-        "ready": "READY",
-        "idle": "READY" if axes_homed else "NOT_READY",
-        "not_ready": "NOT_READY",
-        "homing": "HOMING",
-        "moving": "MOVING",
-        "alarm": "ALARM",
-        "e_stop": "E_STOP",
-        "stopped": "STOPPED",
-    }.get(raw_state.lower(), raw_state.upper())
-    if normalized == "READY" and not axes_homed:
-        return "NOT_READY"
-    return normalized
+    return normalize_machine_state(
+        raw_state,
+        estop=estop,
+        busy=busy,
+        active_command=active_command,
+        axes_homed=axes_homed,
+    ).value
+
 
 
 def _build_snapshot(service: Any) -> MachineSnapshot:
     """Convert MotionService state into a MachineSnapshot."""
     from narit_vending.shared.snapshot import AxisSnapshot, MachineSnapshot
+    from narit_vending.controller.io_registry import build_io_registry
 
     status = service.status_payload()
     ctrl_status = status.get("status", {})
@@ -96,6 +84,9 @@ def _build_snapshot(service: Any) -> MachineSnapshot:
         axes_homed=axes_homed,
     )
 
+    io_status = dict(status.get("io", {}))
+    picontrol_io_status = dict(status.get("picontrol_io", {}))
+
     return MachineSnapshot(
         state=machine_state,
         estop=bool(ctrl_status.get("estop", False)),
@@ -119,10 +110,12 @@ def _build_snapshot(service: Any) -> MachineSnapshot:
         speed_override=getattr(service.controller, "speed_override", None),
         motion_enabled=bool(safety.get("motion_enabled", True)),
         slots={str(code): dict(slot) for code, slot in dict(status.get("slots", {})).items()},
-        io_status=dict(status.get("io", {})),
-        picontrol_io_status=dict(status.get("picontrol_io", {})),
+        io_status=io_status,
+        picontrol_io_status=picontrol_io_status,
+        io_registry=build_io_registry(io_status, picontrol_io_status),
         nucleo_status=dict(status.get("nucleo", {})),
         demo_status=dict(status.get("demo", {})),
+        motion_profile_routing=dict(status.get("motion_profile_routing", {})),
     )
 
 
@@ -149,6 +142,7 @@ def _register_handlers(bus: Any, service: Any) -> None:
         make_validate_target_handler,
     )
     from narit_vending.controller.handlers.sequence import make_run_slot_sequence_handler
+    from narit_vending.controller.handlers.settings import make_set_speed_handler, make_set_timer_handler
     from narit_vending.controller.handlers.demo import make_demo_handler
     from narit_vending.controller.handlers.stop import (
         make_clear_alarm_handler,
@@ -196,23 +190,53 @@ def _register_handlers(bus: Any, service: Any) -> None:
     bus.register("ARM_MOTOR_TEST", make_arm_motor_test_handler(service))
     bus.register("DISARM_MOTOR_TEST", make_disarm_motor_test_handler(service))
     bus.register("RUN_MOTOR_TEST", make_run_motor_test_handler(service))
+    bus.register("SET_SPEED", make_set_speed_handler(service))
+    bus.register("SET_TIMER", make_set_timer_handler(service))
     from narit_vending.controller.handlers.slots import (
         make_save_slot_handler,
         make_save_slot_from_current_handler,
+        make_save_slot_sequence_handler,
     )
     bus.register("SAVE_SLOT", make_save_slot_handler(service))
     bus.register("SAVE_SLOT_FROM_CURRENT", make_save_slot_from_current_handler(service))
+    bus.register("SAVE_SLOT_SEQUENCE", make_save_slot_sequence_handler(service))
     _log.info("Registered %d command handlers", len(bus._handlers))
 
 
-async def _async_main(service: Any, args: argparse.Namespace) -> None:
+def _build_command_bus(state_machine: Any, snapshot_fn: Any, args: argparse.Namespace) -> Any:
+    """Build the runtime bus with durable command history repositories."""
     from narit_vending.controller.command_bus import CommandBus
+    from narit_vending.persistence.audit_repository import SQLiteAuditRepository
+    from narit_vending.persistence.idempotency_repository import SQLiteIdempotencyRepository
+
+    configured_path = getattr(args, "persistence_db", None)
+    database_path = (
+        Path(configured_path)
+        if configured_path
+        else Path(args.config).resolve().parent / "controller_history.sqlite3"
+    )
+    database_path = database_path.resolve()
+    demo_database_path = Path(args.config).resolve().parent / "demo_results.sqlite3"
+    if database_path == demo_database_path:
+        raise ValueError(
+            "command persistence database must differ from demo_results.sqlite3"
+        )
+    _log.info("Persistent command history database: %s", database_path)
+    return CommandBus(
+        state_machine,
+        snapshot_fn,
+        idempotency_repository=SQLiteIdempotencyRepository(database_path),
+        audit_repository=SQLiteAuditRepository(database_path),
+    )
+
+
+async def _async_main(service: Any, args: argparse.Namespace) -> None:
     from narit_vending.controller.server import IPCServer
     from narit_vending.controller.state_machine import StateMachine
 
     state_machine = StateMachine()
     snapshot_fn = lambda: _build_snapshot(service)  # noqa: E731
-    bus = CommandBus(state_machine, snapshot_fn)
+    bus = _build_command_bus(state_machine, snapshot_fn, args)
     _register_handlers(bus, service)
     service.mqtt_service.set_command_dispatcher(bus.submit)
 
@@ -266,6 +290,14 @@ def main() -> None:
         "--mock-gpio",
         action="store_true",
         help="Use mock GPIO (no physical hardware required)",
+    )
+    parser.add_argument(
+        "--persistence-db",
+        default=None,
+        help=(
+            "SQLite path for command audit and idempotency history "
+            "(default: controller_history.sqlite3 beside the machine config)"
+        ),
     )
     parser.add_argument(
         "--log-level",
