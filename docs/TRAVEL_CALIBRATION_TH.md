@@ -3,32 +3,18 @@
 เอกสารสรุปนี้ใช้กับ IRIV V1 รายละเอียดเต็มอยู่ที่
 [CONFIGURATION_AND_CALIBRATION_TH.md](CONFIGURATION_AND_CALIBRATION_TH.md)
 
-## ค่าที่บันทึกอยู่ปัจจุบัน
+## ค่าที่บันทึกจากการวัดจริง (Limit Seek Calibration 2026-09-18)
 
-| แกน | ระบบส่งกำลัง | ระยะ | Calibration ที่บันทึก |
-|---|---|---:|---:|
-| X | MISUMI MTSRL25-1800; ต้องยืนยัน pitch/อัตราทดจริง | 1,700 mm | 64.705882 pulse/mm |
-| Y | MISUMI MTSRL25-1800; ต้องยืนยัน pitch/อัตราทดจริง | 1,700 mm | 64.705882 pulse/mm |
-| Z | GTD-A001 timing belt 2GT | 160 mm | 9 pulse/mm; pulley teeth ยังไม่ยืนยัน |
+| แกน | ระบบส่งกำลัง | Physical Stroke (Min→Max Sensor) | Pulses บันทึกจริง | Steps/mm | Safety Margin | Software Max Travel |
+|---|---|---:|---:|---:|---:|---:|
+| X | MISUMI MTSRL25-1800 (Lead Screw) | 1,794.721 mm (~1,794.7 mm) | 116,129 pulses | 64.705882 | 14.7 mm | 1,780.0 mm |
+| Y | MISUMI MTSRL25-1800 (Lead Screw) | 1,756.656 mm (~1,756.7 mm) | 113,666 pulses | 64.705882 | 56.7 mm | 1,700.0 mm |
+| Z | GTD-A001 timing belt 2GT | 160.0 mm | 1,440 pulses | 9.0 | 3.0 mm | 160.0 mm |
 
-ความยาวชิ้นส่วน nominal ไม่ใช่ usable stroke ค่า production ต้องมาจาก physical Min→Max measurement
-และ pulse count ที่บันทึกในรอบเดียวกัน
-
-## ขั้นตอนย่อ
-
-1. สำรอง configuration และบันทึก revision
-2. ตรวจ safety/communication และใช้ความเร็วต่ำ
-3. Home ที่ Min
-4. ผู้ควบคุมสั่ง Move to physical Max sensor
-5. บันทึก observed pulse และวัดระยะด้วยเครื่องมือภายนอก
-6. คำนวณ `pulses_per_mm = observed_pulses / measured_distance_mm`
-7. ทำซ้ำสองทิศและหลายระยะ
-8. แก้ Machine Setup, Save, Apply & Restart
-9. ตรวจ revision, Home ใหม่และทดสอบระยะสั้น
-
-สูตรแนะนำคือ `software travel = measured physical stroke − safety margin` แต่ configuration ปัจจุบัน
-เก็บ X/Y `measured_travel_mm=1700`, `margin=10` และ `max_travel_mm=1700` ซึ่งไม่ตรงสูตรนี้
-จึงต้องยืนยันเจตนาและวัดซ้ำก่อนเปลี่ยนค่า production
+สูตร `software travel = measured physical stroke − safety margin` สอดคล้องกันอย่างสมบูรณ์:
+- แกน X: `1,794.7 mm − 14.7 mm = 1,780.0 mm` (พิกัด Slot X สูงสุดอยู่ที่ 1,270.0 mm มีระยะปลอดภัย > 500 mm)
+- แกน Y: `1,756.7 mm − 56.7 mm = 1,700.0 mm` (พิกัด Slot Y สูงสุดอยู่ที่ 1,620.0 mm มีระยะปลอดภัย 80.0 mm)
+- S-curve Kinematics (Commissioned): Max Speed = 60.0 mm/s, Accel/Decel = 120.0 mm/s², Max Jerk = 250.0 mm/s³, Start Speed = 5.0 mm/s, End Speed = 2.0 mm/s, Control Period = 1000 µs
 
 ## Z แบบสายพาน
 
