@@ -15,6 +15,37 @@ if os.name != "posix" and "GPIOZERO_PIN_FACTORY" not in os.environ:
 from gpiozero import DigitalInputDevice, OutputDevice
 from gpiozero.pins.mock import MockFactory
 
+from .config_foundation import load_hardware_payload
+from .controller.homing_orchestrator import HomingOrchestrator
+from .domain.errors import (
+    ActiveLimitError,
+    ControlledStopError,
+    EmergencyStopError,
+    LimitTriggeredError,
+    MotionError,
+    NotHomedError,
+    NucleoError,
+    PositionVerificationError,
+    StopRequestedError,
+    TravelBoundaryError,
+)
+from .domain.motion_math import (
+    clamp_axis_speed_mm_s,
+    effective_speed_limit_mm_s,
+    mm_s_to_pulse_hz,
+    pulse_hz_to_mm_s,
+    pulse_hz_to_rpm,
+    pulses_per_revolution,
+)
+from .domain.motion_plans import AxisMovePlan, CoordinatedMovePlan, build_axis_move_plan
+from .domain.motion_policy import (
+    LimitViolation,
+    SegmentOutcome,
+    active_physical_limit,
+    assess_directional_limit,
+    classify_segment_outcome,
+)
+
 
 _logger = logging.getLogger(__name__)
 
@@ -28,56 +59,15 @@ def _slot_sort_key(item: tuple[str, object]) -> tuple[int, int | str]:
     return (0, int(code)) if code.isdigit() else (1, code)
 
 
-def _home_backoff_limit_steps(steps_per_mm: float) -> int:
+def _home_backoff_limit_steps(steps_per_mm: float, backoff_mm: float = 10.0) -> int:
     """Allow enough travel for a mechanical home switch to release.
 
     Two millimetres was too short for the installed sensor/bracket geometry and
     caused a false ``sensor did not release`` failure.  The move still stops as
-    soon as the input releases; 10 mm is only a watchdog ceiling, not a forced
-    move distance.
+    soon as the input releases; backoff_mm is only a watchdog ceiling, not a
+    forced move distance.
     """
-    return max(1, int(round(10.0 * steps_per_mm)))
-
-
-class MotionError(RuntimeError):
-    pass
-
-
-class LimitTriggeredError(MotionError):
-    pass
-
-
-class ActiveLimitError(MotionError):
-    """Requested direction is already blocked by an active endpoint sensor."""
-
-    pass
-
-
-class EmergencyStopError(MotionError):
-    pass
-
-
-class NotHomedError(MotionError):
-    pass
-
-
-class StopRequestedError(MotionError):
-    pass
-
-
-class ControlledStopError(MotionError):
-    pass
-
-
-class TravelBoundaryError(MotionError):
-    """Command rejected before motion because it exceeds software travel."""
-
-    pass
-
-
-class NucleoError(MotionError):
-    pass
-
+    return max(1, int(round(backoff_mm * steps_per_mm)))
 
 
 @dataclass(frozen=True)
@@ -113,6 +103,12 @@ class AxisConfig:
     travel_safety_margin_mm: float = 5.0
     pulley_pitch_mm: float | None = None
     pulley_teeth: int | None = None
+    scurve_enabled: bool | None = None
+    scurve_profile_type: str | None = None
+    scurve_start_speed_mm_s: float | None = None
+    scurve_end_speed_mm_s: float | None = None
+    scurve_max_jerk_mm_s3: float | None = None
+    scurve_control_period_us: int | None = None
 
     def __post_init__(self) -> None:
         positive_values = {
@@ -162,6 +158,35 @@ class AxisConfig:
             raise MotionError(f"{self.name}: pulley_pitch_mm must be greater than zero")
         if self.pulley_teeth is not None and self.pulley_teeth <= 0:
             raise MotionError(f"{self.name}: pulley_teeth must be greater than zero")
+        scurve_values = (
+            self.scurve_enabled,
+            self.scurve_profile_type,
+            self.scurve_start_speed_mm_s,
+            self.scurve_end_speed_mm_s,
+            self.scurve_max_jerk_mm_s3,
+            self.scurve_control_period_us,
+        )
+        if self.name == "z" and any(value is not None for value in scurve_values):
+            raise MotionError("z: S-curve configuration is supported for X/Y only")
+        if self.name in ("x", "y") and any(value is not None for value in scurve_values):
+            if any(value is None for value in scurve_values):
+                raise MotionError(f"{self.name}: all S-curve fields must be configured together")
+            if not isinstance(self.scurve_enabled, bool):
+                raise MotionError(f"{self.name}: scurve_enabled must be boolean")
+            if self.scurve_profile_type != "seven_segment_s_curve":
+                raise MotionError(f"{self.name}: unsupported S-curve profile type")
+            for field_name in ("scurve_start_speed_mm_s", "scurve_end_speed_mm_s"):
+                value = float(getattr(self, field_name))
+                if not math.isfinite(value) or not 0 <= value <= self.commissioned_max_speed_mm_s:
+                    raise MotionError(f"{self.name}: {field_name} exceeds commissioned speed")
+            assert self.scurve_max_jerk_mm_s3 is not None
+            assert self.scurve_control_period_us is not None
+            if not math.isfinite(self.scurve_max_jerk_mm_s3) or self.scurve_max_jerk_mm_s3 <= 0:
+                raise MotionError(f"{self.name}: scurve_max_jerk_mm_s3 must be greater than zero")
+            if not isinstance(self.scurve_control_period_us, int) or isinstance(self.scurve_control_period_us, bool):
+                raise MotionError(f"{self.name}: scurve_control_period_us must be an integer")
+            if not 100 <= self.scurve_control_period_us <= 10_000:
+                raise MotionError(f"{self.name}: scurve_control_period_us must be within 100-10000")
 
     @property
     def step_pin(self) -> int:
@@ -173,16 +198,16 @@ class AxisConfig:
 
     @property
     def pulses_per_rev(self) -> int:
-        return self.motor_steps_per_rev * self.driver_microsteps
+        return int(pulses_per_revolution(self.motor_steps_per_rev, self.driver_microsteps))
 
     def pulse_hz_to_rpm(self, pulse_hz: float) -> float:
-        return float(pulse_hz) * 60.0 / self.pulses_per_rev
+        return pulse_hz_to_rpm(pulse_hz, self.pulses_per_rev)
 
     def pulse_hz_to_mm_s(self, pulse_hz: float) -> float:
-        return float(pulse_hz) / self.steps_per_mm
+        return pulse_hz_to_mm_s(pulse_hz, self.steps_per_mm)
 
     def mm_s_to_pulse_hz(self, speed_mm_s: float) -> float:
-        return float(speed_mm_s) * self.steps_per_mm
+        return mm_s_to_pulse_hz(speed_mm_s, self.steps_per_mm)
 
 
 @dataclass(frozen=True)
@@ -202,61 +227,6 @@ class SlotPosition:
             "z_mm": self.z_mm,
             "product_name": self.product_name,
             "dispense_delay_ms": self.dispense_delay_ms,
-        }
-
-
-@dataclass(frozen=True)
-class AxisMovePlan:
-    axis: str
-    current_mm: float
-    target_mm: float
-    distance_mm: float
-    direction: int
-    steps: int
-    speed_mm_s: float
-    duration_s: float
-
-    @property
-    def pulse_hz(self) -> float:
-        if self.duration_s <= 0:
-            return 0.0
-        return self.steps / self.duration_s
-
-    def to_dict(self) -> dict[str, float | int | str]:
-        return {
-            "axis": self.axis,
-            "current_mm": round(self.current_mm, 3),
-            "target_mm": round(self.target_mm, 3),
-            "distance_mm": round(self.distance_mm, 3),
-            "direction": self.direction,
-            "steps": self.steps,
-            "speed_mm_s": round(self.speed_mm_s, 3),
-            "duration_s": round(self.duration_s, 3),
-            "pulse_hz": round(self.pulse_hz, 3),
-        }
-
-
-@dataclass(frozen=True)
-class CoordinatedMovePlan:
-    axes: dict[str, AxisMovePlan]
-    duration_s: float
-    mode: str
-
-    @property
-    def total_distance_mm(self) -> float:
-        return max((abs(plan.distance_mm) for plan in self.axes.values()), default=0.0)
-
-    @property
-    def master_steps(self) -> int:
-        return max((plan.steps for plan in self.axes.values()), default=0)
-
-    def to_dict(self) -> dict[str, object]:
-        return {
-            "mode": self.mode,
-            "duration_s": round(self.duration_s, 3),
-            "master_steps": self.master_steps,
-            "total_distance_mm": round(self.total_distance_mm, 3),
-            "axes": {name: plan.to_dict() for name, plan in self.axes.items()},
         }
 
 
@@ -320,6 +290,7 @@ class AxisController:
         controlled_stop_requested: Callable[[], bool],
         enable: OutputDevice | None = None,
         motion_backend: Any | None = None,
+        completion_verifier: Any | None = None,
     ) -> None:
         self.config = config
         self.pulse = pulse
@@ -331,6 +302,7 @@ class AxisController:
         self.controlled_stop_requested = controlled_stop_requested
         self.enable = enable
         self.motion_backend = motion_backend
+        self.completion_verifier = completion_verifier
         self.position_steps = 0
         self.is_homed = False
         if self.enable is not None:
@@ -350,37 +322,41 @@ class AxisController:
         requested = self.config.default_speed_mm_s if speed_mm_s is None else float(speed_mm_s)
         if not math.isfinite(requested) or requested <= 0:
             raise MotionError(f"{self.config.name}: speed_mm_s must be a finite number greater than 0")
-        return min(requested, self.config.max_speed_mm_s, self.config.commissioned_max_speed_mm_s, self.config.max_pulse_hz / self.config.steps_per_mm)
+        return clamp_axis_speed_mm_s(requested, speed_limit_mm_s=self._effective_speed_limit())
+
+    def _effective_speed_limit(self) -> float:
+        return effective_speed_limit_mm_s(
+            max_speed_mm_s=self.config.max_speed_mm_s,
+            commissioned_max_speed_mm_s=self.config.commissioned_max_speed_mm_s,
+            max_pulse_hz=self.config.max_pulse_hz,
+            pulses_per_mm=self.config.steps_per_mm,
+        )
 
     def plan_relative_move(self, distance_mm: float, speed_mm_s: float | None = None, time_s: float | None = None) -> AxisMovePlan:
         if not math.isfinite(float(distance_mm)):
             raise MotionError(f"{self.config.name}: distance_mm must be finite")
         if distance_mm == 0:
-            return AxisMovePlan(
+            return build_axis_move_plan(
                 axis=self.config.name,
                 current_mm=self.position_mm,
-                target_mm=self.position_mm,
                 distance_mm=0.0,
-                direction=self.config.forward_direction,
-                steps=0,
-                speed_mm_s=0.0,
+                forward_direction=self.config.forward_direction,
+                home_direction=self.config.home_direction,
+                pulses_per_mm=self.config.steps_per_mm,
                 duration_s=0.0,
             )
 
         steps = abs(self.mm_to_steps(distance_mm))
         direction = self.config.forward_direction if distance_mm > 0 else self.config.home_direction
-        target_mm = self.position_mm + distance_mm
         self._guard_before_move(direction, steps if direction == self.config.forward_direction else -steps)
         duration_s = self._resolve_duration(abs(distance_mm), steps, speed_mm_s, time_s)
-        planned_speed = 0.0 if duration_s == 0 else abs(distance_mm) / duration_s
-        return AxisMovePlan(
+        return build_axis_move_plan(
             axis=self.config.name,
             current_mm=self.position_mm,
-            target_mm=target_mm,
             distance_mm=distance_mm,
-            direction=direction,
-            steps=steps,
-            speed_mm_s=planned_speed,
+            forward_direction=self.config.forward_direction,
+            home_direction=self.config.home_direction,
+            pulses_per_mm=self.config.steps_per_mm,
             duration_s=duration_s,
         )
 
@@ -422,7 +398,9 @@ class AxisController:
         if self.estop.value or self.stop_requested():
             self._guard_before_move(direction, 0)
 
-        speed = self.clamp_speed(speed_mm_s)
+        raw_speed = self.clamp_speed(speed_mm_s)
+        # Honour explicit caller speed up to commissioned limit; use search speed only as default
+        speed = raw_speed if speed_mm_s is not None else min(raw_speed, getattr(self.config, "homing_search_speed_mm_s", 50.0))
         speed_hz = max(10.0, min(self.config.max_pulse_hz, speed * self.config.steps_per_mm))
         # Search up to twice the configured stroke at the effective speed plus
         # a fixed allowance. This prevents the normal homing timeout from
@@ -580,10 +558,11 @@ class AxisController:
         if self.estop.value:
             raise EmergencyStopError(f"{self.config.name}: emergency stop is active")
 
+        axis_backoff_mm = getattr(self.config, "homing_backoff_mm", None) or (25.0 if self.config.name == "y" else 10.0)
         effective_backoff = (
             backoff_steps
             if backoff_steps is not None
-            else _home_backoff_limit_steps(self.config.steps_per_mm)
+            else _home_backoff_limit_steps(self.config.steps_per_mm, backoff_mm=axis_backoff_mm)
         )
 
         # Homing has an independently commissioned search speed.  Normal Jog,
@@ -603,10 +582,26 @@ class AxisController:
 
         if self.motion_backend is not None and getattr(self.motion_backend, "expected_protocol", 1) >= 2:
             speed_hz = max(10.0, min(self.config.max_pulse_hz, homing_speed * self.config.steps_per_mm))
-            # Protocol v2 monitors E-stop, software stop, and the home input every
-            # 80 ms while a MOVE is active. Use the firmware's full move window
-            # instead of flooding its serial task with 10 MOVE commands/second.
-            chunk_steps = 10_000
+            # Use one continuous firmware frame whenever the negotiated limit
+            # can cover the complete bounded search.  The live G491RE advertises
+            # a 1,000,000-pulse frame, so a normal 1,700 mm X/Y search no longer
+            # pauses at legacy 10,000-pulse USB boundaries.  Older firmware keeps
+            # its advertised smaller frames and therefore remains compatible.
+            search_frame_steps = min(
+                max_steps,
+                max(1, int(getattr(self.motion_backend, "max_move_steps", NUCLEO_MOVE_CHUNK_STEPS))),
+            )
+
+            def search_stop_requested() -> bool:
+                # The long frame must retain the Controller-owned sensor and
+                # time watchdog.  A missing sensor may never leave the NUCLEO
+                # running until its entire pulse budget expires.
+                return bool(
+                    self.estop.value
+                    or self.stop_requested()
+                    or self.head_limit.value
+                    or monotonic() >= search_deadline
+                )
             while not limit_active:
                 if monotonic() >= search_deadline:
                     raise LimitTriggeredError(f"{self.config.name}: home sensor not reached within {self.config.homing_timeout_s:g} seconds")
@@ -618,18 +613,22 @@ class AxisController:
                     res = self.motion_backend.move(
                         axis=self.config.name,
                         direction=self.config.home_direction,
-                        steps=chunk_steps,
+                        steps=search_frame_steps,
                         speed_hz=speed_hz,
-                        stop_requested=lambda: bool(self.estop.value or self.stop_requested() or self.head_limit.value),
+                        stop_requested=search_stop_requested,
                     )
-                    chunk_moved = int(res.get("steps", chunk_steps))
+                    chunk_moved = int(res.get("steps", search_frame_steps))
                     moved += chunk_moved
                 except NucleoError:
                     if self.head_limit.value:
                         break
                     raise
                 limit_active = self.head_limit.value
-                if limit_active or chunk_moved < chunk_steps:
+                if monotonic() >= search_deadline and not limit_active:
+                    raise LimitTriggeredError(
+                        f"{self.config.name}: home sensor not reached within {self.config.homing_timeout_s:g} seconds"
+                    )
+                if limit_active or chunk_moved < search_frame_steps:
                     break
 
             sleep(self.config.settle_delay)
@@ -645,11 +644,11 @@ class AxisController:
                         res = self.motion_backend.move(
                             axis=self.config.name,
                             direction=release_direction,
-                            steps=min(chunk_steps, effective_backoff - released),
+                            steps=min(search_frame_steps, effective_backoff - released),
                             speed_hz=speed_hz,
                             stop_requested=lambda: bool(self.estop.value or self.stop_requested() or not self.head_limit.value),
                         )
-                        chunk_released = int(res.get("steps", chunk_steps))
+                        chunk_released = int(res.get("steps", min(search_frame_steps, effective_backoff - released)))
                         released += chunk_released
                     except NucleoError:
                         if not self.head_limit.value:
@@ -776,7 +775,7 @@ class AxisController:
             if not math.isfinite(duration_s) or duration_s <= 0:
                 raise MotionError(f"{self.config.name}: time_s must be a finite number greater than 0")
             required_speed = distance_mm / duration_s
-            effective_max = min(self.config.max_speed_mm_s, self.config.commissioned_max_speed_mm_s, self.config.max_pulse_hz / self.config.steps_per_mm)
+            effective_max = self._effective_speed_limit()
             if required_speed > effective_max:
                 raise MotionError(
                     f"{self.config.name}: requested {required_speed:.2f} mm/s exceeds commissioned limit {effective_max:.2f} mm/s"
@@ -789,6 +788,9 @@ class AxisController:
     def _execute_plan(self, plan: AxisMovePlan) -> int:
         if plan.steps == 0:
             return 0
+
+        completion_verifier = getattr(self, "completion_verifier", None)
+        completion_token = completion_verifier.begin(self.config.name) if completion_verifier else None
 
         self.direction.value = bool(plan.direction)
 
@@ -841,36 +843,62 @@ class AxisController:
                     stop_requested=_stop_cond,
                 )
                 completed = int(res.get("steps", chunk_steps))
-                if completed < 0 or completed > chunk_steps:
+                try:
+                    outcome = classify_segment_outcome(
+                        expected_steps=chunk_steps,
+                        completed_steps=completed,
+                        stopped=bool(res.get("stopped")),
+                        stop_reason=stop_context["reason"],
+                        controlled_stop_active=bool(res.get("stopped")) and self.controlled_stop_requested(),
+                    )
+                except ValueError:
                     raise MotionError(
                         f"{self.config.name}: invalid completed step count {completed} for {chunk_steps}-step segment"
                     )
                 self.position_steps += completed if plan.direction == self.config.forward_direction else -completed
                 moved += completed
                 remaining -= completed
-                stopped = bool(res.get("stopped"))
                 stop_reason = stop_context["reason"]
-                if stopped and (stop_reason == "controlled jog release" or self.controlled_stop_requested()):
+                if outcome is SegmentOutcome.CONTROLLED_STOP:
                     # The release flag may be cleared by the request lifecycle
                     # before the USB worker returns. Preserve the reason observed
                     # inside the worker so a normal jog release never becomes a
                     # latched incomplete-segment alarm.
                     raise ControlledStopError(f"{self.config.name}: jog stopped when hold control was released")
-                if stopped and stop_reason in {"Min limit triggered", "Max limit triggered"}:
-                    self.is_homed = False
-                    raise LimitTriggeredError(f"{self.config.name}: {stop_reason}")
-                if stopped and stop_reason == "emergency stop":
+                if outcome in {SegmentOutcome.MIN_LIMIT, SegmentOutcome.MAX_LIMIT}:
+                    # A directional end-stop is a recoverable endpoint, not a
+                    # loss of machine reference.  Snap the logical coordinate
+                    # to the known physical endpoint and reject only further
+                    # motion into that switch.  Raising ActiveLimitError keeps
+                    # MotionService from latching the all-axis software STOP,
+                    # so the operator can move away immediately.
+                    if self.is_homed:
+                        self.position_steps = (
+                            0
+                            if plan.direction == self.config.home_direction
+                            else self.mm_to_steps(self.config.max_travel_mm)
+                        )
+                    away = "positive" if plan.direction == self.config.home_direction else "negative"
+                    raise ActiveLimitError(
+                        f"{self.config.name}: {stop_reason}; move in the {away} direction"
+                    )
+                if outcome is SegmentOutcome.EMERGENCY_STOP:
                     self.is_homed = False
                     raise EmergencyStopError(f"{self.config.name}: emergency stop triggered")
-                if stopped and stop_reason == "stop requested":
+                if outcome is SegmentOutcome.STOP_REQUESTED:
                     self.is_homed = False
                     raise StopRequestedError(f"{self.config.name}: stop requested")
-                if completed != chunk_steps:
+                if outcome is SegmentOutcome.INCOMPLETE:
                     raise MotionError(
                         f"{self.config.name}: incomplete USB move segment ({completed}/{chunk_steps} steps)"
                         + (f"; stop reason: {stop_reason}" if stop_reason else "")
                     )
             sleep(self.config.settle_delay)
+            if completion_verifier:
+                completion_verifier.verify(
+                    completion_token,
+                    abort_requested=lambda: bool(self.estop.value or self.stop_requested()),
+                )
             return moved
 
         half_periods = _build_half_periods(plan.steps, plan.duration_s, ramp_ratio=1.6)
@@ -895,6 +923,11 @@ class AxisController:
                     self.stop()
                     raise ControlledStopError(f"{self.config.name}: controlled stop completed")
         sleep(self.config.settle_delay)
+        if completion_verifier:
+            completion_verifier.verify(
+                completion_token,
+                abort_requested=lambda: bool(self.estop.value or self.stop_requested()),
+            )
         return moved
 
     def _pulse_once(self, half_period_s: float) -> None:
@@ -908,17 +941,24 @@ class AxisController:
             raise EmergencyStopError(f"{self.config.name}: emergency stop is active")
         if self.stop_requested():
             raise StopRequestedError(f"{self.config.name}: stop requested")
-        if direction == self.config.home_direction and self.head_limit.value:
+        assessment = assess_directional_limit(
+            direction=direction,
+            home_direction=self.config.home_direction,
+            min_active=bool(self.head_limit.value),
+            max_active=bool(self.tail_limit.value),
+            is_homed=self.is_homed,
+            current_steps=self.position_steps,
+            delta_steps=delta_steps,
+            max_steps=self.mm_to_steps(self.config.max_travel_mm),
+        )
+        if assessment.violation is LimitViolation.MIN_ACTIVE:
             raise ActiveLimitError(f"{self.config.name}: Min limit is active; jog in the positive direction")
-        if direction != self.config.home_direction and self.tail_limit.value:
+        if assessment.violation is LimitViolation.MAX_ACTIVE:
             raise ActiveLimitError(f"{self.config.name}: Max limit is active; jog in the negative direction")
-        if self.is_homed:
-            target_steps = self.position_steps + delta_steps
-            max_steps = self.mm_to_steps(self.config.max_travel_mm)
-            if target_steps < 0 or target_steps > max_steps:
-                raise TravelBoundaryError(
-                    f"{self.config.name}: target exceeds configured travel 0-{self.config.max_travel_mm:.2f} mm"
-                )
+        if assessment.violation is LimitViolation.SOFTWARE_TRAVEL:
+            raise TravelBoundaryError(
+                f"{self.config.name}: target exceeds configured travel 0-{self.config.max_travel_mm:.2f} mm"
+            )
 
     def _guard_during_move(self, direction: int) -> None:
         if self.estop.value:
@@ -929,14 +969,22 @@ class AxisController:
             self.stop()
             self.is_homed = False
             raise StopRequestedError(f"{self.config.name}: stop requested")
-        if direction == self.config.home_direction and self.head_limit.value:
+        active_limit = active_physical_limit(
+            direction=direction,
+            home_direction=self.config.home_direction,
+            min_active=bool(self.head_limit.value),
+            max_active=bool(self.tail_limit.value),
+        )
+        if active_limit is LimitViolation.MIN_ACTIVE:
             self.stop()
-            self.is_homed = False
-            raise LimitTriggeredError(f"{self.config.name}: head limit triggered")
-        if direction != self.config.home_direction and self.tail_limit.value:
+            if self.is_homed:
+                self.position_steps = 0
+            raise ActiveLimitError(f"{self.config.name}: Min limit reached; move in the positive direction")
+        if active_limit is LimitViolation.MAX_ACTIVE:
             self.stop()
-            self.is_homed = False
-            raise LimitTriggeredError(f"{self.config.name}: tail limit triggered")
+            if self.is_homed:
+                self.position_steps = self.mm_to_steps(self.config.max_travel_mm)
+            raise ActiveLimitError(f"{self.config.name}: Max limit reached; move in the negative direction")
 
 
 class MotionController:
@@ -969,61 +1017,130 @@ class MotionController:
         self.timer_seconds: float = 0.0
         self.last_plan: CoordinatedMovePlan | None = None
         self._state_name = "idle"
+        self._dynamic_revision = "cfg-1"
+        self._dynamic_config_synced = False
+        self._homing = HomingOrchestrator(axes=self.axes, home_order=self.config.home_order)
         self.set_state("idle")
+
+    def _sync_dynamic_config(self, speed_override_mm_s: float | None = None) -> None:
+        backend = getattr(self.x, "motion_backend", None)
+        if backend is not None and getattr(backend, "supports_buffered_scurve", False) and hasattr(backend, "configure_dynamic_axis"):
+            try:
+                from narit_vending.domain.nucleo_profile_protocol import DynamicAxisConfigCommand, DynamicPositionCommand
+                was_armed = getattr(backend, "is_armed", False)
+                if was_armed and hasattr(backend, "disarm"):
+                    backend.disarm()
+                self._dynamic_revision = f"cfg-{int(monotonic() * 1000) % 1000000}"
+                for axis_name in ("x", "y"):
+                    axis_cfg = getattr(self.config, axis_name)
+                    commissioned_limit = getattr(axis_cfg, "commissioned_max_speed_mm_s", None) or axis_cfg.max_speed_mm_s
+                    safe_max_speed = speed_override_mm_s if (speed_override_mm_s is not None and speed_override_mm_s > 0) else commissioned_limit
+                    safe_max_speed = min(safe_max_speed, commissioned_limit)
+                    cmd = DynamicAxisConfigCommand(
+                        axis=axis_name,
+                        travel_min_pulses=0,
+                        travel_max_pulses=int(round(axis_cfg.max_travel_mm * axis_cfg.steps_per_mm)),
+                        pulses_per_mm_milli=int(round(axis_cfg.steps_per_mm * 1000)),
+                        kp_enabled=False,
+                        kp_approach_milliper_s=1000,
+                        max_velocity_millihz=min(50_000_000, int(round(safe_max_speed * axis_cfg.steps_per_mm * 1000))),
+                        max_acceleration_millihz_s=int(round(axis_cfg.acceleration * axis_cfg.steps_per_mm * 1000)),
+                        max_deceleration_millihz_s=int(round(axis_cfg.deceleration * axis_cfg.steps_per_mm * 1000)),
+                        max_jerk_millihz_s2=int(round((getattr(axis_cfg, "scurve_max_jerk_mm_s3", None) or 1500.0) * axis_cfg.steps_per_mm * 1000)),
+                        configuration_revision=self._dynamic_revision,
+                    )
+                    backend.configure_dynamic_axis(cmd)
+                    axis_obj = self.axes().get(axis_name)
+                    if axis_obj is not None and getattr(axis_obj, "is_homed", False) and hasattr(backend, "set_dynamic_position"):
+                        pos_steps = int(round(axis_obj.position_mm * axis_obj.config.steps_per_mm))
+                        backend.set_dynamic_position(
+                            DynamicPositionCommand(axis_name, pos_steps, self._dynamic_revision)
+                        )
+                self._dynamic_config_synced = True
+                self._last_dynamic_speed = safe_max_speed
+            except Exception as exc:
+                logging.getLogger(__name__).warning("Failed to sync dynamic config: %s", exc)
+
+    def _sync_dynamic_positions(self, axis_names: Iterable[str] | None = None) -> None:
+        """Synchronize dynamic positions for homed axes without intermediate disarm/arm cycles.
+
+        Firmware invariant: NucleoMotion_Disarm() invalidates dynamic positions for ALL axes.
+        DYN_POSITION requires the backend to be disarmed (motion_armed == 0).
+        Therefore:
+        1. If the backend is armed, disarm it once before updating any axis.
+        2. Set dynamic position for requested homed axes.
+        3. Do not re-arm here; backend.start_dynamic_motion() arms atomically before moving.
+        """
+        keys = tuple(
+            str(k).lower()
+            for k in (axis_names if axis_names is not None else ("x", "y"))
+            if str(k).lower() in ("x", "y")
+        )
+        if not keys:
+            return
+        backend = None
+        for k in keys:
+            ax = self.axes().get(k)
+            if ax and getattr(ax, "motion_backend", None):
+                backend = ax.motion_backend
+                break
+        if backend is None or not getattr(backend, "supports_buffered_scurve", False) or not hasattr(backend, "set_dynamic_position"):
+            return
+        try:
+            from narit_vending.domain.nucleo_profile_protocol import DynamicPositionCommand
+            if getattr(backend, "is_armed", False) and hasattr(backend, "disarm"):
+                backend.disarm()
+            for k in keys:
+                ax = self.axes().get(k)
+                if ax is not None and getattr(ax, "is_homed", False):
+                    pos_steps = int(round(ax.position_mm * ax.config.steps_per_mm))
+                    cmd = DynamicPositionCommand(k, pos_steps, self._dynamic_revision)
+                    backend.set_dynamic_position(cmd)
+        except Exception as exc:
+            logging.getLogger(__name__).warning("Failed to sync dynamic positions for %s: %s", keys, exc)
+
+    def _sync_dynamic_position(self, axis_name: str) -> None:
+        self._sync_dynamic_positions((axis_name,))
 
     def axes(self) -> dict[str, AxisController]:
         return {"x": self.x, "y": self.y, "z": self.z}
 
+    def close(self) -> None:
+        """Stop outputs and release each shared GPIO device exactly once."""
+
+        devices: list[object] = [self.estop]
+        for axis in self.axes().values():
+            axis.stop()
+            if axis.enable is not None:
+                axis.enable.off()
+            devices.extend((axis.pulse, axis.direction, axis.head_limit, axis.tail_limit))
+            if axis.enable is not None:
+                devices.append(axis.enable)
+        devices.extend(
+            device for device in (
+                self.led_idle, self.led_moving, self.led_success,
+                self.alarm_warning, self.alarm_buzzer,
+            ) if device is not None
+        )
+        seen: set[int] = set()
+        for device in devices:
+            identity = id(device)
+            if identity in seen:
+                continue
+            seen.add(identity)
+            close = getattr(device, "close", None)
+            if callable(close):
+                close()
+
     def home_axis(self, axis_name: str, progress: Callable[[str, str], None] | None = None) -> None:
-        axis = self.axes()[axis_name.lower()]
-        axis.home(progress=(lambda phase: progress(axis.config.name, phase)) if progress is not None else None)
-        if axis.config.home_position_mm > 0:
-            if progress is not None:
-                progress(axis.config.name, "positioning")
-            try:
-                axis.move_to_mm(axis.config.home_position_mm, speed_mm_s=axis.config.commissioned_max_speed_mm_s)
-            except Exception:
-                axis.is_homed = False
-                raise
-        if progress is not None:
-            progress(axis.config.name, "passed")
+        self._sync_dynamic_config()
+        self._homing.home_axis(axis_name, progress=progress)
+        self._sync_dynamic_position(axis_name)
 
     def home_all(self, progress: Callable[[str, str], None] | None = None) -> None:
-        backend_protocol = getattr(self.x.motion_backend, "expected_protocol", 1) if self.x.motion_backend is not None else 1
-        if (
-            self.x.motion_backend is not None
-            and isinstance(backend_protocol, (int, float))
-            and backend_protocol >= 3
-            and hasattr(self.x.motion_backend, "home_parallel")
-        ):
-            axes = self.axes()
-            plans = {}
-            for name, axis in axes.items():
-                if progress is not None:
-                    progress(name, "searching")
-                plans[name] = {
-                    "direction": axis.config.home_direction,
-                    "speed_hz": min(axis.config.max_pulse_hz, axis.config.homing_search_speed_mm_s * axis.config.steps_per_mm),
-                    "limit": lambda current=axis: current.head_limit.value,
-                    "abort": lambda current=axis: bool(current.estop.value or current.stop_requested()),
-                    "timeout_s": axis.config.homing_timeout_s,
-                }
-            self.x.motion_backend.home_parallel(plans)
-            for name, axis in axes.items():
-                axis.home(progress=(lambda phase, current=name: progress(current, phase)) if progress is not None else None)
-                if axis.config.home_position_mm > 0:
-                    if progress is not None:
-                        progress(name, "positioning")
-                    try:
-                        axis.move_to_mm(axis.config.home_position_mm, speed_mm_s=axis.config.commissioned_max_speed_mm_s)
-                    except Exception:
-                        axis.is_homed = False
-                        raise
-                if progress is not None:
-                    progress(name, "passed")
-            return
-        for axis_name in self.config.home_order:
-            self.home_axis(axis_name, progress=progress)
+        self._sync_dynamic_config()
+        self._homing.home_all(progress=progress)
+        self._sync_dynamic_positions(("x", "y"))
 
     def move_by_mm(
         self,
@@ -1133,9 +1250,15 @@ class MotionController:
 
         if len(plan.axes) == 1:
             single_plan = next(iter(plan.axes.values()))
-            self.axes()[single_plan.axis]._execute_plan(single_plan)
-            self.last_plan = plan
-            return plan
+            single_axis = self.axes()[single_plan.axis]
+            if not (
+                single_plan.axis in ("x", "y")
+                and getattr(single_axis.config, "scurve_enabled", False)
+                and getattr(single_axis.motion_backend, "supports_buffered_scurve", False)
+            ):
+                single_axis._execute_plan(single_plan)
+                self.last_plan = plan
+                return plan
 
         self._execute_coordinated_plan(plan)
         self.last_plan = plan
@@ -1163,7 +1286,11 @@ class MotionController:
             speed_mm_s=speed_mm_s or self.speed_override,
             time_s=time_s,
         )
-        self.z.move_to_mm(slot.z_mm, speed_mm_s=speed_mm_s or self.speed_override)
+        # A slot on the same physical Z step needs no firmware command.  This
+        # explicit check prevents a no-op Z phase from being treated as a
+        # rejected zero-step MOVE by any current or future motion backend.
+        if self.z.mm_to_steps(slot.z_mm) != self.z.position_steps:
+            self.z.move_to_mm(slot.z_mm, speed_mm_s=speed_mm_s or self.speed_override)
         return slot
 
     def update_slot(
@@ -1208,15 +1335,18 @@ class MotionController:
 
     def request_stop(self) -> None:
         self._stop_requested = True
+        self._dynamic_config_synced = False
         for axis in self.axes().values():
             axis.stop()
 
     def request_controlled_stop(self) -> None:
         self._controlled_stop_requested = True
+        self._dynamic_config_synced = False
 
     def clear_stop(self) -> None:
         self._stop_requested = False
         self._controlled_stop_requested = False
+        self._dynamic_config_synced = False
 
     def stop_requested(self) -> bool:
         return self._stop_requested
@@ -1286,6 +1416,107 @@ class MotionController:
             axes[axis_name]._guard_before_move(axis_plan.direction, delta_steps)
             axes[axis_name].direction.value = bool(axis_plan.direction)
 
+        completion_tokens = self._begin_completion_verification(axes, plan)
+
+        # Production NUCLEO protocol v3 owns all STEP generation. Never fall
+        # through to Raspberry Pi placeholder GPIO for a coordinated move.
+        backends = {id(axis.motion_backend): axis.motion_backend for axis in axes.values() if axis.motion_backend is not None}
+        backend = next(iter(backends.values())) if len(backends) == 1 else None
+        if backend is not None and getattr(backend, "expected_protocol", 1) >= 3:
+            def coordinated_stop() -> bool:
+                if self.emergency_stop_active() or self.stop_requested() or self.controlled_stop_requested():
+                    return True
+                return any(
+                    active_physical_limit(
+                        direction=axis_plan.direction,
+                        home_direction=axes[name].config.home_direction,
+                        min_active=bool(axes[name].head_limit.value),
+                        max_active=bool(axes[name].tail_limit.value),
+                    )
+                    is not None
+                    for name, axis_plan in plan.axes.items()
+                )
+
+            use_dynamic_scurve = (
+                getattr(backend, "supports_buffered_scurve", False)
+                and all(getattr(axes[name].config, "scurve_enabled", False) for name in plan.axes if name in ("x", "y"))
+                and set(plan.axes.keys()).issubset({"x", "y"})
+                and hasattr(backend, "start_dynamic_motion")
+            )
+
+            if use_dynamic_scurve:
+                from narit_vending.domain.nucleo_profile_protocol import (
+                    DynamicStartCommand,
+                    DynamicTargetCommand,
+                )
+                target_speed = max((axis_plan.speed_mm_s for axis_plan in plan.axes.values() if axis_plan.speed_mm_s > 0), default=None)
+                self._sync_dynamic_config(speed_override_mm_s=target_speed)
+                self._sync_dynamic_positions(plan.axes.keys())
+                cmd_id = f"cmd-{int(monotonic() * 1000) % 1000000}"
+                for axis_name, axis_plan in plan.axes.items():
+                    target_pulses = int(round(axis_plan.target_mm * axes[axis_name].config.steps_per_mm))
+                    backend.stage_dynamic_target(
+                        DynamicTargetCommand(cmd_id, axis_name, target_pulses, self._dynamic_revision)
+                    )
+                start_cmd = DynamicStartCommand(cmd_id, tuple(plan.axes.keys()))
+                result = backend.start_dynamic_motion(
+                    start_cmd,
+                    timeout_s=max(plan.duration_s * 2.0 + 5.0, 10.0),
+                    stop_requested=coordinated_stop,
+                )
+                if result.get("stopped"):
+                    self._dynamic_config_synced = False
+                    if self.emergency_stop_active():
+                        raise EmergencyStopError("emergency stop during coordinated move")
+                    if self.stop_requested():
+                        raise StopRequestedError("stop requested during coordinated move")
+                    if self.controlled_stop_requested():
+                        raise ControlledStopError("coordinated controlled stop completed")
+                    for axis in axes.values():
+                        axis.is_homed = False
+                    raise LimitTriggeredError("physical limit triggered during coordinated move")
+                for axis_name, axis_plan in plan.axes.items():
+                    target_pulses = int(round(axis_plan.target_mm * axes[axis_name].config.steps_per_mm))
+                    axes[axis_name].position_steps = target_pulses
+                sleep(max(axis.config.settle_delay for axis in axes.values()))
+                self._verify_completion(completion_tokens)
+                self._dynamic_config_synced = False
+                return
+
+            if hasattr(backend, "move_parallel"):
+                backend_plans = {
+                    axis_name: {
+                        "direction": axis_plan.direction,
+                        "steps": axis_plan.steps,
+                        "speed_hz": max(10.0, axis_plan.steps / max(plan.duration_s, 0.001)),
+                    }
+                    for axis_name, axis_plan in plan.axes.items()
+                    if axis_plan.steps > 0
+                }
+
+                result = backend.move_parallel(
+                    backend_plans,
+                    timeout_s=plan.duration_s + 4.0,
+                    stop_requested=coordinated_stop,
+                )
+                completed = dict(result.get("steps", {}))
+                for axis_name, axis_plan in plan.axes.items():
+                    count = int(completed.get(axis_name, axis_plan.steps))
+                    axes[axis_name].position_steps += count if axis_plan.direction == axes[axis_name].config.forward_direction else -count
+                if result.get("stopped"):
+                    if self.emergency_stop_active():
+                        raise EmergencyStopError("emergency stop during coordinated move")
+                    if self.stop_requested():
+                        raise StopRequestedError("stop requested during coordinated move")
+                    if self.controlled_stop_requested():
+                        raise ControlledStopError("coordinated controlled stop completed")
+                    for axis in axes.values():
+                        axis.is_homed = False
+                    raise LimitTriggeredError("physical limit triggered during coordinated move")
+                sleep(max(axis.config.settle_delay for axis in axes.values()))
+                self._verify_completion(completion_tokens)
+                return
+
         accumulators = {name: 0 for name in plan.axes}
         half_periods = _build_half_periods(master_steps, plan.duration_s, ramp_ratio=1.6)
         controlled_remaining: int | None = None
@@ -1330,6 +1561,29 @@ class MotionController:
             raise
 
         sleep(max(axis.config.settle_delay for axis in axes.values()))
+        self._verify_completion(completion_tokens)
+
+    @staticmethod
+    def _begin_completion_verification(
+        axes: dict[str, AxisController],
+        plan: CoordinatedMovePlan,
+    ) -> dict[str, tuple[object, object]]:
+        tokens: dict[str, tuple[object, object]] = {}
+        for name, axis in axes.items():
+            verifier = getattr(axis, "completion_verifier", None)
+            if verifier is None or plan.axes[name].steps <= 0:
+                continue
+            token = verifier.begin(name)
+            if token is not None:
+                tokens[name] = (verifier, token)
+        return tokens
+
+    def _verify_completion(self, tokens: dict[str, tuple[object, object]]) -> None:
+        for verifier, token in tokens.values():
+            verifier.verify(
+                token,
+                abort_requested=lambda: bool(self.emergency_stop_active() or self.stop_requested()),
+            )
 
 
 def build_default_slots(slot_count: int = 30) -> dict[str, SlotPosition]:
@@ -1362,8 +1616,8 @@ def _build_half_periods(total_steps: int, duration_s: float, ramp_ratio: float =
     return [max(scale * weight, 0.00002) for weight in weights]
 
 
-def _axis_config_to_dict(config: AxisConfig) -> dict[str, int | float | str]:
-    return {
+def _axis_config_to_dict(config: AxisConfig) -> dict[str, int | float | str | bool]:
+    payload: dict[str, int | float | str | bool] = {
         "name": config.name,
         "pulse_pin": config.pulse_pin,
         "direction_pin": config.direction_pin,
@@ -1396,6 +1650,22 @@ def _axis_config_to_dict(config: AxisConfig) -> dict[str, int | float | str]:
         "pulley_teeth": config.pulley_teeth,
         "pulses_per_rev": config.pulses_per_rev,
     }
+    if config.scurve_enabled is not None:
+        assert config.scurve_start_speed_mm_s is not None
+        assert config.scurve_end_speed_mm_s is not None
+        assert config.scurve_max_jerk_mm_s3 is not None
+        assert config.scurve_control_period_us is not None
+        payload.update(
+            {
+                "scurve_enabled": config.scurve_enabled,
+                "scurve_profile_type": str(config.scurve_profile_type),
+                "scurve_start_speed_mm_s": float(config.scurve_start_speed_mm_s),
+                "scurve_end_speed_mm_s": float(config.scurve_end_speed_mm_s),
+                "scurve_max_jerk_mm_s3": float(config.scurve_max_jerk_mm_s3),
+                "scurve_control_period_us": int(config.scurve_control_period_us),
+            }
+        )
+    return payload
 
 
 def _axis_config_from_dict(name: str, payload: dict[str, object]) -> AxisConfig:
@@ -1446,6 +1716,12 @@ def _axis_config_from_dict(name: str, payload: dict[str, object]) -> AxisConfig:
         travel_safety_margin_mm=float(payload.get("travel_safety_margin_mm", 5.0)),
         pulley_pitch_mm=float(payload["pulley_pitch_mm"]) if payload.get("pulley_pitch_mm") is not None else None,
         pulley_teeth=int(payload["pulley_teeth"]) if payload.get("pulley_teeth") is not None else None,
+        scurve_enabled=bool(payload["scurve_enabled"]) if payload.get("scurve_enabled") is not None else None,
+        scurve_profile_type=str(payload["scurve_profile_type"]) if payload.get("scurve_profile_type") is not None else None,
+        scurve_start_speed_mm_s=float(payload["scurve_start_speed_mm_s"]) if payload.get("scurve_start_speed_mm_s") is not None else None,
+        scurve_end_speed_mm_s=float(payload["scurve_end_speed_mm_s"]) if payload.get("scurve_end_speed_mm_s") is not None else None,
+        scurve_max_jerk_mm_s3=float(payload["scurve_max_jerk_mm_s3"]) if payload.get("scurve_max_jerk_mm_s3") is not None else None,
+        scurve_control_period_us=int(payload["scurve_control_period_us"]) if payload.get("scurve_control_period_us") is not None else None,
     )
 
 
@@ -1545,15 +1821,11 @@ def save_machine_config(config: MachineConfig, path: str | Path) -> None:
 
 
 def load_hardware_config(path: str | Path = "hardware_config.json") -> dict:
-    p = Path(path)
-    if not p.exists():
-        p = Path(__file__).parent.parent / "hardware_config.json"
-    if p.exists():
-        try:
-            return json.loads(p.read_text(encoding="utf-8"))
-        except Exception as exc:
-            raise MotionError(f"Failed to parse hardware config '{p}': {exc}") from exc
-    return {}
+    """Compatibility wrapper retained for existing motion consumers."""
+    try:
+        return load_hardware_payload(path)
+    except ValueError as exc:
+        raise MotionError(str(exc)) from exc
 
 
 def build_controller(
@@ -1561,6 +1833,7 @@ def build_controller(
     hw_config_path: str = "hardware_config.json",
     io_backend: object | None = None,
     motion_backend: object | None = None,
+    completion_verifier: object | None = None,
 ) -> MotionController:
     hw_config = load_hardware_config(hw_config_path)
     motion_placeholder_factory = MockFactory() if motion_backend is not None else None
@@ -1657,6 +1930,7 @@ def build_controller(
             controlled_stop_requested=controlled_stop_requested,
             enable=enable_dev,
             motion_backend=motion_backend,
+            completion_verifier=completion_verifier,
         )
 
     x_axis = make_axis(config.x)

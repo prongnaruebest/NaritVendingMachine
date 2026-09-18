@@ -1000,7 +1000,7 @@
             <!-- Master S-Curve Bar -->
             <div class="scurve-master-bar">
               <div class="scurve-master-info">
-                <strong>Master S-Curve Switch (เปิด / ปิด การควบคุม S-Curve ทั้งหมด)</strong>
+                <strong>Master S-Curve Switch (Enable / Bypass S-Curve for All Axes)</strong>
                 <p>When enabled, NUCLEO hardware executes smooth 7-segment jerk-limited profiles. When disabled, axes run standard synchronized trapezoidal moves.</p>
               </div>
               <div class="scurve-master-actions">
@@ -1634,8 +1634,10 @@
             <div class="rp-preset-row speed-preset-row">
               <button type="button" class="rp-preset-btn speed-preset" data-speed="5">5 mm/s</button>
               <button type="button" class="rp-preset-btn speed-preset" data-speed="15">15 mm/s</button>
-              <button type="button" class="rp-preset-btn speed-preset" data-speed="30">30 mm/s</button>
               <button type="button" class="rp-preset-btn speed-preset" data-speed="50">50 mm/s</button>
+              <button type="button" class="rp-preset-btn speed-preset" data-speed="100">100 mm/s</button>
+              <button type="button" class="rp-preset-btn speed-preset" data-speed="150">150 mm/s</button>
+              <button type="button" class="rp-preset-btn speed-preset" data-speed="206">206 mm/s (500 RPM)</button>
             </div>
             <div class="axis-speed-bank compact jog-axis-speed-bank" data-axis-speed-bank aria-label="Linked axis speed settings for jogging"></div>
             <label class="jog-keyboard-switch">

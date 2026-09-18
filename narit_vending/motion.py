@@ -59,15 +59,15 @@ def _slot_sort_key(item: tuple[str, object]) -> tuple[int, int | str]:
     return (0, int(code)) if code.isdigit() else (1, code)
 
 
-def _home_backoff_limit_steps(steps_per_mm: float) -> int:
+def _home_backoff_limit_steps(steps_per_mm: float, backoff_mm: float = 10.0) -> int:
     """Allow enough travel for a mechanical home switch to release.
 
     Two millimetres was too short for the installed sensor/bracket geometry and
     caused a false ``sensor did not release`` failure.  The move still stops as
-    soon as the input releases; 10 mm is only a watchdog ceiling, not a forced
-    move distance.
+    soon as the input releases; backoff_mm is only a watchdog ceiling, not a
+    forced move distance.
     """
-    return max(1, int(round(10.0 * steps_per_mm)))
+    return max(1, int(round(backoff_mm * steps_per_mm)))
 
 
 @dataclass(frozen=True)
@@ -558,10 +558,11 @@ class AxisController:
         if self.estop.value:
             raise EmergencyStopError(f"{self.config.name}: emergency stop is active")
 
+        axis_backoff_mm = getattr(self.config, "homing_backoff_mm", None) or (25.0 if self.config.name == "y" else 10.0)
         effective_backoff = (
             backoff_steps
             if backoff_steps is not None
-            else _home_backoff_limit_steps(self.config.steps_per_mm)
+            else _home_backoff_limit_steps(self.config.steps_per_mm, backoff_mm=axis_backoff_mm)
         )
 
         # Homing has an independently commissioned search speed.  Normal Jog,
@@ -601,7 +602,6 @@ class AxisController:
                     or self.head_limit.value
                     or monotonic() >= search_deadline
                 )
-
             while not limit_active:
                 if monotonic() >= search_deadline:
                     raise LimitTriggeredError(f"{self.config.name}: home sensor not reached within {self.config.homing_timeout_s:g} seconds")
@@ -1022,7 +1022,7 @@ class MotionController:
         self._homing = HomingOrchestrator(axes=self.axes, home_order=self.config.home_order)
         self.set_state("idle")
 
-    def _sync_dynamic_config(self) -> None:
+    def _sync_dynamic_config(self, speed_override_mm_s: float | None = None) -> None:
         backend = getattr(self.x, "motion_backend", None)
         if backend is not None and getattr(backend, "supports_buffered_scurve", False) and hasattr(backend, "configure_dynamic_axis"):
             try:
@@ -1030,9 +1030,12 @@ class MotionController:
                 was_armed = getattr(backend, "is_armed", False)
                 if was_armed and hasattr(backend, "disarm"):
                     backend.disarm()
+                self._dynamic_revision = f"cfg-{int(monotonic() * 1000) % 1000000}"
                 for axis_name in ("x", "y"):
                     axis_cfg = getattr(self.config, axis_name)
-                    safe_max_speed = getattr(axis_cfg, "commissioned_max_speed_mm_s", None) or axis_cfg.max_speed_mm_s
+                    commissioned_limit = getattr(axis_cfg, "commissioned_max_speed_mm_s", None) or axis_cfg.max_speed_mm_s
+                    safe_max_speed = speed_override_mm_s if (speed_override_mm_s is not None and speed_override_mm_s > 0) else commissioned_limit
+                    safe_max_speed = min(safe_max_speed, commissioned_limit)
                     cmd = DynamicAxisConfigCommand(
                         axis=axis_name,
                         travel_min_pulses=0,
@@ -1053,9 +1056,8 @@ class MotionController:
                         backend.set_dynamic_position(
                             DynamicPositionCommand(axis_name, pos_steps, self._dynamic_revision)
                         )
-                if was_armed and hasattr(backend, "arm"):
-                    backend.arm(safety_permissive=True)
                 self._dynamic_config_synced = True
+                self._last_dynamic_speed = safe_max_speed
             except Exception as exc:
                 logging.getLogger(__name__).warning("Failed to sync dynamic config: %s", exc)
 
@@ -1333,15 +1335,18 @@ class MotionController:
 
     def request_stop(self) -> None:
         self._stop_requested = True
+        self._dynamic_config_synced = False
         for axis in self.axes().values():
             axis.stop()
 
     def request_controlled_stop(self) -> None:
         self._controlled_stop_requested = True
+        self._dynamic_config_synced = False
 
     def clear_stop(self) -> None:
         self._stop_requested = False
         self._controlled_stop_requested = False
+        self._dynamic_config_synced = False
 
     def stop_requested(self) -> bool:
         return self._stop_requested
@@ -1444,8 +1449,10 @@ class MotionController:
                     DynamicStartCommand,
                     DynamicTargetCommand,
                 )
-                if not getattr(self, "_dynamic_config_synced", False):
-                    self._sync_dynamic_config()
+                target_speed = max((axis_plan.speed_mm_s for axis_plan in plan.axes.values() if axis_plan.speed_mm_s > 0), default=None)
+                last_speed = getattr(self, "_last_dynamic_speed", None)
+                if not getattr(self, "_dynamic_config_synced", False) or (last_speed is not None and target_speed is not None and last_speed != target_speed):
+                    self._sync_dynamic_config(speed_override_mm_s=target_speed)
                 self._sync_dynamic_positions(plan.axes.keys())
                 cmd_id = f"cmd-{int(monotonic() * 1000) % 1000000}"
                 for axis_name, axis_plan in plan.axes.items():
@@ -1456,10 +1463,11 @@ class MotionController:
                 start_cmd = DynamicStartCommand(cmd_id, tuple(plan.axes.keys()))
                 result = backend.start_dynamic_motion(
                     start_cmd,
-                    timeout_s=plan.duration_s + 4.0,
+                    timeout_s=max(plan.duration_s * 2.0 + 5.0, 10.0),
                     stop_requested=coordinated_stop,
                 )
                 if result.get("stopped"):
+                    self._dynamic_config_synced = False
                     if self.emergency_stop_active():
                         raise EmergencyStopError("emergency stop during coordinated move")
                     if self.stop_requested():
@@ -1474,6 +1482,7 @@ class MotionController:
                     axes[axis_name].position_steps = target_pulses
                 sleep(max(axis.config.settle_delay for axis in axes.values()))
                 self._verify_completion(completion_tokens)
+                self._dynamic_config_synced = False
                 return
 
             if hasattr(backend, "move_parallel"):

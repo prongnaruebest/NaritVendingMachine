@@ -1119,6 +1119,29 @@ class MotionService:
             max_steps = axis.mm_to_steps(axis.config.max_travel_mm)
             remaining_steps = max_steps - axis.position_steps if distance_mm > 0 else axis.position_steps
             distance_mm = axis.steps_to_mm(max(0, remaining_steps)) * (1 if distance_mm > 0 else -1)
+
+        backend = getattr(axis, "motion_backend", None)
+        is_mock = hasattr(backend, "_mock_return_value") or hasattr(axis, "_mock_return_value")
+        use_scurve = (
+            not is_mock
+            and axis.is_homed
+            and axis_name in ("x", "y")
+            and getattr(axis.config, "scurve_enabled", False) is True
+            and getattr(backend, "supports_buffered_scurve", False) is True
+            and hasattr(backend, "start_dynamic_motion")
+        )
+        if use_scurve:
+            def _do_scurve_jog():
+                target_mm = round(axis.position_mm + distance_mm, 3)
+                target_mm = max(0.0, min(axis.config.max_travel_mm, target_mm))
+                plan = self.controller.move_to(
+                    speed_mm_s=speed_mm_s,
+                    time_s=time_s,
+                    **{f"{axis_name}_mm": target_mm},
+                )
+                return plan.to_dict()
+            return self._run(f"jog_{axis_name}", _do_scurve_jog)
+
         return self._run(
             f"jog_{axis_name}",
             lambda: axis.move_mm(distance_mm, speed_mm_s=speed_mm_s, time_s=time_s),
