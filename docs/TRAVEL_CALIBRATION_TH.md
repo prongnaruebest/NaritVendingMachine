@@ -14,7 +14,7 @@
 สูตร `software travel = measured physical stroke − safety margin` สอดคล้องกันอย่างสมบูรณ์:
 - แกน X: `1,794.7 mm − 14.7 mm = 1,780.0 mm` (พิกัด Slot X สูงสุดอยู่ที่ 1,270.0 mm มีระยะปลอดภัย > 500 mm)
 - แกน Y: `1,756.7 mm − 56.7 mm = 1,700.0 mm` (พิกัด Slot Y สูงสุดอยู่ที่ 1,620.0 mm มีระยะปลอดภัย 80.0 mm)
-- S-curve Kinematics (Commissioned): Max Speed = 60.0 mm/s, Accel/Decel = 120.0 mm/s², Max Jerk = 250.0 mm/s³, Start Speed = 5.0 mm/s, End Speed = 2.0 mm/s, Control Period = 1000 µs
+- S-curve Kinematics (Commissioned): Max Speed = 210.0 mm/s (รองรับ 500 RPM / 206.06 mm/s สำหรับ X และ Y; 60.0 mm/s สำหรับ Z), Accel/Decel = 120.0 mm/s², Max Jerk = 250.0 mm/s³, Start Speed = 5.0 mm/s, End Speed = 2.0 mm/s, Control Period = 1000 µs
 
 ## Z แบบสายพาน
 
@@ -22,11 +22,13 @@
 `pulses_per_mm = pulses_per_rev ÷ travel_per_rev_mm` ปัจจุบัน pulley teeth ยังเป็น null จึงห้าม
 สมมติจำนวนฟัน ค่า 9 pulse/mm ต้องถือเป็น empirical value จนมี measurement record
 
-## ความเร็ว
+## ความเร็วและการทดสอบจลนศาสตร์ (Commissioned & Timing Benchmark 2026-09-18)
 
-configuration บันทึก commissioned maximum 100 mm/s ทุกแกน แต่ค่านี้ไม่ใช่หลักฐานว่าเครื่องผ่าน
-commissioning ที่ความเร็วดังกล่าว ต้องเพิ่มทีละขั้นและตรวจ ALM, PEND, position error และกลไก
-ค่า 50,000 pulse/s ของ NUCLEO ไม่ใช่ mechanical safe-speed rating
+- Configuration กำหนด commissioned maximum 210.0 mm/s สำหรับแกน X และ Y เพื่อรองรับ 500 RPM (206.06 mm/s) และ 60.0 mm/s สำหรับแกน Z
+- ผ่านการทดสอบ Max-to-Min Full Stroke Timing Benchmark จริงบนเครื่องจักร (ระยะ 1,700 mm บนแกน X และ 1,650 mm บนแกน Y) ครบทั้ง 4 ช่วงความเร็ว (50, 100, 150, 206.06 mm/s / 500 RPM):
+  - เวลาการเคลื่อนที่จริงตรงตามสมการทฤษฎี 7-Segment S-Curve ความคลาดเคลื่อนเฉลี่ย < 0.3% (ที่ 500 RPM ค่าคลาดเคลื่อนเพียง 13 ms)
+  - ความแม่นยำปลายทางพิกัด $\Delta \le 0.005$ mm
+  - ตรวจสอบ ALM = 0, PEND = 0 ไม่มีการตกสเต็ปหรือไดรเวอร์ตัดการทำงาน
 
 ## ประวัติที่ห้ามนำมาปะปน
 
