@@ -72,6 +72,7 @@ class TestDynamicScurveMotion(unittest.TestCase):
                 home_direction=1,
                 settle_delay=0.01,
                 max_pulse_hz=50000.0,
+                homing_timeout_s=120.0,
             )
             axis.motion_backend = self.backend
             axis.is_homed = True
@@ -279,8 +280,65 @@ class TestDynamicScurveMotion(unittest.TestCase):
         self.assertEqual(self.mock_x.config.forward_direction, 0)
         self.assertEqual(self.mock_x.config.home_direction, 1)
 
+    def test_move_to_limit_routes_via_scurve_when_homed(self) -> None:
+        """Verify move_to_limit routes through S-curve when homed instead of un-ramped pulse train."""
+        from narit_vending.webapp import MotionService
+        with patch.object(MotionService, "__init__", lambda self: None):
+            service = MotionService()
+            service.controller = self.mc
+            service.busy = False
+            service.lock = MagicMock()
+            service.command_lock = MagicMock()
+            service._profile_route_error = MagicMock(return_value="")
+            service._run = lambda name, fn, **kw: {"ok": True, "result": fn()}
+
+            class RealAxisWrapper:
+                def __init__(self, mock_axis):
+                    self._mock_axis = mock_axis
+                    self.config = mock_axis.config
+                    self.is_homed = mock_axis.is_homed
+                    self.position_mm = mock_axis.position_mm
+                    self.position_steps = mock_axis.position_steps
+                    self.motion_backend = mock_axis.motion_backend
+                def plan_absolute_move(self, target_mm, speed_mm_s=None, time_s=None):
+                    dist = abs(target_mm - self.position_mm)
+                    steps = int(round(dist * self.config.steps_per_mm))
+                    direction = 0 if target_mm >= self.position_mm else 1
+                    speed = speed_mm_s or 100.0
+                    return AxisMovePlan(
+                        axis="x", current_mm=self.position_mm, target_mm=target_mm,
+                        distance_mm=dist, direction=direction, steps=steps,
+                        speed_mm_s=speed, duration_s=dist / speed,
+                    )
+                def __getattr__(self, item):
+                    if item.startswith("_mock"):
+                        raise AttributeError(item)
+                    return getattr(self._mock_axis, item)
+
+            self.mc.x = RealAxisWrapper(self.mock_x)
+            self.backend.positions.clear()
+            self.backend.staged_targets.clear()
+            self.backend.started_motions.clear()
+
+            # Move X to max limit at 100 mm/s
+            res = service.move_to_limit("x", "max", speed_mm_s=100.0)
+            self.assertTrue(res["ok"])
+            staged = {t.axis: t.target_position_pulses for t in self.backend.staged_targets}
+            self.assertEqual(staged["x"], int(round(1700.0 * self.mock_x.config.steps_per_mm)))
+            self.assertEqual(len(self.backend.started_motions), 1)
+
+            # Move X to min limit at 206 mm/s
+            self.backend.staged_targets.clear()
+            self.backend.started_motions.clear()
+            res_min = service.move_to_limit("x", "min", speed_mm_s=206.06)
+            self.assertTrue(res_min["ok"])
+            staged_min = {t.axis: t.target_position_pulses for t in self.backend.staged_targets}
+            self.assertEqual(staged_min["x"], 0)
+            self.assertEqual(len(self.backend.started_motions), 1)
+
 
 if __name__ == "__main__":
     unittest.main()
+
 
 

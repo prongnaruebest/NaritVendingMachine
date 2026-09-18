@@ -399,8 +399,10 @@ class AxisController:
             self._guard_before_move(direction, 0)
 
         raw_speed = self.clamp_speed(speed_mm_s)
-        # Honour explicit caller speed up to commissioned limit; use search speed only as default
-        speed = raw_speed if speed_mm_s is not None else min(raw_speed, getattr(self.config, "homing_search_speed_mm_s", 50.0))
+        # Direct un-ramped pulse frames must never exceed the homing search speed ceiling;
+        # instantaneous frequency jumps beyond pull-in cause stepper stall and drive fault.
+        search_ceiling = getattr(self.config, "homing_search_speed_mm_s", 25.0)
+        speed = min(raw_speed, search_ceiling)
         speed_hz = max(10.0, min(self.config.max_pulse_hz, speed * self.config.steps_per_mm))
         # Search up to twice the configured stroke at the effective speed plus
         # a fixed allowance. This prevents the normal homing timeout from
@@ -1450,7 +1452,9 @@ class MotionController:
                     DynamicTargetCommand,
                 )
                 target_speed = max((axis_plan.speed_mm_s for axis_plan in plan.axes.values() if axis_plan.speed_mm_s > 0), default=None)
-                self._sync_dynamic_config(speed_override_mm_s=target_speed)
+                last_speed = getattr(self, "_last_dynamic_speed", None)
+                if not getattr(self, "_dynamic_config_synced", False) or (last_speed is not None and target_speed is not None and last_speed != target_speed):
+                    self._sync_dynamic_config(speed_override_mm_s=target_speed)
                 self._sync_dynamic_positions(plan.axes.keys())
                 cmd_id = f"cmd-{int(monotonic() * 1000) % 1000000}"
                 for axis_name, axis_plan in plan.axes.items():

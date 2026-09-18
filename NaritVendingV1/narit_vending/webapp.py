@@ -1151,6 +1151,29 @@ class MotionService:
         if axis_name not in self.controller.axes() or endpoint not in {"min", "max"}:
             return {"ok": False, "error": "axis and endpoint must identify X/Y/Z and min/max"}
         axis = self.controller.axes()[axis_name]
+        backend = getattr(axis, "motion_backend", None)
+        is_mock = hasattr(backend, "_mock_return_value") or hasattr(axis, "_mock_return_value")
+        use_scurve = (
+            not is_mock
+            and axis.is_homed
+            and axis_name in ("x", "y")
+            and getattr(axis.config, "scurve_enabled", False) is True
+            and getattr(backend, "supports_buffered_scurve", False) is True
+            and hasattr(backend, "start_dynamic_motion")
+        )
+        if use_scurve:
+            route_error = MotionService._profile_route_error(self, (axis_name,), ProfileOperation.MOVE)
+            if route_error:
+                return {"ok": False, "error": route_error}
+            def _do_scurve_move_to_limit():
+                target_mm = 0.0 if endpoint == "min" else axis.config.max_travel_mm
+                plan = self.controller.move_to(
+                    speed_mm_s=speed_mm_s,
+                    **{f"{axis_name}_mm": target_mm},
+                )
+                return plan.to_dict()
+            return self._run(f"seek_{axis_name}_{endpoint}_limit", _do_scurve_move_to_limit)
+
         route_error = MotionService._profile_route_error(self, (axis_name,), ProfileOperation.LIMIT_SEEK)
         if route_error:
             return {"ok": False, "error": route_error}

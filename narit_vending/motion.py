@@ -399,8 +399,10 @@ class AxisController:
             self._guard_before_move(direction, 0)
 
         raw_speed = self.clamp_speed(speed_mm_s)
-        # Honour explicit caller speed up to commissioned limit; use search speed only as default
-        speed = raw_speed if speed_mm_s is not None else min(raw_speed, getattr(self.config, "homing_search_speed_mm_s", 50.0))
+        # Direct un-ramped pulse frames must never exceed the homing search speed ceiling;
+        # instantaneous frequency jumps beyond pull-in cause stepper stall and drive fault.
+        search_ceiling = getattr(self.config, "homing_search_speed_mm_s", 25.0)
+        speed = min(raw_speed, search_ceiling)
         speed_hz = max(10.0, min(self.config.max_pulse_hz, speed * self.config.steps_per_mm))
         # Search up to twice the configured stroke at the effective speed plus
         # a fixed allowance. This prevents the normal homing timeout from
