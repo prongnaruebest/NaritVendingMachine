@@ -620,6 +620,9 @@ body { font-size: 14px; }
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
 }
+.motion-jog-panel .speed-preset-row {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
 .motion-jog-panel .rp-preset-btn { min-height: 44px; padding: 8px; font-size: 12px; }
 .motion-jog-panel .rp-jog-speed-rail { display: grid; align-content: start; gap: 10px; }
 

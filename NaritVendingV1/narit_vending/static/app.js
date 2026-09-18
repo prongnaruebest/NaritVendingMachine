@@ -536,7 +536,7 @@
     return body;
   }
 
-  function targetSpeedPayload(axes = AXES) {
+  function targetSpeedPayload(axes = ["x", "y"]) {
     return { speed_mm_s: effectiveMotionSpeed(axes) };
   }
 
@@ -1687,13 +1687,15 @@
     return Math.min(...(selected.length ? selected : AXES).map(axisSpeed)) * (MS.feedOverridePct / 100);
   }
 
-  function renderAxisSpeedBanks() {
+  function renderAxisSpeedBanks(force = false) {
     $$('[data-axis-speed-bank]').forEach((bank) => {
-      if (bank.dataset.ready === "true") return;
+      if (bank.dataset.ready === "true" && !force) return;
       bank.innerHTML = AXES.map((axis) => {
         const limit = axisSpeedLimit(axis);
         const cfg = MS.config?.axes?.[axis] || {};
-        const pitch = Number(cfg.lead_screw_pitch_mm || 24.727273);
+        const ppm = Number(cfg.steps_per_mm || 0);
+        const ppr = Number(cfg.motor_steps_per_rev || 0) * Number(cfg.driver_microsteps || 0);
+        const pitch = Number(cfg.lead_screw_pitch_mm || (ppm > 0 && ppr > 0 ? ppr / ppm : 24.727273));
         const maxRpm = pitch > 0 ? Math.round(limit * 60 / pitch) : 600;
         return `<div class="axis-speed-row">
         <strong>${axis.toUpperCase()}</strong>
@@ -1721,10 +1723,6 @@
       const speed = axisSpeed(axis);
       MS.axisSpeeds[axis] = speed;
       const max = axisSpeedLimit(axis);
-      $$(`[data-axis-speed-range="${axis}"], [data-axis-speed-number="${axis}"]`).forEach((input) => {
-        input.max = String(max);
-        if (document.activeElement !== input) input.value = speed.toFixed(1);
-      });
       const cfg = MS.config?.axes?.[axis] || {};
       const ppm = Number(cfg.steps_per_mm || 0);
       const ppr = Number(cfg.motor_steps_per_rev || 0) * Number(cfg.driver_microsteps || 0);
@@ -1732,6 +1730,11 @@
       const pulse = speed * ppm;
       const rpm = pitch > 0 ? speed * 60 / pitch : (ppr > 0 ? pulse * 60 / ppr : NaN);
       const maxRpm = pitch > 0 ? Math.round(max * 60 / pitch) : 600;
+
+      $$(`[data-axis-speed-range="${axis}"], [data-axis-speed-number="${axis}"]`).forEach((input) => {
+        input.max = String(max);
+        if (document.activeElement !== input) input.value = speed.toFixed(1);
+      });
       $$(`[data-axis-speed-rpm="${axis}"]`).forEach((input) => {
         input.max = String(maxRpm);
         if (document.activeElement !== input) input.value = Number.isFinite(rpm) ? Math.round(rpm) : "";
@@ -1740,11 +1743,14 @@
         node.textContent = `${Math.round(pulse).toLocaleString()} pulse/s · ${Number.isFinite(rpm) ? rpm.toFixed(1) : "--"} rpm`;
       });
     });
-    const coordinated = effectiveMotionSpeed();
-    MS.selectedJogSpeed = coordinated;
-    setText("jog-speed-display", coordinated.toFixed(1));
+    const xyCoordinated = effectiveMotionSpeed(["x", "y"]);
+    if (!MS.selectedJogSpeed || Math.abs(MS.selectedJogSpeed - xyCoordinated) < 0.2) {
+      MS.selectedJogSpeed = xyCoordinated;
+    }
+    const displaySpeed = MS.selectedJogSpeed || xyCoordinated;
+    setText("jog-speed-display", displaySpeed.toFixed(1));
     $$(".speed-preset").forEach((b) => {
-      b.classList.toggle("active", Math.abs(Number(b.dataset.speed) - coordinated) < 0.2);
+      b.classList.toggle("active", Math.abs(Number(b.dataset.speed) - displaySpeed) < 0.2);
     });
   }
 
@@ -1753,6 +1759,10 @@
     const parsed = Number(rawValue);
     if (!Number.isFinite(parsed) || parsed <= 0) return;
     MS.axisSpeeds[axis] = Math.min(axisSpeedLimit(axis), Math.max(0.1, parsed));
+    if (axis === "x" || axis === "y") {
+      MS.selectedJogSpeed = MS.axisSpeeds[axis];
+      try { localStorage.setItem("narit.selectedJogSpeed", String(MS.selectedJogSpeed)); } catch (_) {}
+    }
     try { localStorage.setItem("narit.axisSpeeds", JSON.stringify(MS.axisSpeeds)); } catch (_) {}
     if (invalidate && MS.validation.stage !== "idle") invalidateMotionWorkflow("Axis speed changed — validate, preview and arm the GOTO command again.");
     syncAxisSpeedBanks();
@@ -4816,6 +4826,8 @@
       });
       // Rebuild homing sequence panel with actual order
       renderHomingSequence();
+      renderAxisSpeedBanks(true);
+      syncAxisSpeedBanks();
       renderWorkspacePages();
       updateFeedOverride();
       renderConfigurationEditor(true);
@@ -5002,8 +5014,13 @@
     /* --- Jog speed presets --- */
     $$(".speed-preset").forEach((btn) => {
       btn.addEventListener("click", () => {
-        AXES.forEach((axis) => { MS.axisSpeeds[axis] = Number(btn.dataset.speed); });
-        MS.selectedJogSpeed = Number(btn.dataset.speed);
+        const speed = Number(btn.dataset.speed);
+        MS.selectedJogSpeed = speed;
+        try { localStorage.setItem("narit.selectedJogSpeed", String(speed)); } catch (_) {}
+        AXES.forEach((axis) => {
+          const limit = axisSpeedLimit(axis);
+          MS.axisSpeeds[axis] = Math.min(limit, speed);
+        });
         try { localStorage.setItem("narit.axisSpeeds", JSON.stringify(MS.axisSpeeds)); } catch (_) {}
         $$(".speed-preset").forEach((b) => b.classList.toggle("active", b === btn));
         syncAxisSpeedBanks();
@@ -5365,6 +5382,8 @@
       AXES.forEach((axis) => {
         if (Number.isFinite(Number(saved[axis])) && Number(saved[axis]) > 0) MS.axisSpeeds[axis] = Number(saved[axis]);
       });
+      const savedJogSpeed = Number(localStorage.getItem("narit.selectedJogSpeed"));
+      if (Number.isFinite(savedJogSpeed) && savedJogSpeed > 0) MS.selectedJogSpeed = savedJogSpeed;
     } catch (_) {}
     organizeWorkspacePanels();
     renderAxisSpeedBanks();
