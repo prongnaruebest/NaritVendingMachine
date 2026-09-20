@@ -1509,15 +1509,21 @@ class MotionService:
                         axis_payload, "scurve_start_speed_mm_s", minimum=0.0, maximum=commissioned_speed
                     ),
                     "scurve_end_speed_mm_s": _config_number(
-                        axis_payload, "scurve_end_speed_mm_s", minimum=0.0, maximum=commissioned_speed
+                        axis_payload, "scurve_end_speed_mm_s",
+                        minimum=0.001 if scurve_enabled else 0.0,
+                        maximum=commissioned_speed,
                     ),
                     "scurve_max_jerk_mm_s3": _config_number(
-                        axis_payload, "scurve_max_jerk_mm_s3", minimum=0.001, maximum=1_000_000.0
+                        axis_payload, "scurve_max_jerk_mm_s3", minimum=0.001, maximum=500.0
                     ),
                     "scurve_control_period_us": _config_integer(
-                        axis_payload, "scurve_control_period_us", minimum=100, maximum=10_000
+                        axis_payload, "scurve_control_period_us", minimum=1000, maximum=1000
                     ),
                 }
+                if scurve_enabled and (acceleration > 200.0 or deceleration > 200.0):
+                    raise APIInputError(
+                        f"{axis_name.upper()}: S-curve acceleration and deceleration must not exceed 200 mm/s^2 before commissioning"
+                    )
             elif axis_name == "z" and any(str(key).startswith("scurve_") for key in axis_payload):
                 raise APIInputError("Z: S-curve configuration is supported for X/Y only")
             if home_direction == forward_direction:

@@ -150,15 +150,18 @@ PEND ไม่สามารถ bypass E-Stop/ALM หาก PEND ไม่ม�
 - `scurve_enabled`: เปิดใช้โปรไฟล์ S-curve สำหรับ X/Y; configuration ปัจจุบันเป็น `true` แต่ Controller จะใช้จริงเฉพาะเมื่อ handshake ยืนยัน protocol v4 และ capability ครบ
 - `scurve_profile_type`: ต้องเป็น `seven_segment_s_curve`
 - `scurve_start_speed_mm_s`: ค่าที่เก็บไว้เพื่อความเข้ากันได้ ปัจจุบันยังไม่ใช้เป็นความเร็วเริ่มต้นของ timer
-- `scurve_end_speed_mm_s`: ความเร็วปลายทางสูงสุดขณะปล่อย target pulse สุดท้าย ต้องมากกว่า 0 เมื่อเปิด S-curve และถูกส่งเป็น `terminal_rate_millihz`
-- `scurve_max_jerk_mm_s3`: เพดาน jerk ต้องมากกว่า 0
+- `scurve_end_speed_mm_s`: ความเร็วปลายทางสูงสุดขณะปล่อย target pulse สุดท้าย ต้องไม่น้อยกว่า 0.001 mm/s เมื่อเปิด S-curve และถูกส่งเป็น `terminal_rate_millihz`
+- `scurve_max_jerk_mm_s3`: เพดาน jerk ต้องอยู่ในช่วงมากกว่า 0 ถึง 500 mm/s³
 - `scurve_control_period_us`: ต้องเป็น 1,000 ไมโครวินาทีเท่านั้น เพราะ TIM6 เป็นเจ้าของ control tick 1 kHz
+- `acceleration_mm_s2` และ `deceleration_mm_s2`: เมื่อเปิด S-curve ต้องอยู่ในช่วงมากกว่า 0 ถึง 200 mm/s²
 
 การเปลี่ยนความเร็วปลายทาง, acceleration, deceleration หรือ jerk จะมีผลหลัง
 Validate/Save/Apply configuration สำเร็จและ NUCLEO ตอบรับ revision เดียวกัน
 เท่านั้น ค่าในหน้าเว็บไม่ใช่ค่าที่มีผลจริงจนกว่าจะผ่านขั้นตอนดังกล่าว
 
-หน้า Machine Setup แสดงค่าชุดนี้เฉพาะการ์ด X/Y และบันทึกลง machine/hardware configuration แบบ atomic พร้อม backup ได้แล้ว ส่วน preview เป็นการคำนวณเพื่อทบทวนค่าบนหน้าเว็บเท่านั้นและไม่สั่ง motion สวิตช์ Enable จะถูกปิดไว้จนกว่า NUCLEO handshake จะรายงาน buffered S-curve capability จริง
+หน้า Machine Setup ใช้ตัวแก้ไข S-curve ชุดเดียวสำหรับ X/Y เพื่อลดค่าซ้ำซ้อน โดยให้แก้เฉพาะ Terminal Speed, Commissioned Speed Ceiling, Acceleration, Deceleration และ Jerk ส่วน Start Speed ถูก planner กำหนดให้ ramp จากหยุดนิ่ง และ Control Period ถูกตรึงที่ 1,000 us ตาม firmware contract ค่าที่ปรากฏซ้ำใน Motor Settings จะซิงก์ทันทีจาก shared configuration draft ก่อน Save
+
+ตัวแก้ไขบันทึกลง machine/hardware configuration แบบ atomic พร้อม backup ส่วน preview เป็นการคำนวณเพื่อทบทวนค่าบนหน้าเว็บเท่านั้นและไม่สั่ง motion สวิตช์ Enable จะถูกปิดไว้จนกว่า NUCLEO handshake จะรายงาน buffered S-curve capability จริง ค่า speed ceiling มากกว่า 20 mm/s จะแสดงสถานะว่าต้องมี commissioning evidence แทนการกล่าวว่าเป็นค่าปลอดภัย และค่าเริ่มต้นแบบ conservative คือ terminal 2 mm/s, ceiling 20 mm/s, acceleration/deceleration 120 mm/s² และ jerk 250 mm/s³
 
 ค่า production ปัจจุบันยังเป็น `scurve_enabled = false` และยังไม่ถูกส่งไปควบคุมมอเตอร์ ห้ามเพิ่มค่าเหล่านี้ให้แกน Z เพราะ Z ต้องใช้ motion path เดิม
 

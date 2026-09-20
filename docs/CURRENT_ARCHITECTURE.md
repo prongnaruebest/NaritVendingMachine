@@ -272,6 +272,17 @@ for firmware execution state but remains open-loop; it must never be presented
 as encoder-measured carriage position. Undersized response buffers fail closed
 without emitting partial JSON.
 
+The Machine Setup UI presents one authoritative X/Y S-curve editor rather than
+a second editable copy inside each motor card. Start speed remains a
+compatibility field because the runtime ramps from rest, and the TIM6 control
+period is fixed at 1,000 us rather than operator-editable. Candidate values are
+validated consistently by the browser, Controller API, and configuration
+foundation: enabled acceleration/deceleration are limited to 200 mm/s2, jerk
+to 500 mm/s3, and terminal speed must be positive. The editor is capability
+gated, invalidates pending configuration workflow state on change, and labels
+speed ceilings above the conservative 20 mm/s starting point as requiring
+commissioning evidence; it does not advertise mechanical safety.
+
 ## Baseline quality status
 
 - Automated suite before structural extraction: 190 tests passed and 18 subtests passed.

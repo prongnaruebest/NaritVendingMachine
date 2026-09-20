@@ -127,8 +127,10 @@ class ConfigFoundationTests(unittest.TestCase):
         hardware = json.loads((ROOT / "hardware_config.iriv.json").read_text(encoding="utf-8"))
         overrides = hardware["machine_parameters"]["axes"]["x"]
         overrides["scurve_start_speed_mm_s"] = float("inf")
-        overrides["scurve_max_jerk_mm_s3"] = 0
-        overrides["scurve_control_period_us"] = 1000.5
+        overrides["scurve_end_speed_mm_s"] = 0
+        overrides["scurve_max_jerk_mm_s3"] = 501
+        overrides["scurve_control_period_us"] = 999
+        overrides["acceleration"] = 201
 
         report = validate_configuration_payloads(machine, hardware)
         codes = {issue.code for issue in report.issues}
@@ -137,6 +139,8 @@ class ConfigFoundationTests(unittest.TestCase):
         self.assertIn("SCURVE_SPEED_INVALID", codes)
         self.assertIn("SCURVE_JERK_INVALID", codes)
         self.assertIn("SCURVE_PERIOD_INVALID", codes)
+        self.assertIn("SCURVE_TERMINAL_SPEED_INVALID", codes)
+        self.assertIn("SCURVE_DYNAMICS_UNCOMMISSIONED", codes)
 
     def test_enabled_nucleo_requires_supported_identity_and_transport(self) -> None:
         hardware = copy.deepcopy(self.hardware)

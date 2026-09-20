@@ -352,10 +352,18 @@ def _validate_axis_values(axis: str, payload: dict[str, object], issues: list[Co
                 issues.append(ConfigIssue("error", "SCURVE_TERMINAL_SPEED_INVALID", f"effective.axes.{axis}.scurve_end_speed_mm_s", "must be greater than zero when S-curve is enabled"))
         try:
             jerk = float(payload["scurve_max_jerk_mm_s3"])
-            if not math.isfinite(jerk) or jerk <= 0:
+            if not math.isfinite(jerk) or not 0 < jerk <= 500:
                 raise ValueError
         except (KeyError, TypeError, ValueError):
-            issues.append(ConfigIssue("error", "SCURVE_JERK_INVALID", f"effective.axes.{axis}.scurve_max_jerk_mm_s3", "must be finite and greater than zero"))
+            issues.append(ConfigIssue("error", "SCURVE_JERK_INVALID", f"effective.axes.{axis}.scurve_max_jerk_mm_s3", "must be finite and within 0-500 mm/s^3"))
+        if payload.get("scurve_enabled") is True:
+            for field in ("acceleration", "deceleration"):
+                try:
+                    value = float(payload[field])
+                    if not math.isfinite(value) or not 0 < value <= 200:
+                        raise ValueError
+                except (KeyError, TypeError, ValueError):
+                    issues.append(ConfigIssue("error", "SCURVE_DYNAMICS_UNCOMMISSIONED", f"effective.axes.{axis}.{field}", "must be within 0-200 mm/s^2 while S-curve is enabled"))
         try:
             raw_period = payload["scurve_control_period_us"]
             period = int(raw_period)

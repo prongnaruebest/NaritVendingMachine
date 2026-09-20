@@ -161,6 +161,16 @@
   border-color: var(--blue-lt, #38bdf8);
 }
 
+.scurve-toggle-switch:focus-within {
+  outline: 2px solid var(--blue-lt, #38bdf8);
+  outline-offset: 2px;
+}
+
+.scurve-toggle-switch:has(input:disabled) {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .scurve-toggle-switch input[type="checkbox"] {
   position: absolute;
   opacity: 0;
@@ -275,6 +285,32 @@
   gap: 14px;
 }
 
+.scurve-fixed-contract {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border, #334155);
+  border-radius: 6px;
+  background: var(--surf-2, #0f172a);
+  color: var(--text-2, #cbd5e1);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.scurve-fixed-contract span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.scurve-fixed-contract b {
+  display: block;
+  color: var(--text-muted, #94a3b8);
+  font-size: 9px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
 /* --- Sections inside card --- */
 .scurve-section {
   display: flex;
@@ -341,7 +377,7 @@
 
 .unit-input-wrap input.config-input {
   width: 100%;
-  min-height: 38px;
+  min-height: 44px;
   padding: 6px 36px 6px 8px;
   background: var(--surf-1, #1e293b);
   border: 1px solid var(--border-med, #475569);
@@ -354,6 +390,18 @@
 .unit-input-wrap input.config-input:focus {
   border-color: var(--blue-lt, #38bdf8);
   outline: none;
+}
+
+.unit-input-wrap input.config-input[aria-invalid="true"] {
+  border-color: var(--red, #ef4444);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--red, #ef4444) 45%, transparent);
+}
+
+.scurve-field-help {
+  min-height: 30px;
+  color: var(--text-muted, #94a3b8);
+  font-size: 9px;
+  line-height: 1.45;
 }
 
 .unit-badge {
@@ -382,8 +430,8 @@
 }
 
 .scurve-preset-chip {
-  min-height: 24px;
-  padding: 2px 7px;
+  min-height: 44px;
+  padding: 6px 9px;
   border-radius: 4px;
   background: var(--surf-3, #334155);
   border: 1px solid var(--border, #475569);
@@ -542,5 +590,16 @@
   .scurve-metrics-bar {
     grid-template-columns: repeat(2, 1fr);
   }
+  .scurve-fixed-contract {
+    grid-template-columns: 1fr;
+  }
+  .scurve-master-actions,
+  .scurve-panel-toolbar,
+  .scurve-toolbar-buttons {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+  .scurve-toolbar-buttons > button {
+    flex: 1 1 180px;
+  }
 }
-

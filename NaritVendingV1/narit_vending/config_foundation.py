@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import shutil
 from dataclasses import dataclass
@@ -38,7 +39,29 @@ MOTION_OVERRIDE_FIELDS = (
     "travel_safety_margin_mm",
     "pulley_pitch_mm",
     "pulley_teeth",
+    "scurve_enabled",
+    "scurve_profile_type",
+    "scurve_start_speed_mm_s",
+    "scurve_end_speed_mm_s",
+    "scurve_max_jerk_mm_s3",
+    "scurve_control_period_us",
 )
+
+
+def load_hardware_payload(path: str | Path = "hardware_config.json") -> dict:
+    """Load hardware JSON without importing motion or hardware modules."""
+    config_path = Path(path)
+    if not config_path.exists():
+        config_path = Path(__file__).parent.parent / "hardware_config.json"
+    if not config_path.exists():
+        return {}
+    try:
+        payload = json.loads(config_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"Failed to parse hardware config '{config_path}': {exc}") from exc
+    if not isinstance(payload, dict):
+        raise ValueError(f"Hardware config '{config_path}' must contain a JSON object")
+    return payload
 
 
 @dataclass(frozen=True)
@@ -280,6 +303,79 @@ def _validate_axis_values(axis: str, payload: dict[str, object], issues: list[Co
     except (KeyError, TypeError, ValueError):
         issues.append(ConfigIssue("error", "HOME_POSITION_INVALID", f"effective.axes.{axis}.home_position_mm", "home position must be a number"))
 
+    scurve_fields = {
+        "scurve_enabled",
+        "scurve_profile_type",
+        "scurve_start_speed_mm_s",
+        "scurve_end_speed_mm_s",
+        "scurve_max_jerk_mm_s3",
+        "scurve_control_period_us",
+    }
+    present_scurve_fields = scurve_fields.intersection(payload)
+    if axis == "z" and present_scurve_fields:
+        issues.append(
+            ConfigIssue(
+                "error",
+                "SCURVE_AXIS_UNSUPPORTED",
+                "effective.axes.z",
+                "S-curve configuration is supported for X/Y only",
+            )
+        )
+    elif axis in ("x", "y") and present_scurve_fields:
+        if present_scurve_fields != scurve_fields:
+            issues.append(
+                ConfigIssue(
+                    "error",
+                    "SCURVE_CONFIG_INCOMPLETE",
+                    f"effective.axes.{axis}",
+                    "all S-curve fields must be configured together",
+                )
+            )
+            return
+        if not isinstance(payload.get("scurve_enabled"), bool):
+            issues.append(ConfigIssue("error", "SCURVE_ENABLED_INVALID", f"effective.axes.{axis}.scurve_enabled", "must be boolean"))
+        if payload.get("scurve_profile_type") != "seven_segment_s_curve":
+            issues.append(ConfigIssue("error", "SCURVE_TYPE_INVALID", f"effective.axes.{axis}.scurve_profile_type", "must be seven_segment_s_curve"))
+        for field in ("scurve_start_speed_mm_s", "scurve_end_speed_mm_s"):
+            try:
+                value = float(payload[field])
+                max_speed = float(payload["commissioned_max_speed_mm_s"])
+                if not math.isfinite(value) or not 0 <= value <= max_speed:
+                    raise ValueError
+            except (KeyError, TypeError, ValueError):
+                issues.append(ConfigIssue("error", "SCURVE_SPEED_INVALID", f"effective.axes.{axis}.{field}", "must be finite and within 0-commissioned speed"))
+        if payload.get("scurve_enabled") is True:
+            try:
+                if float(payload["scurve_end_speed_mm_s"]) <= 0:
+                    raise ValueError
+            except (KeyError, TypeError, ValueError):
+                issues.append(ConfigIssue("error", "SCURVE_TERMINAL_SPEED_INVALID", f"effective.axes.{axis}.scurve_end_speed_mm_s", "must be greater than zero when S-curve is enabled"))
+        try:
+            jerk = float(payload["scurve_max_jerk_mm_s3"])
+            if not math.isfinite(jerk) or not 0 < jerk <= 500:
+                raise ValueError
+        except (KeyError, TypeError, ValueError):
+            issues.append(ConfigIssue("error", "SCURVE_JERK_INVALID", f"effective.axes.{axis}.scurve_max_jerk_mm_s3", "must be finite and within 0-500 mm/s^3"))
+        if payload.get("scurve_enabled") is True:
+            for field in ("acceleration", "deceleration"):
+                try:
+                    value = float(payload[field])
+                    if not math.isfinite(value) or not 0 < value <= 200:
+                        raise ValueError
+                except (KeyError, TypeError, ValueError):
+                    issues.append(ConfigIssue("error", "SCURVE_DYNAMICS_UNCOMMISSIONED", f"effective.axes.{axis}.{field}", "must be within 0-200 mm/s^2 while S-curve is enabled"))
+        try:
+            raw_period = payload["scurve_control_period_us"]
+            period = int(raw_period)
+            if (
+                isinstance(raw_period, bool)
+                or float(raw_period) != period
+                or period != 1000
+            ):
+                raise ValueError
+        except (KeyError, TypeError, ValueError):
+            issues.append(ConfigIssue("error", "SCURVE_PERIOD_INVALID", f"effective.axes.{axis}.scurve_control_period_us", "must be exactly 1000 us for the fixed TIM6 control tick"))
+
 
 def _validate_signal_polarity(inputs: dict[str, object], issues: list[ConfigIssue]) -> None:
     for name, value in inputs.items():
@@ -415,13 +511,13 @@ def _validate_nucleo(payload: object, issues: list[ConfigIssue]) -> None:
         )
     if not str(payload.get("port", "")).strip():
         issues.append(ConfigIssue("error", "NUCLEO_PORT_MISSING", "hardware.nucleo.port", "port is required"))
-    if str(payload.get("expected_device", "")) != "NUCLEO-F439ZI":
+    if str(payload.get("expected_device", "")) != "NUCLEO-G491RE":
         issues.append(
             ConfigIssue(
                 "error",
                 "NUCLEO_IDENTITY_INVALID",
                 "hardware.nucleo.expected_device",
-                "must be NUCLEO-F439ZI",
+                "must be NUCLEO-G491RE",
             )
         )
     for field, minimum, maximum in (("baudrate", 1200, 3_000_000), ("protocol_version", 1, 255)):

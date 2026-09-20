@@ -126,6 +126,22 @@ class StartupSmokeTests(unittest.TestCase):
             self.assertFalse(result["ok"])
             self.assertIn("blocked", result["error"])
 
+    def test_configuration_api_rejects_non_firmware_control_period(self) -> None:
+        service = self._service(ROOT / "machine_config.json", ROOT / "hardware_config.json")
+        payload = service.get_config()
+        for axis in ("x", "y"):
+            payload["axes"][axis].update({
+                "scurve_enabled": False,
+                "scurve_profile_type": "seven_segment_s_curve",
+                "scurve_start_speed_mm_s": 0.0,
+                "scurve_end_speed_mm_s": 0.0,
+                "scurve_max_jerk_mm_s3": 100.0,
+                "scurve_control_period_us": 999,
+            })
+
+        with self.assertRaisesRegex(APIInputError, "scurve_control_period_us"):
+            service.save_configuration(payload)
+
     def test_live_nucleo_contract_allows_legacy_home_route(self) -> None:
         """Regression: an enabled USB link exposes status_payload(), not status()."""
 
