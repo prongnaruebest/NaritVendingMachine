@@ -25,6 +25,22 @@ narit-vending-controller-iriv.service
 
 The deployed production path already separates the web process from the Controller. The web process uses `ControllerClient`; the Controller owns the instantiated hardware adapters and motion objects.
 
+## Controller-owned vending sequence
+
+`controller/sequence_service.py` owns the order of the bounded vending cycle;
+it does not own GPIO or pulse generation. Every stage calls the existing
+Controller motion APIs, so X/Y profile routing, Z legacy routing, travel limits,
+driver alarms, watchdogs and stop policy remain in their owning layers.
+
+Before starting, the service requires the effective sequence switch, all axes
+Homed, a known slot, a finite positive speed and a feasible Y-lift target. It
+does not silently clamp an infeasible lift. Pick/drop dwell is limited to 60 s
+and checks Stop, E-Stop, I/O fault channels and NUCLEO communication at 100 ms
+or faster. Failures report the active phase and already completed phases but do
+not perform an automatic recovery move. Final Home verification uses configured
+per-axis `home_position_mm`; the reported coordinates remain open-loop emitted-
+pulse estimates rather than external position measurements.
+
 ## Hardware ownership
 
 | Resource | Current owner | Transport |

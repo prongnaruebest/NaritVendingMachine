@@ -510,6 +510,18 @@
     setVal("slot-seq-parking-y", { key: "parking_y_mm", def: 50.0 });
     setVal("slot-seq-drop-z", { key: "z_drop_mm", def: 150.0 });
     setVal("slot-seq-drop-hold", { key: "drop_hold_seconds", def: 3.0 });
+    const axisLimits = MS.config?.axes || {};
+    const maxByInput = {
+      "slot-seq-standby-z": axisLimits.z?.max_travel_mm,
+      "slot-seq-pick-z": axisLimits.z?.max_travel_mm,
+      "slot-seq-lift-delta-y": axisLimits.y?.max_travel_mm,
+      "slot-seq-parking-x": axisLimits.x?.max_travel_mm,
+      "slot-seq-parking-y": axisLimits.y?.max_travel_mm,
+      "slot-seq-drop-z": axisLimits.z?.max_travel_mm,
+    };
+    Object.entries(maxByInput).forEach(([id, maximum]) => {
+      if (Number.isFinite(Number(maximum)) && el(id)) el(id).max = String(maximum);
+    });
   }
 
   async function saveSlotSequenceSettings() {
@@ -527,6 +539,27 @@
         z_drop_mm: parseFloat(el("slot-seq-drop-z")?.value ?? "150.0"),
         drop_hold_seconds: parseFloat(el("slot-seq-drop-hold")?.value ?? "3.0"),
       };
+      const limits = MS.config?.axes || {};
+      const bounds = [
+        ["slot-seq-standby-z", payload.z_standby_mm, Number(limits.z?.max_travel_mm), "Standby Z"],
+        ["slot-seq-pick-z", payload.z_pick_mm, Number(limits.z?.max_travel_mm), "Pick Z"],
+        ["slot-seq-lift-delta-y", payload.y_lift_delta_mm, Number(limits.y?.max_travel_mm), "Y Lift Delta"],
+        ["slot-seq-parking-x", payload.parking_x_mm, Number(limits.x?.max_travel_mm), "Parking X"],
+        ["slot-seq-parking-y", payload.parking_y_mm, Number(limits.y?.max_travel_mm), "Parking Y"],
+        ["slot-seq-drop-z", payload.z_drop_mm, Number(limits.z?.max_travel_mm), "Drop Z"],
+        ["slot-seq-pick-hold", payload.pick_hold_seconds, 60, "Pick Dwell"],
+        ["slot-seq-drop-hold", payload.drop_hold_seconds, 60, "Drop Dwell"],
+      ];
+      for (const [id, value, maximum, label] of bounds) {
+        const input = el(id);
+        const valid = Number.isFinite(value) && value >= 0 && Number.isFinite(maximum) && value <= maximum;
+        input?.setCustomValidity(valid ? "" : `${label} must be between 0 and ${maximum}`);
+        input?.setAttribute("aria-invalid", valid ? "false" : "true");
+        if (!valid) {
+          input?.reportValidity();
+          throw new Error(`${label} must be between 0 and ${maximum}`);
+        }
+      }
       const res = await apiCall("/api/slots/sequence-config", "POST", payload);
       if (res && res.accepted !== false) {
         if (!MS.config) MS.config = {};

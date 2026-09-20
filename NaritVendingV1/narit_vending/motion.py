@@ -289,6 +289,19 @@ class MachineConfig:
             raise MotionError("home_order must contain x, y, and z exactly once")
         if not math.isfinite(self.safe_z_mm) or not 0 <= self.safe_z_mm <= self.z.max_travel_mm:
             raise MotionError(f"safe_z_mm must be within 0-{self.z.max_travel_mm:.2f} mm")
+        sequence_values = {
+            "z_standby_mm": self.slot_sequence.z_standby_mm,
+            "z_pick_mm": self.slot_sequence.z_pick_mm,
+            "y_lift_delta_mm": self.slot_sequence.y_lift_delta_mm,
+            "pick_hold_seconds": self.slot_sequence.pick_hold_seconds,
+            "parking_x_mm": self.slot_sequence.parking_x_mm,
+            "parking_y_mm": self.slot_sequence.parking_y_mm,
+            "z_drop_mm": self.slot_sequence.z_drop_mm,
+            "drop_hold_seconds": self.slot_sequence.drop_hold_seconds,
+        }
+        for field_name, value in sequence_values.items():
+            if not math.isfinite(value):
+                raise MotionError(f"slot_sequence.{field_name} must be finite")
         if not (0 <= self.slot_sequence.z_standby_mm <= self.z.max_travel_mm):
             raise MotionError(f"slot_sequence.z_standby_mm must be within 0-{self.z.max_travel_mm:.2f} mm")
         if not (0 <= self.slot_sequence.z_pick_mm <= self.z.max_travel_mm):
@@ -299,10 +312,12 @@ class MachineConfig:
             raise MotionError(f"slot_sequence.parking_x_mm must be within 0-{self.x.max_travel_mm:.2f} mm")
         if not (0 <= self.slot_sequence.parking_y_mm <= self.y.max_travel_mm):
             raise MotionError(f"slot_sequence.parking_y_mm must be within 0-{self.y.max_travel_mm:.2f} mm")
-        if self.slot_sequence.pick_hold_seconds < 0:
-            raise MotionError("slot_sequence.pick_hold_seconds cannot be negative")
-        if self.slot_sequence.drop_hold_seconds < 0:
-            raise MotionError("slot_sequence.drop_hold_seconds cannot be negative")
+        if not (0 <= self.slot_sequence.y_lift_delta_mm <= self.y.max_travel_mm):
+            raise MotionError(f"slot_sequence.y_lift_delta_mm must be within 0-{self.y.max_travel_mm:.2f} mm")
+        if not (0 <= self.slot_sequence.pick_hold_seconds <= 60):
+            raise MotionError("slot_sequence.pick_hold_seconds must be within 0-60 seconds")
+        if not (0 <= self.slot_sequence.drop_hold_seconds <= 60):
+            raise MotionError("slot_sequence.drop_hold_seconds must be within 0-60 seconds")
         limits = {"x": self.x.max_travel_mm, "y": self.y.max_travel_mm, "z": self.z.max_travel_mm}
         for code, slot in self.slots.items():
             for axis_name in ("x", "y", "z"):
@@ -1094,9 +1109,9 @@ class MotionController:
         velocity computed by the Controller planner. Configuration failure is
         safety-significant and must not be downgraded to a log message.
         """
-        # Dynamic G491 configuration is an atomic X/Y contract. Do not let a
-        # legacy-only configuration enter it merely because a backend exposes
-        # the protocol methods.
+        # The G491 runtime requires a coherent X/Y pair before it reports ready.
+        # Legacy-only configurations must not accidentally enter this path just
+        # because a test double or future backend advertises the capability.
         if not all(bool(getattr(getattr(self.config, name), "scurve_enabled", False)) for name in ("x", "y")):
             return
         backend = getattr(self.x, "motion_backend", None)

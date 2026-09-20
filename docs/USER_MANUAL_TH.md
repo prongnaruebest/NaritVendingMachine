@@ -186,6 +186,18 @@ motor feedback, over-current, over-voltage หรือสาเหตุที�
 ผู้ใช้ใส่จำนวน Slot Moves และ Dwell; UI คำนวณ Maximum Duration ให้อัตโนมัติจากตำแหน่ง, speed และ dwell
 Controller ยังบังคับ bounded sequence และไม่ Resume session เดิมหลัง restart
 
+## Vending Slot Sequence
+
+เมื่อเปิด Sequence Mode คำสั่ง Go To Slot จะทำรอบหยิบ–จ่ายตามค่าที่บันทึกไว้
+ใน Slot Positioning Manager ก่อนกดเริ่มต้องตรวจว่า X/Y/Z Home แล้ว, ไม่มี
+E-Stop/Alarm/communication fault และตำแหน่ง Slot รวม Y Lift ไม่เกิน travel
+ของแกน Y ค่า Pick/Drop Dwell ใส่ได้ 0–60 วินาที
+
+หาก sequence หยุดหรือ Failed ให้ดู `failed_phase` และ `completed_phases` ใน
+สถานะ/บันทึกเหตุการณ์ ระบบจะไม่เคลื่อนที่กู้ตำแหน่งเองหลัง fault ให้ตรวจพื้นที่
+แก้สาเหตุ Clear Alarm และ Home ใหม่ตามความจำเป็นก่อนเริ่มคำสั่งใหม่ ห้ามถือว่า
+ตำแหน่งที่รายงานหลังจบเป็นค่าที่วัดจาก encoder ภายนอก
+
 ## ตรวจปัญหาเบื้องต้น
 
 | อาการ | ตรวจสอบ |

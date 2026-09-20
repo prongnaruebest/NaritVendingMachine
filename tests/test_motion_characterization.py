@@ -10,6 +10,7 @@ from narit_vending.motion import (
     MachineConfig,
     MotionController,
     MotionError,
+    SlotSequenceConfig,
     TravelBoundaryError,
     SlotPosition,
     _build_half_periods,
@@ -61,6 +62,26 @@ class MotionCharacterizationTests(unittest.TestCase):
             config,
         )
         return controller, axes
+
+    def _machine_config_with_sequence(self, sequence: SlotSequenceConfig) -> MachineConfig:
+        return MachineConfig(
+            x=self._axis_config("x", 220.0),
+            y=self._axis_config("y", 260.0),
+            z=self._axis_config("z", 200.0),
+            slot_sequence=sequence,
+        )
+
+    def test_slot_sequence_rejects_non_finite_values(self) -> None:
+        with self.assertRaisesRegex(MotionError, "z_pick_mm must be finite"):
+            self._machine_config_with_sequence(SlotSequenceConfig(z_pick_mm=float("nan")))
+
+    def test_slot_sequence_rejects_unbounded_hold_time(self) -> None:
+        with self.assertRaisesRegex(MotionError, "pick_hold_seconds must be within 0-60"):
+            self._machine_config_with_sequence(SlotSequenceConfig(pick_hold_seconds=60.1))
+
+    def test_slot_sequence_rejects_negative_y_lift(self) -> None:
+        with self.assertRaisesRegex(MotionError, "y_lift_delta_mm must be within"):
+            self._machine_config_with_sequence(SlotSequenceConfig(y_lift_delta_mm=-1.0))
 
     def test_2000_hz_profile_preserves_requested_pulse_count(self) -> None:
         pulse_count = 300

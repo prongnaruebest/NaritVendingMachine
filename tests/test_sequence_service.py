@@ -3,7 +3,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from narit_vending.controller.sequence_service import SequenceService
-from narit_vending.domain.errors import EmergencyStopError, ControlledStopError
+from narit_vending.domain.errors import EmergencyStopError, MotionError
 from narit_vending.motion import SlotSequenceConfig
 
 
@@ -32,6 +32,7 @@ class SequenceServiceTests(unittest.TestCase):
             drop_hold_seconds=3.0,
         )
         controller = MagicMock()
+        controller.speed_override = 20.0
         controller.config = SimpleNamespace(
             slots={"2": slot},
             slot_sequence=seq_cfg,
@@ -48,7 +49,7 @@ class SequenceServiceTests(unittest.TestCase):
         controller.home_axis.side_effect = lambda axis, progress=None: events.append(f"HOME_{axis.upper()}")
         motion = MagicMock()
         motion.controller = controller
-        motion._run.side_effect = lambda _name, action: {"ok": True, "result": action()}
+        motion._run.side_effect = lambda _name, action, **_: {"ok": True, "result": action()}
         service = SequenceService(motion)
         return service, events
 
@@ -101,10 +102,82 @@ class SequenceServiceTests(unittest.TestCase):
         self.assertFalse(result["ok"])
         self.assertEqual(result["failed_phase"], "VALIDATE_READY")
 
+    def test_rejects_disabled_sequence(self):
+        service, _ = self._service()
+        service._motion.controller.config.slot_sequence = SlotSequenceConfig(enabled=False)
+
+        result = service.run("2")
+
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["failed_phase"], "VALIDATE_CONFIGURATION")
+
+    def test_rejects_non_finite_speed(self):
+        service, _ = self._service()
+
+        result = service.run("2", speed_mm_s=float("nan"))
+
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["failed_phase"], "VALIDATE_SPEED")
+
+        service._motion.controller.speed_override = None
+        result = service.run("2")
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["failed_phase"], "VALIDATE_SPEED")
+
+    def test_rejects_y_lift_target_beyond_travel_without_clamping(self):
+        service, _ = self._service()
+        service._motion.controller.config.slots["2"].y_mm = 1690.0
+
+        result = service.run("2")
+
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["failed_phase"], "VALIDATE_Y_LIFT")
+        self.assertIn("1720.000 mm", result["error"])
+
+    @patch("narit_vending.controller.sequence_service.time.sleep")
+    def test_dwell_preserves_fractional_remainder_and_checks_safety(self, sleep):
+        service, _ = self._service()
+
+        service._wait_with_safety(0.15)
+
+        self.assertEqual(sleep.call_count, 2)
+        self.assertAlmostEqual(sleep.call_args_list[0].args[0], 0.1)
+        self.assertAlmostEqual(sleep.call_args_list[1].args[0], 0.05)
+
+    def test_dwell_fails_closed_on_io_alarm(self):
+        service, _ = self._service()
+        service._motion.picontrol_io.alarm_channels.return_value = [
+            {"active": True, "level": "fault", "label": "X Drive Alarm"}
+        ]
+
+        with self.assertRaisesRegex(MotionError, "X Drive Alarm"):
+            service._wait_with_safety(0.1)
+
+    def test_failure_reports_active_and_completed_phases(self):
+        service, _ = self._service()
+        service._motion.controller.axes()["z"].move_to_mm.side_effect = MotionError("Z move failed")
+
+        def guarded_run(_name, action, **_kwargs):
+            try:
+                return {"ok": True, "result": action()}
+            except MotionError as exc:
+                return {"ok": False, "error": str(exc)}
+
+        service._motion._run.side_effect = guarded_run
+        result = service.run("2", request_id="request-123")
+
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["failed_phase"], "MOVE_Z_STANDBY")
+        self.assertEqual(result["completed_phases"], [])
+        self.assertEqual(service._motion._run.call_args.kwargs["command_id"], "request-123")
+        service._motion.set_sequence_operation.assert_called_with(
+            "FAILED", None, "Slot sequence failed during MOVE_Z_STANDBY"
+        )
+
     @patch("narit_vending.controller.sequence_service.time.sleep")
     def test_aborts_on_emergency_stop_during_dwell(self, _sleep):
         service, _ = self._service()
-        service._motion._run.side_effect = lambda _name, action: action()
+        service._motion._run.side_effect = lambda _name, action, **_: action()
         # Trigger E-stop during dwell
         call_count = 0
         def estop_trigger():

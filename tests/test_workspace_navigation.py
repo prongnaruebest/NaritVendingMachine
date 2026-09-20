@@ -89,6 +89,16 @@ class WorkspaceNavigationTests(unittest.TestCase):
             'const config = await apiCall("/api/config", "GET", undefined, 1500);',
             script,
         )
+
+    def test_slot_sequence_editor_enforces_controller_bounds(self) -> None:
+        script = (ROOT / "narit_vending" / "static" / "app.js").read_text(encoding="utf-8")
+        template = (ROOT / "narit_vending" / "templates" / "index.html").read_text(encoding="utf-8")
+
+        self.assertIn('payload.pick_hold_seconds, 60, "Pick Dwell"', script)
+        self.assertIn('payload.drop_hold_seconds, 60, "Drop Dwell"', script)
+        self.assertIn('input?.setAttribute("aria-invalid", valid ? "false" : "true")', script)
+        self.assertIn('id="slot-seq-pick-hold"', template)
+        self.assertIn('max="60" value="3.0"', template)
         self.assertIn(
             "if (config.axes && config.hardware && config.restart_required === false)",
             script,

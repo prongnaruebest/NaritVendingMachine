@@ -6,6 +6,7 @@ This module owns order and phase reporting only.  AxisController in
 
 from __future__ import annotations
 
+import math
 import time
 from typing import Any, Callable
 
@@ -49,16 +50,81 @@ class SequenceService:
         if slot is None:
             return {"ok": False, "error": f"unknown slot '{slot_code}'", "failed_phase": "VALIDATE_SLOT"}
 
-        def action() -> dict[str, object]:
-            return self._execute(slot, speed_mm_s=speed_mm_s, phase_callback=phase_callback)
+        cfg = getattr(self._motion.controller.config, "slot_sequence", None) or SlotSequenceConfig()
+        if not cfg.enabled:
+            return {
+                "ok": False,
+                "error": "Slot sequence is disabled in effective configuration",
+                "failed_phase": "VALIDATE_CONFIGURATION",
+            }
+        raw_speed = self._motion.controller.speed_override if speed_mm_s is None else speed_mm_s
+        try:
+            speed = float(raw_speed)
+        except (TypeError, ValueError):
+            speed = math.nan
+        if not math.isfinite(speed) or speed <= 0:
+            return {
+                "ok": False,
+                "error": "speed_mm_s must be a finite value greater than 0",
+                "failed_phase": "VALIDATE_SPEED",
+            }
+        y_target_mm = float(slot.y_mm) + cfg.y_lift_delta_mm
+        y_max_mm = float(axes["y"].config.max_travel_mm)
+        if y_target_mm > y_max_mm:
+            return {
+                "ok": False,
+                "error": (
+                    f"Slot {slot.code} Y lift target {y_target_mm:.3f} mm exceeds "
+                    f"Y travel maximum {y_max_mm:.3f} mm"
+                ),
+                "failed_phase": "VALIDATE_Y_LIFT",
+            }
 
-        return self._motion._run(f"slot_sequence_{slot_code}", action)
-
-    def _execute(self, slot: Any, *, speed_mm_s: float | None, phase_callback: PhaseCallback | None) -> dict[str, object]:
         completed: list[str] = []
+        active_phase = "VALIDATE_READY"
+
+        def tracked_phase(state: str, detail: dict[str, object]) -> None:
+            nonlocal active_phase
+            active_phase = str(detail.get("phase") or active_phase)
+            if phase_callback is not None:
+                phase_callback(state, detail)
+
+        def action() -> dict[str, object]:
+            return self._execute(
+                slot,
+                speed_mm_s=speed,
+                phase_callback=tracked_phase,
+                completed=completed,
+            )
+
+        result = self._motion._run(
+            f"slot_sequence_{slot_code}",
+            action,
+            command_id=request_id,
+        )
+        if result.get("ok"):
+            self._motion.set_sequence_operation(
+                "COMPLETED", None, "Slot sequence completed; all axes returned home"
+            )
+        else:
+            result.setdefault("failed_phase", active_phase)
+            result.setdefault("completed_phases", list(completed))
+            self._motion.set_sequence_operation(
+                "FAILED", None, f"Slot sequence failed during {active_phase}"
+            )
+        return result
+
+    def _execute(
+        self,
+        slot: Any,
+        *,
+        speed_mm_s: float,
+        phase_callback: PhaseCallback | None,
+        completed: list[str],
+    ) -> dict[str, object]:
         cfg = getattr(self._motion.controller.config, "slot_sequence", None) or SlotSequenceConfig()
         controller = self._motion.controller
-        speed = speed_mm_s or controller.speed_override
+        speed = speed_mm_s
         axes = controller.axes()
 
         # Initial / Validation: Ensure Z is at Z_standby before lateral moves
@@ -86,8 +152,7 @@ class SequenceService:
 
         # Stage 3 - Y Lift & Dwell (Hook/Pickup)
         self._check_stop()
-        y_max = getattr(axes["y"].config, "max_travel_mm", 2000.0)
-        y_target = min(slot.y_mm + cfg.y_lift_delta_mm, y_max)
+        y_target = slot.y_mm + cfg.y_lift_delta_mm
         phase = "Y_LIFT_PICK"
         self._set_phase(phase, "y", f"Stage 3: Lifting Y by +{cfg.y_lift_delta_mm:.1f} mm to hook product", phase_callback)
         axes["y"].move_to_mm(y_target, speed_mm_s=speed)
@@ -95,9 +160,7 @@ class SequenceService:
 
         phase = "HOLD_AT_PICK"
         self._set_phase(phase, None, f"Holding at pick position for {cfg.pick_hold_seconds:.1f} s", phase_callback)
-        for _ in range(round(cfg.pick_hold_seconds / self.HOLD_POLL_SECONDS)):
-            self._check_stop()
-            time.sleep(self.HOLD_POLL_SECONDS)
+        self._wait_with_safety(cfg.pick_hold_seconds)
         completed.append(phase)
 
         # Stage 4 - Retract Z to Standby
@@ -122,14 +185,13 @@ class SequenceService:
         completed.append(phase)
 
         # Trigger dispense output pulse if available
+        self._check_stop()
         if hasattr(self._motion, "activate_dispense") and callable(self._motion.activate_dispense):
             self._motion.activate_dispense()
 
         phase = "HOLD_AT_DROP"
         self._set_phase(phase, None, f"Holding at drop position for {cfg.drop_hold_seconds:.1f} s", phase_callback)
-        for _ in range(round(cfg.drop_hold_seconds / self.HOLD_POLL_SECONDS)):
-            self._check_stop()
-            time.sleep(self.HOLD_POLL_SECONDS)
+        self._wait_with_safety(cfg.drop_hold_seconds)
         completed.append(phase)
 
         # Stage 7 - Retract Z to Standby
@@ -190,6 +252,25 @@ class SequenceService:
             raise EmergencyStopError("Emergency stop is active")
         if self._motion.controller.stop_requested():
             raise ControlledStopError("Sequence stopped before next stage")
+        for backend in (getattr(self._motion, "io_backend", None), getattr(self._motion, "picontrol_io", None)):
+            if backend is None:
+                continue
+            for channel in backend.alarm_channels():
+                if channel.get("active") and channel.get("level") == "fault":
+                    raise MotionError(f"Sequence safety fault: {channel.get('label', 'I/O fault')}")
+        nucleo_link = getattr(self._motion, "nucleo_link", None)
+        if nucleo_link is not None and getattr(nucleo_link, "communication_ok", None) is False:
+            raise MotionError("Sequence safety fault: NUCLEO communication lost")
+
+    def _wait_with_safety(self, duration_s: float) -> None:
+        """Wait the configured dwell without creating an unchecked safety window."""
+
+        remaining_s = duration_s
+        while remaining_s > 0:
+            self._check_stop()
+            interval_s = min(self.HOLD_POLL_SECONDS, remaining_s)
+            time.sleep(interval_s)
+            remaining_s -= interval_s
 
     def _target_verification(self, slot: Any, actual: dict[str, float]) -> dict[str, object]:
         target = {axis: float(getattr(slot, f"{axis}_mm")) for axis in ("x", "y", "z")}
@@ -203,8 +284,16 @@ class SequenceService:
     def _home_verification(self, actual: dict[str, float]) -> dict[str, object]:
         axes_homed = {axis: bool(self._motion.controller.axes()[axis].is_homed) for axis in ("x", "y", "z")}
         measured = {axis: float(actual[f"{axis}_mm"]) for axis in ("x", "y", "z")}
+        expected = {
+            axis: float(getattr(self._motion.controller.axes()[axis].config, "home_position_mm", 0.0))
+            for axis in ("x", "y", "z")
+        }
         return {
-            "home_reached": all(axes_homed.values()) and all(abs(value) <= self.POSITION_TOLERANCE_MM for value in measured.values()),
+            "home_reached": all(axes_homed.values()) and all(
+                abs(measured[axis] - expected[axis]) <= self.POSITION_TOLERANCE_MM
+                for axis in measured
+            ),
             "home_position_mm": {axis: round(value, 3) for axis, value in measured.items()},
+            "expected_home_position_mm": {axis: round(value, 3) for axis, value in expected.items()},
             "axes_homed": axes_homed,
         }

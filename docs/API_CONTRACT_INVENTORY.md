@@ -42,6 +42,22 @@ Baseline: Phase 1 inventory after commit `fef66c5`.
 | Runtime settings | `SET_SPEED`, `SET_TIMER` |
 | Slot persistence | `SAVE_SLOT`, `SAVE_SLOT_FROM_CURRENT` |
 
+### Slot sequence result contract
+
+`RUN_SLOT_SEQUENCE` is a Controller-owned, serialized command. It rejects an
+unknown slot, disabled effective sequence configuration, unhomed axes,
+non-finite/non-positive speed, and a per-slot Y-lift target beyond configured
+travel before emitting motion. The execution result retains the existing
+`ok`/`error` fields and adds `failed_phase` plus `completed_phases` on failure
+so the HMI and audit log can identify the last bounded stage. A failure never
+starts an automatic recovery move. The operator must resolve the fault, clear
+the safety latch, re-Home as required, and issue a new command.
+
+Sequence dwell values are bounded to 0–60 seconds. During dwell the Controller
+polls E-Stop, software Stop, active IRIV/PiControl fault channels, and explicit
+NUCLEO communication loss at intervals no longer than 100 ms. Home completion
+is compared with each axis `home_position_mm`, not an assumed zero coordinate.
+
 ## Read/query routes
 
 - `/api/status`, `/api/io/status`, `/api/mqtt/status`
