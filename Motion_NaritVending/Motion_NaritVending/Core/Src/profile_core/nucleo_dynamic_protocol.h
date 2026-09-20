@@ -27,6 +27,7 @@ typedef struct {
   uint32_t max_acceleration_millihz_s;
   uint32_t max_deceleration_millihz_s;
   uint32_t max_jerk_millihz_s2;
+  uint32_t terminal_rate_millihz;
   char configuration_revision[NUCLEO_DYNAMIC_IDENTIFIER_MAX + 1U];
   uint8_t kp_enabled;
   uint8_t valid;

@@ -344,6 +344,12 @@ def _validate_axis_values(axis: str, payload: dict[str, object], issues: list[Co
                     raise ValueError
             except (KeyError, TypeError, ValueError):
                 issues.append(ConfigIssue("error", "SCURVE_SPEED_INVALID", f"effective.axes.{axis}.{field}", "must be finite and within 0-commissioned speed"))
+        if payload.get("scurve_enabled") is True:
+            try:
+                if float(payload["scurve_end_speed_mm_s"]) <= 0:
+                    raise ValueError
+            except (KeyError, TypeError, ValueError):
+                issues.append(ConfigIssue("error", "SCURVE_TERMINAL_SPEED_INVALID", f"effective.axes.{axis}.scurve_end_speed_mm_s", "must be greater than zero when S-curve is enabled"))
         try:
             jerk = float(payload["scurve_max_jerk_mm_s3"])
             if not math.isfinite(jerk) or jerk <= 0:
@@ -356,11 +362,11 @@ def _validate_axis_values(axis: str, payload: dict[str, object], issues: list[Co
             if (
                 isinstance(raw_period, bool)
                 or float(raw_period) != period
-                or not 100 <= period <= 10_000
+                or period != 1000
             ):
                 raise ValueError
         except (KeyError, TypeError, ValueError):
-            issues.append(ConfigIssue("error", "SCURVE_PERIOD_INVALID", f"effective.axes.{axis}.scurve_control_period_us", "must be an integer within 100-10000 us"))
+            issues.append(ConfigIssue("error", "SCURVE_PERIOD_INVALID", f"effective.axes.{axis}.scurve_control_period_us", "must be exactly 1000 us for the fixed TIM6 control tick"))
 
 
 def _validate_signal_polarity(inputs: dict[str, object], issues: list[ConfigIssue]) -> None:

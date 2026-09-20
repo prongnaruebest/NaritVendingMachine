@@ -4,7 +4,6 @@
 #include <string.h>
 
 #define DYNAMIC_CONTROL_PERIOD_US 1000U
-#define DYNAMIC_TERMINAL_RATE_MILLIHZ 1000000U
 
 static uint32_t conservative_whole_units(uint32_t milli_units)
 {
@@ -30,7 +29,9 @@ static NucleoDynamicConfig runtime_config(
       wire->max_deceleration_millihz_s);
   result.constraints.max_jerk_hz_s2 = conservative_whole_units(
       wire->max_jerk_millihz_s2);
-  result.terminal_max_rate_millihz = DYNAMIC_TERMINAL_RATE_MILLIHZ;
+  /* Completion may disable STEP only after the configured low terminal rate;
+   * this value is revision-bound instead of hidden in firmware. */
+  result.terminal_max_rate_millihz = wire->terminal_rate_millihz;
   return result;
 }
 

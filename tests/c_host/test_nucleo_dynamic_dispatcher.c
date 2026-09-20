@@ -40,7 +40,7 @@ int main(void)
                                      prepare_direction};
   char response[128];
 #if NUCLEO_DYNAMIC_PROTOCOL_V4_ENABLED
-  char status_response[640];
+  char status_response[960];
   char tiny[8] = {'x', '\0'};
 #endif
   char oversized[321];
@@ -61,12 +61,12 @@ int main(void)
   assert(strstr(status_response, "\"runtime_ready\":false") != NULL);
   assert(NucleoDynamicDispatcher_HandleLine(
              &dispatcher,
-             "DYN_CONFIG X 0 1000 100000 1 2500 30000000 60000000 50000000 300000000 cfg-1",
+             "DYN_CONFIG X 0 1000 100000 1 2500 30000000 60000000 50000000 300000000 200000 cfg-1",
              0ULL, 1U, 0U, response, sizeof(response)) == 1U);
   assert(strstr(response, "configured") != NULL);
   assert(NucleoDynamicDispatcher_HandleLine(
              &dispatcher,
-             "DYN_CONFIG Y 0 1000 100000 1 2500 30000000 60000000 50000000 300000000 cfg-1",
+             "DYN_CONFIG Y 0 1000 100000 1 2500 30000000 60000000 50000000 300000000 200000 cfg-1",
              0ULL, 1U, 0U, response, sizeof(response)) == 1U);
   assert(strstr(response, "configured") != NULL);
   assert(NucleoDynamicDispatcher_HandleLine(
@@ -100,6 +100,9 @@ int main(void)
   assert(strstr(status_response, "\"runtime_ready\":true") != NULL);
   assert(strstr(status_response, "\"active_mask\":3") != NULL);
   assert(strstr(status_response, "\"state\":\"RUNNING\"") != NULL);
+  assert(strstr(status_response, "\"remaining_pulses\":") != NULL);
+  assert(strstr(status_response, "\"acceleration_millihz_s\":") != NULL);
+  assert(strstr(status_response, "\"braking\":") != NULL);
   assert(NucleoDynamicDispatcher_HandleLine(
              &dispatcher, "DYN_STATUS", 1000ULL, 1U, 1U,
              tiny, sizeof(tiny)) == 0U);
@@ -115,7 +118,7 @@ int main(void)
   assert(strstr(response, "\"code\":\"STATE\"") != NULL);
   assert(NucleoDynamicDispatcher_HandleLine(
              &dispatcher,
-             "DYN_CONFIG X 0 1000 100000 1 2500 30000000 60000000 50000000 300000000 cfg-1",
+             "DYN_CONFIG X 0 1000 100000 1 2500 30000000 60000000 50000000 300000000 200000 cfg-1",
              0ULL, 1U, 0U, response, sizeof(response)) == 1U);
   assert(strstr(response, "\"code\":\"STATE\"") != NULL);
 #endif

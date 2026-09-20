@@ -11,7 +11,7 @@
 #define NUCLEO_CAPABILITIES_JSON \
   "\"capabilities\":[\"continuous_profile\",\"seven_segment_s_curve\"," \
   "\"buffered_segments\",\"profile_sequence\",\"profile_telemetry\"," \
-  "\"dynamic_motion\"],"
+  "\"dynamic_motion\",\"terminal_rate_config\"],"
 #else
 #define NUCLEO_PROTOCOL_VERSION 3U
 #define NUCLEO_CAPABILITIES_JSON ""
@@ -203,7 +203,7 @@ static void process_line(char *line)
 #if NUCLEO_G491_DYNAMIC_MOTION_ENABLED
   } else if ((strncmp(line, "DYN_", 4U) == 0) ||
              (strcmp(line, "CONTROLLED_STOP") == 0)) {
-    char response[512];
+    char response[768];
     if (NucleoMotion_HandleDynamicLine(line, response, sizeof(response)) != 0U) {
       transmit_text(response);
       transmit_text("\r\n");

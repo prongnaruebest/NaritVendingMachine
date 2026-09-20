@@ -108,7 +108,7 @@ class StartupSmokeTests(unittest.TestCase):
             scurve_enabled=True,
             scurve_profile_type="seven_segment_s_curve",
             scurve_start_speed_mm_s=0.0,
-            scurve_end_speed_mm_s=0.0,
+            scurve_end_speed_mm_s=2.0,
             scurve_max_jerk_mm_s3=100.0,
             scurve_control_period_us=1000,
         )

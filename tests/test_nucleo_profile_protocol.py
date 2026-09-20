@@ -26,7 +26,8 @@ def test_dynamic_protocol_serializes_integer_units_and_revision() -> None:
         kp_approach_milliper_s=2_500, max_velocity_millihz=2_064_720,
         max_acceleration_millihz_s=6_882_400,
         max_deceleration_millihz_s=6_882_400,
-        max_jerk_millihz_s2=68_824_000, configuration_revision="cfg-42",
+        max_jerk_millihz_s2=68_824_000, terminal_rate_millihz=137_648,
+        configuration_revision="cfg-42",
     )
     target = DynamicTargetCommand(
         command_id="move-123", axis="Y", target_position_pulses=110_000,
@@ -37,7 +38,7 @@ def test_dynamic_protocol_serializes_integer_units_and_revision() -> None:
 
     assert config.wire_line() == (
         "DYN_CONFIG X 0 117000 68824 1 2500 2064720 6882400 "
-        "6882400 68824000 cfg-42"
+        "6882400 68824000 137648 cfg-42"
     )
     assert target.wire_line() == "DYN_TARGET move-123 Y 110000 cfg-42"
     assert position.wire_line() == "DYN_POSITION X 0 cfg-42"
@@ -53,6 +54,8 @@ def test_dynamic_protocol_serializes_integer_units_and_revision() -> None:
         ({"kp_approach_milliper_s": 0}, "greater than zero"),
         ({"configuration_revision": "bad revision"}, "safe ASCII"),
         ({"max_velocity_millihz": 50_000_001}, "50 kHz"),
+        ({"terminal_rate_millihz": 0}, "greater than zero"),
+        ({"terminal_rate_millihz": 2_064_721}, "cannot exceed"),
     ],
 )
 def test_dynamic_config_rejects_unsafe_or_unusable_values(
@@ -64,7 +67,8 @@ def test_dynamic_config_rejects_unsafe_or_unusable_values(
         "kp_approach_milliper_s": 2_500, "max_velocity_millihz": 2_064_720,
         "max_acceleration_millihz_s": 6_882_400,
         "max_deceleration_millihz_s": 6_882_400,
-        "max_jerk_millihz_s2": 68_824_000, "configuration_revision": "cfg-42",
+        "max_jerk_millihz_s2": 68_824_000, "terminal_rate_millihz": 137_648,
+        "configuration_revision": "cfg-42",
     }
     values.update(changes)
     with pytest.raises(ValueError, match=message):

@@ -23,6 +23,7 @@ PROFILE_CAPABILITIES = frozenset(
         "profile_sequence",
         "profile_telemetry",
         "dynamic_motion",
+        "terminal_rate_config",
     }
 )
 SENSOR_TERMINATED_PROFILE_CAPABILITIES = frozenset(
@@ -56,6 +57,7 @@ class DynamicAxisConfigCommand:
     max_acceleration_millihz_s: int
     max_deceleration_millihz_s: int
     max_jerk_millihz_s2: int
+    terminal_rate_millihz: int
     configuration_revision: str
 
     def __post_init__(self) -> None:
@@ -67,7 +69,7 @@ class DynamicAxisConfigCommand:
             "travel_min_pulses", "travel_max_pulses", "pulses_per_mm_milli",
             "kp_approach_milliper_s", "max_velocity_millihz",
             "max_acceleration_millihz_s", "max_deceleration_millihz_s",
-            "max_jerk_millihz_s2",
+            "max_jerk_millihz_s2", "terminal_rate_millihz",
         ):
             _bounded_uint(getattr(self, name), name)
         if self.travel_max_pulses <= self.travel_min_pulses:
@@ -79,11 +81,14 @@ class DynamicAxisConfigCommand:
         for name in (
             "max_velocity_millihz", "max_acceleration_millihz_s",
             "max_deceleration_millihz_s", "max_jerk_millihz_s2",
+            "terminal_rate_millihz",
         ):
             if getattr(self, name) == 0:
                 raise ValueError(f"{name} must be greater than zero")
         if self.max_velocity_millihz > NUCLEO_DYNAMIC_MAX_RATE_MILLIHZ:
             raise ValueError("max_velocity_millihz exceeds the 50 kHz firmware ceiling")
+        if self.terminal_rate_millihz > self.max_velocity_millihz:
+            raise ValueError("terminal_rate_millihz cannot exceed max_velocity_millihz")
 
     def wire_line(self) -> str:
         return " ".join(
@@ -93,6 +98,7 @@ class DynamicAxisConfigCommand:
                 "1" if self.kp_enabled else "0", str(self.kp_approach_milliper_s),
                 str(self.max_velocity_millihz), str(self.max_acceleration_millihz_s),
                 str(self.max_deceleration_millihz_s), str(self.max_jerk_millihz_s2),
+                str(self.terminal_rate_millihz),
                 self.configuration_revision,
             )
         )

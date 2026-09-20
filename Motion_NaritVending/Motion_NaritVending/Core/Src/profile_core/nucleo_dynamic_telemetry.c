@@ -29,6 +29,15 @@ static const char *fault_name(NucleoDynamicFault fault)
   }
 }
 
+static uint32_t remaining_pulses(const NucleoDynamicRuntime *runtime)
+{
+  /* Saturate diagnostic arithmetic so a corrupted/late counter cannot wrap
+     into a misleading multi-billion-pulse remaining distance. */
+  return runtime->planner.target_pulses >= runtime->planner.emitted_pulses
+             ? runtime->planner.target_pulses - runtime->planner.emitted_pulses
+             : 0U;
+}
+
 uint8_t NucleoDynamicTelemetry_Write(const NucleoDynamicFacade *facade,
                                      char *response, size_t response_size)
 {
@@ -46,23 +55,33 @@ uint8_t NucleoDynamicTelemetry_Write(const NucleoDynamicFacade *facade,
       "\"active_mask\":%u,\"axes\":{"
       "\"x\":{\"position_valid\":%s,\"position_pulses\":%lu,"
       "\"target_pulses\":%lu,\"emitted_pulses\":%lu,"
-      "\"rate_millihz\":%lu,\"state\":\"%s\",\"fault\":\"%s\"},"
+      "\"remaining_pulses\":%lu,\"rate_millihz\":%lu,"
+      "\"acceleration_millihz_s\":%ld,\"braking\":%s,"
+      "\"state\":\"%s\",\"fault\":\"%s\"},"
       "\"y\":{\"position_valid\":%s,\"position_pulses\":%lu,"
       "\"target_pulses\":%lu,\"emitted_pulses\":%lu,"
-      "\"rate_millihz\":%lu,\"state\":\"%s\",\"fault\":\"%s\"}}}",
+      "\"remaining_pulses\":%lu,\"rate_millihz\":%lu,"
+      "\"acceleration_millihz_s\":%ld,\"braking\":%s,"
+      "\"state\":\"%s\",\"fault\":\"%s\"}}}",
       facade->runtime_ready != 0U ? "true" : "false",
       (unsigned int)facade->coordinator.active_mask,
       facade->protocol.position_valid[0] != 0U ? "true" : "false",
       (unsigned long)facade->protocol.estimated_position_pulses[0],
       (unsigned long)facade->staged[0].target_position_pulses,
       (unsigned long)x->planner.emitted_pulses,
+      (unsigned long)remaining_pulses(x),
       (unsigned long)x->planner.output_rate_millihz,
+      (long)x->planner.constraint.acceleration_millihz_s,
+      x->planner.constraint.braking != 0U ? "true" : "false",
       state_name(x->planner.state), fault_name(x->fault),
       facade->protocol.position_valid[1] != 0U ? "true" : "false",
       (unsigned long)facade->protocol.estimated_position_pulses[1],
       (unsigned long)facade->staged[1].target_position_pulses,
       (unsigned long)y->planner.emitted_pulses,
+      (unsigned long)remaining_pulses(y),
       (unsigned long)y->planner.output_rate_millihz,
+      (long)y->planner.constraint.acceleration_millihz_s,
+      y->planner.constraint.braking != 0U ? "true" : "false",
       state_name(y->planner.state), fault_name(y->fault));
   if ((written < 0) || ((size_t)written >= response_size)) {
     response[0] = '\0';

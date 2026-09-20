@@ -5,7 +5,7 @@
 #include <string.h>
 
 #define DYNAMIC_LINE_MAX 320U
-#define DYNAMIC_CONFIG_TOKEN_COUNT 12U
+#define DYNAMIC_CONFIG_TOKEN_COUNT 13U
 #define DYNAMIC_TARGET_TOKEN_COUNT 5U
 #define DYNAMIC_POSITION_TOKEN_COUNT 4U
 #define DYNAMIC_START_TOKEN_COUNT 3U
@@ -82,7 +82,7 @@ NucleoDynamicProtocolResult NucleoDynamicProtocol_ApplyConfig(
   char *tokens[DYNAMIC_CONFIG_TOKEN_COUNT];
   uint8_t count = 0U;
   uint8_t axis;
-  uint32_t values[9];
+  uint32_t values[10];
   uint8_t index;
   NucleoDynamicAxisProtocolConfig next;
   if ((state == NULL) || (line == NULL)) return NUCLEO_DYNAMIC_PROTOCOL_ERR_FORMAT;
@@ -91,7 +91,7 @@ NucleoDynamicProtocolResult NucleoDynamicProtocol_ApplyConfig(
       (count != DYNAMIC_CONFIG_TOKEN_COUNT) ||
       (strcmp(tokens[0], "DYN_CONFIG") != 0)) return NUCLEO_DYNAMIC_PROTOCOL_ERR_FORMAT;
   if (parse_axis(tokens[1], &axis) == 0U) return NUCLEO_DYNAMIC_PROTOCOL_ERR_AXIS;
-  for (index = 0U; index < 9U; ++index) {
+  for (index = 0U; index < 10U; ++index) {
     if (parse_u32(tokens[index + 2U], &values[index]) == 0U) {
       return NUCLEO_DYNAMIC_PROTOCOL_ERR_RANGE;
     }
@@ -99,10 +99,11 @@ NucleoDynamicProtocolResult NucleoDynamicProtocol_ApplyConfig(
   if ((values[1] <= values[0]) || (values[2] == 0U) || (values[3] > 1U) ||
       ((values[3] != 0U) && (values[4] == 0U)) || (values[5] == 0U) ||
       (values[5] > 50000000U) ||
-      (values[6] == 0U) || (values[7] == 0U) || (values[8] == 0U)) {
+      (values[6] == 0U) || (values[7] == 0U) || (values[8] == 0U) ||
+      (values[9] == 0U) || (values[9] > values[5])) {
     return NUCLEO_DYNAMIC_PROTOCOL_ERR_RANGE;
   }
-  if (valid_identifier(tokens[11]) == 0U) return NUCLEO_DYNAMIC_PROTOCOL_ERR_REVISION;
+  if (valid_identifier(tokens[12]) == 0U) return NUCLEO_DYNAMIC_PROTOCOL_ERR_REVISION;
   memset(&next, 0, sizeof(next));
   next.travel_min_pulses = values[0];
   next.travel_max_pulses = values[1];
@@ -113,7 +114,8 @@ NucleoDynamicProtocolResult NucleoDynamicProtocol_ApplyConfig(
   next.max_acceleration_millihz_s = values[6];
   next.max_deceleration_millihz_s = values[7];
   next.max_jerk_millihz_s2 = values[8];
-  strcpy(next.configuration_revision, tokens[11]);
+  next.terminal_rate_millihz = values[9];
+  strcpy(next.configuration_revision, tokens[12]);
   next.valid = 1U;
   state->config[axis] = next;
   /* Scale/travel changes make the old open-loop pulse coordinate unsafe. */

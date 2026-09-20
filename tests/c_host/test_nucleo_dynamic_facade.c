@@ -37,9 +37,9 @@ static uint8_t prepare_direction(void *context, uint8_t axis,
 int main(void)
 {
   const char *config_x =
-      "DYN_CONFIG X 0 1000 100000 1 2500 30000000 60000000 50000000 300000000 cfg-1";
+      "DYN_CONFIG X 0 1000 100000 1 2500 30000000 60000000 50000000 300000000 200000 cfg-1";
   const char *config_y =
-      "DYN_CONFIG Y 0 1000 100000 1 2500 30000000 60000000 50000000 300000000 cfg-1";
+      "DYN_CONFIG Y 0 1000 100000 1 2500 30000000 60000000 50000000 300000000 200000 cfg-1";
   NucleoDynamicFacade facade;
   FacadeMock mock = {{0U, 0U}, 0U, 0U, 0xffU};
   NucleoDynamicRuntimeHooks hooks = {set_rate, disable_all, &mock,
@@ -52,6 +52,7 @@ int main(void)
   assert(NucleoDynamicFacade_ApplyConfig(&facade, config_y, 0U) ==
          NUCLEO_DYNAMIC_PROTOCOL_OK);
   assert(facade.runtime_ready == 1U);
+  assert(facade.coordinator.axes[0].config.terminal_max_rate_millihz == 200000U);
   assert(NucleoDynamicFacade_ApplyConfig(&facade, config_x, 1U) ==
          NUCLEO_DYNAMIC_PROTOCOL_ERR_STATE);
 

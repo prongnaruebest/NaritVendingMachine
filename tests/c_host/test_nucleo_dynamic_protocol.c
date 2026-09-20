@@ -9,7 +9,7 @@ int main(void)
   NucleoDynamicProtocolState state;
   NucleoDynamicTarget target;
   const char *config_x =
-      "DYN_CONFIG X 0 117000 68824 1 2500 2064720 6882400 6882400 68824000 cfg-42";
+      "DYN_CONFIG X 0 117000 68824 1 2500 2064720 6882400 6882400 68824000 137648 cfg-42";
 
   NucleoDynamicProtocol_Init(&state);
   assert(NucleoDynamicProtocol_ApplyConfig(&state, config_x, 1U) ==
@@ -61,19 +61,23 @@ int main(void)
 
   assert(NucleoDynamicProtocol_ApplyConfig(
              &state,
-             "DYN_CONFIG Z 0 100 1000 0 0 1000 1000 1000 1000 cfg-42",
+             "DYN_CONFIG Z 0 100 1000 0 0 1000 1000 1000 1000 100 cfg-42",
              0U) == NUCLEO_DYNAMIC_PROTOCOL_ERR_AXIS);
   assert(NucleoDynamicProtocol_ApplyConfig(
              &state,
-             "DYN_CONFIG X 0 0 1000 0 0 1000 1000 1000 1000 cfg-42",
+             "DYN_CONFIG X 0 0 1000 0 0 1000 1000 1000 1000 100 cfg-42",
              0U) == NUCLEO_DYNAMIC_PROTOCOL_ERR_RANGE);
   assert(NucleoDynamicProtocol_ApplyConfig(
              &state,
-             "DYN_CONFIG X 0 100 1000 0 0 1000 1000 1000 1000 bad revision",
+             "DYN_CONFIG X 0 100 1000 0 0 1000 1000 1000 1000 100 bad revision",
              0U) == NUCLEO_DYNAMIC_PROTOCOL_ERR_FORMAT);
   assert(NucleoDynamicProtocol_ApplyConfig(
              &state,
-             "DYN_CONFIG X 0 100 1000 1 1000 50000001 1000 1000 1000 cfg-43",
+             "DYN_CONFIG X 0 100 1000 1 1000 50000001 1000 1000 1000 100 cfg-43",
+             0U) == NUCLEO_DYNAMIC_PROTOCOL_ERR_RANGE);
+  assert(NucleoDynamicProtocol_ApplyConfig(
+             &state,
+             "DYN_CONFIG X 0 100 1000 1 1000 1000 1000 1000 1000 1001 cfg-43",
              0U) == NUCLEO_DYNAMIC_PROTOCOL_ERR_RANGE);
   assert(NucleoDynamicProtocol_ParseTarget(
              &state, "DYN_TARGET", 0U, &target) ==

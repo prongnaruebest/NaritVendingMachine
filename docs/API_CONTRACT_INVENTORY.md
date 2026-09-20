@@ -72,7 +72,8 @@ These are corrected in Phase 1 with distinct Controller-owned handlers and regre
 
 The current G491RE source advertises protocol v4 and the capabilities
 `continuous_profile`, `seven_segment_s_curve`, `buffered_segments`,
-`profile_sequence`, `profile_telemetry`, and `dynamic_motion`. Controller code
+`profile_sequence`, `profile_telemetry`, `dynamic_motion`, and
+`terminal_rate_config`. Controller code
 must require the complete set before using the dynamic X/Y path; protocol number
 alone is insufficient. `DYN_CONFIG` is applied while disarmed, configuration
 errors abort the move before targets are staged, and each coordinated axis uses
@@ -104,7 +105,7 @@ Controller. Compiled presence alone is never a capability signal.
 The candidate contract now reserves these integer-only protocol-v4 frames:
 
 ```text
-DYN_CONFIG <axis> <travel_min_pulses> <travel_max_pulses> <pulses_per_mm_milli> <kp_enabled> <kp_approach_milliper_s> <max_velocity_millihz> <max_acceleration_millihz_s> <max_deceleration_millihz_s> <max_jerk_millihz_s2> <configuration_revision>
+DYN_CONFIG <axis> <travel_min_pulses> <travel_max_pulses> <pulses_per_mm_milli> <kp_enabled> <kp_approach_milliper_s> <max_velocity_millihz> <max_acceleration_millihz_s> <max_deceleration_millihz_s> <max_jerk_millihz_s2> <terminal_rate_millihz> <configuration_revision>
 DYN_POSITION <axis> <estimated_position_pulses> <configuration_revision>
 DYN_TARGET <command_id> <axis> <target_position_pulses> <configuration_revision>
 DYN_START <command_id> <axis_mask>
@@ -118,6 +119,13 @@ axis is busy, or when it is outside the configured travel envelope. Identical
 command-ID retries are idempotent; reuse with different content is a conflict.
 These frames are compiled candidate code only: protocol v3 does not advertise
 or dispatch them and the Controller must not send them yet.
+
+`terminal_rate_millihz` is the maximum output rate permitted when emitting the
+final target pulse. It must be nonzero and no greater than
+`max_velocity_millihz`; invalid values fail closed. The Controller derives it
+from the effective per-axis terminal speed and `pulses_per_mm`. Dynamic routing
+requires `terminal_rate_config`, preventing a new Controller from silently
+using firmware that still contains the former fixed 1,000 Hz terminal gate.
 
 `DYN_POSITION` is disarmed-only and may be sent only after the Controller has
 completed a successful Home/reference operation under the same acknowledged
@@ -146,7 +154,8 @@ compiled but remains unregistered in the production v3 serial loop.
 When the v4 gate is enabled, `DYN_STATUS` returns bounded JSON containing
 `runtime_ready`, `active_mask`, and per-axis `position_valid`,
 `position_pulses`, `target_pulses`, `emitted_pulses`, `rate_millihz`, `state`,
-and `fault`. `position_pulses` is an open-loop coordinate derived only from
+`fault`, `remaining_pulses`, `acceleration_millihz_s`, and `braking`.
+`position_pulses` is an open-loop coordinate derived only from
 confirmed falling STEP edges; it is not encoder-measured mechanical position.
 The response is rejected rather than truncated when the caller's output buffer
 is too small. With the feature gate off, `DYN_STATUS` returns `STATE`.

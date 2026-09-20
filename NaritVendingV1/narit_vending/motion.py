@@ -179,14 +179,16 @@ class AxisConfig:
                 value = float(getattr(self, field_name))
                 if not math.isfinite(value) or not 0 <= value <= self.commissioned_max_speed_mm_s:
                     raise MotionError(f"{self.name}: {field_name} exceeds commissioned speed")
+            if self.scurve_enabled and float(self.scurve_end_speed_mm_s) <= 0:
+                raise MotionError(f"{self.name}: scurve_end_speed_mm_s must be greater than zero when S-curve is enabled")
             assert self.scurve_max_jerk_mm_s3 is not None
             assert self.scurve_control_period_us is not None
             if not math.isfinite(self.scurve_max_jerk_mm_s3) or self.scurve_max_jerk_mm_s3 <= 0:
                 raise MotionError(f"{self.name}: scurve_max_jerk_mm_s3 must be greater than zero")
             if not isinstance(self.scurve_control_period_us, int) or isinstance(self.scurve_control_period_us, bool):
                 raise MotionError(f"{self.name}: scurve_control_period_us must be an integer")
-            if not 100 <= self.scurve_control_period_us <= 10_000:
-                raise MotionError(f"{self.name}: scurve_control_period_us must be within 100-10000")
+            if self.scurve_control_period_us != 1000:
+                raise MotionError(f"{self.name}: scurve_control_period_us is fixed at 1000 us by TIM6")
 
     @property
     def step_pin(self) -> int:
@@ -1092,6 +1094,11 @@ class MotionController:
         velocity computed by the Controller planner. Configuration failure is
         safety-significant and must not be downgraded to a log message.
         """
+        # Dynamic G491 configuration is an atomic X/Y contract. Do not let a
+        # legacy-only configuration enter it merely because a backend exposes
+        # the protocol methods.
+        if not all(bool(getattr(getattr(self.config, name), "scurve_enabled", False)) for name in ("x", "y")):
+            return
         backend = getattr(self.x, "motion_backend", None)
         if backend is not None and getattr(backend, "supports_buffered_scurve", False) and hasattr(backend, "configure_dynamic_axis"):
             try:
@@ -1123,6 +1130,7 @@ class MotionController:
                         max_acceleration_millihz_s=int(round(axis_cfg.acceleration * axis_cfg.steps_per_mm * 1000)),
                         max_deceleration_millihz_s=int(round(axis_cfg.deceleration * axis_cfg.steps_per_mm * 1000)),
                         max_jerk_millihz_s2=int(round((getattr(axis_cfg, "scurve_max_jerk_mm_s3", None) or 1500.0) * axis_cfg.steps_per_mm * 1000)),
+                        terminal_rate_millihz=int(round((axis_cfg.scurve_end_speed_mm_s or 0.0) * axis_cfg.steps_per_mm * 1000)),
                         configuration_revision=self._dynamic_revision,
                     )
                     backend.configure_dynamic_axis(cmd)

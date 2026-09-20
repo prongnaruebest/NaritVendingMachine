@@ -68,6 +68,14 @@ path. The Controller accepts a v3 or v4 handshake when its compatibility
 configuration is `protocol_version: 3`, but enables dynamic X/Y only when the
 complete protocol-v4 capability set, including `dynamic_motion`, is advertised.
 
+The current dynamic contract also requires `terminal_rate_config`.
+`DYN_CONFIG` carries the terminal pulse rate derived from the effective X/Y
+terminal speed, so the final-edge gate no longer uses a hidden fixed 1,000 Hz
+constant. Firmware reports remaining pulses, commanded acceleration, and
+braking state in `DYN_STATUS` for commissioning diagnosis. The planner cadence
+is fixed by TIM6 at 1,000 us; configuration values other than 1,000 us are
+rejected rather than displayed as effective.
+
 The dynamic and legacy X/Y executors share TIM1; firmware therefore rejects
 `DYN_START` while a legacy X/Y command is active. Controller configuration
 failure is fail-closed before target staging, and coordinated X/Y configuration

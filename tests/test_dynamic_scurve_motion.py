@@ -68,6 +68,7 @@ class TestDynamicScurveMotion(unittest.TestCase):
                 acceleration=300.0,
                 deceleration=300.0,
                 scurve_max_jerk_mm_s3=1500.0,
+                scurve_end_speed_mm_s=2.0,
                 forward_direction=0,
                 home_direction=1,
                 settle_delay=0.01,
@@ -113,6 +114,7 @@ class TestDynamicScurveMotion(unittest.TestCase):
         self.assertEqual(x_cfg.axis, "x")
         self.assertEqual(x_cfg.max_acceleration_millihz_s, int(round(300.0 * self.mock_x.config.steps_per_mm * 1000)))
         self.assertEqual(x_cfg.max_jerk_millihz_s2, int(round(1500.0 * self.mock_x.config.steps_per_mm * 1000)))
+        self.assertEqual(x_cfg.terminal_rate_millihz, int(round(2.0 * self.mock_x.config.steps_per_mm * 1000)))
 
     def test_sync_dynamic_config_uses_each_axis_planned_speed(self) -> None:
         self.mc._sync_dynamic_config({"x": 50.0, "y": 100.0})

@@ -149,9 +149,14 @@ PEND ไม่สามารถ bypass E-Stop/ALM หาก PEND ไม่ม�
 
 - `scurve_enabled`: เปิดใช้โปรไฟล์ S-curve สำหรับ X/Y; configuration ปัจจุบันเป็น `true` แต่ Controller จะใช้จริงเฉพาะเมื่อ handshake ยืนยัน protocol v4 และ capability ครบ
 - `scurve_profile_type`: ต้องเป็น `seven_segment_s_curve`
-- `scurve_start_speed_mm_s` และ `scurve_end_speed_mm_s`: ความเร็วขอบเขตของโปรไฟล์
+- `scurve_start_speed_mm_s`: ค่าที่เก็บไว้เพื่อความเข้ากันได้ ปัจจุบันยังไม่ใช้เป็นความเร็วเริ่มต้นของ timer
+- `scurve_end_speed_mm_s`: ความเร็วปลายทางสูงสุดขณะปล่อย target pulse สุดท้าย ต้องมากกว่า 0 เมื่อเปิด S-curve และถูกส่งเป็น `terminal_rate_millihz`
 - `scurve_max_jerk_mm_s3`: เพดาน jerk ต้องมากกว่า 0
-- `scurve_control_period_us`: คาบควบคุม 100–10,000 ไมโครวินาที
+- `scurve_control_period_us`: ต้องเป็น 1,000 ไมโครวินาทีเท่านั้น เพราะ TIM6 เป็นเจ้าของ control tick 1 kHz
+
+การเปลี่ยนความเร็วปลายทาง, acceleration, deceleration หรือ jerk จะมีผลหลัง
+Validate/Save/Apply configuration สำเร็จและ NUCLEO ตอบรับ revision เดียวกัน
+เท่านั้น ค่าในหน้าเว็บไม่ใช่ค่าที่มีผลจริงจนกว่าจะผ่านขั้นตอนดังกล่าว
 
 หน้า Machine Setup แสดงค่าชุดนี้เฉพาะการ์ด X/Y และบันทึกลง machine/hardware configuration แบบ atomic พร้อม backup ได้แล้ว ส่วน preview เป็นการคำนวณเพื่อทบทวนค่าบนหน้าเว็บเท่านั้นและไม่สั่ง motion สวิตช์ Enable จะถูกปิดไว้จนกว่า NUCLEO handshake จะรายงาน buffered S-curve capability จริง
 
