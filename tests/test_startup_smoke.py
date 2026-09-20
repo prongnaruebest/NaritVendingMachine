@@ -36,6 +36,7 @@ class StartupSmokeTests(unittest.TestCase):
 
         self.assertTrue(health["service_ready"])
         self.assertFalse(health["machine_ready"])
+        self.assertFalse(service.status_payload()["safety"]["motion_enabled"])
         self.assertTrue(effective["valid"])
         self.assertEqual(effective["effective_axes"]["x"]["pulse_pin"], 16)
         self.assertEqual(effective["effective_axes"]["y"]["head_limit_pin"], 22)

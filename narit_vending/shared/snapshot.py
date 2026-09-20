@@ -74,7 +74,7 @@ class MachineSnapshot:
     stop_requested: bool
     controlled_stop_requested: bool
     speed_override: float | None
-    motion_enabled: bool = True
+    motion_enabled: bool = False
     io_registry: list[dict[str, Any]] = field(default_factory=list)
     slots: dict[str, dict[str, Any]] = field(default_factory=dict)
     io_status: dict[str, Any] = field(default_factory=dict)
@@ -116,7 +116,8 @@ class MachineSnapshot:
             stop_requested=bool(data.get("stop_requested", False)),
             controlled_stop_requested=bool(data.get("controlled_stop_requested", False)),
             speed_override=data.get("speed_override"),
-            motion_enabled=bool(data.get("motion_enabled", True)),
+            # Older/malformed snapshots that omit authority must fail closed.
+            motion_enabled=bool(data.get("motion_enabled", False)),
             io_registry=[dict(channel) for channel in data.get("io_registry", [])],
             slots={str(code): dict(slot) for code, slot in dict(data.get("slots", {})).items()},
             io_status=dict(data.get("io_status", {})),

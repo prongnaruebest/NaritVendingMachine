@@ -41,3 +41,6 @@ Allow Unhomed และ Ignore Position Limits ใช้ได้เฉพาะ
 Controller แบ่ง motion ยาวเป็น USB segments และตรวจ safety ทุกช่วง หากหยุดกลางทางให้ตรวจ limit, E-Stop, Stop, driver alarm และ USB heartbeat ห้ามคาดเดาตำแหน่งหรือสั่งต่อจนกว่าจะยืนยัน position/reference หากมี safety interruption ระบบอาจล้าง Homed และต้อง Home ใหม่
 
 Software stop ของ Z ไม่ป้องกันกรณี Pi, USB, STM32 หรือ driver ล้มเหลว ต้องต่อ Enable/power ของ Z ผ่าน safety-rated relay/contactor
+# Motion authority after process restart
+
+Controller เริ่มต้นด้วย `motion_enabled = false` ทุกครั้งหลัง boot หรือ process restart โดยไม่สนใจว่าสถานะก่อน restart เป็นอย่างไร ผู้ควบคุมต้องตรวจสถานะการเชื่อมต่อและ safety inputs แล้วกด Enable Motion ใหม่อย่างชัดเจน การเชื่อมต่อ NUCLEO สำเร็จเพียงอย่างเดียวไม่ถือเป็นสิทธิ์ให้เครื่องเคลื่อนที่

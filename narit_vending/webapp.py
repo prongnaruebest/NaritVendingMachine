@@ -110,7 +110,10 @@ class MotionService:
         self.configuration_restart_required = False
         self.motor_test_armed = False
         self.motor_test_armed_until: float | None = None
-        self.motion_enabled = True
+        # A process restart must never restore motion authority implicitly.  The
+        # operator must re-enable motion after the Controller has re-established
+        # every safety/transport input and the UI has shown the effective state.
+        self.motion_enabled = False
         self._profile_runtime_ready: bool | None = None
         self._safety_trip_latched = False
         self._safety_monitor_stop = threading.Event()

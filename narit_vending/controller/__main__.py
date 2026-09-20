@@ -108,7 +108,9 @@ def _build_snapshot(service: Any) -> MachineSnapshot:
         stop_requested=bool(safety.get("stop_requested", False)),
         controlled_stop_requested=bool(safety.get("controlled_stop_requested", False)),
         speed_override=getattr(service.controller, "speed_override", None),
-        motion_enabled=bool(safety.get("motion_enabled", True)),
+        # Missing authority data is treated as disabled; transport success is
+        # not permission to move the machine.
+        motion_enabled=bool(safety.get("motion_enabled", False)),
         slots={str(code): dict(slot) for code, slot in dict(status.get("slots", {})).items()},
         io_status=io_status,
         picontrol_io_status=picontrol_io_status,
