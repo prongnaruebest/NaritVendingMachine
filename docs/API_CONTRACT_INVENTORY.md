@@ -68,6 +68,25 @@ These are corrected in Phase 1 with distinct Controller-owned handlers and regre
 
 ## NUCLEO motion-protocol boundary
 
+### Current audited contract — 2026-09-20
+
+The current G491RE source advertises protocol v4 and the capabilities
+`continuous_profile`, `seven_segment_s_curve`, `buffered_segments`,
+`profile_sequence`, `profile_telemetry`, and `dynamic_motion`. Controller code
+must require the complete set before using the dynamic X/Y path; protocol number
+alone is insufficient. `DYN_CONFIG` is applied while disarmed, configuration
+errors abort the move before targets are staged, and each coordinated axis uses
+its own planned velocity limit. TIM6 supplies the deterministic 1 kHz planner
+clock; TIM1 falling-edge callbacks remain the only authority for emitted X/Y
+pulse counts.
+
+Firmware still supports legacy MOVE for compatibility and Z. It rejects a
+dynamic start while legacy X/Y owns TIM1. STOP, DISARM, watchdog and safety loss
+remain global priority actions. This contract describes repository source and
+tests; a USB handshake is still required to prove which firmware is flashed.
+The candidate/protocol-v3 narrative below is retained as historical design
+context and is superseded where it conflicts with this current-status section.
+
 The deployed Controller contract currently targets G491RE USB protocol v3:
 `PING`, `STATUS`, `ARM SAFE`, `HEARTBEAT`, `MOVE`, `STOP`, and `DISARM`.
 Although the G491RE build now compiles the hardware-neutral profile core and an

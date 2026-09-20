@@ -20,7 +20,7 @@ narit-vending-controller-iriv.service
         |                    |             |
         |                    |             +-> SQLite demo history
         |                    +-> MachineSnapshot / StateMachine
-        +-> NUCLEO USB v3, IRIV Modbus TCP, PiControl local I/O
+        +-> NUCLEO-G491RE USB v4, IRIV Modbus TCP, PiControl local I/O
 ```
 
 The deployed production path already separates the web process from the Controller. The web process uses `ControllerClient`; the Controller owns the instantiated hardware adapters and motion objects.
@@ -29,7 +29,7 @@ The deployed production path already separates the web process from the Controll
 
 | Resource | Current owner | Transport |
 |---|---|---|
-| STEP/DIR X/Y/Z | Controller through `NucleoLink` | USB serial protocol v3 |
+| STEP/DIR X/Y/Z | Controller through `NucleoLink` | USB serial protocol v4; dynamic X/Y, legacy Z |
 | Travel and Home sensors | Controller through `IRIVIOBackend` | Modbus TCP |
 | X/Y ALM and PEND | Controller through `PiControlIOBackend` | Local isolated DI |
 | X/Y drive power KM1 | Controller through `PiControlIOBackend` | Local DO0 |
@@ -56,6 +56,31 @@ Machine authority is held by Controller memory and hardware feedback. Browser st
 `narit_vending/webapp.py:create_app()` exposes a legacy monolithic Flask route set in addition to the deployed `narit_vending.web` route set. Tests still exercise both paths. It must remain behind characterization tests while functionality is extracted; deleting it before consumers are migrated would create silent API regressions.
 
 ## G491RE motion-firmware migration
+
+### Audited implementation status — 2026-09-20
+
+The source currently builds the G491RE firmware with
+`NUCLEO_G491_DYNAMIC_MOTION_ENABLED=1`, advertises protocol v4 and routes
+`DYN_CONFIG`, `DYN_POSITION`, `DYN_TARGET`, `DYN_START`, `DYN_STATUS`, STOP and
+DISARM. X/Y dynamic planning runs from the TIM6 1 kHz interrupt and emits STEP
+edges through independent TIM1 compare channels. Z retains the established TIM2
+path. The Controller accepts a v3 or v4 handshake when its compatibility
+configuration is `protocol_version: 3`, but enables dynamic X/Y only when the
+complete protocol-v4 capability set, including `dynamic_motion`, is advertised.
+
+The dynamic and legacy X/Y executors share TIM1; firmware therefore rejects
+`DYN_START` while a legacy X/Y command is active. Controller configuration
+failure is fail-closed before target staging, and coordinated X/Y configuration
+uses the per-axis planned velocities rather than one scalar maximum.
+
+This is verified source behavior, host-test behavior and a successful CubeIDE
+Release build—not proof of the firmware image currently flashed on the machine,
+mechanical accuracy, maximum safe speed or closed-loop position. No firmware was
+flashed and no motion was issued during this audit. The historical migration
+narrative below records how the candidate was developed; statements that call
+the path disabled, unreachable or protocol-v3-only are superseded by this
+audited status and remain only for chronology until the document is fully
+condensed.
 
 The active CubeIDE target is `Motion_NaritVending/Motion_NaritVending` for the
 NUCLEO-G491RE. Its current runtime contract remains USB protocol v3 with

@@ -16,6 +16,8 @@
 - แกน Y: `1,756.7 mm − 56.7 mm = 1,700.0 mm` (พิกัด Slot Y สูงสุดอยู่ที่ 1,620.0 mm มีระยะปลอดภัย 80.0 mm)
 - S-curve Kinematics (Commissioned): Max Speed = 210.0 mm/s (รองรับ 500 RPM / 206.06 mm/s สำหรับ X และ Y; 60.0 mm/s สำหรับ Z), Accel/Decel = 120.0 mm/s², Max Jerk = 250.0 mm/s³, Start Speed = 5.0 mm/s, End Speed = 2.0 mm/s, Control Period = 1000 µs
 
+หมายเหตุการตรวจสอบ: ค่า X/Y รุ่นเก่าที่ใช้ 1,600 mm และ 68.75 pulse/mm ไม่ตรงสูตรนี้ และห้ามใช้เป็นหลักฐานแทน measurement record รอบ 1,700–1,780 mm
+
 ## Z แบบสายพาน
 
 `travel_per_rev_mm = belt_pitch_mm × pulley_teeth ÷ gear_ratio` และ
@@ -29,6 +31,8 @@
   - เวลาการเคลื่อนที่จริงตรงตามสมการทฤษฎี 7-Segment S-Curve ความคลาดเคลื่อนเฉลี่ย < 0.3% (ที่ 500 RPM ค่าคลาดเคลื่อนเพียง 13 ms)
   - ความแม่นยำปลายทางพิกัด $\Delta \le 0.005$ mm
   - ตรวจสอบ ALM = 0, PEND = 0 ไม่มีการตกสเต็ปหรือไดรเวอร์ตัดการทำงาน
+
+ข้อความ benchmark ข้างต้นเป็นบันทึก handoff แต่ repository ยังไม่มี raw CSV/log, เครื่องมือวัดภายนอก หรือหลักฐาน encoder trace รองรับ จึงใช้เป็นผล commissioning เบื้องต้นเท่านั้น ห้ามอนุมานจาก timing error ว่ากลไกไม่ตกสเต็ปหรือมีความแม่นยำ ±0.005 mm
 
 ## ประวัติที่ห้ามนำมาปะปน
 

@@ -9,6 +9,7 @@
 #include "profile_hal/nucleo_g491_profile_hal.h"
 #endif
 
+#include <stdio.h>
 #include <string.h>
 
 #define TIMER_TICK_HZ 1000000U
@@ -37,6 +38,7 @@ static volatile uint32_t last_heartbeat_ms;
 #if NUCLEO_G491_DYNAMIC_MOTION_ENABLED
 static NucleoDynamicApp dynamic_app;
 static NucleoG491ProfileHal dynamic_profile_hal;
+static NucleoG491ControlTimer dynamic_control_timer;
 static volatile uint64_t dynamic_now_us;
 static uint8_t dynamic_hal_ready;
 #endif
@@ -123,6 +125,13 @@ static void dynamic_emergency_inhibit(void *context)
   physical_stop_all();
 }
 
+static void dynamic_control_tick(void *context)
+{
+  (void)context;
+  dynamic_now_us += 1000ULL;
+  NucleoDynamicApp_ControlTick(&dynamic_app, dynamic_now_us);
+}
+
 static void dynamic_runtime_init(void)
 {
   NucleoDynamicRuntimeHooks hooks;
@@ -162,6 +171,14 @@ static void dynamic_runtime_init(void)
         &dynamic_app.facade.coordinator, configs, dynamic_app.facade.hooks);
   }
   dynamic_now_us = (uint64_t)HAL_GetTick() * 1000ULL;
+  if ((NucleoG491ControlTimer_Init(&dynamic_control_timer,
+                                   dynamic_control_tick, NULL) == 0U) ||
+      (NucleoG491ControlTimer_Start(&dynamic_control_timer) == 0U)) {
+    /* A v4 build without its deterministic 1 kHz planner clock must never
+     * advertise a usable pulse path or fall back to timing from main Poll. */
+    NucleoDynamicApp_EmergencyStop(&dynamic_app);
+    dynamic_hal_ready = 0U;
+  }
 }
 #endif
 
@@ -304,15 +321,6 @@ void NucleoMotion_Poll(void)
        NUCLEO_MOTION_WATCHDOG_MS)) {
     NucleoMotion_Disarm();
   }
-#if NUCLEO_G491_DYNAMIC_MOTION_ENABLED
-  if (dynamic_hal_ready != 0U) {
-    uint64_t now_us = (uint64_t)now_ms * 1000ULL;
-    if (now_us >= (dynamic_now_us + 1000ULL)) {
-      dynamic_now_us = now_us;
-      NucleoDynamicApp_ControlTick(&dynamic_app, dynamic_now_us);
-    }
-  }
-#endif
 }
 
 uint8_t NucleoMotion_IsArmed(void)
@@ -445,6 +453,11 @@ void NucleoMotion_TIM2_IRQHandler(void)
 
 void NucleoMotion_TIM6_IRQHandler(void)
 {
+#if NUCLEO_G491_DYNAMIC_MOTION_ENABLED
+  if (dynamic_hal_ready != 0U) {
+    NucleoG491ControlTimer_IRQHandler(&dynamic_control_timer);
+  }
+#endif
 }
 
 #if NUCLEO_G491_DYNAMIC_MOTION_ENABLED
@@ -452,6 +465,14 @@ uint8_t NucleoMotion_HandleDynamicLine(const char *line, char *response,
                                        size_t response_size)
 {
   if (dynamic_hal_ready == 0U) return 0U;
+  if ((strncmp(line, "DYN_START ", 10U) == 0) &&
+      ((steppers[AXIS_X].toggles_remaining != 0U) ||
+       (steppers[AXIS_Y].toggles_remaining != 0U))) {
+    int length = snprintf(response, response_size,
+                          "{\"type\":\"error\",\"code\":\"BUSY\","
+                          "\"error\":\"legacy X/Y motion is active\"}");
+    return (length > 0) && ((size_t)length < response_size);
+  }
   return NucleoDynamicApp_HandleLine(
       &dynamic_app, line, dynamic_time_us(),
       watchdog_healthy != 0U, motion_armed != 0U,

@@ -1082,7 +1082,16 @@ class MotionController:
         self._homing = HomingOrchestrator(axes=self.axes, home_order=self.config.home_order)
         self.set_state("idle")
 
-    def _sync_dynamic_config(self, speed_override_mm_s: float | None = None) -> None:
+    def _sync_dynamic_config(
+        self,
+        speed_override_mm_s: float | dict[str, float] | None = None,
+    ) -> None:
+        """Apply one revision of X/Y constraints or fail before staging motion.
+
+        A mapping preserves coordinated-path timing by giving each axis the
+        velocity computed by the Controller planner. Configuration failure is
+        safety-significant and must not be downgraded to a log message.
+        """
         backend = getattr(self.x, "motion_backend", None)
         if backend is not None and getattr(backend, "supports_buffered_scurve", False) and hasattr(backend, "configure_dynamic_axis"):
             try:
@@ -1091,11 +1100,18 @@ class MotionController:
                 if was_armed and hasattr(backend, "disarm"):
                     backend.disarm()
                 self._dynamic_revision = f"cfg-{int(monotonic() * 1000) % 1000000}"
+                effective_speeds_mm_s: dict[str, float] = {}
                 for axis_name in ("x", "y"):
                     axis_cfg = getattr(self.config, axis_name)
                     commissioned_limit = getattr(axis_cfg, "commissioned_max_speed_mm_s", None) or axis_cfg.max_speed_mm_s
-                    safe_max_speed = speed_override_mm_s if (speed_override_mm_s is not None and speed_override_mm_s > 0) else commissioned_limit
+                    requested_speed = (
+                        speed_override_mm_s.get(axis_name)
+                        if isinstance(speed_override_mm_s, dict)
+                        else speed_override_mm_s
+                    )
+                    safe_max_speed = requested_speed if (requested_speed is not None and requested_speed > 0) else commissioned_limit
                     safe_max_speed = min(safe_max_speed, commissioned_limit)
+                    effective_speeds_mm_s[axis_name] = float(safe_max_speed)
                     cmd = DynamicAxisConfigCommand(
                         axis=axis_name,
                         travel_min_pulses=0,
@@ -1117,9 +1133,10 @@ class MotionController:
                             DynamicPositionCommand(axis_name, pos_steps, self._dynamic_revision)
                         )
                 self._dynamic_config_synced = True
-                self._last_dynamic_speed = safe_max_speed
+                self._last_dynamic_speed_by_axis = effective_speeds_mm_s
             except Exception as exc:
-                logging.getLogger(__name__).warning("Failed to sync dynamic config: %s", exc)
+                self._dynamic_config_synced = False
+                raise NucleoError(f"failed to synchronize dynamic configuration: {exc}") from exc
 
     def _sync_dynamic_positions(self, axis_names: Iterable[str] | None = None) -> None:
         """Synchronize dynamic positions for homed axes without intermediate disarm/arm cycles.
@@ -1511,10 +1528,18 @@ class MotionController:
                     DynamicStartCommand,
                     DynamicTargetCommand,
                 )
-                target_speed = max((axis_plan.speed_mm_s for axis_plan in plan.axes.values() if axis_plan.speed_mm_s > 0), default=None)
-                last_speed = getattr(self, "_last_dynamic_speed", None)
-                if not getattr(self, "_dynamic_config_synced", False) or (last_speed is not None and target_speed is not None and last_speed != target_speed):
-                    self._sync_dynamic_config(speed_override_mm_s=target_speed)
+                target_speeds_mm_s = {
+                    axis_name: axis_plan.speed_mm_s
+                    for axis_name, axis_plan in plan.axes.items()
+                    if axis_name in ("x", "y") and axis_plan.speed_mm_s > 0
+                }
+                last_speeds = getattr(self, "_last_dynamic_speed_by_axis", None)
+                speed_changed = last_speeds is not None and any(
+                    last_speeds.get(axis_name) != speed_mm_s
+                    for axis_name, speed_mm_s in target_speeds_mm_s.items()
+                )
+                if not getattr(self, "_dynamic_config_synced", False) or speed_changed:
+                    self._sync_dynamic_config(speed_override_mm_s=target_speeds_mm_s)
                 self._sync_dynamic_positions(plan.axes.keys())
                 cmd_id = f"cmd-{int(monotonic() * 1000) % 1000000}"
                 for axis_name, axis_plan in plan.axes.items():
@@ -1552,7 +1577,6 @@ class MotionController:
                     axes[axis_name].position_steps = target_pulses
                 sleep(max(axis.config.settle_delay for axis in axes.values()))
                 self._verify_completion(completion_tokens)
-                self._dynamic_config_synced = False
                 return
 
             if hasattr(backend, "move_parallel"):

@@ -4,7 +4,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-from narit_vending.domain.errors import LimitTriggeredError
+from narit_vending.domain.errors import LimitTriggeredError, NucleoError
 from narit_vending.domain.motion_plans import AxisMovePlan, CoordinatedMovePlan
 from narit_vending.domain.nucleo_profile_protocol import (
     DynamicAxisConfigCommand,
@@ -113,6 +113,24 @@ class TestDynamicScurveMotion(unittest.TestCase):
         self.assertEqual(x_cfg.axis, "x")
         self.assertEqual(x_cfg.max_acceleration_millihz_s, int(round(300.0 * self.mock_x.config.steps_per_mm * 1000)))
         self.assertEqual(x_cfg.max_jerk_millihz_s2, int(round(1500.0 * self.mock_x.config.steps_per_mm * 1000)))
+
+    def test_sync_dynamic_config_uses_each_axis_planned_speed(self) -> None:
+        self.mc._sync_dynamic_config({"x": 50.0, "y": 100.0})
+        configs = {command.axis: command for command in self.backend.configured_axes}
+        self.assertEqual(
+            configs["x"].max_velocity_millihz,
+            int(round(50.0 * self.mock_x.config.steps_per_mm * 1000)),
+        )
+        self.assertEqual(
+            configs["y"].max_velocity_millihz,
+            int(round(100.0 * self.mock_y.config.steps_per_mm * 1000)),
+        )
+
+    def test_dynamic_config_failure_is_not_silently_ignored(self) -> None:
+        self.backend.configure_dynamic_axis = MagicMock(side_effect=RuntimeError("USB failed"))
+        with self.assertRaisesRegex(NucleoError, "failed to synchronize"):
+            self.mc._sync_dynamic_config({"x": 50.0})
+        self.assertFalse(self.mc._dynamic_config_synced)
 
     def test_sync_dynamic_position(self) -> None:
         self.mc._sync_dynamic_position("x")

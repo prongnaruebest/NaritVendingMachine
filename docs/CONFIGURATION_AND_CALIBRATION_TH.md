@@ -143,9 +143,11 @@ PEND ไม่สามารถ bypass E-Stop/ALM หาก PEND ไม่ม�
 - ผล Home ซ้ำ, short move, bidirectional move และ external position measurement
 ## 11. การตั้งค่า S-curve สำหรับแกน X/Y (Phase 8)
 
+ค่า commissioned maximum ที่บันทึกปัจจุบันคือ 210 mm/s สำหรับ X/Y แต่ห้ามตีความว่า 100 mm/s ผ่านการทดสอบแล้ว หรือว่าค่าใดปลอดภัยเชิงกลจาก configuration เพียงอย่างเดียว ค่า pulse-input rating ของ driver และเวลาที่ Controller รายงานไม่สามารถยืนยันการไม่ตกสเต็ป ความคลาดตำแหน่ง หรือ backlash ได้ ต้องมี raw test record, ระยะวัดภายนอก, ALM/PEND และผู้ปฏิบัติงานรับรองประกอบ
+
 ไฟล์ `machine_config.iriv.json` และ `hardware_config.iriv.json` มีค่าต่อไปนี้สำหรับแกน X และ Y เท่านั้น:
 
-- `scurve_enabled`: เปิดใช้โปรไฟล์ S-curve (ค่าเริ่มต้น `false`)
+- `scurve_enabled`: เปิดใช้โปรไฟล์ S-curve สำหรับ X/Y; configuration ปัจจุบันเป็น `true` แต่ Controller จะใช้จริงเฉพาะเมื่อ handshake ยืนยัน protocol v4 และ capability ครบ
 - `scurve_profile_type`: ต้องเป็น `seven_segment_s_curve`
 - `scurve_start_speed_mm_s` และ `scurve_end_speed_mm_s`: ความเร็วขอบเขตของโปรไฟล์
 - `scurve_max_jerk_mm_s3`: เพดาน jerk ต้องมากกว่า 0

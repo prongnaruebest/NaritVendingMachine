@@ -1033,8 +1033,11 @@ class MotionService:
         route_error = MotionService._profile_route_error(self, ("x", "y", "z"), ProfileOperation.MOVE)
         if route_error:
             return {"ok": False, "error": route_error}
-        seq_cfg = getattr(self.controller.config, "slot_sequence", None)
-        seq_enabled = bool(getattr(seq_cfg, "enabled", True))
+        controller = getattr(self, "controller", None)
+        seq_cfg = getattr(getattr(controller, "config", None), "slot_sequence", None)
+        # Older integrations without sequence configuration retain plain
+        # positioning; an explicit MQTT/request context still selects sequence.
+        seq_enabled = bool(getattr(seq_cfg, "enabled", False))
         if seq_enabled:
             return self.run_slot_sequence(slot_code, speed_mm_s=speed_mm_s)
         def action():
@@ -1196,8 +1199,11 @@ class MotionService:
         request_id: str | None = None,
         phase_callback=None,
     ) -> dict[str, object]:
-        seq_cfg = getattr(self.controller.config, "slot_sequence", None)
-        seq_enabled = bool(getattr(seq_cfg, "enabled", True))
+        controller = getattr(self, "controller", None)
+        seq_cfg = getattr(getattr(controller, "config", None), "slot_sequence", None)
+        # A missing sequence configuration means legacy plain positioning.
+        # MQTT/request context remains an explicit request for the sequence.
+        seq_enabled = bool(getattr(seq_cfg, "enabled", False))
         if seq_enabled or request_id is not None or phase_callback is not None:
             return self.run_slot_sequence(
                 slot_code,

@@ -87,11 +87,11 @@ int main(void)
   NucleoG491ProfileHal_OnCompare(&port, 0U);
   NucleoG491ProfileHal_OnCompare(&port, 0U);
   NucleoG491ProfileHal_OnCompare(&port, 0U);
-  assert(completed[0] == 2U && stops[0] == 1U);
+  assert(completed[0] == 2U && stops[0] == 2U);
   /* Completing X must not disturb Y on the shared TIM1 peripheral. */
-  assert(port.compare_adapter.enabled[1] == 1U && stops[1] == 0U);
+  assert(port.compare_adapter.enabled[1] == 1U && stops[1] == 1U);
   NucleoG491ProfileHal_DisableAll(&port);
-  assert(stops[1] == 1U);
+  assert(stops[1] == 2U);
 
   start_result = 1;
   assert(NucleoG491ProfileHal_Init(

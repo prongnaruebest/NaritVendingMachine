@@ -22,6 +22,7 @@ PROFILE_CAPABILITIES = frozenset(
         "buffered_segments",
         "profile_sequence",
         "profile_telemetry",
+        "dynamic_motion",
     }
 )
 SENSOR_TERMINATED_PROFILE_CAPABILITIES = frozenset(
