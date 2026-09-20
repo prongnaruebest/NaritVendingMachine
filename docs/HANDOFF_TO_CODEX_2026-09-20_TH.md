@@ -58,6 +58,19 @@
   - `motion_enabled`: `true` (พร้อมทำงาน 🟢)
 - **ตำแหน่งแกน**: ปัจจุบันยังไม่ได้ Home (`not_homed`) ตามกฎความปลอดภัย
 
+> หมายเหตุจากการตรวจซ้ำแบบ read-only โดย Codex: API ยืนยัน protocol 4 และ
+> capability dynamic ครบ แต่ค่า 210 mm/s เป็น configuration/handoff record;
+> ยังไม่มี raw external measurement ใน repository ที่พิสูจน์ความเร็วเชิงกลนี้
+> และ PEND X/Y ยังมีสถานะ `commissioned: false` จึงต้องเริ่ม physical
+> commissioning ที่ความเร็วไม่เกิน 20 mm/s ตาม gate ด้านล่าง
+
+> Deployment verification: `/home/admin/NaritVendingV1` ไม่มี `.git` metadata
+> และ SHA-256 ของ `narit_vending/motion.py`, `webapp.py` และ
+> `domain/nucleo_profile_protocol.py` บน Pi ไม่ตรงกับไฟล์ local ล่าสุดแม้
+> normalize line ending แล้ว จึงยืนยันได้เฉพาะว่า service ปัจจุบัน online และ
+> handshake protocol v4; ยังห้ามกล่าวว่า Controller ที่รันอยู่เป็น commit
+> `8636da8` จนกว่าจะ deploy ผ่าน release manifest และตรวจ hash หลังติดตั้ง
+
 ---
 
 ## 4. แผนงานร่วมกันในขั้นตอนถัดไป (Proposed Next Steps for Codex & Team)

@@ -45,12 +45,21 @@ The machine uses NEMA hybrid stepper motors driven by Leadshine/StepperOnline HB
 > [!CAUTION]
 > Stepper motors lose torque rapidly at higher rotational speeds. On heavy lead-screw carriages, commanding speeds above 120 mm/s (>300 RPM) or accelerations above 200 mm/s² will cause the rotor to lag behind the stator field, tripping HBS860H position error alarms.
 
-* **Recommended Operating Speed**:
-  * **Homing Search**: $50.0 \text{ mm/s}$ ($\sim 121 \text{ RPM}$, $3,235 \text{ Hz}$) — Proven rock-solid.
+The repository currently records `commissioned_max_speed_mm_s = 210.0` for X/Y,
+but the repository does not contain the raw external measurement, ALM/PEND trace,
+or encoder evidence needed to treat that value as independently verified. Never
+convert a configured ceiling or driver pulse-input rating into a mechanical-safe
+speed claim.
+
+* **Commissioning entry speed**: Start each single-axis test at or below
+  $20.0 \text{ mm/s}$ with the operator at the machine, then increase only after
+  external distance, ALM, PEND, limits and mechanical behavior pass.
+* **Previously used operating values (not a substitute for a new commissioning gate)**:
+  * **Homing Search**: $50.0 \text{ mm/s}$ ($\sim 121 \text{ RPM}$, $3,235 \text{ Hz}$).
   * **Homing Latch / Crawl**: $5.0 \text{ mm/s}$ ($\sim 12 \text{ RPM}$, $324 \text{ Hz}$).
   * **Normal Dispense / Goto Slot**: $50.0 - 80.0 \text{ mm/s}$ ($121 - 194 \text{ RPM}$, $3,235 - 5,176 \text{ Hz}$).
-  * **Absolute Upper Bound**: $100.0 \text{ mm/s}$ ($242 \text{ RPM}$, $6,470 \text{ Hz}$).
-  * **DO NOT USE**: $>120 \text{ mm/s}$ ($>300 \text{ RPM}$). Config values of 250 mm/s (>600 RPM) will stall!
+  * Values above $100.0 \text{ mm/s}$ require a recorded commissioning result;
+    do not infer safety from the current 210/250 mm/s configuration fields.
 
 * **Acceleration & Deceleration**:
   * Keep `acceleration` and `deceleration` between $100.0 - 150.0 \text{ mm/s}^2$ ($6,470 - 9,705 \text{ Hz/s}$).
@@ -63,16 +72,23 @@ The machine uses NEMA hybrid stepper motors driven by Leadshine/StepperOnline HB
 
 ## 3. Direction Polarity Standards
 
-The machine hardware wiring enforces:
+The machine hardware wiring enforces the following physical pin levels, but the
+wire-level direction number is not shared between both protocol paths:
 
-* **Forward Direction (`forward_direction = 0`)**:
+* **Legacy `MOVE` forward (`forward_direction = 0`)**:
   * Drives physical DIR pin **LOW (`GPIO_PIN_RESET`)**.
   * Direction of positive displacement ($+X, +Y$ away from Home towards slots).
-* **Home / Reverse Direction (`home_direction = 1`)**:
+* **Legacy Home / Reverse (`home_direction = 1`)**:
   * Drives physical DIR pin **HIGH (`GPIO_PIN_SET`)**.
   * Direction of negative displacement ($-X, -Y$ back towards Home limit switches).
 
-Every firmware HAL hook (`NucleoG491ProfileHal_PrepareDirectionHook`) and controller driver (`Stepper_Move`) must preserve:
+* **Dynamic absolute target**: the firmware planner uses `direction = 1` for a
+  positive target delta and maps it to physical LOW; `direction = 0` means a
+  negative target delta and maps to physical HIGH. This positional semantic is
+  intentionally different from the legacy configuration enum.
+
+Do not copy one path's direction number into the other. Preserve the physical
+mapping already characterized by the firmware tests:
 ```c
 HAL_GPIO_WritePin(port, pin, (direction != 0U) ? GPIO_PIN_RESET : GPIO_PIN_SET);
 ```
@@ -98,8 +114,12 @@ Once the drive trips any alarm, it disconnects motor coil power. The drive **can
 
 ## 5. Motion Routing Invariant
 
-* **Multi-Axis Coordinated Moves (`move_to_slot`, multi-axis `move`)**:
-  * Keep `scurve_enabled: false` in `machine_config.iriv.json` so motion routes to `backend.move_parallel()`.
-  * `move_parallel()` executes standard `MOVE` protocol v3 frames at the exact operator-commanded speed matching `duration_s`.
-* **Single-Axis Moves (`move_mm`, `move_to_mm`)**:
-  * Routes to `AxisController._execute_plan()`, which executes `backend.move()` directly.
+* X/Y currently use `scurve_enabled: true`, but dynamic routing is allowed only
+  after the USB handshake reports protocol v4 and the complete capability set,
+  including `dynamic_motion`.
+* Coordinated X/Y moves configure the planner with each axis's planned speed;
+  do not replace these with one scalar maximum.
+* Z and host-supervised Home/limit seeking remain on the legacy motion path.
+* Protocol v3 or an incomplete capability handshake must not be treated as
+  dynamic-profile support; use the characterized fallback or reject the command
+  according to the owning routing policy.
