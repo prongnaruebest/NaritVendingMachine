@@ -89,6 +89,18 @@ python scripts/verify_release.py <release.zip> <release.manifest.json>
 ต้องบันทึก `release_id`, Git commit, configuration revision และ archive SHA-256 ไว้ด้วยกัน
 ห้าม build จาก dirty worktree
 
+Firmware G491RE ต้อง clean/rebuild จาก CubeIDE Release configuration ก่อน แล้วจึง
+สร้าง artifact ที่ผูก board/protocol/capability/revision ด้วยคำสั่ง:
+
+```powershell
+python scripts/package_g491_firmware.py
+```
+
+ผลลัพธ์อยู่ใต้ `output/firmware/v4-<git-revision>/` และต้องมี BIN, ELF,
+`firmware-manifest.json` กับ `SHA256SUMS.txt` การ package ไม่ใช่การ Flash และ
+manifest ต้องระบุ `flash_performed: false` ห้ามนำ artifact v3 หรือ artifact คนละ
+Git revision ไปใช้แทนโดยไม่มีการตรวจสอบใหม่
+
 ## 6. Stage และตรวจ compatibility
 
 หลังส่ง ZIP และ manifest ไปยัง staging area ของ target แล้ว ให้ตรวจและแตกไฟล์ด้วย:
