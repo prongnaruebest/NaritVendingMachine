@@ -101,6 +101,11 @@ python scripts/package_g491_firmware.py
 manifest ต้องระบุ `flash_performed: false` ห้ามนำ artifact v3 หรือ artifact คนละ
 Git revision ไปใช้แทนโดยไม่มีการตรวจสอบใหม่
 
+CubeIDE makefile ของ project ปัจจุบันสร้าง ELF แต่ไม่ประกาศ BIN เป็น secondary
+output จึงต้องใช้ `arm-none-eabi-objcopy -O binary Motion_NaritVending.elf
+Motion_NaritVending.bin` หลัง build ทุกครั้ง Packager จะปฏิเสธ BIN ที่มีเวลาแก้ไข
+เก่ากว่า ELF เพื่อป้องกันการจับคู่ image คนละ build
+
 ## 6. Stage และตรวจ compatibility
 
 หลังส่ง ZIP และ manifest ไปยัง staging area ของ target แล้ว ให้ตรวจและแตกไฟล์ด้วย:

@@ -47,6 +47,12 @@ def package_firmware(
     for path in inputs.values():
         if not path.is_file() or path.stat().st_size <= 0:
             raise ValueError(f"Firmware build output is missing or empty: {path}")
+    binary = inputs["nucleo_g491re_protocol_v4.bin"]
+    executable = inputs["nucleo_g491re_protocol_v4.elf"]
+    if binary.stat().st_mtime_ns < executable.stat().st_mtime_ns:
+        raise ValueError(
+            "Firmware BIN is older than ELF; regenerate BIN from this ELF before packaging"
+        )
 
     revision = source_revision.strip().lower()
     if len(revision) < 12 or any(character not in "0123456789abcdef" for character in revision):

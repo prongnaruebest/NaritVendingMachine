@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -11,8 +12,12 @@ from scripts.package_g491_firmware import CAPABILITIES, package_firmware, sha256
 def _build_outputs(root: Path) -> Path:
     build_dir = root / "Release"
     build_dir.mkdir()
-    (build_dir / "Motion_NaritVending.bin").write_bytes(b"binary-image")
-    (build_dir / "Motion_NaritVending.elf").write_bytes(b"elf-image")
+    binary = build_dir / "Motion_NaritVending.bin"
+    executable = build_dir / "Motion_NaritVending.elf"
+    binary.write_bytes(b"binary-image")
+    executable.write_bytes(b"elf-image")
+    os.utime(binary, ns=(2_000_000_000, 2_000_000_000))
+    os.utime(executable, ns=(2_000_000_000, 2_000_000_000))
     return build_dir
 
 
@@ -48,3 +53,14 @@ def test_never_overwrites_existing_artifact(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="already exists"):
         package_firmware(build_dir, output, "c" * 40)
+
+
+def test_rejects_bin_older_than_elf(tmp_path: Path) -> None:
+    build_dir = _build_outputs(tmp_path)
+    binary = build_dir / "Motion_NaritVending.bin"
+    executable = build_dir / "Motion_NaritVending.elf"
+    os.utime(binary, ns=(1_000_000_000, 1_000_000_000))
+    os.utime(executable, ns=(2_000_000_000, 2_000_000_000))
+
+    with pytest.raises(ValueError, match="BIN is older than ELF"):
+        package_firmware(build_dir, tmp_path / "artifacts", "d" * 40)
