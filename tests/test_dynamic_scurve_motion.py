@@ -204,6 +204,25 @@ class TestDynamicScurveMotion(unittest.TestCase):
         self.assertEqual(len(self.backend.started_motions), 0)
         self.backend.move_parallel.assert_called_once()
 
+    def test_quarantined_dynamic_runtime_uses_legacy_parallel_fallback(self) -> None:
+        self.backend.dynamic_motion_quarantined = True
+        self.backend.move_parallel = MagicMock(
+            return_value={"status": "ok", "steps": {"x": 6471, "y": 12941}}
+        )
+        plan = CoordinatedMovePlan(
+            axes={
+                "x": AxisMovePlan(axis="x", current_mm=100.0, target_mm=200.0, distance_mm=100.0, direction=0, steps=6471, speed_mm_s=50.0, duration_s=2.0),
+                "y": AxisMovePlan(axis="y", current_mm=100.0, target_mm=300.0, distance_mm=200.0, direction=0, steps=12941, speed_mm_s=100.0, duration_s=2.0),
+            },
+            duration_s=2.0,
+            mode="speed",
+        )
+
+        self.mc._execute_coordinated_plan(plan)
+
+        self.assertEqual(self.backend.started_motions, [])
+        self.backend.move_parallel.assert_called_once()
+
     def test_stopped_due_to_limit_raises_and_clears_homed(self) -> None:
         self.backend.mock_start_result = {"status": "stopped", "stopped": True}
         plan = CoordinatedMovePlan(

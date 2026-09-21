@@ -1373,6 +1373,7 @@ class MotionController:
                 single_plan.axis in ("x", "y")
                 and getattr(single_axis.config, "scurve_enabled", False)
                 and getattr(single_axis.motion_backend, "supports_buffered_scurve", False)
+                and not getattr(single_axis.motion_backend, "dynamic_motion_quarantined", False)
             ):
                 single_axis._execute_plan(single_plan)
                 self.last_plan = plan
@@ -1558,6 +1559,7 @@ class MotionController:
 
             use_dynamic_scurve = (
                 getattr(backend, "supports_buffered_scurve", False)
+                and not getattr(backend, "dynamic_motion_quarantined", False)
                 and all(getattr(axes[name].config, "scurve_enabled", False) for name in plan.axes if name in ("x", "y"))
                 and all(getattr(axes[name], "is_homed", False) for name in plan.axes if name in ("x", "y"))
                 and set(plan.axes.keys()).issubset({"x", "y"})

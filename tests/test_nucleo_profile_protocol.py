@@ -171,6 +171,8 @@ def test_link_status_exposes_capability_without_sending_profile():
     link._last_payload = {"protocol": 4, "capabilities": sorted(PROFILE_CAPABILITIES)}
     status = link.status_payload()
     assert status["supports_buffered_scurve"] is True
+    assert status["dynamic_motion_quarantined"] is True
+    assert "500 ms heartbeat" in status["dynamic_motion_quarantine_reason"]
     assert set(status["capabilities"]) == PROFILE_CAPABILITIES
     assert status["supports_sensor_terminated_scurve"] is False
 

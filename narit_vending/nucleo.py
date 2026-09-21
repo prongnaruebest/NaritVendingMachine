@@ -25,6 +25,7 @@ NUCLEO_MOTION_MAX_SPEED_HZ = 50_000.0
 NUCLEO_MOTION_MAX_STEPS = 1_000_000
 NUCLEO_LEGACY_MAX_STEPS = 10_000
 NUCLEO_SERIAL_READ_SLICE_S = 0.05
+DYNAMIC_WATCHDOG_CAPABILITY = "dynamic_watchdog_heartbeat"
 
 
 class NucleoLink:
@@ -103,6 +104,23 @@ class NucleoLink:
         """Require explicit sensor-stop/watchdog capabilities from handshake."""
 
         return self.capabilities.supports_sensor_terminated_scurve
+
+    @property
+    def dynamic_motion_quarantined(self) -> bool:
+        """Fail closed when v4 cannot prove heartbeat-safe dynamic execution.
+
+        The deployed G491RE build accepts DYN_START but can starve its 500 ms
+        watchdog while TIM1 dynamic pulse interrupts are active.  Legacy
+        protocol motion remains available and keeps the same Controller safety
+        checks.  A future firmware build must explicitly advertise the
+        heartbeat capability before this Controller routes real motion back to
+        the dynamic planner.
+        """
+
+        return bool(
+            self.supports_buffered_scurve
+            and DYNAMIC_WATCHDOG_CAPABILITY not in self.capabilities.advertised
+        )
 
     def start(self) -> None:
         if self._thread and self._thread.is_alive():
@@ -908,6 +926,12 @@ class NucleoLink:
             "max_move_steps": self.max_move_steps,
             "capabilities": sorted(self.capabilities.advertised),
             "supports_buffered_scurve": self.supports_buffered_scurve,
+            "dynamic_motion_quarantined": self.dynamic_motion_quarantined,
+            "dynamic_motion_quarantine_reason": (
+                "Firmware has not proven 500 ms heartbeat servicing during dynamic pulse output"
+                if self.dynamic_motion_quarantined
+                else None
+            ),
             "supports_sensor_terminated_scurve": self.supports_sensor_terminated_scurve,
             "uptime_ms": payload.get("uptime_ms"),
             "last_success_at": last_success_at,
