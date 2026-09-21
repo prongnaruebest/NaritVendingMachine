@@ -128,6 +128,22 @@ class TestDynamicScurveMotion(unittest.TestCase):
             int(round(100.0 * self.mock_y.config.steps_per_mm * 1000)),
         )
 
+    def test_sync_dynamic_config_clamps_terminal_rate_to_slow_move(self) -> None:
+        """A slow slot move must remain valid when its speed is below end speed."""
+        self.mc._sync_dynamic_config({"x": 1.0, "y": 2.0})
+
+        configs = {command.axis: command for command in self.backend.configured_axes}
+        for axis_name in ("x", "y"):
+            self.assertGreater(configs[axis_name].terminal_rate_millihz, 0)
+            self.assertLessEqual(
+                configs[axis_name].terminal_rate_millihz,
+                configs[axis_name].max_velocity_millihz,
+            )
+        self.assertEqual(
+            configs["x"].terminal_rate_millihz,
+            configs["x"].max_velocity_millihz,
+        )
+
     def test_dynamic_config_failure_is_not_silently_ignored(self) -> None:
         self.backend.configure_dynamic_axis = MagicMock(side_effect=RuntimeError("USB failed"))
         with self.assertRaisesRegex(NucleoError, "failed to synchronize"):

@@ -160,7 +160,10 @@ or dispatch them and the Controller must not send them yet.
 `terminal_rate_millihz` is the maximum output rate permitted when emitting the
 final target pulse. It must be nonzero and no greater than
 `max_velocity_millihz`; invalid values fail closed. The Controller derives it
-from the effective per-axis terminal speed and `pulses_per_mm`. Dynamic routing
+from the effective per-axis terminal speed and `pulses_per_mm`, then clamps it
+to the effective velocity of the current command. This permits deliberately
+slow moves below the configured end speed without expanding their velocity
+envelope. Dynamic routing
 requires `terminal_rate_config`, preventing a new Controller from silently
 using firmware that still contains the former fixed 1,000 Hz terminal gate.
 

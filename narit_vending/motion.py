@@ -1134,6 +1134,24 @@ class MotionController:
                     safe_max_speed = requested_speed if (requested_speed is not None and requested_speed > 0) else commissioned_limit
                     safe_max_speed = min(safe_max_speed, commissioned_limit)
                     effective_speeds_mm_s[axis_name] = float(safe_max_speed)
+                    max_velocity_millihz = max(
+                        1,
+                        min(
+                            50_000_000,
+                            int(round(safe_max_speed * axis_cfg.steps_per_mm * 1000)),
+                        ),
+                    )
+                    configured_terminal_rate_millihz = int(
+                        round((axis_cfg.scurve_end_speed_mm_s or 0.0) * axis_cfg.steps_per_mm * 1000)
+                    )
+                    # The terminal rate is an upper bound for the final pulse,
+                    # not permission to exceed a deliberately slow command.
+                    # Keep it positive for the firmware contract while clamping
+                    # it to this move's effective velocity envelope.
+                    terminal_rate_millihz = max(
+                        1,
+                        min(configured_terminal_rate_millihz, max_velocity_millihz),
+                    )
                     cmd = DynamicAxisConfigCommand(
                         axis=axis_name,
                         travel_min_pulses=0,
@@ -1141,11 +1159,11 @@ class MotionController:
                         pulses_per_mm_milli=int(round(axis_cfg.steps_per_mm * 1000)),
                         kp_enabled=False,
                         kp_approach_milliper_s=1000,
-                        max_velocity_millihz=min(50_000_000, int(round(safe_max_speed * axis_cfg.steps_per_mm * 1000))),
+                        max_velocity_millihz=max_velocity_millihz,
                         max_acceleration_millihz_s=int(round(axis_cfg.acceleration * axis_cfg.steps_per_mm * 1000)),
                         max_deceleration_millihz_s=int(round(axis_cfg.deceleration * axis_cfg.steps_per_mm * 1000)),
                         max_jerk_millihz_s2=int(round((getattr(axis_cfg, "scurve_max_jerk_mm_s3", None) or 1500.0) * axis_cfg.steps_per_mm * 1000)),
-                        terminal_rate_millihz=int(round((axis_cfg.scurve_end_speed_mm_s or 0.0) * axis_cfg.steps_per_mm * 1000)),
+                        terminal_rate_millihz=terminal_rate_millihz,
                         configuration_revision=self._dynamic_revision,
                     )
                     backend.configure_dynamic_axis(cmd)
