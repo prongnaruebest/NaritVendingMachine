@@ -599,10 +599,25 @@ class NucleoLink:
                     if completed:
                         break
                 else:
+                    timeout_detail = ""
+                    if dyn_status and isinstance(dyn_status.get("axes"), dict):
+                        parts: list[str] = []
+                        for axis_name in sorted(participating):
+                            axis_info = dyn_status["axes"].get(axis_name, {})
+                            parts.append(
+                                f"{axis_name.upper()}(state={axis_info.get('state')},"
+                                f"fault={axis_info.get('fault')},"
+                                f"emitted={axis_info.get('emitted_pulses')},"
+                                f"remaining={axis_info.get('remaining_pulses')},"
+                                f"rate_millihz={axis_info.get('output_rate_millihz')})"
+                            )
+                        timeout_detail = "; last_status=" + ",".join(parts)
                     serial_port.write(b"STOP\n")
                     serial_port.flush()
                     self.disarm()
-                    raise NucleoError(f"Dynamic move timed out after {timeout_s:.1f} seconds")
+                    raise NucleoError(
+                        f"Dynamic move timed out after {timeout_s:.1f} seconds{timeout_detail}"
+                    )
 
                 if not dyn_status or not isinstance(dyn_status.get("axes"), dict):
                     raise NucleoError("Dynamic motion stopped without terminal DYN_STATUS telemetry")

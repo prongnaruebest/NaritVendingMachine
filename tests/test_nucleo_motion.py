@@ -140,6 +140,32 @@ class MockDynamicSerial(MockSerialProtocolV2):
         return super().write(data)
 
 
+class MockStalledDynamicSerial(MockDynamicSerial):
+    """Dynamic fake that preserves terminal telemetry until host timeout."""
+
+    def write(self, data: bytes) -> int:
+        line = data.decode("ascii", errors="replace").strip()
+        if line == "DYN_STATUS":
+            self.writes.append(data)
+            self.dynamic_status_count += 1
+            self.script.append({
+                "type": "dynamic_status",
+                "runtime_ready": True,
+                "axes": {
+                    "x": {
+                        "state": "RUNNING",
+                        "fault": "NONE",
+                        "emitted_pulses": 99,
+                        "remaining_pulses": 1,
+                        "output_rate_millihz": 2500,
+                    },
+                    "y": {"state": "IDLE", "fault": "NONE"},
+                },
+            })
+            return len(data)
+        return super().write(data)
+
+
 class NucleoMotionTests(unittest.TestCase):
     def config(self) -> dict:
         return {
@@ -287,6 +313,23 @@ class NucleoMotionTests(unittest.TestCase):
         self.assertGreater(heartbeat_count, mock_serial.dynamic_status_count)
         self.assertEqual(result["telemetry"]["axes"]["x"]["state"], "COMPLETE")
         self.assertEqual(result["telemetry"]["axes"]["x"]["remaining_pulses"], 0)
+
+    def test_dynamic_timeout_reports_last_terminal_telemetry(self):
+        mock_serial = MockStalledDynamicSerial()
+        config = self.config()
+        config.update({"protocol_version": 4, "expected_device": "NUCLEO-F439ZI"})
+        link = NucleoLink(config, serial_factory=lambda **kwargs: mock_serial)
+        link._connected = True
+        link._last_success_monotonic = __import__("time").monotonic()
+
+        with self.assertRaisesRegex(
+            NucleoError,
+            r"last_status=X\(state=RUNNING,fault=NONE,emitted=99,remaining=1,rate_millihz=2500\)",
+        ):
+            link.start_dynamic_motion(
+                DynamicStartCommand(command_id="move-stalled", axes=("x",)),
+                timeout_s=1.0,
+            )
 
     def test_move_stops_when_condition_triggers(self):
         mock_serial = MockSerialProtocolV2()
