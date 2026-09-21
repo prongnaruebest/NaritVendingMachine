@@ -499,6 +499,8 @@ class NucleoLink:
             deadline = started + max(1.0, float(timeout_s))
             participating = set(command.axes)
             dyn_status: dict[str, Any] | None = None
+            saw_dynamic_moving = False
+            next_dynamic_status_at = started + 1.0
 
             try:
                 while time.monotonic() < deadline:
@@ -531,27 +533,59 @@ class NucleoLink:
                         self._last_payload = dict(hb)
                         moving = hb.get("moving", {})
                         # G491RE protocol v4 derives these bits from the
-                        # dynamic coordinator active mask.  Keep the 500 ms
-                        # watchdog channel lean while pulses are active; the
-                        # larger DYN_STATUS frame is requested once, below,
-                        # after all participating axes report stopped.
-                        if isinstance(moving, dict) and all(
-                            not moving.get(axis_name, 0) for axis_name in participating
-                        ):
-                            break
+                        # dynamic coordinator active mask, but the first
+                        # heartbeat after DYN_START can race the mask update.
+                        # Therefore a zero bit is only a hint after motion has
+                        # first been observed; DYN_STATUS remains completion
+                        # authority.
+                        if isinstance(moving, dict):
+                            any_moving = any(
+                                moving.get(axis_name, 0) for axis_name in participating
+                            )
+                            saw_dynamic_moving = saw_dynamic_moving or any_moving
+                            if saw_dynamic_moving and not any_moving:
+                                next_dynamic_status_at = time.monotonic()
+
+                    if time.monotonic() < next_dynamic_status_at:
+                        continue
+
+                    # Keep large telemetry frames sparse and bracketed by the
+                    # regular heartbeat loop so they cannot starve the fixed
+                    # 500 ms firmware watchdog on the shared 115200-baud link.
+                    next_dynamic_status_at = time.monotonic() + 1.0
+                    serial_port.write(b"DYN_STATUS\n")
+                    serial_port.flush()
+                    candidate = self._read_json_response(
+                        serial_port,
+                        time.monotonic() + 0.25,
+                        expected_types={"dynamic_status"},
+                    )
+                    if not candidate or not isinstance(candidate.get("axes"), dict):
+                        continue
+                    dyn_status = candidate
+                    status_axes = candidate["axes"]
+                    completed = True
+                    for axis_name in participating:
+                        axis_info = status_axes.get(axis_name, {})
+                        axis_state = axis_info.get("state", "UNKNOWN")
+                        axis_fault = axis_info.get("fault", "UNKNOWN")
+                        if axis_state == "FAILED" or axis_fault not in ("NONE", ""):
+                            raise NucleoError(
+                                f"Dynamic move failed on axis {axis_name.upper()}: "
+                                f"state={axis_state}, fault={axis_fault}, "
+                                f"emitted={axis_info.get('emitted_pulses')}, "
+                                f"remaining={axis_info.get('remaining_pulses')}"
+                            )
+                        if axis_state != "COMPLETE" or axis_info.get("remaining_pulses") != 0:
+                            completed = False
+                    if completed:
+                        break
                 else:
                     serial_port.write(b"STOP\n")
                     serial_port.flush()
                     self.disarm()
                     raise NucleoError(f"Dynamic move timed out after {timeout_s:.1f} seconds")
 
-                serial_port.write(b"DYN_STATUS\n")
-                serial_port.flush()
-                dyn_status = self._read_json_response(
-                    serial_port,
-                    time.monotonic() + 0.25,
-                    expected_types={"dynamic_status"},
-                )
                 if not dyn_status or not isinstance(dyn_status.get("axes"), dict):
                     raise NucleoError("Dynamic motion stopped without terminal DYN_STATUS telemetry")
 

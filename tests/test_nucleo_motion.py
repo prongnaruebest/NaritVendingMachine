@@ -85,26 +85,22 @@ class MockSerialProtocolV2:
 
 
 class MockDynamicSerial(MockSerialProtocolV2):
-    """Protocol-v4 fake whose heartbeat mirrors the dynamic active mask."""
+    """Protocol-v4 fake reproducing the post-DYN_START moving-bit race."""
 
     def __init__(self) -> None:
         super().__init__(protocol=4)
         self.dynamic_status_count = 0
         self.dynamic_heartbeat_count = 0
-        self.dynamic_active = False
 
     def write(self, data: bytes) -> int:
         line = data.decode("ascii", errors="replace").strip()
         if line.startswith("DYN_START "):
             self.writes.append(data)
-            self.dynamic_active = True
             self.script.append({"type": "ack", "status": "running"})
             return len(data)
-        if line == "HEARTBEAT SAFE" and self.dynamic_active:
+        if line == "HEARTBEAT SAFE":
             self.writes.append(data)
             self.dynamic_heartbeat_count += 1
-            if self.dynamic_heartbeat_count >= 3:
-                self.dynamic_active = False
             self.script.append({
                 "type": "heartbeat",
                 "device": "NUCLEO-F439ZI",
@@ -112,21 +108,25 @@ class MockDynamicSerial(MockSerialProtocolV2):
                 "safe": False,
                 "armed": True,
                 "watchdog": True,
-                "moving": {"x": int(self.dynamic_active), "y": 0, "z": 0},
+                # The deployed firmware can transiently report zero while the
+                # dynamic status remains RUNNING. Completion must not be
+                # inferred from this field alone.
+                "moving": {"x": 0, "y": 0, "z": 0},
             })
             return len(data)
         if line == "DYN_STATUS":
             self.writes.append(data)
             self.dynamic_status_count += 1
+            complete = self.dynamic_status_count >= 2
             self.script.append({
                 "type": "dynamic_status",
                 "runtime_ready": True,
                 "axes": {
                     "x": {
-                        "state": "COMPLETE",
+                        "state": "COMPLETE" if complete else "RUNNING",
                         "fault": "NONE",
-                        "emitted_pulses": 100,
-                        "remaining_pulses": 0,
+                        "emitted_pulses": 100 if complete else 16,
+                        "remaining_pulses": 0 if complete else 84,
                     },
                     "y": {
                         "state": "IDLE",
@@ -275,11 +275,11 @@ class NucleoMotionTests(unittest.TestCase):
 
         result = link.start_dynamic_motion(
             DynamicStartCommand(command_id="move-1", axes=("x",)),
-            timeout_s=2.0,
+            timeout_s=3.0,
         )
 
         self.assertTrue(result["ok"])
-        self.assertEqual(mock_serial.dynamic_status_count, 1)
+        self.assertEqual(mock_serial.dynamic_status_count, 2)
         heartbeat_count = sum(
             write.decode("ascii", errors="replace").strip() == "HEARTBEAT SAFE"
             for write in mock_serial.writes
