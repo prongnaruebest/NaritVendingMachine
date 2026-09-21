@@ -115,3 +115,18 @@ single-axis ก่อน coordinated motion และตรวจ interlock/tele
 - ยังไม่ได้ทดสอบ speed ramp ที่สูงกว่า 20 mm/s, GOTO Slot, Demo Sampling หรือ
   9-stage vending sequence กับ firmware นี้ จึงห้ามถือว่า release ผ่าน full-speed
   mechanical commissioning
+
+### Speed ramp gate 40 mm/s
+
+- ผู้ควบคุมยืนยันพื้นที่ปลอดภัยสำหรับ X/Y ไป-กลับ 50 mm ที่ 40 mm/s
+- Dynamic X+ และ X- ระยะ 50 mm ผ่าน: ปลายทางบวก 3,235 pulses (49.995 mm)
+  และกลับ Min/0 โดย Homed state ยังคงถูกต้อง
+- Dynamic Y+ และ Y- ระยะ 50 mm ผ่านด้วยผลเทียบเท่า X
+- Coordinated X+/Y+ ไป 50/50 mm ที่ 40 mm/s ผ่าน ทั้งสองแกนรายงาน 3,235 pulses
+- Home All หลังทดสอบผ่านและคืน X/Y/Z ที่ 0 mm
+- Maximum heartbeat gap ใน gate นี้ 125 ms; watchdog trip, UART overrun,
+  dropped RX bytes และ X/Y driver alarms เป็นศูนย์
+- สถานะสุดท้ายยังเป็น Machine READY, Motion Enabled, NUCLEO safe/disarmed,
+  ไม่มี active command และ services/health UP
+- Gate นี้ยังไม่ครอบคลุมความเร็วสูงกว่า 40 mm/s, ระยะ Slot จริง, Z sequence,
+  Demo Sampling หรือ 9-stage vending sequence
