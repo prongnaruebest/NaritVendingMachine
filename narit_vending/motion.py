@@ -1158,8 +1158,12 @@ class MotionController:
                         travel_min_pulses=0,
                         travel_max_pulses=int(round(axis_cfg.max_travel_mm * axis_cfg.steps_per_mm)),
                         pulses_per_mm_milli=int(round(axis_cfg.steps_per_mm * 1000)),
-                        kp_enabled=False,
-                        kp_approach_milliper_s=1000,
+                        # Reduce the requested rate with remaining distance.
+                        # A constant request can make the jerk-aware envelope
+                        # alternate between acceleration and braking at the
+                        # final pulse and remain RUNNING until host timeout.
+                        kp_enabled=True,
+                        kp_approach_milliper_s=2500,
                         max_velocity_millihz=max_velocity_millihz,
                         max_acceleration_millihz_s=int(round(axis_cfg.acceleration * axis_cfg.steps_per_mm * 1000)),
                         max_deceleration_millihz_s=int(round(axis_cfg.deceleration * axis_cfg.steps_per_mm * 1000)),

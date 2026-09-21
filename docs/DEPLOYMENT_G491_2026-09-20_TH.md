@@ -144,3 +144,18 @@ single-axis ก่อน coordinated motion และตรวจ interlock/tele
   ไม่มี active command และทุกแกน Homed
 - Gate นี้ยังไม่ครอบคลุม GOTO Slot ระยะจริง, Z pick/drop, Demo Sampling,
   9-stage vending sequence หรือความเร็วสูงกว่า 60 mm/s
+
+### GOTO Slot 27 terminal-approach regression
+
+- การทดสอบ GOTO Slot 27 ที่ 40 mm/s ยก Z ไป 85 mm สำเร็จ แต่ Dynamic Y จาก
+  0 ไป 340 mm ไม่จบภายใน timeout 22 วินาที; Controller จึง STOP, Disarm,
+  ล้าง Homed ของ X/Y และคง Stop latch ตาม fail-closed policy
+- Driver alarm, E-Stop, USB watchdog, UART overrun และ RX drop ไม่ทำงานระหว่าง
+  เหตุการณ์ จึงตัดสาเหตุด้าน safety input/transport ออกได้
+- พบว่า Controller ส่ง `kp_enabled=0` ทำให้ constant-rate request สลับสถานะ
+  acceleration/braking ใกล้ปลายทางและอาจค้างก่อน terminal pulse
+- แก้ให้ X/Y Dynamic route เปิด Virtual Kp ที่ 2.5/s เพื่อให้ requested rate ลดตาม
+  remaining pulses ก่อนผ่าน jerk/acceleration/deceleration envelope
+- เพิ่ม C host regression ระยะ Y 22,000 pulses (Slot 27 ที่ 340 mm) และ Python
+  protocol assertion; full automated suite ผ่าน 527 tests และ 22 subtests
+- ยังต้อง deploy Controller, Home All ใหม่ และทดสอบ Slot 27 ซ้ำก่อนถือว่า gate นี้ผ่าน

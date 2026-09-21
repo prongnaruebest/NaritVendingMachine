@@ -112,6 +112,8 @@ class TestDynamicScurveMotion(unittest.TestCase):
         self.assertEqual(len(self.backend.configured_axes), 2)
         x_cfg = self.backend.configured_axes[0]
         self.assertEqual(x_cfg.axis, "x")
+        self.assertTrue(x_cfg.kp_enabled)
+        self.assertEqual(x_cfg.kp_approach_milliper_s, 2500)
         self.assertEqual(x_cfg.max_acceleration_millihz_s, int(round(300.0 * self.mock_x.config.steps_per_mm * 1000)))
         self.assertEqual(x_cfg.max_jerk_millihz_s2, int(round(1500.0 * self.mock_x.config.steps_per_mm * 1000)))
         self.assertEqual(x_cfg.terminal_rate_millihz, int(round(2.0 * self.mock_x.config.steps_per_mm * 1000)))

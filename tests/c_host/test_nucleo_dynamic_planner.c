@@ -44,6 +44,9 @@ int main(void)
   run_move(0U, 1U, 1U);
   run_move(1U, 0U, 137U);
   run_move(0U, 1U, 170000U);
+  /* Slot 27 regression: 340 mm at the commissioned Y conversion is 22,000
+   * pulses. Virtual Kp must finish the terminal edge without oscillation. */
+  run_move(1U, 1U, 22000U);
   puts("dynamic planner host tests passed");
   return 0;
 }
