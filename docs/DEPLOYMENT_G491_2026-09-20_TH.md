@@ -85,3 +85,33 @@ Debugger ยืนยันว่า CPU ติดอยู่ใน `TIM6_DAC_I
   path ภายใต้ pulse load ได้
 - ไม่มี Home, Jog, GOTO, Dispense, drive-power reset หรือ Demo Sampling ระหว่าง
   deploy และ health verification รอบนี้
+
+## Low-speed commissioning หลัง deploy (2026-09-21)
+
+ผู้ควบคุมยืนยันว่าพื้นที่เครื่องปลอดภัยก่อนเริ่ม motion จริง การทดสอบใช้ลำดับ
+single-axis ก่อน coordinated motion และตรวจ interlock/telemetry หลังทุก gate:
+
+- Manual Commissioning X+ และ Y+ อย่างละประมาณ 5 mm ที่ 20 mm/s ผ่าน;
+  Min switch release ถูกทิศและไม่มี driver alarm
+- Home All ที่ search 50 mm/s และ latch 5 mm/s ผ่านครบ X/Y/Z
+- Dynamic X+ 10 mm ที่ 20 mm/s ถึง 647/647 pulses และ terminal velocity/acceleration
+  เป็นศูนย์
+- พบ regression เมื่อ Dynamic X- กลับ target 0 mm: Min sensor ทำงานก่อน virtual
+  pulse position ถึงศูนย์ ทำให้ Controller จัดเป็น limit fault และล้าง Homed state
+- แก้ใน commit `9b4edb4` โดยยอมรับเฉพาะ single-axis, ทิศ Home, target 0 pulses
+  และ Min active เป็น sensor-terminated zero completion; E-Stop, Stop, non-zero target,
+  Max และ multi-axis limit stop ยังคง fail-closed
+- Host automated tests หลังแก้ผ่าน `527 tests` และ `22 subtests`; deploy เฉพาะ
+  `motion.py` กับ `domain/motion_policy.py` หลังสำรองไว้ที่
+  `/home/admin/NaritVendingV1/backups/pre-9b4edb4-20260921-190525/`
+- Retest Dynamic X ±10 mm และ Y ±10 mm ที่ 20 mm/s ผ่าน ตำแหน่งกลับ 0 steps
+  และ Homed state ยังคงถูกต้อง
+- Coordinated X+/Y+ จาก 0 ไป 10/10 mm ที่ 20 mm/s ผ่าน ทั้งสองแกนรายงาน
+  647 pulses จากนั้น Home All กลับจุดอ้างอิงผ่าน
+- Maximum heartbeat gap ที่พบตลอดรอบคือ 127 ms ต่ำกว่า watchdog 500 ms;
+  watchdog trip, UART overrun และ dropped RX bytes เป็นศูนย์
+- สถานะสุดท้าย: services active, health UP, Machine READY, X/Y/Z homed ที่ 0 mm,
+  Motion Enabled, NUCLEO safe/disarmed, ไม่มี active command, E-Stop/driver alarms clear
+- ยังไม่ได้ทดสอบ speed ramp ที่สูงกว่า 20 mm/s, GOTO Slot, Demo Sampling หรือ
+  9-stage vending sequence กับ firmware นี้ จึงห้ามถือว่า release ผ่าน full-speed
+  mechanical commissioning
