@@ -37,3 +37,9 @@ Deploy Controller/Web release `61ef6a957a8e-c4051c40de67` และทดสอ�
 ## งานที่ต้องทำต่อ
 
 ตรวจ firmware startup path ของ candidate โดยเน้น clock, USART/VCP initialization, interrupt/DMA configuration, heartbeat scheduling และ watchdog boot state ก่อนสร้าง artifact ใหม่ ห้าม Flash ซ้ำจน host-side tests, clean build และ serial-handshake bench gate ผ่าน
+
+## Root cause ที่ยืนยันภายหลัง
+
+Debugger ยืนยันว่า CPU ติดอยู่ใน `TIM6_DAC_IRQHandler` ขณะ `HAL_TIM_Base_Start_IT()` ยังไม่คืนค่ากลับมาที่ startup code สาเหตุคือ TIM6 update interrupt เกิดขึ้นทันที แต่ `NucleoG491ControlTimer.running` ยังเป็น 0 ทำให้ handler return โดยไม่ clear UIF และเกิด interrupt storm ก่อนเริ่ม serial link
+
+แก้โดยตั้ง `running = 1` ก่อน enable timer interrupt และ rollback ค่าเป็น 0 หาก HAL start ล้มเหลว พร้อมเพิ่ม C host regression test ที่บังคับให้ ISR เกิดภายใน `HAL_TIM_Base_Start_IT()` เพื่อป้องกันบัคนี้ย้อนกลับมา

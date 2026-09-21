@@ -47,8 +47,14 @@ uint8_t NucleoG491ControlTimer_Start(NucleoG491ControlTimer *control_timer)
 {
   if ((control_timer == NULL) || (control_timer->initialized == 0U) ||
       (control_timer->running != 0U)) return 0U;
-  if (HAL_TIM_Base_Start_IT(&control_timer->timer) != HAL_OK) return 0U;
+  /* HAL may expose a pending update interrupt before Start_IT returns. Mark
+   * the handler ready first so the initial IRQ clears UIF instead of causing
+   * an interrupt storm during boot. */
   control_timer->running = 1U;
+  if (HAL_TIM_Base_Start_IT(&control_timer->timer) != HAL_OK) {
+    control_timer->running = 0U;
+    return 0U;
+  }
   return 1U;
 }
 

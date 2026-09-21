@@ -594,6 +594,45 @@ def test_g491_hal_adapter_fails_closed_and_keeps_tim1_channels_independent(
     assert "G491RE profile HAL host tests passed" in run_result.stdout
 
 
+def test_g491_control_timer_handles_interrupt_before_start_returns(tmp_path: Path):
+    """Guard against the TIM6 boot-time interrupt storm observed on hardware."""
+    compiler = shutil.which("gcc")
+    if compiler is None:
+        pytest.skip("host GCC is unavailable")
+    profile_hal = CORE.parent / "profile_hal"
+    shim = ROOT / "tests" / "c_host" / "g491_timer_shim"
+    executable = tmp_path / "g491_control_timer_test.exe"
+    sources = [
+        profile_hal / "nucleo_g491_control_timer.c",
+        ROOT / "tests" / "c_host" / "test_nucleo_g491_control_timer.c",
+    ]
+    compile_result = subprocess.run(
+        [
+            compiler,
+            "-std=c99",
+            "-Wall",
+            "-Wextra",
+            "-Werror",
+            f"-I{shim}",
+            f"-I{profile_hal}",
+            f"-I{CORE.parent.parent / 'Inc'}",
+            *(str(source) for source in sources),
+            "-o",
+            str(executable),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert compile_result.returncode == 0, compile_result.stdout + compile_result.stderr
+    run_result = subprocess.run(
+        [str(executable)], capture_output=True, text=True, timeout=10, check=False
+    )
+    assert run_result.returncode == 0, run_result.stdout + run_result.stderr
+    assert "G491RE control timer host tests passed" in run_result.stdout
+
+
 def test_candidate_hal_port_maps_shared_tim1_channels_without_cross_stop(tmp_path: Path):
     compiler = shutil.which("gcc")
     if compiler is None:
