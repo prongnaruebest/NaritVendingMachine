@@ -164,3 +164,21 @@ single-axis ก่อน coordinated motion และตรวจ interlock/tele
 - หลัง deploy รอบสุดท้าย Home All ถูกหยุดเพราะ X Min ยัง active หลัง backoff 647 pulses
   (ประมาณ 10 mm) จึงยังไม่ retest Slot 27 หลัง fix; Controller ถูก Disable Motion,
   NUCLEO safe/disarmed และ Stop latch ยังคง active เพื่อรอตรวจ X Min หน้าเครื่อง
+
+### X Max limit-seek diagnostic
+
+- ผู้ควบคุมยืนยันพื้นที่ปลอดภัยสำหรับ X+ ไปหา Max ที่ไม่เกิน 20 mm/s
+- เนื่องจาก X ยังไม่ Homed และ firmware รายงาน
+  `supports_sensor_terminated_scurve=false` คำสั่งนี้ต้องใช้ Controller-owned legacy
+  `LIMIT_SEEK`; ยังไม่ใช่ Dynamic Virtual-Kp route
+- Controller ส่งเฟรม `MOVE X 0 1000000 1294`; NUCLEO ACK moving และ telemetry
+  รายงาน X moving โดย E-Stop, ALM X/Y และ USB watchdog ไม่ทำงาน
+- หลังเวลามากกว่าระยะเดินทางเชิงทฤษฎี X Min ยังคง active และ X Max ไม่ active
+  จึงส่ง STOP ทันทีแทนการรอ watchdog เต็มช่วง
+- สถานะหลังหยุด: Motion Disabled, Stop latched, NUCLEO safe/disarmed,
+  X/Y alarm clear และ KM1 power feedback true
+- ผลนี้ชี้ว่า command/USB/pulse path ทำงาน แต่ยังไม่มีหลักฐานว่ากลไก X เคลื่อนออกจาก
+  Min ต้องตรวจ LED/Enable ของ HBS860H, มอเตอร์/คัปปลิง/สกรู, DIR wiring และสถานะ
+  IRIV DI0 ด้วยการสังเกตหน้าเครื่องก่อน motion ครั้งถัดไป
+- ห้ามทดสอบ Kp absolute move จนกว่าจะสร้าง reference coordinate ที่เชื่อถือได้จาก
+  physical limit และ `is_homed=true`
