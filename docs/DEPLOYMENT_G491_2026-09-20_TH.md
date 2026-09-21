@@ -152,10 +152,15 @@ single-axis ก่อน coordinated motion และตรวจ interlock/tele
   ล้าง Homed ของ X/Y และคง Stop latch ตาม fail-closed policy
 - Driver alarm, E-Stop, USB watchdog, UART overrun และ RX drop ไม่ทำงานระหว่าง
   เหตุการณ์ จึงตัดสาเหตุด้าน safety input/transport ออกได้
-- พบว่า Controller ส่ง `kp_enabled=0` ทำให้ constant-rate request สลับสถานะ
-  acceleration/braking ใกล้ปลายทางและอาจค้างก่อน terminal pulse
-- แก้ให้ X/Y Dynamic route เปิด Virtual Kp ที่ 2.5/s เพื่อให้ requested rate ลดตาม
-  remaining pulses ก่อนผ่าน jerk/acceleration/deceleration envelope
+- พบว่า Controller ส่ง `kp_enabled=0`; แก้ให้ X/Y Dynamic route เปิด Virtual Kp
+  ที่ 2.5/s เพื่อให้ requested rate ลดตาม remaining pulses ก่อนผ่าน
+  jerk/acceleration/deceleration envelope
 - เพิ่ม C host regression ระยะ Y 22,000 pulses (Slot 27 ที่ 340 mm) และ Python
   protocol assertion; full automated suite ผ่าน 527 tests และ 22 subtests
-- ยังต้อง deploy Controller, Home All ใหม่ และทดสอบ Slot 27 ซ้ำก่อนถือว่า gate นี้ผ่าน
+- Diagnostic retest ยืนยันว่า firmware ทำ Y ครบ 22,000 pulses และรายงาน COMPLETE
+  แต่ X ซึ่งมีระยะ 0 pulse อยู่ IDLE; Controller รอ X=COMPLETE จึงเกิด false timeout
+- แก้ใน commit `69a86c2` ให้ stage/start เฉพาะแกนที่มีระยะมากกว่า 0 pulse
+  พร้อม regression test X=0/Y=340 mm; ไม่ลดระดับ interlock หรือ completion criteria
+- หลัง deploy รอบสุดท้าย Home All ถูกหยุดเพราะ X Min ยัง active หลัง backoff 647 pulses
+  (ประมาณ 10 mm) จึงยังไม่ retest Slot 27 หลัง fix; Controller ถูก Disable Motion,
+  NUCLEO safe/disarmed และ Stop latch ยังคง active เพื่อรอตรวจ X Min หน้าเครื่อง
