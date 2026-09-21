@@ -85,34 +85,48 @@ class MockSerialProtocolV2:
 
 
 class MockDynamicSerial(MockSerialProtocolV2):
-    """Protocol-v4 serial fake whose legacy moving bits remain zero."""
+    """Protocol-v4 fake whose heartbeat mirrors the dynamic active mask."""
 
     def __init__(self) -> None:
         super().__init__(protocol=4)
         self.dynamic_status_count = 0
+        self.dynamic_heartbeat_count = 0
+        self.dynamic_active = False
 
     def write(self, data: bytes) -> int:
         line = data.decode("ascii", errors="replace").strip()
         if line.startswith("DYN_START "):
             self.writes.append(data)
+            self.dynamic_active = True
             self.script.append({"type": "ack", "status": "running"})
+            return len(data)
+        if line == "HEARTBEAT SAFE" and self.dynamic_active:
+            self.writes.append(data)
+            self.dynamic_heartbeat_count += 1
+            if self.dynamic_heartbeat_count >= 3:
+                self.dynamic_active = False
+            self.script.append({
+                "type": "heartbeat",
+                "device": "NUCLEO-F439ZI",
+                "protocol": 4,
+                "safe": False,
+                "armed": True,
+                "watchdog": True,
+                "moving": {"x": int(self.dynamic_active), "y": 0, "z": 0},
+            })
             return len(data)
         if line == "DYN_STATUS":
             self.writes.append(data)
             self.dynamic_status_count += 1
-            complete = self.dynamic_status_count >= 2
-            state = "COMPLETE" if complete else "RUNNING"
-            remaining = 0 if complete else 100
-            emitted = 100 if complete else 0
             self.script.append({
                 "type": "dynamic_status",
                 "runtime_ready": True,
                 "axes": {
                     "x": {
-                        "state": state,
+                        "state": "COMPLETE",
                         "fault": "NONE",
-                        "emitted_pulses": emitted,
-                        "remaining_pulses": remaining,
+                        "emitted_pulses": 100,
+                        "remaining_pulses": 0,
                     },
                     "y": {
                         "state": "IDLE",
@@ -251,7 +265,7 @@ class NucleoMotionTests(unittest.TestCase):
         self.assertFalse(link.disarm())
         self.assertIn("not acknowledged", link.status_payload()["last_error"])
 
-    def test_dynamic_completion_uses_dynamic_status_not_legacy_moving_bits(self):
+    def test_dynamic_completion_keeps_heartbeat_channel_lean_then_verifies_status(self):
         mock_serial = MockDynamicSerial()
         config = self.config()
         config.update({"protocol_version": 4, "expected_device": "NUCLEO-F439ZI"})
@@ -265,7 +279,7 @@ class NucleoMotionTests(unittest.TestCase):
         )
 
         self.assertTrue(result["ok"])
-        self.assertEqual(mock_serial.dynamic_status_count, 2)
+        self.assertEqual(mock_serial.dynamic_status_count, 1)
         heartbeat_count = sum(
             write.decode("ascii", errors="replace").strip() == "HEARTBEAT SAFE"
             for write in mock_serial.writes
