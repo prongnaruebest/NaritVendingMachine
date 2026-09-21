@@ -335,9 +335,10 @@ class NucleoLink:
                 deadline = time.monotonic() + self.timeout_s
                 resp = self._read_json_response(serial_port, deadline, expected_types={"ack"})
                 self._armed = False
-                if resp:
-                    self._last_success_monotonic = time.monotonic()
-                    self._last_success_at = datetime.now(timezone.utc).isoformat()
+                if not resp or resp.get("status") != "disarmed":
+                    self._last_error = f"Nucleo disarm was not acknowledged: {resp!r}"
+                    return False
+                self._publish_disarmed_snapshot()
                 return True
             except Exception:
                 return False
@@ -357,12 +358,38 @@ class NucleoLink:
                 deadline = time.monotonic() + self.timeout_s
                 resp = self._read_json_response(serial_port, deadline, expected_types={"ack"})
                 self._armed = False
-                if resp:
-                    self._last_success_monotonic = time.monotonic()
-                    self._last_success_at = datetime.now(timezone.utc).isoformat()
+                if not resp or resp.get("status") != "disarmed":
+                    self._last_error = f"Nucleo stop was not acknowledged: {resp!r}"
+                    return False
+                self._publish_disarmed_snapshot()
                 return True
             except Exception:
                 return False
+
+    def _publish_disarmed_snapshot(self) -> None:
+        """Publish the state proven by a DISARM/STOP acknowledgement.
+
+        During motion ``_last_payload`` contains the most recent armed
+        heartbeat, where ``watchdog=true`` means the 500 ms heartbeat watchdog
+        is healthy. Leaving that payload visible after a successful DISARM
+        briefly reports ``safe=false`` even though pulse output is inhibited.
+        Replace only the fields proven by the ACK while preserving identity,
+        protocol, capabilities and uptime telemetry.
+        """
+        payload = dict(self._last_payload)
+        payload.update(
+            {
+                "safe": True,
+                "armed": False,
+                "watchdog": False,
+                "moving": {"x": 0, "y": 0, "z": 0},
+            }
+        )
+        self._last_payload = payload
+        self._moving_axes = {"x": 0, "y": 0, "z": 0}
+        self._last_success_monotonic = time.monotonic()
+        self._last_success_at = datetime.now(timezone.utc).isoformat()
+        self._last_error = ""
 
     def reset_connection(self) -> dict[str, Any]:
         """Fail-safe USB transport reset followed by a fresh protocol handshake.

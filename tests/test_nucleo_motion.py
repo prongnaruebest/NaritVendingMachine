@@ -164,6 +164,33 @@ class NucleoMotionTests(unittest.TestCase):
         self.assertIn("DISARM", commands)
         self.assertFalse(link.is_armed)
 
+        # The last wire heartbeat was captured while armed; the acknowledged
+        # DISARM must replace those stale safety fields immediately.
+        status = link.status_payload()
+        self.assertTrue(status["safe"])
+        self.assertFalse(status["armed"])
+        self.assertFalse(status["watchdog"])
+        self.assertEqual(status["moving"], {"x": 0, "y": 0, "z": 0})
+
+    def test_disarm_fails_closed_without_acknowledgement(self):
+        mock_serial = MockSerialProtocolV2()
+        link = NucleoLink(self.config(), serial_factory=lambda **kwargs: mock_serial)
+        link._poll_once()
+        self.assertTrue(link.arm(safety_permissive=True))
+
+        original_write = mock_serial.write
+
+        def drop_disarm_ack(data: bytes) -> int:
+            if data.decode("ascii", errors="replace").strip() == "DISARM":
+                mock_serial.writes.append(data)
+                return len(data)
+            return original_write(data)
+
+        mock_serial.write = drop_disarm_ack  # type: ignore[method-assign]
+
+        self.assertFalse(link.disarm())
+        self.assertIn("not acknowledged", link.status_payload()["last_error"])
+
     def test_move_stops_when_condition_triggers(self):
         mock_serial = MockSerialProtocolV2()
         link = NucleoLink(self.config(), serial_factory=lambda **kwargs: mock_serial)

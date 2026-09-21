@@ -101,6 +101,13 @@ Firmware still supports legacy MOVE for compatibility and Z. It rejects a
 dynamic start while legacy X/Y owns TIM1. STOP, DISARM, watchdog and safety loss
 remain global priority actions. This contract describes repository source and
 tests; a USB handshake is still required to prove which firmware is flashed.
+
+In protocol heartbeat telemetry, `watchdog=true` means the armed 500 ms
+heartbeat watchdog is healthy; it is not a timeout alarm. After an acknowledged
+`STOP` or `DISARM`, the Controller immediately publishes `armed=false`,
+`safe=true`, `watchdog=false`, and zero moving axes so clients do not observe a
+stale armed heartbeat while waiting for the next background poll.
+
 The candidate/protocol-v3 narrative below is retained as historical design
 context and is superseded where it conflicts with this current-status section.
 
