@@ -37,6 +37,24 @@ def test_g491_motion_mapping_and_fail_safe_contract() -> None:
     assert "NucleoMotion_StopAll();" in motion
 
 
+def test_g491_uart_rx_is_interrupt_buffered_above_motion_irqs() -> None:
+    serial = (PROJECT / "Core" / "Src" / "nucleo_serial_link.c").read_text(
+        encoding="utf-8"
+    )
+    interrupts = (PROJECT / "Core" / "Src" / "stm32g4xx_it.c").read_text(
+        encoding="utf-8"
+    )
+
+    assert "HAL_UART_Receive_IT" in serial
+    assert "SERIAL_RX_RING_SIZE 512U" in serial
+    assert "HAL_UART_Receive(serial_uart" not in serial
+    assert "HAL_NVIC_SetPriority(LPUART1_IRQn, 3U, 0U)" in serial
+    assert "HAL_UART_IRQHandler(&hlpuart1)" in interrupts
+    assert "uart_overrun_count" in serial
+    assert "rx_dropped_bytes" in serial
+    assert "dynamic_watchdog_heartbeat" in serial
+
+
 def test_g491_ioc_records_motion_pins() -> None:
     ioc = (PROJECT / "Motion_NaritVending.ioc").read_text(encoding="utf-8")
 

@@ -11,17 +11,37 @@
 #define NUCLEO_CAPABILITIES_JSON \
   "\"capabilities\":[\"continuous_profile\",\"seven_segment_s_curve\"," \
   "\"buffered_segments\",\"profile_sequence\",\"profile_telemetry\"," \
-  "\"dynamic_motion\",\"terminal_rate_config\"],"
+  "\"dynamic_motion\",\"terminal_rate_config\"," \
+  "\"dynamic_watchdog_heartbeat\"],"
 #else
 #define NUCLEO_PROTOCOL_VERSION 3U
 #define NUCLEO_CAPABILITIES_JSON ""
 #endif
 
 #define SERIAL_LINE_MAX 160U
+#define SERIAL_RX_RING_SIZE 512U
 
 static UART_HandleTypeDef *serial_uart;
 static char receive_line[SERIAL_LINE_MAX];
 static uint32_t receive_length;
+static uint8_t receive_interrupt_byte;
+static volatile uint8_t receive_ring[SERIAL_RX_RING_SIZE];
+static volatile uint16_t receive_ring_head;
+static volatile uint16_t receive_ring_tail;
+static volatile uint32_t receive_overrun_count;
+static volatile uint32_t receive_dropped_bytes;
+
+static uint16_t receive_ring_next(uint16_t index)
+{
+  return (uint16_t)((index + 1U) % SERIAL_RX_RING_SIZE);
+}
+
+static void arm_interrupt_receive(void)
+{
+  if (serial_uart != NULL) {
+    (void)HAL_UART_Receive_IT(serial_uart, &receive_interrupt_byte, 1U);
+  }
+}
 
 static void transmit_text(const char *message)
 {
@@ -37,7 +57,7 @@ static uint8_t any_axis_moving(void)
 
 static void transmit_status(const char *type)
 {
-  char response[360];
+  char response[512];
   uint8_t moving = any_axis_moving();
   uint8_t armed = NucleoMotion_IsArmed();
   int length = snprintf(
@@ -46,6 +66,7 @@ static void transmit_status(const char *type)
       "\"protocol\":%lu," NUCLEO_CAPABILITIES_JSON
       "\"safe\":%s,\"armed\":%s,"
       "\"watchdog\":%s,\"uptime_ms\":%lu,\"max_move_steps\":%lu,"
+      "\"uart_overrun_count\":%lu,\"rx_dropped_bytes\":%lu,"
       "\"moving\":{\"x\":%u,\"y\":%u,\"z\":%u}}\r\n",
       type,
       (unsigned long)NUCLEO_PROTOCOL_VERSION,
@@ -54,6 +75,8 @@ static void transmit_status(const char *type)
       NucleoMotion_WatchdogHealthy() != 0U ? "true" : "false",
       (unsigned long)HAL_GetTick(),
       (unsigned long)NUCLEO_MOTION_MAX_STEPS,
+      (unsigned long)receive_overrun_count,
+      (unsigned long)receive_dropped_bytes,
       (unsigned int)Stepper_IsMoving(AXIS_X),
       (unsigned int)Stepper_IsMoving(AXIS_Y),
       (unsigned int)Stepper_IsMoving(AXIS_Z));
@@ -218,13 +241,14 @@ static void process_line(char *line)
 
 void NucleoSerialLink_Poll(void)
 {
-  uint8_t byte = 0U;
+  uint8_t byte;
 
   if (serial_uart == NULL) {
     return;
   }
-  __HAL_UART_CLEAR_OREFLAG(serial_uart);
-  while (HAL_UART_Receive(serial_uart, &byte, 1U, 0U) == HAL_OK) {
+  while (receive_ring_tail != receive_ring_head) {
+    byte = receive_ring[receive_ring_tail];
+    receive_ring_tail = receive_ring_next(receive_ring_tail);
     if ((byte == '\r') || (byte == '\n')) {
       if (receive_length > 0U) {
         receive_line[receive_length] = '\0';
@@ -246,6 +270,16 @@ void NucleoSerialLink_Start(UART_HandleTypeDef *uart)
 {
   serial_uart = uart;
   receive_length = 0U;
+  receive_ring_head = 0U;
+  receive_ring_tail = 0U;
+  receive_overrun_count = 0U;
+  receive_dropped_bytes = 0U;
+  /* Safety traffic must pre-empt the 1 kHz planner (priority 4) and STEP
+   * compare service (priority 5). The ISR only stores one byte; parsing and
+   * responses remain in the main loop. */
+  HAL_NVIC_SetPriority(LPUART1_IRQn, 3U, 0U);
+  HAL_NVIC_EnableIRQ(LPUART1_IRQn);
+  arm_interrupt_receive();
   transmit_text(
       "{\"type\":\"boot\",\"device\":\"NUCLEO-G491RE\","
       "\"protocol\":"
@@ -255,4 +289,26 @@ void NucleoSerialLink_Start(UART_HandleTypeDef *uart)
       "3,"
 #endif
       "\"safe\":true,\"armed\":false}\r\n");
+}
+
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *uart)
+{
+  uint16_t next;
+  if ((serial_uart == NULL) || (uart != serial_uart)) return;
+  next = receive_ring_next(receive_ring_head);
+  if (next == receive_ring_tail) {
+    ++receive_dropped_bytes;
+  } else {
+    receive_ring[receive_ring_head] = receive_interrupt_byte;
+    receive_ring_head = next;
+  }
+  arm_interrupt_receive();
+}
+
+void HAL_UART_ErrorCallback(UART_HandleTypeDef *uart)
+{
+  if ((serial_uart == NULL) || (uart != serial_uart)) return;
+  ++receive_overrun_count;
+  __HAL_UART_CLEAR_OREFLAG(uart);
+  arm_interrupt_receive();
 }

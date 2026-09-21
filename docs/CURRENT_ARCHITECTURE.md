@@ -305,3 +305,22 @@ commissioning evidence; it does not advertise mechanical safety.
 - Production health before refactor: Web, Controller, NUCLEO USB, IRIV I/O and PiControl I/O online.
 - Automated tests do not issue real motion.
 - Mechanical motion, PEND polarity and maximum-speed behavior remain operator acceptance items.
+# G491RE dynamic-motion heartbeat gate (2026-09-21)
+
+The deployed Controller currently quarantines protocol-v4 Dynamic S-curve
+motion unless the firmware handshake explicitly advertises
+`dynamic_watchdog_heartbeat`. The legacy Controller-owned safety path remains
+available while the deployed firmware is quarantined.
+
+The candidate G491RE firmware receives LPUART1 bytes through an interrupt-fed
+512-byte ring buffer. LPUART1 uses NVIC priority 3, above the TIM6 1 kHz planner
+(priority 4) and TIM1 STEP compare service (priority 5). The interrupt handler
+only stores bytes; line parsing and responses remain in the main loop. This
+prevents STEP interrupts from causing UART overrun and starving the mandatory
+500 ms watchdog. Heartbeat telemetry reports `uart_overrun_count` and
+`rx_dropped_bytes`.
+
+The new capability must not be treated as commissioned until the firmware is
+flashed under an operator-controlled gate and passes heartbeat/STOP/USB-loss
+tests during real X, Y, and coordinated XY motion. No automatic motion is part
+of build or deployment.

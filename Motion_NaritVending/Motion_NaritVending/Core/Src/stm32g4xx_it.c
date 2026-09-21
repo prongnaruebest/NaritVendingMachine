@@ -59,6 +59,8 @@
 
 /* USER CODE BEGIN EV */
 
+extern UART_HandleTypeDef hlpuart1;
+
 /* USER CODE END EV */
 
 /******************************************************************************/
@@ -228,6 +230,11 @@ void TIM2_IRQHandler(void)
 void TIM6_DAC_IRQHandler(void)
 {
   NucleoMotion_TIM6_IRQHandler();
+}
+
+void LPUART1_IRQHandler(void)
+{
+  HAL_UART_IRQHandler(&hlpuart1);
 }
 
 /* USER CODE END 1 */
