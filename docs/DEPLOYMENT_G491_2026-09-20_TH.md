@@ -54,3 +54,34 @@ Debugger ยืนยันว่า CPU ติดอยู่ใน `TIM6_DAC_I
 - Controller รายงาน `supports_buffered_scurve = true`
 - หลัง deploy NUCLEO ยัง disarmed/safe, Motion disabled, IRIV I/O online และไม่มี X/Y driver alarm
 - ไม่มีการสั่ง Home, Jog, GOTO, Dispense หรือ Demo Sampling ระหว่าง deploy และ verification
+
+## Deploy UART-interrupt heartbeat firmware (2026-09-21)
+
+- Source revision และ Controller package revision: `dff96fd9044432497a5bfe9fcae981c22c36d8e2`
+- Clean Release build ของ NUCLEO-G491RE สำเร็จ: text 35,024 bytes, data 112 bytes,
+  bss 4,248 bytes; linker ยังเตือน RWX LOAD segment และต้องแก้ในงาน hardening ถัดไป
+- Firmware BIN SHA-256:
+  `b23340012a4c478c40a3aaeb44a57493991d3c54dfcd829b31f4800a82e86c58`
+- Artifact manifest ระบุ Protocol 4 และ capability
+  `dynamic_watchdog_heartbeat` ตรงกับ firmware handshake
+- สำรอง Controller, configuration และ SQLite databases ก่อน deploy ที่
+  `/home/admin/NaritVendingV1/backups/pre-dff96fd-20260921-150731/` และตรวจ
+  `SHA256SUMS.txt` ผ่านทุกไฟล์
+- Deploy เฉพาะ `narit_vending/nucleo.py` ที่เปลี่ยนใน Controller layer;
+  `motion.py` บนเครื่องมี SHA-256 ตรงกับ source อยู่แล้ว
+- Flash ผ่าน ST-LINK mass-storage `NOD_G491RE1`; volume รับ image และไม่สร้าง
+  `FAIL.TXT` จากนั้น VCP กลับมาที่ stable by-id path เดิม
+- ข้อจำกัด: รอบนี้ไม่ได้ทำ full-flash read-back byte comparison แบบ `st-flash`;
+  หลักฐานการ activate คือ board reboot, Protocol 4 handshake และ capability ใหม่
+  `dynamic_watchdog_heartbeat` จาก firmware ที่กำลังรัน
+- หลัง restart Controller/Web เป็น active, `/health/live` และ `/health/ready` ตอบ 200,
+  IRIV I/O และ NUCLEO online, E-Stop/driver alarms clear, UART overrun/drop และ
+  watchdog trip เป็นศูนย์
+- Controller ปลด dynamic-motion quarantine ตาม capability ใหม่ แต่ Motion ยังคง
+  disabled, NUCLEO safe/disarmed, axes not homed และไม่มี active command
+- `heartbeat_age_ms` ขณะ disarmed เท่ากับระยะเวลาตั้งแต่ boot เพราะ metric นี้วัด
+  อายุของ dynamic-motion heartbeat ล่าสุด; ต้องประเมิน `max_heartbeat_gap_ms` และ
+  `watchdog_trip_count` ระหว่าง commissioning motion จึงจะยืนยัน 500 ms watchdog
+  path ภายใต้ pulse load ได้
+- ไม่มี Home, Jog, GOTO, Dispense, drive-power reset หรือ Demo Sampling ระหว่าง
+  deploy และ health verification รอบนี้
