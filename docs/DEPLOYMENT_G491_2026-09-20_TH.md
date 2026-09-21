@@ -130,3 +130,17 @@ single-axis ก่อน coordinated motion และตรวจ interlock/tele
   ไม่มี active command และ services/health UP
 - Gate นี้ยังไม่ครอบคลุมความเร็วสูงกว่า 40 mm/s, ระยะ Slot จริง, Z sequence,
   Demo Sampling หรือ 9-stage vending sequence
+
+### Speed ramp gate 60 mm/s
+
+- ผู้ควบคุมยืนยันพื้นที่ปลอดภัยสำหรับ X/Y ไป-กลับ 100 mm ที่ 60 mm/s
+- Dynamic X และ Y ไป-กลับ 100 mm ผ่าน: ปลายทางแต่ละแกน 6,471 pulses
+  (100.006 mm) และกลับ Min/0 โดย Homed state ยังคงถูกต้อง
+- Coordinated X+/Y+ ไป 100/100 mm ที่ 60 mm/s ผ่าน ทั้งสองแกนรายงาน
+  6,471 pulses จากนั้น Home All กลับ X/Y/Z ที่ 0 mm ผ่าน
+- Maximum heartbeat gap ใน gate นี้ 128 ms; watchdog trip, UART overrun,
+  dropped RX bytes และ X/Y driver alarms เป็นศูนย์
+- สถานะสุดท้าย Machine READY, Motion Enabled, NUCLEO safe/disarmed,
+  ไม่มี active command และทุกแกน Homed
+- Gate นี้ยังไม่ครอบคลุม GOTO Slot ระยะจริง, Z pick/drop, Demo Sampling,
+  9-stage vending sequence หรือความเร็วสูงกว่า 60 mm/s
