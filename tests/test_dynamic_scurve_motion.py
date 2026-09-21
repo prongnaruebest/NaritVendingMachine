@@ -190,6 +190,24 @@ class TestDynamicScurveMotion(unittest.TestCase):
         self.assertEqual(len(self.backend.started_motions), 1)
         self.assertEqual(set(self.backend.started_motions[0].axes), {"x", "y"})
 
+    def test_zero_distance_axis_is_not_staged_or_started(self) -> None:
+        """A no-op X must not make a real Y move wait for X=COMPLETE."""
+        plan = CoordinatedMovePlan(
+            axes={
+                "x": AxisMovePlan(axis="x", current_mm=0.0, target_mm=0.0, distance_mm=0.0, direction=0, steps=0, speed_mm_s=0.0, duration_s=0.0),
+                "y": AxisMovePlan(axis="y", current_mm=0.0, target_mm=340.0, distance_mm=340.0, direction=0, steps=22000, speed_mm_s=40.0, duration_s=8.5),
+            },
+            duration_s=8.5,
+            mode="speed",
+        )
+
+        self.mc._execute_coordinated_plan(plan)
+
+        self.assertEqual([target.axis for target in self.backend.staged_targets], ["y"])
+        self.assertEqual(self.backend.started_motions[0].axes, ("y",))
+        self.assertEqual(self.mock_x.position_steps, 0)
+        self.assertEqual(self.mock_y.position_steps, 22000)
+
     def test_move_with_z_does_not_route_to_dynamic_scurve(self) -> None:
         self.backend.move_parallel = MagicMock(return_value={"status": "ok", "steps": {"x": 100, "z": 50}})
         plan = CoordinatedMovePlan(

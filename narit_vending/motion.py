@@ -1590,12 +1590,23 @@ class MotionController:
                     self._sync_dynamic_config(speed_override_mm_s=target_speeds_mm_s)
                 self._sync_dynamic_positions(plan.axes.keys())
                 cmd_id = f"cmd-{int(monotonic() * 1000) % 1000000}"
-                for axis_name, axis_plan in plan.axes.items():
+                moving_dynamic_axes = tuple(
+                    axis_name
+                    for axis_name, axis_plan in plan.axes.items()
+                    if axis_plan.steps > 0
+                )
+                for axis_name in moving_dynamic_axes:
+                    axis_plan = plan.axes[axis_name]
                     target_pulses = int(round(axis_plan.target_mm * axes[axis_name].config.steps_per_mm))
                     backend.stage_dynamic_target(
                         DynamicTargetCommand(cmd_id, axis_name, target_pulses, self._dynamic_revision)
                     )
-                start_cmd = DynamicStartCommand(cmd_id, tuple(plan.axes.keys()))
+                # Do not include zero-distance axes in DYN_START. Firmware
+                # correctly leaves them IDLE, while the host completion
+                # contract requires every participating axis to be COMPLETE.
+                # Treating a no-op axis as participating caused false timeouts
+                # after the moving axis had emitted every requested pulse.
+                start_cmd = DynamicStartCommand(cmd_id, moving_dynamic_axes)
                 try:
                     result = backend.start_dynamic_motion(
                         start_cmd,
