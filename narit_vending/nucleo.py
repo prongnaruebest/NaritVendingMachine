@@ -499,6 +499,7 @@ class NucleoLink:
             deadline = started + max(1.0, float(timeout_s))
             participating = set(command.axes)
             dyn_status: dict[str, Any] | None = None
+            next_dynamic_status_at = started
 
             try:
                 while time.monotonic() < deadline:
@@ -532,7 +533,12 @@ class NucleoLink:
 
                     # Legacy heartbeat ``moving`` bits come from StepperState
                     # and do not represent the protocol-v4 dynamic scheduler.
-                    # Completion authority therefore belongs to DYN_STATUS.
+                    # Completion authority therefore belongs to DYN_STATUS,
+                    # but its large JSON response is rate-limited so it cannot
+                    # congest 115200-baud UART and starve the 500 ms heartbeat.
+                    if time.monotonic() < next_dynamic_status_at:
+                        continue
+                    next_dynamic_status_at = time.monotonic() + 0.4
                     serial_port.write(b"DYN_STATUS\n")
                     serial_port.flush()
                     candidate = self._read_json_response(

@@ -118,6 +118,10 @@ heartbeat before the 500 ms firmware deadline while interleaving `DYN_STATUS`.
 The configured command timeout may be longer, but no individual blocking serial
 read may consume the watchdog window.
 
+`DYN_STATUS` is limited to 2.5 Hz while the smaller heartbeat remains near
+10 Hz. This avoids saturating the 115200-baud UART with telemetry while keeping
+terminal completion observable and the heartbeat gap below the 500 ms limit.
+
 The candidate/protocol-v3 narrative below is retained as historical design
 context and is superseded where it conflicts with this current-status section.
 

@@ -266,6 +266,11 @@ class NucleoMotionTests(unittest.TestCase):
 
         self.assertTrue(result["ok"])
         self.assertEqual(mock_serial.dynamic_status_count, 2)
+        heartbeat_count = sum(
+            write.decode("ascii", errors="replace").strip() == "HEARTBEAT SAFE"
+            for write in mock_serial.writes
+        )
+        self.assertGreater(heartbeat_count, mock_serial.dynamic_status_count)
         self.assertEqual(result["telemetry"]["axes"]["x"]["state"], "COMPLETE")
         self.assertEqual(result["telemetry"]["axes"]["x"]["remaining_pulses"], 0)
 
