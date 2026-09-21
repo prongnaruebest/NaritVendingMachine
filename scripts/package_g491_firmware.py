@@ -21,6 +21,9 @@ CAPABILITIES = (
     "profile_sequence",
     "profile_telemetry",
     "dynamic_motion",
+    # The Controller must see this capability before it may leave the
+    # watchdog-safety quarantine and route X/Y moves to the dynamic planner.
+    "dynamic_watchdog_heartbeat",
     "terminal_rate_config",
 )
 

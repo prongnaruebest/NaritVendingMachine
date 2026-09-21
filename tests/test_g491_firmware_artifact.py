@@ -9,6 +9,10 @@ import pytest
 from scripts.package_g491_firmware import CAPABILITIES, package_firmware, sha256_file
 
 
+def test_artifact_declares_dynamic_watchdog_heartbeat_capability() -> None:
+    assert "dynamic_watchdog_heartbeat" in CAPABILITIES
+
+
 def _build_outputs(root: Path) -> Path:
     build_dir = root / "Release"
     build_dir.mkdir()
