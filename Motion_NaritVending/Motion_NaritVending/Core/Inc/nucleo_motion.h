@@ -39,6 +39,9 @@ void NucleoMotion_StopAxis(uint8_t axis);
 void NucleoMotion_Poll(void);
 uint8_t NucleoMotion_IsArmed(void);
 uint8_t NucleoMotion_WatchdogHealthy(void);
+uint32_t NucleoMotion_HeartbeatAgeMs(void);
+uint32_t NucleoMotion_MaxHeartbeatGapMs(void);
+uint32_t NucleoMotion_WatchdogTripCount(void);
 NucleoMotionResult Stepper_Move(uint8_t axis, uint8_t dir,
                                uint32_t steps, uint32_t speed_hz);
 uint8_t Stepper_IsMoving(uint8_t axis);

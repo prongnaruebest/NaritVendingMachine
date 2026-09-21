@@ -52,6 +52,8 @@ def test_g491_uart_rx_is_interrupt_buffered_above_motion_irqs() -> None:
     assert "HAL_UART_IRQHandler(&hlpuart1)" in interrupts
     assert "uart_overrun_count" in serial
     assert "rx_dropped_bytes" in serial
+    assert "max_heartbeat_gap_ms" in serial
+    assert "watchdog_trip_count" in serial
     assert "dynamic_watchdog_heartbeat" in serial
 
 

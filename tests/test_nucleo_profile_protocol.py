@@ -168,13 +168,26 @@ def test_sequence_rejects_duplicate_gap_and_cross_command_frames():
 
 def test_link_status_exposes_capability_without_sending_profile():
     link = NucleoLink({"protocol_version": 4})
-    link._last_payload = {"protocol": 4, "capabilities": sorted(PROFILE_CAPABILITIES)}
+    link._last_payload = {
+        "protocol": 4,
+        "capabilities": sorted(PROFILE_CAPABILITIES),
+        "heartbeat_age_ms": 42,
+        "max_heartbeat_gap_ms": 137,
+        "watchdog_trip_count": 0,
+        "uart_overrun_count": 0,
+        "rx_dropped_bytes": 0,
+    }
     status = link.status_payload()
     assert status["supports_buffered_scurve"] is True
     assert status["dynamic_motion_quarantined"] is True
     assert "500 ms heartbeat" in status["dynamic_motion_quarantine_reason"]
     assert set(status["capabilities"]) == PROFILE_CAPABILITIES
     assert status["supports_sensor_terminated_scurve"] is False
+    assert status["heartbeat_age_ms"] == 42
+    assert status["max_heartbeat_gap_ms"] == 137
+    assert status["watchdog_trip_count"] == 0
+    assert status["uart_overrun_count"] == 0
+    assert status["rx_dropped_bytes"] == 0
 
 
 def test_sensor_terminated_profile_requires_explicit_additional_capabilities():

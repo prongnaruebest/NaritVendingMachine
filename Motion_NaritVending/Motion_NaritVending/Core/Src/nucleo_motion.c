@@ -34,6 +34,8 @@ static StepperState steppers[AXIS_COUNT];
 static volatile uint8_t motion_armed;
 static volatile uint8_t watchdog_healthy;
 static volatile uint32_t last_heartbeat_ms;
+static volatile uint32_t max_heartbeat_gap_ms;
+static volatile uint32_t watchdog_trip_count;
 
 #if NUCLEO_G491_DYNAMIC_MOTION_ENABLED
 static NucleoDynamicApp dynamic_app;
@@ -259,6 +261,8 @@ void NucleoMotion_Init(void)
   motion_armed = 0U;
   watchdog_healthy = 0U;
   last_heartbeat_ms = HAL_GetTick();
+  max_heartbeat_gap_ms = 0U;
+  watchdog_trip_count = 0U;
   NucleoMotion_StopAll();
 }
 
@@ -270,6 +274,7 @@ uint8_t NucleoMotion_Arm(uint8_t safety_permissive)
   }
 
   last_heartbeat_ms = HAL_GetTick();
+  max_heartbeat_gap_ms = 0U;
   watchdog_healthy = 1U;
   motion_armed = 1U;
   return 1U;
@@ -277,12 +282,17 @@ uint8_t NucleoMotion_Arm(uint8_t safety_permissive)
 
 void NucleoMotion_Heartbeat(uint8_t safety_permissive)
 {
+  uint32_t now_ms;
+  uint32_t gap_ms;
   if ((safety_permissive == 0U) || (motion_armed == 0U)) {
     NucleoMotion_Disarm();
     return;
   }
 
-  last_heartbeat_ms = HAL_GetTick();
+  now_ms = HAL_GetTick();
+  gap_ms = (uint32_t)(now_ms - last_heartbeat_ms);
+  if (gap_ms > max_heartbeat_gap_ms) max_heartbeat_gap_ms = gap_ms;
+  last_heartbeat_ms = now_ms;
   watchdog_healthy = 1U;
 #if NUCLEO_G491_DYNAMIC_MOTION_ENABLED
   if (dynamic_hal_ready != 0U) {
@@ -319,6 +329,7 @@ void NucleoMotion_Poll(void)
   if ((motion_armed != 0U) &&
       ((uint32_t)(now_ms - last_heartbeat_ms) >
        NUCLEO_MOTION_WATCHDOG_MS)) {
+    ++watchdog_trip_count;
     NucleoMotion_Disarm();
   }
 }
@@ -458,6 +469,21 @@ void NucleoMotion_TIM6_IRQHandler(void)
     NucleoG491ControlTimer_IRQHandler(&dynamic_control_timer);
   }
 #endif
+}
+
+uint32_t NucleoMotion_HeartbeatAgeMs(void)
+{
+  return (uint32_t)(HAL_GetTick() - last_heartbeat_ms);
+}
+
+uint32_t NucleoMotion_MaxHeartbeatGapMs(void)
+{
+  return max_heartbeat_gap_ms;
+}
+
+uint32_t NucleoMotion_WatchdogTripCount(void)
+{
+  return watchdog_trip_count;
 }
 
 #if NUCLEO_G491_DYNAMIC_MOTION_ENABLED

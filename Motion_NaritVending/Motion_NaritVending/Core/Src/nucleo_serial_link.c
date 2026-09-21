@@ -66,6 +66,8 @@ static void transmit_status(const char *type)
       "\"protocol\":%lu," NUCLEO_CAPABILITIES_JSON
       "\"safe\":%s,\"armed\":%s,"
       "\"watchdog\":%s,\"uptime_ms\":%lu,\"max_move_steps\":%lu,"
+      "\"heartbeat_age_ms\":%lu,\"max_heartbeat_gap_ms\":%lu,"
+      "\"watchdog_trip_count\":%lu,"
       "\"uart_overrun_count\":%lu,\"rx_dropped_bytes\":%lu,"
       "\"moving\":{\"x\":%u,\"y\":%u,\"z\":%u}}\r\n",
       type,
@@ -75,6 +77,9 @@ static void transmit_status(const char *type)
       NucleoMotion_WatchdogHealthy() != 0U ? "true" : "false",
       (unsigned long)HAL_GetTick(),
       (unsigned long)NUCLEO_MOTION_MAX_STEPS,
+      (unsigned long)NucleoMotion_HeartbeatAgeMs(),
+      (unsigned long)NucleoMotion_MaxHeartbeatGapMs(),
+      (unsigned long)NucleoMotion_WatchdogTripCount(),
       (unsigned long)receive_overrun_count,
       (unsigned long)receive_dropped_bytes,
       (unsigned int)Stepper_IsMoving(AXIS_X),
