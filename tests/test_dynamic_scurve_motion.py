@@ -233,6 +233,39 @@ class TestDynamicScurveMotion(unittest.TestCase):
         with self.assertRaises(LimitTriggeredError):
             self.mc._execute_coordinated_plan(plan)
 
+        self.assertFalse(self.mock_x.is_homed)
+
+    def test_single_axis_zero_target_accepts_home_sensor_termination(self) -> None:
+        self.backend.mock_start_result = {"status": "stopped", "stopped": True}
+        self.mock_x.position_mm = 10.0
+        self.mock_x.position_steps = 647
+        self.mock_x.head_limit.value = 1
+        plan = CoordinatedMovePlan(
+            axes={"x": AxisMovePlan(axis="x", current_mm=10.0, target_mm=0.0, distance_mm=-10.0, direction=1, steps=647, speed_mm_s=20.0, duration_s=0.5)},
+            duration_s=0.5,
+            mode="speed",
+        )
+
+        self.mc._execute_coordinated_plan(plan)
+
+        self.assertEqual(self.mock_x.position_steps, 0)
+        self.assertTrue(self.mock_x.is_homed)
+        self.assertFalse(self.mc._dynamic_config_synced)
+
+    def test_nonzero_target_with_home_sensor_still_fails_closed(self) -> None:
+        self.backend.mock_start_result = {"status": "stopped", "stopped": True}
+        self.mock_x.head_limit.value = 1
+        plan = CoordinatedMovePlan(
+            axes={"x": AxisMovePlan(axis="x", current_mm=10.0, target_mm=1.0, distance_mm=-9.0, direction=1, steps=582, speed_mm_s=20.0, duration_s=0.45)},
+            duration_s=0.45,
+            mode="speed",
+        )
+
+        with self.assertRaises(LimitTriggeredError):
+            self.mc._execute_coordinated_plan(plan)
+
+        self.assertFalse(self.mock_x.is_homed)
+
     def test_dynamic_config_sync_preserves_position_for_homed_axes(self) -> None:
         self.mock_x.is_homed = True
         self.mock_x.position_mm = 50.0

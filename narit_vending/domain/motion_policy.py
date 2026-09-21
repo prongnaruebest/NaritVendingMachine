@@ -40,6 +40,30 @@ def active_physical_limit(
     return None
 
 
+def is_sensor_terminated_home_target(
+    *,
+    direction: int,
+    home_direction: int,
+    target_steps: int,
+    min_active: bool,
+    max_active: bool,
+) -> bool:
+    """Return true only when a Min switch terminates a commanded zero target.
+
+    The Home switch is the machine-coordinate reference, so it may assert a few
+    pulses before the virtual planner reaches zero.  This policy deliberately
+    excludes Max, non-zero and multi-axis decisions; callers must enforce the
+    single-axis condition before using the switch as successful completion.
+    """
+
+    return (
+        int(target_steps) == 0
+        and direction == home_direction
+        and min_active
+        and not max_active
+    )
+
+
 def assess_directional_limit(
     *,
     direction: int,

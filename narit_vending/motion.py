@@ -44,6 +44,7 @@ from .domain.motion_policy import (
     active_physical_limit,
     assess_directional_limit,
     classify_segment_outcome,
+    is_sensor_terminated_home_target,
 )
 
 
@@ -1605,14 +1606,38 @@ class MotionController:
 
                 if result.get("stopped"):
                     self._dynamic_config_synced = False
-                    for axis in axes.values():
-                        axis.is_homed = False
                     if self.emergency_stop_active():
+                        for axis in axes.values():
+                            axis.is_homed = False
                         raise EmergencyStopError("emergency stop during coordinated move")
                     if self.stop_requested():
+                        for axis in axes.values():
+                            axis.is_homed = False
                         raise StopRequestedError("stop requested during coordinated move")
                     if self.controlled_stop_requested():
+                        for axis in axes.values():
+                            axis.is_homed = False
                         raise ControlledStopError("coordinated controlled stop completed")
+                    if len(plan.axes) == 1:
+                        axis_name, axis_plan = next(iter(plan.axes.items()))
+                        axis = axes[axis_name]
+                        target_steps = int(round(axis_plan.target_mm * axis.config.steps_per_mm))
+                        if is_sensor_terminated_home_target(
+                            direction=axis_plan.direction,
+                            home_direction=axis.config.home_direction,
+                            target_steps=target_steps,
+                            min_active=bool(axis.head_limit.value),
+                            max_active=bool(axis.tail_limit.value),
+                        ):
+                            # The physical Home switch owns coordinate zero.  A
+                            # later dynamic command will resend this reconciled
+                            # position because config sync was invalidated above.
+                            axis.position_steps = 0
+                            sleep(axis.config.settle_delay)
+                            self._verify_completion(completion_tokens)
+                            return
+                    for axis in axes.values():
+                        axis.is_homed = False
                     raise LimitTriggeredError("physical limit triggered during coordinated move")
 
                 for axis_name, axis_plan in plan.axes.items():
