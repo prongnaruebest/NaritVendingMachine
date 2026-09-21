@@ -24,6 +24,7 @@ NUCLEO_MOTION_MIN_SPEED_HZ = 10.0
 NUCLEO_MOTION_MAX_SPEED_HZ = 50_000.0
 NUCLEO_MOTION_MAX_STEPS = 1_000_000
 NUCLEO_LEGACY_MAX_STEPS = 10_000
+NUCLEO_SERIAL_READ_SLICE_S = 0.05
 
 
 class NucleoLink:
@@ -134,7 +135,11 @@ class NucleoLink:
         self._serial = factory(
             port=self.port,
             baudrate=self.baudrate,
-            timeout=self.timeout_s,
+            # readline() is blocking. It must return well inside the firmware's
+            # 500 ms watchdog so a delayed response cannot starve HEARTBEAT.
+            # Command-level deadlines remain controlled by
+            # _read_json_response(), which may perform multiple short reads.
+            timeout=min(self.timeout_s, NUCLEO_SERIAL_READ_SLICE_S),
             write_timeout=self.timeout_s,
         )
         self._serial.write(b"\n")
@@ -497,7 +502,7 @@ class NucleoLink:
 
             try:
                 while time.monotonic() < deadline:
-                    time.sleep(0.08)
+                    time.sleep(0.02)
 
                     if stop_requested is not None and stop_requested():
                         serial_port.write(b"CONTROLLED_STOP\n")
@@ -520,7 +525,7 @@ class NucleoLink:
 
                     serial_port.write(b"HEARTBEAT SAFE\n")
                     serial_port.flush()
-                    hb = self._read_json_response(serial_port, time.monotonic() + 0.2, expected_types={"heartbeat"})
+                    hb = self._read_json_response(serial_port, time.monotonic() + 0.1, expected_types={"heartbeat"})
                     if hb:
                         self._last_success_monotonic = time.monotonic()
                         self._last_payload = dict(hb)
@@ -532,7 +537,7 @@ class NucleoLink:
                     serial_port.flush()
                     candidate = self._read_json_response(
                         serial_port,
-                        time.monotonic() + 0.2,
+                        time.monotonic() + 0.1,
                         expected_types={"dynamic_status"},
                     )
                     if not candidate or not isinstance(candidate.get("axes"), dict):

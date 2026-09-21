@@ -10,6 +10,7 @@ from narit_vending.nucleo import (
     NUCLEO_MOTION_MAX_STEPS,
     NUCLEO_LEGACY_MAX_STEPS,
     NUCLEO_MOTION_MIN_SPEED_HZ,
+    NUCLEO_SERIAL_READ_SLICE_S,
     NucleoError,
     NucleoLink,
 )
@@ -148,6 +149,22 @@ class NucleoMotionTests(unittest.TestCase):
         self.assertEqual(payload["device"], "NUCLEO-F439ZI")
         self.assertEqual(payload["max_move_steps"], NUCLEO_LEGACY_MAX_STEPS)
         self.assertFalse(payload["armed"])
+
+    def test_serial_read_timeout_is_bounded_below_firmware_watchdog(self):
+        captured: dict[str, object] = {}
+        mock_serial = MockSerialProtocolV2()
+
+        def factory(**kwargs):
+            captured.update(kwargs)
+            return mock_serial
+
+        config = self.config()
+        config["timeout_s"] = 1.0
+        link = NucleoLink(config, serial_factory=factory)
+        link._open_serial()
+
+        self.assertEqual(captured["timeout"], NUCLEO_SERIAL_READ_SLICE_S)
+        self.assertLess(float(captured["timeout"]), 0.5)
 
     def test_usb_open_failure_publishes_communication_fault(self):
         def fail_serial(**kwargs):

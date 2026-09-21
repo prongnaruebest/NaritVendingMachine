@@ -113,6 +113,11 @@ legacy heartbeat `moving` bits. Every participating axis must report
 `state=COMPLETE`, `remaining_pulses=0`, and `fault=NONE` before the Controller
 may update its estimated position or report the command complete.
 
+The host serial read slice is capped at 50 ms and dynamic supervision refreshes
+heartbeat before the 500 ms firmware deadline while interleaving `DYN_STATUS`.
+The configured command timeout may be longer, but no individual blocking serial
+read may consume the watchdog window.
+
 The candidate/protocol-v3 narrative below is retained as historical design
 context and is superseded where it conflicts with this current-status section.
 
