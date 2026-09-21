@@ -1723,7 +1723,7 @@ class MotionController:
             )
 
 
-def build_default_slots(slot_count: int = 30) -> dict[str, SlotPosition]:
+def build_default_slots(slot_count: int = 40) -> dict[str, SlotPosition]:
     return {
         str(index): SlotPosition(code=str(index), x_mm=0.0, y_mm=0.0, z_mm=0.0)
         for index in range(1, slot_count + 1)

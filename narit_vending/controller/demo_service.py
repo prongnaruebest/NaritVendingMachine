@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+import math
 import random
 import threading
 import time
@@ -39,6 +40,7 @@ class DemoSamplingService:
         self._ended_at: str | None = None
         self._current_slot: str | None = None
         self._next_slot: str | None = None
+        self._current_phase: str | None = None
         self._cycle = 0
         self._counters = {key: 0 for key in ("requested", "attempted", "passed", "failed", "skipped", "stopped")}
         self._last_result = ""
@@ -48,9 +50,22 @@ class DemoSamplingService:
         self.schema_version = self.repository.schema_version
 
     def _normalise(self, payload: dict[str, Any]) -> dict[str, Any]:
-        slots = [str(value) for value in payload.get("slots", []) if str(value) in self.motion.controller.config.slots]
+        slots = [
+            str(value)
+            for value in payload.get("slots", [])
+            if self._slot_is_sequence_eligible(str(value))
+        ]
         if not slots:
-            slots = sorted(self.motion.controller.config.slots, key=lambda value: int(value) if str(value).isdigit() else str(value))
+            slots = sorted(
+                (
+                    str(value)
+                    for value in self.motion.controller.config.slots
+                    if self._slot_is_sequence_eligible(str(value))
+                ),
+                key=lambda value: int(value) if str(value).isdigit() else str(value),
+            )
+        if not slots:
+            raise ValueError("Demo requires at least one sequence-eligible slot")
         config = {
             "mode": str(payload.get("mode", "sequential")).lower(),
             "slots": slots,
@@ -63,7 +78,8 @@ class DemoSamplingService:
             "speed_mm_s": float(payload.get("speed_mm_s", 5) or 5),
             "random_seed": int(payload.get("random_seed", 0) or 0),
             "stop_on_failure": bool(payload.get("stop_on_failure", True)),
-            "motion_only": True,
+            "workflow": "slot_sequence",
+            "motion_only": False,
         }
         if config["mode"] not in {"sequential", "random", "balanced", "selected"}:
             raise ValueError("mode must be sequential, random, balanced, or selected")
@@ -72,6 +88,37 @@ class DemoSamplingService:
         if config["speed_mm_s"] <= 0:
             raise ValueError("speed_mm_s must be greater than zero")
         return config
+
+    def _slot_is_sequence_eligible(self, slot_code: str) -> bool:
+        """Return whether a saved slot can complete every configured sequence stage."""
+
+        controller_config = self.motion.controller.config
+        slot = controller_config.slots.get(str(slot_code))
+        sequence = getattr(controller_config, "slot_sequence", None)
+        if slot is None or sequence is None or not bool(getattr(sequence, "enabled", False)):
+            return False
+        axes = getattr(controller_config, "axes", None)
+        if callable(axes):
+            axes = axes()
+        axis_configs = axes if isinstance(axes, dict) else {
+            axis: getattr(controller_config, axis, None) for axis in ("x", "y", "z")
+        }
+        try:
+            coordinates = {
+                axis: float(getattr(slot, f"{axis}_mm")) for axis in ("x", "y", "z")
+            }
+            limits = {
+                axis: float(getattr(axis_configs[axis], "max_travel_mm"))
+                for axis in ("x", "y", "z")
+            }
+            y_lift_target_mm = coordinates["y"] + float(sequence.y_lift_delta_mm)
+        except (AttributeError, KeyError, TypeError, ValueError):
+            return False
+        return (
+            all(math.isfinite(value) for value in (*coordinates.values(), *limits.values(), y_lift_target_mm))
+            and all(0.0 <= coordinates[axis] <= limits[axis] for axis in coordinates)
+            and 0.0 <= y_lift_target_mm <= limits["y"]
+        )
 
     def configure(self, payload: dict[str, Any]) -> dict[str, Any]:
         with self._lock:
@@ -126,6 +173,7 @@ class DemoSamplingService:
             self._stop.clear()
             self._pause_requested = False
             self._cycle = 0
+            self._current_phase = None
             self._counters = {key: 0 for key in self._counters}
             requested = max(0, self._config["sample_count"])
             self._counters["requested"] = requested
@@ -199,7 +247,19 @@ class DemoSamplingService:
                 self._state = "MOVING_TO_SLOT"
                 sample_id, sample_started, t0 = uuid.uuid4().hex, _now(), time.monotonic()
                 self._counters["attempted"] += 1
-                result = self.motion.move_to_slot(slot, speed_mm_s=self._config["speed_mm_s"])
+                def phase_update(_state: str, detail: dict[str, object]) -> None:
+                    phase = str(detail.get("phase") or "SEQUENCE")
+                    message = str(detail.get("message") or phase)
+                    with self._lock:
+                        self._current_phase = phase
+                        self._last_result = message
+
+                result = self.motion.run_slot_sequence(
+                    slot,
+                    speed_mm_s=self._config["speed_mm_s"],
+                    request_id=sample_id,
+                    phase_callback=phase_update,
+                )
                 stopped = self._stop.is_set()
                 passed = bool(result.get("ok")) and not stopped
                 outcome = "STOPPED" if stopped else ("PASSED" if passed else "FAILED")
@@ -236,6 +296,7 @@ class DemoSamplingService:
         finally:
             self._ended_at = _now()
             self._current_slot = self._next_slot = None
+            self._current_phase = None
             self.repository.finish_session(
                 session_id=self._session_id,
                 ended_at=self._ended_at,
@@ -275,7 +336,7 @@ class DemoSamplingService:
     def status(self) -> dict[str, Any]:
         with self._lock:
             attempted = self._counters["attempted"]
-            return {"state": self._state, "session_id": self._session_id, "started_at": self._started_at, "ended_at": self._ended_at, "cycle": self._cycle, "current_slot": self._current_slot, "next_slot": self._next_slot, "configuration": dict(self._config), "counters": dict(self._counters) | {"success_rate": round(100*self._counters["passed"]/attempted, 1) if attempted else 0.0}, "last_result": self._last_result, "pause_requested": self._pause_requested, "schema_version": self.schema_version}
+            return {"state": self._state, "session_id": self._session_id, "started_at": self._started_at, "ended_at": self._ended_at, "cycle": self._cycle, "current_slot": self._current_slot, "next_slot": self._next_slot, "current_phase": getattr(self, "_current_phase", None), "configuration": dict(self._config), "counters": dict(self._counters) | {"success_rate": round(100*self._counters["passed"]/attempted, 1) if attempted else 0.0}, "last_result": self._last_result, "pause_requested": self._pause_requested, "schema_version": self.schema_version}
 
     def history(self, limit: int = 50) -> list[dict[str, Any]]:
         return self.repository.history(limit)

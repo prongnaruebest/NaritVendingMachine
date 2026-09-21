@@ -9,7 +9,15 @@ from narit_vending.controller.demo_service import DemoSamplingService
 
 class FakeMotion:
     def __init__(self):
-        self.controller = SimpleNamespace(config=SimpleNamespace(slots={"1": object(), "2": object()}))
+        axis = SimpleNamespace(max_travel_mm=100.0)
+        sequence = SimpleNamespace(enabled=True, y_lift_delta_mm=5.0)
+        slots = {
+            "1": SimpleNamespace(x_mm=10.0, y_mm=10.0, z_mm=10.0),
+            "2": SimpleNamespace(x_mm=20.0, y_mm=20.0, z_mm=20.0),
+        }
+        self.controller = SimpleNamespace(config=SimpleNamespace(
+            slots=slots, x=axis, y=axis, z=axis, slot_sequence=sequence,
+        ))
         self.motion_enabled = True
         self.moves = []
         self.stopped = False
@@ -17,8 +25,10 @@ class FakeMotion:
     def _motion_safety_errors(self, **kwargs):
         return []
 
-    def move_to_slot(self, slot, speed_mm_s=None):
+    def run_slot_sequence(self, slot, speed_mm_s=None, request_id=None, phase_callback=None):
         self.moves.append((slot, speed_mm_s))
+        if phase_callback:
+            phase_callback("moving", {"phase": "MOVE_XY_TARGET", "message": f"Moving to {slot}"})
         return {"ok": True}
 
     def stop(self):
@@ -58,6 +68,7 @@ class DemoSamplingTests(unittest.TestCase):
         self.assertEqual(len(self.demo.history()), 1)
         history = self.demo.history()[0]
         self.assertEqual(history["configuration"]["mode"], "sequential")
+        self.assertEqual(history["configuration"]["workflow"], "slot_sequence")
         self.assertEqual([row["slot_code"] for row in history["samples"]], ["1", "2"])
         self.assertTrue(all(row["result"] == "PASSED" for row in history["samples"]))
         self.assertIn("session_id,cycle,slot", self.demo.export_csv())
@@ -87,6 +98,23 @@ class DemoSamplingTests(unittest.TestCase):
         self.assertFalse(result["ok"])
         self.assertEqual(self.motion.moves, [])
 
+    def test_demo_rejects_slots_that_cannot_complete_sequence(self):
+        self.motion.controller.config.slots["3"] = SimpleNamespace(
+            x_mm=10.0, y_mm=98.0, z_mm=10.0,
+        )
+        configured = self.demo.configure({"slots": ["3"], "sample_count": 1})
+
+        self.assertTrue(configured["ok"])
+        self.assertNotIn("3", configured["configuration"]["slots"])
+
+    def test_demo_requires_enabled_slot_sequence(self):
+        self.motion.controller.config.slot_sequence.enabled = False
+
+        result = self.demo.configure({"sample_count": 1})
+
+        self.assertFalse(result["ok"])
+        self.assertIn("sequence-eligible", result["error"])
+
     def test_demo_duration_is_read_only_and_calculated_by_frontend(self):
         root = Path(__file__).resolve().parents[1]
         template = (root / "narit_vending" / "templates" / "index.html").read_text(encoding="utf-8")
@@ -95,7 +123,11 @@ class DemoSamplingTests(unittest.TestCase):
         duration_field = template.split('id="demo-max-duration"', 1)[1].split(">", 1)[0]
         self.assertIn("readonly", duration_field)
         self.assertIn("function calculateDemoMaxDuration()", script)
+        self.assertIn("complete Controller-owned slot sequence", script)
         self.assertIn("max_duration_s: maxDuration", script)
+        self.assertIn("const SLOT_COUNT = 40", script)
+        self.assertIn("Slot Overview 8×5", template)
+        self.assertIn("Slot Matrix 01–40", template)
 
 
 if __name__ == "__main__":

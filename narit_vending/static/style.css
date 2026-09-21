@@ -3449,7 +3449,7 @@ select.slot-filter {
   inset: 34px 28px 30px 42px;
   z-index: 1;
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(8, minmax(0, 1fr));
   grid-template-rows: repeat(5, minmax(0, 1fr));
   gap: 8px;
 }
@@ -4529,7 +4529,7 @@ select.slot-filter {
   min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(8, minmax(0, 1fr));
   grid-template-rows: repeat(5, minmax(0, 1fr));
   gap: 3px;
 }

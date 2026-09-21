@@ -64,7 +64,7 @@ class ConfigFoundationTests(unittest.TestCase):
             for axis in ("x", "y", "z")
         }
 
-        self.assertEqual(set(slots), {str(slot) for slot in range(1, 31)})
+        self.assertEqual(set(slots), {str(slot) for slot in range(1, 41)})
         for slot_code, slot in slots.items():
             for axis, maximum in limits.items():
                 coordinate = float(slot[f"{axis}_mm"])

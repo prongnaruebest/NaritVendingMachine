@@ -55,7 +55,7 @@ def build_parser() -> argparse.ArgumentParser:
     move_parser.add_argument("--z", type=float, default=0.0)
 
     goto_parser = subparsers.add_parser("goto-slot", help="Move to a configured vending slot")
-    goto_parser.add_argument("slot", help="Slot number such as 1 or 30")
+    goto_parser.add_argument("slot", help="Slot number such as 1 or 40")
 
     return parser
 

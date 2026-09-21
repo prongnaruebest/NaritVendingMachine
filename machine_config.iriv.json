@@ -328,7 +328,17 @@
       "z_mm": 85.0,
       "product_name": "",
       "dispense_delay_ms": 0
-    }
+    },
+    "31": {"x_mm": 1450.0, "y_mm": 1620.0, "z_mm": 85.0, "product_name": "", "dispense_delay_ms": 0},
+    "32": {"x_mm": 1650.0, "y_mm": 1620.0, "z_mm": 85.0, "product_name": "", "dispense_delay_ms": 0},
+    "33": {"x_mm": 1450.0, "y_mm": 1370.0, "z_mm": 85.0, "product_name": "", "dispense_delay_ms": 0},
+    "34": {"x_mm": 1650.0, "y_mm": 1370.0, "z_mm": 85.0, "product_name": "", "dispense_delay_ms": 0},
+    "35": {"x_mm": 1450.0, "y_mm": 1130.0, "z_mm": 85.0, "product_name": "", "dispense_delay_ms": 0},
+    "36": {"x_mm": 1650.0, "y_mm": 1130.0, "z_mm": 85.0, "product_name": "", "dispense_delay_ms": 0},
+    "37": {"x_mm": 1450.0, "y_mm": 880.0, "z_mm": 85.0, "product_name": "", "dispense_delay_ms": 0},
+    "38": {"x_mm": 1650.0, "y_mm": 880.0, "z_mm": 85.0, "product_name": "", "dispense_delay_ms": 0},
+    "39": {"x_mm": 1450.0, "y_mm": 600.0, "z_mm": 85.0, "product_name": "", "dispense_delay_ms": 0},
+    "40": {"x_mm": 1650.0, "y_mm": 600.0, "z_mm": 85.0, "product_name": "", "dispense_delay_ms": 0}
   },
   "slot_sequence": {
     "enabled": true,

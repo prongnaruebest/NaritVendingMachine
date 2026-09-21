@@ -9,6 +9,7 @@
 
   /* ── CONSTANTS ──────────────────────────────────────────────── */
   const AXES = ["x", "y", "z"];
+  const SLOT_COUNT = 40;
   const POLL_INTERVAL_MS = 1000;
 
   /* ── CENTRALIZED MACHINE STATE ──────────────────────────────── */
@@ -917,7 +918,7 @@
     const filter = el("slot-filter")?.value ?? "all";
 
     const slotsData = { ...MS.slots };
-    for (let i = 1; i <= 30; i++) {
+    for (let i = 1; i <= SLOT_COUNT; i++) {
       const code = String(i);
       slotsData[code] ||= { x_mm: 0, y_mm: 0, z_mm: 0, product_name: "", dispense_delay_ms: 0 };
     }
@@ -997,7 +998,7 @@
   }
 
   function slotManagerEntries() {
-    return Array.from({ length: 30 }, (_, index) => {
+    return Array.from({ length: SLOT_COUNT }, (_, index) => {
       const code = String(index + 1);
       return [code, MS.slots[code] || { x_mm: 0, y_mm: 0, z_mm: 0, product_name: "" }];
     });
@@ -1009,7 +1010,7 @@
       const state = slotManagerStatus(slot);
       if (state in counts) counts[state] += 1;
     });
-    setText("slot-summary-total", 30);
+    setText("slot-summary-total", SLOT_COUNT);
     setText("slot-summary-ready", counts.ready);
     setText("slot-summary-empty", counts.empty);
     setText("slot-summary-invalid", counts.invalid);
@@ -1938,7 +1939,7 @@
     });
     if (nearestDistance > 3) nearestCode = "";
 
-    slotGrid.innerHTML = Array.from({ length: 30 }, (_, index) => {
+    slotGrid.innerHTML = Array.from({ length: SLOT_COUNT }, (_, index) => {
       const code = String(index + 1);
       const slot = MS.slots[code] || {};
       const configured = slotStatus(slot) === "ready";
@@ -2129,7 +2130,7 @@
     const targetZPct = targetValid ? Math.max(0, Math.min(100, targetZ / zMax * 100)) : 0;
     const atPosition = dataState.live && targetValid && Math.hypot(xPosition - targetX, yPosition - targetY, zPosition - targetZ) <= 2;
 
-    slotGrid.innerHTML = Array.from({ length: 30 }, (_, index) => {
+    slotGrid.innerHTML = Array.from({ length: SLOT_COUNT }, (_, index) => {
       const code = String(index + 1);
       const slot = MS.slots[code] || {};
       const configured = slotStatus(slot) === "ready";
@@ -2219,7 +2220,7 @@
 
     const commandSelect = el("visual-command-slot");
     if (commandSelect) {
-      const codes = Array.from({ length: 30 }, (_, index) => String(index + 1));
+      const codes = Array.from({ length: SLOT_COUNT }, (_, index) => String(index + 1));
       if (commandSelect.options.length !== codes.length) {
         commandSelect.innerHTML = codes.map((code) => `<option value="${code}">Slot ${code}</option>`).join("");
       }
@@ -3185,7 +3186,7 @@
     const currentPosition = status.current_position || {};
     const nearestCode = Object.entries(MS.slots || {}).find(([, slot]) => AXES.every((axis) => Math.abs(Number(slot[`${axis}_mm`] || 0) - Number(currentPosition[`${axis}_mm`] || 0)) < 0.05))?.[0];
     const slotGrid = el("dashboard-slot-grid");
-    if (slotGrid) slotGrid.innerHTML = Array.from({ length: 30 }, (_, index) => {
+    if (slotGrid) slotGrid.innerHTML = Array.from({ length: SLOT_COUNT }, (_, index) => {
       const code = String(index + 1);
       const slot = MS.slots[code] || {};
       const configured = slotStatus(slot) === "ready";
@@ -4525,23 +4526,39 @@
       .map((slot) => ({x: Number(slot.x_mm), y: Number(slot.y_mm), z: Number(slot.z_mm)}));
     if (!candidates.length) return Math.ceil((count * (dwell + 10)) + 10);
 
-    const safeZ = Math.max(0, Number(MS.config?.safe_z_mm ?? MS.payload?.config?.safe_z_mm ?? 10) || 10);
-    const tripSeconds = (from, to) => {
-      const startZ = from.z < safeZ ? safeZ : from.z;
-      const clearZ = Math.max(0, safeZ - from.z);
-      const xy = Math.max(Math.abs(to.x - from.x), Math.abs(to.y - from.y));
-      const targetZ = Math.abs(to.z - startZ);
-      return (clearZ + xy + targetZ) / speed;
-    };
-    const current = {x: Number(getAxis("x").position_mm || 0), y: Number(getAxis("y").position_mm || 0), z: Number(getAxis("z").position_mm || 0)};
-    const firstMove = Math.max(...candidates.map((target) => tripSeconds(current, target)));
-    let laterMove = 0;
-    for (const from of candidates) for (const to of candidates) laterMove = Math.max(laterMove, tripSeconds(from, to));
+    const sequence = MS.config?.slot_sequence || {};
+    const standbyZ = Math.max(0, Number(sequence.z_standby_mm ?? 85) || 85);
+    const pickZ = Math.max(0, Number(sequence.z_pick_mm ?? 20) || 20);
+    const liftY = Math.max(0, Number(sequence.y_lift_delta_mm ?? 30) || 30);
+    const parkingX = Math.max(0, Number(sequence.parking_x_mm ?? 50) || 50);
+    const parkingY = Math.max(0, Number(sequence.parking_y_mm ?? 50) || 50);
+    const dropZ = Math.max(0, Number(sequence.z_drop_mm ?? 150) || 150);
+    const pickHold = Math.max(0, Number(sequence.pick_hold_seconds ?? 3) || 0);
+    const dropHold = Math.max(0, Number(sequence.drop_hold_seconds ?? 3) || 0);
 
-    // 25% timing reserve plus three seconds per sample covers command setup,
-    // USB acknowledgements and settling without turning the watchdog unbounded.
-    const estimated = firstMove + (Math.max(0, count - 1) * laterMove) + (count * (dwell + 3));
-    return Math.max(10, Math.ceil((estimated * 1.25) + 10));
+    // Demo samples execute the complete Controller-owned slot sequence and
+    // finish at Home. Estimate every phase rather than a direct slot move.
+    const sequenceSeconds = (target) => {
+      const toStandby = standbyZ;
+      const toSlotXY = Math.max(Math.abs(target.x), Math.abs(target.y));
+      const extendPick = Math.abs(standbyZ - pickZ);
+      const liftPick = liftY;
+      const retractPick = Math.abs(standbyZ - pickZ);
+      const toParking = Math.max(
+        Math.abs(target.x - parkingX),
+        Math.abs((target.y + liftY) - parkingY),
+      );
+      const extendDrop = Math.abs(dropZ - standbyZ);
+      const retractDrop = Math.abs(dropZ - standbyZ);
+      const returnHome = standbyZ + parkingY + parkingX;
+      return (
+        toStandby + toSlotXY + extendPick + liftPick + retractPick
+        + toParking + extendDrop + retractDrop + returnHome
+      ) / speed + pickHold + dropHold;
+    };
+    const worstSequence = Math.max(...candidates.map(sequenceSeconds));
+    const estimated = count * (worstSequence + dwell + 8);
+    return Math.max(30, Math.ceil((estimated * 1.35) + 15));
   }
 
   function demoPayload() {
