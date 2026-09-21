@@ -13,6 +13,7 @@ from narit_vending.nucleo import (
     NucleoError,
     NucleoLink,
 )
+from narit_vending.domain.nucleo_profile_protocol import DynamicStartCommand
 
 
 class MockSerialProtocolV2:
@@ -80,6 +81,48 @@ class MockSerialProtocolV2:
 
     def close(self) -> None:
         self.closed = True
+
+
+class MockDynamicSerial(MockSerialProtocolV2):
+    """Protocol-v4 serial fake whose legacy moving bits remain zero."""
+
+    def __init__(self) -> None:
+        super().__init__(protocol=4)
+        self.dynamic_status_count = 0
+
+    def write(self, data: bytes) -> int:
+        line = data.decode("ascii", errors="replace").strip()
+        if line.startswith("DYN_START "):
+            self.writes.append(data)
+            self.script.append({"type": "ack", "status": "running"})
+            return len(data)
+        if line == "DYN_STATUS":
+            self.writes.append(data)
+            self.dynamic_status_count += 1
+            complete = self.dynamic_status_count >= 2
+            state = "COMPLETE" if complete else "RUNNING"
+            remaining = 0 if complete else 100
+            emitted = 100 if complete else 0
+            self.script.append({
+                "type": "dynamic_status",
+                "runtime_ready": True,
+                "axes": {
+                    "x": {
+                        "state": state,
+                        "fault": "NONE",
+                        "emitted_pulses": emitted,
+                        "remaining_pulses": remaining,
+                    },
+                    "y": {
+                        "state": "IDLE",
+                        "fault": "NONE",
+                        "emitted_pulses": 0,
+                        "remaining_pulses": 0,
+                    },
+                },
+            })
+            return len(data)
+        return super().write(data)
 
 
 class NucleoMotionTests(unittest.TestCase):
@@ -190,6 +233,24 @@ class NucleoMotionTests(unittest.TestCase):
 
         self.assertFalse(link.disarm())
         self.assertIn("not acknowledged", link.status_payload()["last_error"])
+
+    def test_dynamic_completion_uses_dynamic_status_not_legacy_moving_bits(self):
+        mock_serial = MockDynamicSerial()
+        config = self.config()
+        config.update({"protocol_version": 4, "expected_device": "NUCLEO-F439ZI"})
+        link = NucleoLink(config, serial_factory=lambda **kwargs: mock_serial)
+        link._connected = True
+        link._last_success_monotonic = __import__("time").monotonic()
+
+        result = link.start_dynamic_motion(
+            DynamicStartCommand(command_id="move-1", axes=("x",)),
+            timeout_s=2.0,
+        )
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(mock_serial.dynamic_status_count, 2)
+        self.assertEqual(result["telemetry"]["axes"]["x"]["state"], "COMPLETE")
+        self.assertEqual(result["telemetry"]["axes"]["x"]["remaining_pulses"], 0)
 
     def test_move_stops_when_condition_triggers(self):
         mock_serial = MockSerialProtocolV2()

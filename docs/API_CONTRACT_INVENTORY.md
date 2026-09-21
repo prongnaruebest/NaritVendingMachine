@@ -108,6 +108,11 @@ heartbeat watchdog is healthy; it is not a timeout alarm. After an acknowledged
 `safe=true`, `watchdog=false`, and zero moving axes so clients do not observe a
 stale armed heartbeat while waiting for the next background poll.
 
+Protocol-v4 dynamic motion completion must be proven by `DYN_STATUS`, not the
+legacy heartbeat `moving` bits. Every participating axis must report
+`state=COMPLETE`, `remaining_pulses=0`, and `fault=NONE` before the Controller
+may update its estimated position or report the command complete.
+
 The candidate/protocol-v3 narrative below is retained as historical design
 context and is superseded where it conflicts with this current-status section.
 
