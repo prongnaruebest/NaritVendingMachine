@@ -182,3 +182,8 @@ single-axis ก่อน coordinated motion และตรวจ interlock/tele
   IRIV DI0 ด้วยการสังเกตหน้าเครื่องก่อน motion ครั้งถัดไป
 - ห้ามทดสอบ Kp absolute move จนกว่าจะสร้าง reference coordinate ที่เชื่อถือได้จาก
   physical limit และ `is_homed=true`
+- Retest หลังผู้ควบคุมยืนยันว่าสวิตช์ปกติ: ส่ง X+ 20 mm/s และตรวจ live state
+  หลัง 10 วินาที แต่ IRIV DI0/X Min ยังคง active จึง STOP และ Disable Motion
+  ทันทีตาม gate; X Max ไม่ active, ALM clear และ NUCLEO กลับ safe/disarmed
+- ต้องทำ live press/release observation ของ physical X Min เทียบกับ raw IRIV DI0
+  ก่อนทดสอบต่อ เพื่อแยก polarity/mapping fault ออกจากกลไกไม่ออกจากสวิตช์
