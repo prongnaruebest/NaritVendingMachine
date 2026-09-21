@@ -43,3 +43,14 @@ Deploy Controller/Web release `61ef6a957a8e-c4051c40de67` และทดสอ�
 Debugger ยืนยันว่า CPU ติดอยู่ใน `TIM6_DAC_IRQHandler` ขณะ `HAL_TIM_Base_Start_IT()` ยังไม่คืนค่ากลับมาที่ startup code สาเหตุคือ TIM6 update interrupt เกิดขึ้นทันที แต่ `NucleoG491ControlTimer.running` ยังเป็น 0 ทำให้ handler return โดยไม่ clear UIF และเกิด interrupt storm ก่อนเริ่ม serial link
 
 แก้โดยตั้ง `running = 1` ก่อน enable timer interrupt และ rollback ค่าเป็น 0 หาก HAL start ล้มเหลว พร้อมเพิ่ม C host regression test ที่บังคับให้ ISR เกิดภายใน `HAL_TIM_Base_Start_IT()` เพื่อป้องกันบัคนี้ย้อนกลับมา
+
+## ผลยืนยันหลังแก้ไข (2026-09-21)
+
+- Firmware commit: `4a7a5e1`
+- Candidate SHA-256: `e17cf5350c55a3292cef377d2341da34e2a3241752cf3c52fd05b9afb5fe084e`
+- Clean build สำเร็จ และ automated tests ผ่าน `516 tests` กับ `22 subtests`
+- Flash และ read-back verification ตรงกับ candidate ทุก byte
+- NUCLEO handshake ผ่านด้วย Protocol 4 และ capabilities ครบ รวม `terminal_rate_config`
+- Controller รายงาน `supports_buffered_scurve = true`
+- หลัง deploy NUCLEO ยัง disarmed/safe, Motion disabled, IRIV I/O online และไม่มี X/Y driver alarm
+- ไม่มีการสั่ง Home, Jog, GOTO, Dispense หรือ Demo Sampling ระหว่าง deploy และ verification
