@@ -4,7 +4,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-from narit_vending.domain.errors import LimitTriggeredError, NucleoError
+from narit_vending.domain.errors import ControlledStopError, LimitTriggeredError, NucleoError
 from narit_vending.domain.motion_plans import AxisMovePlan, CoordinatedMovePlan
 from narit_vending.domain.nucleo_profile_protocol import (
     DynamicAxisConfigCommand,
@@ -79,6 +79,7 @@ class TestDynamicScurveMotion(unittest.TestCase):
             axis.is_homed = True
             axis.position_mm = 100.0
             axis.position_steps = int(100.0 * steps_per_mm)
+            axis.mm_to_steps.side_effect = lambda value_mm, scale=steps_per_mm: int(round(value_mm * scale))
             axis.head_limit = SimpleNamespace(value=0)
             axis.tail_limit = SimpleNamespace(value=0)
             axis.direction = SimpleNamespace(value=False)
@@ -251,6 +252,53 @@ class TestDynamicScurveMotion(unittest.TestCase):
             mode="speed",
         )
         with self.assertRaises(LimitTriggeredError):
+            self.mc._execute_coordinated_plan(plan)
+
+        self.assertFalse(self.mock_x.is_homed)
+
+    def test_controlled_jog_stop_reconciles_position_and_preserves_home(self) -> None:
+        """A normal hold release remains referenced when pulse telemetry is exact."""
+        stopped_at_pulses = 7_123
+        self.backend.mock_start_result = {
+            "status": "stopped",
+            "stopped": True,
+            "telemetry": {
+                "type": "dynamic_status",
+                "axes": {
+                    "x": {
+                        "position_valid": True,
+                        "position_pulses": stopped_at_pulses,
+                    }
+                },
+            },
+        }
+        self.mc.request_controlled_stop()
+        plan = CoordinatedMovePlan(
+            axes={"x": AxisMovePlan(axis="x", current_mm=100.0, target_mm=1700.0, distance_mm=1600.0, direction=0, steps=103529, speed_mm_s=20.0, duration_s=80.0)},
+            duration_s=80.0,
+            mode="speed",
+        )
+
+        with self.assertRaises(ControlledStopError):
+            self.mc._execute_coordinated_plan(plan)
+
+        self.assertTrue(self.mock_x.is_homed)
+        self.assertEqual(self.mock_x.position_steps, stopped_at_pulses)
+
+    def test_controlled_jog_stop_without_valid_position_invalidates_home(self) -> None:
+        self.backend.mock_start_result = {
+            "status": "stopped",
+            "stopped": True,
+            "telemetry": {"type": "dynamic_status", "axes": {"x": {"position_valid": False}}},
+        }
+        self.mc.request_controlled_stop()
+        plan = CoordinatedMovePlan(
+            axes={"x": AxisMovePlan(axis="x", current_mm=100.0, target_mm=1700.0, distance_mm=1600.0, direction=0, steps=103529, speed_mm_s=20.0, duration_s=80.0)},
+            duration_s=80.0,
+            mode="speed",
+        )
+
+        with self.assertRaises(ControlledStopError):
             self.mc._execute_coordinated_plan(plan)
 
         self.assertFalse(self.mock_x.is_homed)

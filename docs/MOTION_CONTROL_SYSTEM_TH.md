@@ -79,6 +79,12 @@ target_pulses = round(target_position_mm × steps_per_mm)
 remaining_pulses = abs(target_pulses - emitted_pulses)
 ```
 
+สำหรับ Hold-to-run Jog เมื่อปล่อยปุ่ม Controller ส่ง `CONTROLLED_STOP` ให้ planner
+ลดความเร็วตาม S-curve แล้วอ่าน `DYN_STATUS` ก่อน Disarm หาก NUCLEO ยืนยัน
+`position_valid=true` พร้อม `position_pulses` ภายใน travel range ระบบจะรักษา Homed
+และใช้ตำแหน่ง pulse ดังกล่าวเป็นจุดเริ่ม Jog ครั้งถัดไป หากยืนยันไม่ได้จะล้าง Homed
+ตาม fail-closed policy
+
 NUCLEO นับ pulse ที่ **ขอบตกของ STEP ที่ปล่อยจริง** เท่านั้น ไม่ได้นับ pulse ที่
 เพียงถูก queue ขอบเขตจบคำสั่งจึงเป็น integer pulse เสมอ ทำให้ตำแหน่งที่แทนได้จริง
 อาจต่างจากค่า mm เล็กน้อย เช่น X/Y 100 mm กลายเป็น 6,471 pulses หรือ 100.006 mm

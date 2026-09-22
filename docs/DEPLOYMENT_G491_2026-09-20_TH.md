@@ -201,3 +201,14 @@ single-axis ก่อน coordinated motion และตรวจ interlock/tele
 - ขณะเกิดไฟแดง Controller ยังรายงาน `X_DRIVE_ALM=false`; ดังนั้น DI0 wiring,
   common, voltage level และ active polarity ต้อง commissioning ก่อนถือว่า software
   interlock ตรวจจับ fault ของไดรฟ์ X ได้จริง ห้ามกลับ polarity จากซอฟต์แวร์โดยเดา
+
+### Repeated Jog after controlled release
+
+- หลัง Home สำเร็จ Hold-to-run Jog X/Y ใช้ Dynamic S-curve ได้ แต่การปล่อยปุ่ม
+  ทำให้ Controller ล้าง Homed โดยไม่มีการรับตำแหน่งหยุดจริงจาก NUCLEO จึงกด Jog
+  ครั้งถัดไปไม่ได้
+- แก้ transport ให้ขอ terminal `DYN_STATUS` หลัง `CONTROLLED_STOP` และก่อน Disarm
+  จากนั้น Controller อัปเดต `position_steps` จาก confirmed STEP-edge coordinate
+- รักษา Homed เฉพาะเมื่อ `position_valid=true` และ `position_pulses` อยู่ใน travel
+  range; telemetry หาย/ผิดรูป/เกินขอบเขตยังล้าง Homed แบบ fail-closed
+- ตำแหน่งนี้เป็น open-loop emitted-pulse coordinate ไม่ใช่ encoder-measured position

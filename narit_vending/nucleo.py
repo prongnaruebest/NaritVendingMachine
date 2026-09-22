@@ -539,9 +539,28 @@ class NucleoLink:
                                 moving = hb.get("moving", {})
                                 if isinstance(moving, dict) and all(not moving.get(a, 0) for a in participating):
                                     break
+                        # A controlled jog release is recoverable only when the
+                        # Controller receives the exact open-loop coordinate
+                        # derived from confirmed STEP edges.  Returning without
+                        # this snapshot forced the host to invalidate Home and
+                        # locked every subsequent jog even though the planner
+                        # had decelerated normally.
+                        serial_port.write(b"DYN_STATUS\n")
+                        serial_port.flush()
+                        stopped_status = self._read_json_response(
+                            serial_port,
+                            time.monotonic() + 0.25,
+                            expected_types={"dynamic_status"},
+                        )
                         self.disarm()
                         elapsed = max(0.0, time.monotonic() - started)
-                        return {"ok": True, "command_id": command.command_id, "stopped": True, "duration_s": elapsed}
+                        return {
+                            "ok": True,
+                            "command_id": command.command_id,
+                            "stopped": True,
+                            "duration_s": elapsed,
+                            "telemetry": stopped_status,
+                        }
 
                     serial_port.write(b"HEARTBEAT SAFE\n")
                     serial_port.flush()

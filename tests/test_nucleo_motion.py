@@ -166,6 +166,37 @@ class MockStalledDynamicSerial(MockDynamicSerial):
         return super().write(data)
 
 
+class MockControlledStopDynamicSerial(MockDynamicSerial):
+    """Protocol-v4 fake returns a confirmed coordinate after smooth stop."""
+
+    def write(self, data: bytes) -> int:
+        line = data.decode("ascii", errors="replace").strip()
+        if line == "CONTROLLED_STOP":
+            self.writes.append(data)
+            self.script.append({"type": "ack", "status": "stopping"})
+            return len(data)
+        if line == "DYN_STATUS":
+            self.writes.append(data)
+            self.dynamic_status_count += 1
+            self.script.append({
+                "type": "dynamic_status",
+                "runtime_ready": True,
+                "axes": {
+                    "x": {
+                        "position_valid": True,
+                        "position_pulses": 321,
+                        "state": "IDLE",
+                        "fault": "NONE",
+                        "emitted_pulses": 321,
+                        "remaining_pulses": 679,
+                    },
+                    "y": {"state": "IDLE", "fault": "NONE"},
+                },
+            })
+            return len(data)
+        return super().write(data)
+
+
 class NucleoMotionTests(unittest.TestCase):
     def config(self) -> dict:
         return {
@@ -330,6 +361,26 @@ class NucleoMotionTests(unittest.TestCase):
                 DynamicStartCommand(command_id="move-stalled", axes=("x",)),
                 timeout_s=1.0,
             )
+
+    def test_dynamic_controlled_stop_returns_terminal_position_telemetry(self):
+        mock_serial = MockControlledStopDynamicSerial()
+        config = self.config()
+        config.update({"protocol_version": 4, "expected_device": "NUCLEO-F439ZI"})
+        link = NucleoLink(config, serial_factory=lambda **kwargs: mock_serial)
+        link._connected = True
+        link._last_success_monotonic = __import__("time").monotonic()
+
+        result = link.start_dynamic_motion(
+            DynamicStartCommand(command_id="jog-release", axes=("x",)),
+            timeout_s=3.0,
+            stop_requested=lambda: True,
+        )
+
+        self.assertTrue(result["stopped"])
+        self.assertEqual(result["telemetry"]["axes"]["x"]["position_pulses"], 321)
+        commands = [item.decode("ascii", errors="replace").strip() for item in mock_serial.writes]
+        self.assertIn("CONTROLLED_STOP", commands)
+        self.assertIn("DYN_STATUS", commands)
 
     def test_move_stops_when_condition_triggers(self):
         mock_serial = MockSerialProtocolV2()

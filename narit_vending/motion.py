@@ -1630,8 +1630,38 @@ class MotionController:
                             axis.is_homed = False
                         raise StopRequestedError("stop requested during coordinated move")
                     if self.controlled_stop_requested():
-                        for axis in axes.values():
-                            axis.is_homed = False
+                        telemetry = result.get("telemetry")
+                        status_axes = telemetry.get("axes") if isinstance(telemetry, dict) else None
+                        reconciled = isinstance(status_axes, dict)
+                        if reconciled:
+                            for axis_name in moving_dynamic_axes:
+                                axis_info = status_axes.get(axis_name)
+                                axis = axes[axis_name]
+                                position_pulses = (
+                                    axis_info.get("position_pulses")
+                                    if isinstance(axis_info, dict)
+                                    else None
+                                )
+                                max_steps = axis.mm_to_steps(axis.config.max_travel_mm)
+                                if (
+                                    not isinstance(axis_info, dict)
+                                    or axis_info.get("position_valid") is not True
+                                    or isinstance(position_pulses, bool)
+                                    or not isinstance(position_pulses, int)
+                                    or position_pulses < 0
+                                    or position_pulses > max_steps
+                                ):
+                                    reconciled = False
+                                    break
+                        if reconciled:
+                            for axis_name in moving_dynamic_axes:
+                                axes[axis_name].position_steps = int(status_axes[axis_name]["position_pulses"])
+                        else:
+                            # Missing/invalid terminal telemetry means the host
+                            # cannot prove its coordinate after stopping.  Keep
+                            # the original fail-closed Home invalidation.
+                            for axis in axes.values():
+                                axis.is_homed = False
                         raise ControlledStopError("coordinated controlled stop completed")
                     if len(plan.axes) == 1:
                         axis_name, axis_plan = next(iter(plan.axes.items()))

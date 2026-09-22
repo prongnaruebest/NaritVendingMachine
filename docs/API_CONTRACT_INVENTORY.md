@@ -200,6 +200,11 @@ confirmed falling STEP edges; it is not encoder-measured mechanical position.
 The response is rejected rather than truncated when the caller's output buffer
 is too small. With the feature gate off, `DYN_STATUS` returns `STATE`.
 
+After `CONTROLLED_STOP`, the host queries `DYN_STATUS` before disarming. A
+hold-to-run Jog may preserve its Homed reference only when every participating
+axis reports `position_valid=true` and an in-range `position_pulses`. Missing,
+invalid, or out-of-range terminal telemetry invalidates Homed fail-closed.
+
 For the candidate runtime, `emitted_steps` changes only after the HAL confirms
 the falling STEP edge. A 1 kHz planner tick changes the requested timer rate but
 does not change position. Completion therefore means the exact target edge was
