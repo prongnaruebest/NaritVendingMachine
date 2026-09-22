@@ -201,7 +201,7 @@ Home ปัจจุบันเป็น Controller-supervised legacy motion �
 
 1. ตรวจ E-Stop, Stop, ALM, IRIV และ USB
 2. ถ้า Min active ให้ back off จน sensor release
-3. Search ทิศลบด้วย `homing_search_speed_mm_s` (ปัจจุบัน 50 mm/s)
+3. Search ทิศลบด้วย `homing_search_speed_mm_s` (ปัจจุบัน X/Y = 20 mm/s, Z = 50 mm/s)
 4. พบ Min แล้วหยุด
 5. Back off
 6. Approach ใหม่ด้วย `homing_latch_speed_mm_s` (ปัจจุบัน 5 mm/s)

@@ -187,3 +187,17 @@ single-axis ก่อน coordinated motion และตรวจ interlock/tele
   ทันทีตาม gate; X Max ไม่ active, ALM clear และ NUCLEO กลับ safe/disarmed
 - ต้องทำ live press/release observation ของ physical X Min เทียบกับ raw IRIV DI0
   ก่อนทดสอบต่อ เพื่อแยก polarity/mapping fault ออกจากกลไกไม่ออกจากสวิตช์
+
+### X drive 7-flash following-error mitigation
+
+- ระหว่าง Home ผู้ควบคุมพบไฟแดง HBS860H แกน X กระพริบ 7 ครั้ง ซึ่งตามตาราง
+  diagnostic ของไดรฟ์หมายถึง Position Following Error
+- Legacy Home เริ่ม pulse ที่ความถี่คงที่โดยไม่มี acceleration ramp; ค่าเดิม
+  50 mm/s เท่ากับประมาณ 3,235 pulse/s จึงเป็น step input ที่อาจทำให้โรเตอร์ตามไม่ทัน
+- ลด `homing_search_speed_mm_s` เฉพาะ X/Y เป็น 20 mm/s (ประมาณ 1,294 pulse/s)
+  และคง precision latch 5 mm/s; Z ยังคง 50 mm/s เพราะใช้ DM542 และกลไกสายพาน
+- การเปลี่ยนนี้เป็น mitigation ไม่ใช่หลักฐานว่า mechanical fault ถูกแก้แล้ว ต้องตรวจ
+  binding, coupling, drive current และทดสอบ Home ด้วยผู้ควบคุมหน้าเครื่องภายหลัง
+- ขณะเกิดไฟแดง Controller ยังรายงาน `X_DRIVE_ALM=false`; ดังนั้น DI0 wiring,
+  common, voltage level และ active polarity ต้อง commissioning ก่อนถือว่า software
+  interlock ตรวจจับ fault ของไดรฟ์ X ได้จริง ห้ามกลับ polarity จากซอฟต์แวร์โดยเดา

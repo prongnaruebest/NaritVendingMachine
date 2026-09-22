@@ -54,8 +54,9 @@ speed claim.
 * **Commissioning entry speed**: Start each single-axis test at or below
   $20.0 \text{ mm/s}$ with the operator at the machine, then increase only after
   external distance, ALM, PEND, limits and mechanical behavior pass.
-* **Previously used operating values (not a substitute for a new commissioning gate)**:
-  * **Homing Search**: $50.0 \text{ mm/s}$ ($\sim 121 \text{ RPM}$, $3,235 \text{ Hz}$).
+* **Current conservative operating values (not a substitute for a new commissioning gate)**:
+  * **X/Y Homing Search**: $20.0 \text{ mm/s}$ ($\sim 48.5 \text{ RPM}$, $1,294 \text{ Hz}$). This lower legacy-path entry speed mitigates the observed HBS860H 7-flash following error caused by a frequency step without an acceleration ramp.
+  * **Z Homing Search**: $50.0 \text{ mm/s}$ on its separately commissioned belt/DM542 mechanism.
   * **Homing Latch / Crawl**: $5.0 \text{ mm/s}$ ($\sim 12 \text{ RPM}$, $324 \text{ Hz}$).
   * **Normal Dispense / Goto Slot**: $50.0 - 80.0 \text{ mm/s}$ ($121 - 194 \text{ RPM}$, $3,235 - 5,176 \text{ Hz}$).
   * Values above $100.0 \text{ mm/s}$ require a recorded commissioning result;

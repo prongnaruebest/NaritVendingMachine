@@ -46,6 +46,11 @@ class ConfigFoundationTests(unittest.TestCase):
         self.assertAlmostEqual(report.effective_axes["z"]["steps_per_mm"], 9.0)
         self.assertAlmostEqual(report.effective_axes["z"]["max_travel_mm"], 160.0)
         self.assertAlmostEqual(report.effective_axes["z"]["lead_screw_pitch_mm"], 1600 / 9, places=5)
+        # X/Y legacy Home starts at a fixed pulse frequency without an acceleration
+        # ramp. Keep the commissioned search entry below the observed HBS860H
+        # following-error threshold; Z uses a different drive/mechanism.
+        self.assertAlmostEqual(report.effective_axes["x"]["homing_search_speed_mm_s"], 20.0)
+        self.assertAlmostEqual(report.effective_axes["y"]["homing_search_speed_mm_s"], 20.0)
         self.assertAlmostEqual(report.effective_axes["z"]["homing_search_speed_mm_s"], 50.0)
         self.assertAlmostEqual(report.effective_axes["z"]["homing_latch_speed_mm_s"], 5.0)
 
