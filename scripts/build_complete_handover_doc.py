@@ -118,7 +118,7 @@ def apply_header_footer(section):
     hp.text = ""
     hp.alignment = WD_ALIGN_PARAGRAPH.RIGHT
     hp.paragraph_format.first_line_indent = Pt(0)
-    hrun = hp.add_run("หนังสือส่งมอบงานจ้างตามข้อกำหนดสัญญา TOR (ใบสั่งจ้างเลขที่ J69/290 | เลขคุมสัญญา 690714014761) | NARIT Smart Vending Machine")
+    hrun = hp.add_run("หนังสือส่งมอบงานจ้างตามข้อกำหนด TOR: 00-TOR-Vending-J69-290 (ใบสั่งจ้างเลขที่ J69/290) | NARIT Smart Vending Machine")
     set_run_font(hrun, size_pt=10, color_rgb=(148, 163, 184), italic=True)
     
     # Footer
@@ -367,7 +367,7 @@ def add_callout(doc, text, bold_title=None):
 # MAIN BUILDER
 # ---------------------------------------------------------------------------
 
-def generate_handover_document(output_docx_path):
+def generate_handover_document(output_docx_path, include_acceptance_cert=False):
     print("Generating comprehensive Handover Document with EXACT image verification...")
     doc = docx.Document()
     
@@ -384,9 +384,9 @@ def generate_handover_document(output_docx_path):
     sec1 = doc.sections[0]
     sec1.page_width = Inches(8.27)
     sec1.page_height = Inches(11.69)
-    sec1.top_margin = Inches(0.8)
-    sec1.bottom_margin = Inches(0.8)
-    sec1.left_margin = Inches(1.25)
+    sec1.top_margin = Inches(0.55)
+    sec1.bottom_margin = Inches(0.55)
+    sec1.left_margin = Inches(1.0)
     sec1.right_margin = Inches(1.0)
     sec1.header.is_linked_to_previous = False
     sec1.footer.is_linked_to_previous = False
@@ -394,7 +394,7 @@ def generate_handover_document(output_docx_path):
     p_top_title = doc.add_paragraph()
     p_top_title.alignment = WD_ALIGN_PARAGRAPH.CENTER
     p_top_title.paragraph_format.space_before = Pt(0)
-    p_top_title.paragraph_format.space_after = Pt(4)
+    p_top_title.paragraph_format.space_after = Pt(3)
     p_top_title.paragraph_format.first_line_indent = Pt(0)
     r_tt = p_top_title.add_run("ใบส่งมอบงาน")
     set_run_font(r_tt, size_pt=24, bold=True, color_rgb=(15, 23, 42))
@@ -402,10 +402,10 @@ def generate_handover_document(output_docx_path):
     tbl_letter_meta = doc.add_table(rows=2, cols=2)
     tbl_letter_meta.alignment = WD_TABLE_ALIGNMENT.CENTER
     tbl_letter_meta.autofit = False
-    tbl_letter_meta.rows[0].cells[0].width = Inches(2.8)
-    tbl_letter_meta.rows[0].cells[1].width = Inches(3.2)
-    tbl_letter_meta.rows[1].cells[0].width = Inches(2.8)
-    tbl_letter_meta.rows[1].cells[1].width = Inches(3.2)
+    tbl_letter_meta.rows[0].cells[0].width = Inches(3.2)
+    tbl_letter_meta.rows[0].cells[1].width = Inches(3.0)
+    tbl_letter_meta.rows[1].cells[0].width = Inches(3.2)
+    tbl_letter_meta.rows[1].cells[1].width = Inches(3.0)
 
     c00 = tbl_letter_meta.cell(0, 0).paragraphs[0]
     c10 = tbl_letter_meta.cell(1, 0).paragraphs[0]
@@ -431,10 +431,10 @@ def generate_handover_document(output_docx_path):
     c01.paragraph_format.first_line_indent = Pt(0)
     c11.paragraph_format.first_line_indent = Pt(0)
 
-    r = c00.add_run("ที่   J69/290 (คุมสัญญา 690714014761)")
+    r = c00.add_run("ที่   00-TOR-Vending-J69-290")
     set_run_font(r, size_pt=15.5, bold=True, color_rgb=(15, 23, 42))
-    r = c10.add_run("เลขที่โครงการ 69079014721")
-    set_run_font(r, size_pt=13, color_rgb=(71, 85, 105))
+    r = c10.add_run("ใบสั่งจ้างเลขที่ J69/290 (โครงการ 69079014721 | คุมสัญญา 690714014761)")
+    set_run_font(r, size_pt=12, color_rgb=(71, 85, 105))
 
     r = c01.add_run("เขียนที่  สถาบันวิจัยดาราศาสตร์แห่งชาติ (องค์การมหาชน)")
     set_run_font(r, size_pt=15.5, color_rgb=(15, 23, 42))
@@ -442,7 +442,7 @@ def generate_handover_document(output_docx_path):
     set_run_font(r, size_pt=15.5, color_rgb=(15, 23, 42))
 
     p_subj = doc.add_paragraph()
-    p_subj.paragraph_format.space_before = Pt(2)
+    p_subj.paragraph_format.space_before = Pt(1)
     p_subj.paragraph_format.space_after = Pt(2)
     p_subj.paragraph_format.first_line_indent = Pt(0)
     r1 = p_subj.add_run("เรื่อง   ")
@@ -451,7 +451,7 @@ def generate_handover_document(output_docx_path):
     set_run_font(r2, size_pt=15.5, bold=True, color_rgb=(30, 58, 138))
 
     p_to = doc.add_paragraph()
-    p_to.paragraph_format.space_before = Pt(2)
+    p_to.paragraph_format.space_before = Pt(1)
     p_to.paragraph_format.space_after = Pt(2)
     p_to.paragraph_format.first_line_indent = Pt(0)
     r1 = p_to.add_run("เรียน   ")
@@ -460,68 +460,68 @@ def generate_handover_document(output_docx_path):
     set_run_font(r2, size_pt=15.5, bold=False, color_rgb=(15, 23, 42))
 
     p_ref = doc.add_paragraph()
-    p_ref.paragraph_format.space_before = Pt(2)
-    p_ref.paragraph_format.space_after = Pt(4)
+    p_ref.paragraph_format.space_before = Pt(1)
+    p_ref.paragraph_format.space_after = Pt(3)
     p_ref.paragraph_format.first_line_indent = Pt(0)
     r1 = p_ref.add_run("อ้างถึง  ")
     set_run_font(r1, size_pt=15.5, bold=True, color_rgb=(15, 23, 42))
-    r2 = p_ref.add_run("ใบสั่งจ้างเลขที่ J69/290 (เลขที่โครงการ 69079014721, เลขคุมสัญญา 690714014761) ลงวันที่ 1 กรกฎาคม 2569")
+    r2 = p_ref.add_run("ขอบเขตของงาน (TOR) เลขที่ 00-TOR-Vending-J69-290 และใบสั่งจ้างเลขที่ J69/290 (เลขที่โครงการ 69079014721, เลขคุมสัญญา 690714014761) ลงวันที่ 1 กรกฎาคม 2569")
     set_run_font(r2, size_pt=15.5, bold=False, color_rgb=(51, 65, 85))
 
     p_body1 = doc.add_paragraph()
     p_body1.paragraph_format.left_indent = Pt(0)
-    p_body1.paragraph_format.first_line_indent = Inches(1.0) # 2.5 cm standard Thai royal/government letter indent
+    p_body1.paragraph_format.first_line_indent = Inches(0.5)
     p_body1.alignment = WD_ALIGN_PARAGRAPH.THAI_JUSTIFY
-    p_body1.paragraph_format.space_before = Pt(2)
-    p_body1.paragraph_format.space_after = Pt(3)
-    p_body1.paragraph_format.line_spacing = 1.12
+    p_body1.paragraph_format.space_before = Pt(1)
+    p_body1.paragraph_format.space_after = Pt(2)
+    p_body1.paragraph_format.line_spacing = 1.05
     r_b1 = p_body1.add_run(
         insert_thai_breaks(
             "ตามที่ สถาบันวิจัยดาราศาสตร์แห่งชาติ (องค์การมหาชน) ได้ตกลงให้ข้าพเจ้า นายปพน แซ่จ๊ะ "
             "ที่อยู่ 197 หมู่ 6 ตำบลปากกลาง อำเภอปัว จังหวัดน่าน 55120 ดำเนินการจ้างออกแบบชั้นเก็บและจ่ายอุปกรณ์อิเล็กทรอนิกส์อัตโนมัติ "
             "(Auto Electronic Parts Box) / เครื่องจำหน่ายสินค้าอัตโนมัติ (NARIT Smart Vending Machine) สำหรับบรรจุภัณฑ์รูปทรงสี่เหลี่ยม จำนวน 1 งาน "
-            "ตามใบสั่งจ้างเลขที่ J69/290 (เลขที่โครงการ 69079014721, เลขคุมสัญญา 690714014761) ลงวันที่ 1 กรกฎาคม 2569 ในวงเงินงบประมาณค่าจ้างทั้งสิ้น 90,000.00 บาท (เก้าหมื่นบาทถ้วน) นั้น"
+            "ตามข้อกำหนด TOR เลขที่ 00-TOR-Vending-J69-290 และใบสั่งจ้างเลขที่ J69/290 (เลขที่โครงการ 69079014721, เลขคุมสัญญา 690714014761) ลงวันที่ 1 กรกฎาคม 2569 ในวงเงินงบประมาณค่าจ้างทั้งสิ้น 90,000.00 บาท (เก้าหมื่นบาทถ้วน) นั้น"
         )
     )
-    set_run_font(r_b1, size_pt=15.5, color_rgb=(30, 41, 59))
+    set_run_font(r_b1, size_pt=15.0, color_rgb=(30, 41, 59))
 
     p_body2 = doc.add_paragraph()
     p_body2.paragraph_format.left_indent = Pt(0)
-    p_body2.paragraph_format.first_line_indent = Inches(1.0)
+    p_body2.paragraph_format.first_line_indent = Inches(0.5)
     p_body2.alignment = WD_ALIGN_PARAGRAPH.THAI_JUSTIFY
-    p_body2.paragraph_format.space_before = Pt(2)
-    p_body2.paragraph_format.space_after = Pt(3)
-    p_body2.paragraph_format.line_spacing = 1.12
+    p_body2.paragraph_format.space_before = Pt(1)
+    p_body2.paragraph_format.space_after = Pt(2)
+    p_body2.paragraph_format.line_spacing = 1.05
     r_b2 = p_body2.add_run(
         insert_thai_breaks(
-            "บัดนี้ ข้าพเจ้าได้ดำเนินการปฏิบัติงานจ้างออกแบบดังกล่าวเสร็จสิ้นเรียบร้อยสมบูรณ์ ถูกต้องครบถ้วนตามขอบเขตและเงื่อนไขแห่งข้อกำหนดของสถาบันฯ (TOR) "
+            "บัดนี้ ข้าพเจ้าได้ดำเนินการปฏิบัติงานจ้างออกแบบดังกล่าวเสร็จสิ้นเรียบร้อยสมบูรณ์ ถูกต้องครบถ้วนตามขอบเขตและเงื่อนไขแห่งข้อกำหนดของสถาบันฯ (TOR เลขที่ 00-TOR-Vending-J69-290) "
             "ทุกประการ โดยได้รวบรวมรายละเอียดผลงานการออกแบบทั้งหมด ทั้งแบบร่าง 3 รูปแบบ (Versions), ภาพจำลอง 3 มิติ (3D Rendering), "
             "แบบจำลอง 3D CAD Model ฉบับสมบูรณ์, แบบวาดทางวิศวกรรมฉบับสมบูรณ์ (Production Drawing), รายการวัสดุและชิ้นส่วน (Bill of Materials : BOM), "
             "เอกสารอธิบายหลักการทำงานของระบบย่อยแต่ละระบบ (System Description Document), แบบวงจรไฟฟ้าและแผนผังการเดินสาย (Electrical Schematic & Wiring Diagram) "
             "ตลอดจนเอกสารข้อกำหนดการเชื่อมต่อระบบ (Interface Specification Document) บรรจุไว้ในเอกสารหนังสือส่งมอบงานฉบับสมบูรณ์นี้อย่างครบถ้วนในเล่มเดียว โดยไม่มีส่วนแยกแนบภายนอก"
         )
     )
-    set_run_font(r_b2, size_pt=15.5, color_rgb=(30, 41, 59))
+    set_run_font(r_b2, size_pt=15.0, color_rgb=(30, 41, 59))
 
     p_body3 = doc.add_paragraph()
     p_body3.paragraph_format.left_indent = Pt(0)
-    p_body3.paragraph_format.first_line_indent = Inches(1.0)
+    p_body3.paragraph_format.first_line_indent = Inches(0.5)
     p_body3.alignment = WD_ALIGN_PARAGRAPH.THAI_JUSTIFY
-    p_body3.paragraph_format.space_before = Pt(2)
-    p_body3.paragraph_format.space_after = Pt(6)
-    p_body3.paragraph_format.line_spacing = 1.12
+    p_body3.paragraph_format.space_before = Pt(1)
+    p_body3.paragraph_format.space_after = Pt(3)
+    p_body3.paragraph_format.line_spacing = 1.05
     r_b3 = p_body3.add_run(
         insert_thai_breaks(
             "จึงเรียนมาเพื่อโปรดดำเนินการตรวจรับงานจ้าง และอนุมัติการเบิกจ่ายเงินค่าจ้าง จำนวน 90,000.00 บาท (เก้าหมื่นบาทถ้วน) ให้แก่ข้าพเจ้าต่อไป"
         )
     )
-    set_run_font(r_b3, size_pt=15.5, color_rgb=(30, 41, 59))
+    set_run_font(r_b3, size_pt=15.0, color_rgb=(30, 41, 59))
 
     p_close = doc.add_paragraph()
     p_close.paragraph_format.left_indent = Inches(3.0)
     p_close.paragraph_format.first_line_indent = Pt(0)
-    p_close.paragraph_format.space_before = Pt(6)
-    p_close.paragraph_format.space_after = Pt(10)
+    p_close.paragraph_format.space_before = Pt(4)
+    p_close.paragraph_format.space_after = Pt(4)
     r_cl = p_close.add_run("ขอแสดงความนับถือ")
     set_run_font(r_cl, size_pt=15.5, color_rgb=(15, 23, 42))
 
@@ -579,7 +579,7 @@ def generate_handover_document(output_docx_path):
     p_rproj.paragraph_format.space_before = Pt(2)
     p_rproj.paragraph_format.space_after = Pt(6)
     p_rproj.paragraph_format.first_line_indent = Pt(0)
-    r_rp = p_rproj.add_run("งานจัดจ้างออกแบบเครื่องจำหน่ายสินค้าอัตโนมัติ (NARIT Smart Vending Machine)\nสำหรับบรรจุภัณฑ์รูปทรงสี่เหลี่ยม จำนวน 1 งาน ตามข้อกำหนด TOR (ใบสั่งจ้างเลขที่ J69/290 | เลขคุมสัญญา 690714014761)")
+    r_rp = p_rproj.add_run("งานจัดจ้างออกแบบเครื่องจำหน่ายสินค้าอัตโนมัติ (NARIT Smart Vending Machine)\nสำหรับบรรจุภัณฑ์รูปทรงสี่เหลี่ยม จำนวน 1 งาน ตามข้อกำหนด TOR: 00-TOR-Vending-J69-290 (ใบสั่งจ้างเลขที่ J69/290 | เลขคุมสัญญา 690714014761)")
     set_run_font(r_rp, size_pt=15, bold=True, color_rgb=(30, 58, 138))
 
     # COVER IMAGE: image4.png (3D CAD Model Overview)
@@ -602,8 +602,8 @@ def generate_handover_document(output_docx_path):
     doc_ctrl_headers = ["รายการข้อมูล", "รายละเอียด"]
     doc_ctrl_rows = [
         ["ชื่อเอกสาร", "รายงานผลงานส่งมอบงานจ้างออกแบบฉบับสมบูรณ์ตามข้อกำหนด TOR (รวมเล่มเดียว)"],
-        ["เลขที่เอกสารอ้างอิง", "NARIT-VEND-J69-290-DELIVERABLE-REV-FINAL"],
-        ["เลขที่ใบสั่งจ้าง / สัญญา", "ใบสั่งจ้างเลขที่ J69/290 (เลขที่โครงการ 69079014721, เลขคุมสัญญา 690714014761) ลงวันที่ 1 กรกฎาคม 2569"],
+        ["เลขที่เอกสารอ้างอิง", "NARIT-00-TOR-Vending-J69-290-DELIVERABLE"],
+        ["เลขที่ใบสั่งจ้าง / สัญญา", "ใบสั่งจ้างเลขที่ J69/290 (เลขที่โครงการ 69079014721, เลขคุมสัญญา 690714014761 ตาม TOR เลขที่ 00-TOR-Vending-J69-290) ลงวันที่ 1 กรกฎาคม 2569"],
         ["ผู้รับจ้าง / ผู้ออกแบบ", "นายปพน แซ่จ๊ะ (ที่อยู่ 197 หมู่ 6 ต.ปากกลาง อ.ปัว จ.น่าน 55120 | เลขประจำตัวผู้เสียภาษี 1559200013326)"],
         ["หน่วยงานเจ้าของโครงการ", "ศูนย์ปฏิบัติการหอดูดาวและวิศวกรรม สถาบันวิจัยดาราศาสตร์แห่งชาติ (องค์การมหาชน)"],
         ["วงเงินงบประมาณค่าจ้าง", "90,000.00 บาท (เก้าหมื่นบาทถ้วน)"],
@@ -1181,99 +1181,100 @@ def generate_handover_document(output_docx_path):
     )
 
     # =========================================================================
-    # SECTION 4: แบบฟอร์มการตรวจรับพัสดุและลายมือชื่อ (EXACT 1 PAGE COMPLETE)
+    # SECTION 4: แบบฟอร์มการตรวจรับพัสดุและลายมือชื่อ (OPTIONAL)
     # =========================================================================
-    sec4 = doc.add_section()
-    sec4.page_width = Inches(8.27)
-    sec4.page_height = Inches(11.69)
-    sec4.top_margin = Inches(0.6)
-    sec4.bottom_margin = Inches(0.4)
-    sec4.left_margin = Inches(1.25)
-    sec4.right_margin = Inches(1.0)
-    apply_header_footer(sec4)
+    if include_acceptance_cert:
+        sec4 = doc.add_section()
+        sec4.page_width = Inches(8.27)
+        sec4.page_height = Inches(11.69)
+        sec4.top_margin = Inches(0.6)
+        sec4.bottom_margin = Inches(0.4)
+        sec4.left_margin = Inches(1.25)
+        sec4.right_margin = Inches(1.0)
+        apply_header_footer(sec4)
 
-    p_cert_title = doc.add_paragraph()
-    p_cert_title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    p_cert_title.paragraph_format.space_before = Pt(0)
-    p_cert_title.paragraph_format.space_after = Pt(2)
-    p_cert_title.paragraph_format.first_line_indent = Pt(0)
-    r_ct = p_cert_title.add_run("ใบตรวจรับพัสดุสำหรับคณะกรรมการตรวจรับพัสดุ")
-    set_run_font(r_ct, size_pt=16.5, bold=True, color_rgb=(30, 58, 138))
+        p_cert_title = doc.add_paragraph()
+        p_cert_title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p_cert_title.paragraph_format.space_before = Pt(0)
+        p_cert_title.paragraph_format.space_after = Pt(2)
+        p_cert_title.paragraph_format.first_line_indent = Pt(0)
+        r_ct = p_cert_title.add_run("ใบตรวจรับพัสดุสำหรับคณะกรรมการตรวจรับพัสดุ")
+        set_run_font(r_ct, size_pt=16.5, bold=True, color_rgb=(30, 58, 138))
 
-    p_cb1 = doc.add_paragraph()
-    p_cb1.paragraph_format.first_line_indent = Inches(0.5)
-    p_cb1.alignment = WD_ALIGN_PARAGRAPH.THAI_JUSTIFY
-    p_cb1.paragraph_format.space_before = Pt(0)
-    p_cb1.paragraph_format.space_after = Pt(2)
-    p_cb1.paragraph_format.line_spacing = 1.05
-    r_cb1 = p_cb1.add_run(
-        insert_thai_breaks(
-            "ตามที่ สถาบันวิจัยดาราศาสตร์แห่งชาติ (องค์การมหาชน) ได้ตกลงจ้าง นายปพน แซ่จ๊ะ ดำเนินการจ้างออกแบบชั้นเก็บและจ่ายอุปกรณ์อิเล็กทรอนิกส์อัตโนมัติ "
-            "(Auto Electronic Parts Box) / เครื่องจำหน่ายสินค้าอัตโนมัติ (NARIT Smart Vending Machine) สำหรับบรรจุภัณฑ์รูปทรงสี่เหลี่ยม จำนวน 1 งาน "
-            "ตามใบสั่งจ้างเลขที่ J69/290 (เลขที่โครงการ 69079014721, เลขคุมสัญญา 690714014761) ลงวันที่ 1 กรกฎาคม 2569 ในวงเงินค่าจ้าง 90,000.00 บาท (เก้าหมื่นบาทถ้วน) นั้น "
-            "คณะกรรมการตรวจรับพัสดุได้ร่วมกันทำการตรวจสอบผลงานการส่งมอบงานจ้างออกแบบดังกล่าวแล้ว ปรากฏผลการตรวจรับดังนี้:"
+        p_cb1 = doc.add_paragraph()
+        p_cb1.paragraph_format.first_line_indent = Inches(0.5)
+        p_cb1.alignment = WD_ALIGN_PARAGRAPH.THAI_JUSTIFY
+        p_cb1.paragraph_format.space_before = Pt(0)
+        p_cb1.paragraph_format.space_after = Pt(2)
+        p_cb1.paragraph_format.line_spacing = 1.05
+        r_cb1 = p_cb1.add_run(
+            insert_thai_breaks(
+                "ตามที่ สถาบันวิจัยดาราศาสตร์แห่งชาติ (องค์การมหาชน) ได้ตกลงจ้าง นายปพน แซ่จ๊ะ ดำเนินการจ้างออกแบบชั้นเก็บและจ่ายอุปกรณ์อิเล็กทรอนิกส์อัตโนมัติ "
+                "(Auto Electronic Parts Box) / เครื่องจำหน่ายสินค้าอัตโนมัติ (NARIT Smart Vending Machine) สำหรับบรรจุภัณฑ์รูปทรงสี่เหลี่ยม จำนวน 1 งาน "
+                "ตามใบสั่งจ้างเลขที่ J69/290 (เลขที่โครงการ 69079014721, เลขคุมสัญญา 690714014761) ลงวันที่ 1 กรกฎาคม 2569 ในวงเงินค่าจ้าง 90,000.00 บาท (เก้าหมื่นบาทถ้วน) นั้น "
+                "คณะกรรมการตรวจรับพัสดุได้ร่วมกันทำการตรวจสอบผลงานการส่งมอบงานจ้างออกแบบดังกล่าวแล้ว ปรากฏผลการตรวจรับดังนี้:"
+            )
         )
-    )
-    set_run_font(r_cb1, size_pt=13.5, color_rgb=(30, 41, 59))
+        set_run_font(r_cb1, size_pt=13.5, color_rgb=(30, 41, 59))
 
-    chk_headers = ["ลำดับ", "รายการผลงานส่งมอบตามข้อกำหนด TOR", "ข้อกำหนดสัญญา", "ผลการตรวจสอบ", "หมายเหตุ"]
-    chk_rows = [
-        ["1", "แบบร่าง (Concept Design) 3 รูปแบบ พร้อมภาพ 3D Rendering", "TOR ข้อ 4.3.1", "[ / ] ครบถ้วนถูกต้อง", "มีภาพ 3 มิติครบ 3 รูปแบบ"],
-        ["2", "แบบ 3D CAD Model ฉบับสมบูรณ์ (SolidWorks & STEP)", "TOR ข้อ 4.3.2", "[ / ] ครบถ้วนถูกต้อง", "รองรับ 3 แกน X,Y,Z สมบูรณ์"],
-        ["3", "แบบวาดทางวิศวกรรมฉบับสมบูรณ์ (Production Drawing 12 แผ่น)", "TOR ข้อ 4.3.3", "[ / ] ครบถ้วนถูกต้อง", "มีขนาด Tolerance ครบถ้วน"],
-        ["4", "รายการวัสดุและชิ้นส่วน (Bill of Materials : BOM 4 หมวด)", "TOR ข้อ 4.3.4", "[ / ] ครบถ้วนถูกต้อง", "แจกแจงอุปกรณ์ครบทุกหมวด"],
-        ["5", "เอกสารอธิบายการทำงานของระบบย่อย (System Description Document)", "TOR ข้อ 4.3.5", "[ / ] ครบถ้วนถูกต้อง", "อธิบายครบถ้วนทั้ง 8 ระบบย่อย"],
-        ["6", "แบบวงจรไฟฟ้าและแผนผังการเดินสาย (Wiring Schematic)", "TOR ข้อ 4.3.6", "[ / ] ครบถ้วนถูกต้อง", "ครอบคลุมระบบความปลอดภัย E-Stop"],
-        ["7", "เอกสารข้อกำหนดการเชื่อมต่อระบบ (Interface Specification)", "TOR ข้อ 4.3.7", "[ / ] ครบถ้วนถูกต้อง", "ครอบคลุม MQTT และ REST API"]
-    ]
-    add_styled_table(doc, chk_headers, chk_rows, [Inches(0.65), Inches(2.25), Inches(1.05), Inches(1.05), Inches(1.00)], font_size_data=10.5, cell_top=22, cell_bot=22)
+        chk_headers = ["ลำดับ", "รายการผลงานส่งมอบตามข้อกำหนด TOR", "ข้อกำหนดสัญญา", "ผลการตรวจสอบ", "หมายเหตุ"]
+        chk_rows = [
+            ["1", "แบบร่าง (Concept Design) 3 รูปแบบ พร้อมภาพ 3D Rendering", "TOR ข้อ 4.3.1", "[ / ] ครบถ้วนถูกต้อง", "มีภาพ 3 มิติครบ 3 รูปแบบ"],
+            ["2", "แบบ 3D CAD Model ฉบับสมบูรณ์ (SolidWorks & STEP)", "TOR ข้อ 4.3.2", "[ / ] ครบถ้วนถูกต้อง", "รองรับ 3 แกน X,Y,Z สมบูรณ์"],
+            ["3", "แบบวาดทางวิศวกรรมฉบับสมบูรณ์ (Production Drawing 12 แผ่น)", "TOR ข้อ 4.3.3", "[ / ] ครบถ้วนถูกต้อง", "มีขนาด Tolerance ครบถ้วน"],
+            ["4", "รายการวัสดุและชิ้นส่วน (Bill of Materials : BOM 4 หมวด)", "TOR ข้อ 4.3.4", "[ / ] ครบถ้วนถูกต้อง", "แจกแจงอุปกรณ์ครบทุกหมวด"],
+            ["5", "เอกสารอธิบายการทำงานของระบบย่อย (System Description Document)", "TOR ข้อ 4.3.5", "[ / ] ครบถ้วนถูกต้อง", "อธิบายครบถ้วนทั้ง 8 ระบบย่อย"],
+            ["6", "แบบวงจรไฟฟ้าและแผนผังการเดินสาย (Wiring Schematic)", "TOR ข้อ 4.3.6", "[ / ] ครบถ้วนถูกต้อง", "ครอบคลุมระบบความปลอดภัย E-Stop"],
+            ["7", "เอกสารข้อกำหนดการเชื่อมต่อระบบ (Interface Specification)", "TOR ข้อ 4.3.7", "[ / ] ครบถ้วนถูกต้อง", "ครอบคลุม MQTT และ REST API"]
+        ]
+        add_styled_table(doc, chk_headers, chk_rows, [Inches(0.65), Inches(2.25), Inches(1.05), Inches(1.05), Inches(1.00)], font_size_data=10.5, cell_top=22, cell_bot=22)
 
-    p_cb2 = doc.add_paragraph()
-    p_cb2.paragraph_format.first_line_indent = Inches(0.5)
-    p_cb2.alignment = WD_ALIGN_PARAGRAPH.THAI_JUSTIFY
-    p_cb2.paragraph_format.space_before = Pt(2)
-    p_cb2.paragraph_format.space_after = Pt(3)
-    p_cb2.paragraph_format.line_spacing = 1.05
-    r_cb2 = p_cb2.add_run(
-        insert_thai_breaks(
-            "คณะกรรมการตรวจรับพัสดุขอรับรองว่า ผู้รับจ้างได้ส่งมอบงานถูกต้องครบถ้วนตามสัญญาจ้างและข้อกำหนดแห่ง TOR ทุกประการ "
-            "ตั้งแต่วันที่ 17 กันยายน 2569 (ครบกำหนดส่งมอบตามสัญญาภายใน 90 วัน คือวันที่ 29 กันยายน 2569) ซึ่งเป็นการส่งมอบงานก่อนกำหนดเวลา "
-            "จึงเห็นควรอนุมัติให้เบิกจ่ายเงินค่าจ้าง จำนวน 90,000.00 บาท (เก้าหมื่นบาทถ้วน) ให้แก่ผู้รับจ้างต่อไป"
+        p_cb2 = doc.add_paragraph()
+        p_cb2.paragraph_format.first_line_indent = Inches(0.5)
+        p_cb2.alignment = WD_ALIGN_PARAGRAPH.THAI_JUSTIFY
+        p_cb2.paragraph_format.space_before = Pt(2)
+        p_cb2.paragraph_format.space_after = Pt(3)
+        p_cb2.paragraph_format.line_spacing = 1.05
+        r_cb2 = p_cb2.add_run(
+            insert_thai_breaks(
+                "คณะกรรมการตรวจรับพัสดุขอรับรองว่า ผู้รับจ้างได้ส่งมอบงานถูกต้องครบถ้วนตามสัญญาจ้างและข้อกำหนดแห่ง TOR ทุกประการ "
+                "ตั้งแต่วันที่ 17 กันยายน 2569 (ครบกำหนดส่งมอบตามสัญญาภายใน 90 วัน คือวันที่ 29 กันยายน 2569) ซึ่งเป็นการส่งมอบงานก่อนกำหนดเวลา "
+                "จึงเห็นควรอนุมัติให้เบิกจ่ายเงินค่าจ้าง จำนวน 90,000.00 บาท (เก้าหมื่นบาทถ้วน) ให้แก่ผู้รับจ้างต่อไป"
+            )
         )
-    )
-    set_run_font(r_cb2, size_pt=13.5, color_rgb=(30, 41, 59))
+        set_run_font(r_cb2, size_pt=13.5, color_rgb=(30, 41, 59))
 
-    # Signature Block Table (Fits on same page!)
-    tbl_sigs = doc.add_table(rows=2, cols=2)
-    tbl_sigs.alignment = WD_TABLE_ALIGNMENT.CENTER
-    tbl_sigs.autofit = False
-    tbl_sigs.rows[0].cells[0].width = Inches(3.0)
-    tbl_sigs.rows[0].cells[1].width = Inches(3.0)
-    tbl_sigs.rows[1].cells[0].width = Inches(3.0)
-    tbl_sigs.rows[1].cells[1].width = Inches(3.0)
+        # Signature Block Table (Fits on same page!)
+        tbl_sigs = doc.add_table(rows=2, cols=2)
+        tbl_sigs.alignment = WD_TABLE_ALIGNMENT.CENTER
+        tbl_sigs.autofit = False
+        tbl_sigs.rows[0].cells[0].width = Inches(3.0)
+        tbl_sigs.rows[0].cells[1].width = Inches(3.0)
+        tbl_sigs.rows[1].cells[0].width = Inches(3.0)
+        tbl_sigs.rows[1].cells[1].width = Inches(3.0)
 
-    for r in tbl_sigs.rows:
-        for c in r.cells:
-            c.paragraphs[0].paragraph_format.space_before = Pt(0)
-            c.paragraphs[0].paragraph_format.space_after = Pt(2)
-            c.paragraphs[0].paragraph_format.line_spacing = 1.05
-            c.paragraphs[0].paragraph_format.first_line_indent = Pt(0)
+        for r in tbl_sigs.rows:
+            for c in r.cells:
+                c.paragraphs[0].paragraph_format.space_before = Pt(0)
+                c.paragraphs[0].paragraph_format.space_after = Pt(2)
+                c.paragraphs[0].paragraph_format.line_spacing = 1.05
+                c.paragraphs[0].paragraph_format.first_line_indent = Pt(0)
 
-    # Contractor Signature
-    r = tbl_sigs.rows[0].cells[0].paragraphs[0].add_run("ลงชื่อ...................................................ผู้รับจ้าง\n( นายปพน  แซ่จ๊ะ )\nวันที่ 17 กันยายน 2569")
-    set_run_font(r, size_pt=11.5, color_rgb=(15, 23, 42))
+        # Contractor Signature
+        r = tbl_sigs.rows[0].cells[0].paragraphs[0].add_run("ลงชื่อ...................................................ผู้รับจ้าง\n( นายปพน  แซ่จ๊ะ )\nวันที่ 17 กันยายน 2569")
+        set_run_font(r, size_pt=11.5, color_rgb=(15, 23, 42))
 
-    # Committee Chairman Signature
-    r = tbl_sigs.rows[0].cells[1].paragraphs[0].add_run("ลงชื่อ...................................................ประธานกรรมการ\n( .................................................... )\nวันที่ ......./......./.......")
-    set_run_font(r, size_pt=11.5, color_rgb=(15, 23, 42))
+        # Committee Chairman Signature
+        r = tbl_sigs.rows[0].cells[1].paragraphs[0].add_run("ลงชื่อ...................................................ประธานกรรมการ\n( .................................................... )\nวันที่ ......./......./.......")
+        set_run_font(r, size_pt=11.5, color_rgb=(15, 23, 42))
 
-    # Committee Member 1
-    r = tbl_sigs.rows[1].cells[0].paragraphs[0].add_run("ลงชื่อ...................................................กรรมการตรวจรับ\n( .................................................... )\nวันที่ ......./......./.......")
-    set_run_font(r, size_pt=11.5, color_rgb=(15, 23, 42))
+        # Committee Member 1
+        r = tbl_sigs.rows[1].cells[0].paragraphs[0].add_run("ลงชื่อ...................................................กรรมการตรวจรับ\n( .................................................... )\nวันที่ ......./......./.......")
+        set_run_font(r, size_pt=11.5, color_rgb=(15, 23, 42))
 
-    # Committee Member 2
-    r = tbl_sigs.rows[1].cells[1].paragraphs[0].add_run("ลงชื่อ...................................................กรรมการตรวจรับ\n( .................................................... )\nวันที่ ......./......./.......")
-    set_run_font(r, size_pt=11.5, color_rgb=(15, 23, 42))
+        # Committee Member 2
+        r = tbl_sigs.rows[1].cells[1].paragraphs[0].add_run("ลงชื่อ...................................................กรรมการตรวจรับ\n( .................................................... )\nวันที่ ......./......./.......")
+        set_run_font(r, size_pt=11.5, color_rgb=(15, 23, 42))
 
     # Save Word document
     print(f"Saving Word document to: {output_docx_path}")
@@ -1301,5 +1302,5 @@ def generate_handover_document(output_docx_path):
         print(f"Word COM PDF export notice: {e}")
 
 if __name__ == "__main__":
-    out_docx = r"D:\37-Project Narit Vending Machine\Document\01-หนังสือส่งมอบงาน Narit Smart Vending Machine (ฉบับสมบูรณ์รวมเล่ม).docx"
-    generate_handover_document(out_docx)
+    out_docx = r"D:\37-Project Narit Vending Machine\Document\01-หนังสือส่งมอบงาน Narit Smart Vending Machine (00-TOR-Vending-J69-290).docx"
+    generate_handover_document(out_docx, include_acceptance_cert=False)
