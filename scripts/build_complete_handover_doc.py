@@ -3,24 +3,19 @@ Script to generate the complete, unified Handover Document (หนังสื�
 for Narit Smart Vending Machine according to TOR J69-290.
 Outputs both .docx and .pdf files directly into D:\37-Project Narit Vending Machine\Document
 
-Correct image mapping:
-- image1.png  : Concept Design 1 (ระบบมาตรฐาน จุดจ่ายคงที่)
-- image2.png  : Concept Design 2 (ระบบเพิ่มชั้นพักจ่ายแบบเคลื่อนที่)
-- image3.png  : Concept Design 3 (ระบบโครงสร้างโปร่งใสและจ่ายหลายระดับ)
-- image4.png  : 3D CAD Model ภาพรวมตู้และโครงสร้าง
-- image5.png  : โครงสร้างชั้นวางสินค้าแบบลาดเอียง 25 องศา (Sloped Shelves)
-- image6.png  : ขนาดกล่อง 2A, 2B, D และการจัดเรียงบนชั้นวาง
-- image7.png  : มิติรวมตัวตู้ (1465 x 1006.92 x 2000 mm) และ 3 โซนการทำงาน
-- image8.jpg  : ระบบขับเคลื่อน 3 แกนพิกัดฉาก (Cartesian Gantry X, Y, Z)
-- image9.png  : แผนผังลำดับขั้นตอนการทำงานทั้งระบบ (Operation Sequence Flowchart)
-- image10.jpeg: บล็อกไดอะแกรมสถาปัตยกรรมระบบโดยรวม 8 ระบบย่อย
-- image11.png : แผนภาพการกระจายพลังงานไฟฟ้าและระบบสัญญาณควบคุม (Wiring Diagram)
-- image12.jpg : สมองกลควบคุมหลัก IRIV CM4 และอุปกรณ์ตู้ควบคุม Mini Control Box
-- image13.png : โครงสร้างการสื่อสาร Web App - Server - MQTT Broker
-- image14.png : ภาพหน้าจอ Mobile Web Mockup บนโทรศัพท์มือถือ
-- image15.png : ข้อกำหนด MQTT Topic Contract (cabinet/{id}/...)
-- image16.png : แผนภาพ REST API Endpoints สถาปัตยกรรม Decoupled
-- image17.png : ลำดับขั้นตอนความปลอดภัย Two-Phase Motion Safety
+Professional Thai Typography & Engineering Standards:
+- Standard A4 page size (210 x 297 mm)
+- Official Thai Margins: Left 1.25 in (3.175 cm เผื่อเข้าเล่ม), Right 1.0 in, Top 1.0 in, Bottom 1.0 in
+- Content Width = 6.02 inches (All tables, callouts, and drawings fit within 6.0 inches)
+- Full-width distributed alignment (THAI_JUSTIFY / w:jc="thaiDistribute")
+- Thai Paragraph First-Line Indent: 0.5 in (1.27 cm / 1 Thai tab)
+- Official Cover Letter First-Line Indent: 1.0 in (2.5 cm standard Thai royal/government letter indent)
+- Line Spacing: 1.18 multiple (optimal vertical breathing room, no vowel collision)
+- Hanging Indents for bullet and numbered lists
+- Table rows keep together (w:cantSplit) and repeat headers across pages (w:tblHeader)
+- Images kept with their captions (keep_with_next)
+- Clean section breaks before major technical chapters
+- Zero orphan lines, zero blank pages, and single-page acceptance certificate with signatures!
 """
 
 import os
@@ -32,12 +27,36 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.oxml import OxmlElement, parse_xml
 from docx.oxml.ns import nsdecls, qn
+from pythainlp.tokenize import word_tokenize
 
 sys.stdout.reconfigure(encoding='utf-8')
 
 # ---------------------------------------------------------------------------
 # STYLING HELPER FUNCTIONS
 # ---------------------------------------------------------------------------
+
+def insert_thai_breaks(text: str) -> str:
+    """
+    Inserts Zero-Width Spaces (\u200b) at Thai word boundaries using pythainlp.
+    This enables Microsoft Word to perform accurate Thai word breaking,
+    eliminating awkward character stretching and unsightly white gaps in justified text.
+    """
+    if not text or not any('\u0e00' <= c <= '\u0e7f' for c in text):
+        return text
+    tokens = word_tokenize(text, engine='newmm')
+    res = []
+    NO_BREAK_BEFORE = set(":;,.)!?%/\\]}>’”\"“”–— \t\n\u200bฯๆ")
+    NO_BREAK_AFTER = set("([{\\<‘“\"”–— \t\n\u200b")
+    for i, tok in enumerate(tokens):
+        res.append(tok)
+        if i < len(tokens) - 1:
+            next_tok = tokens[i+1]
+            if not tok.endswith(' ') and not next_tok.startswith(' '):
+                if next_tok[0] not in NO_BREAK_BEFORE and tok[-1] not in NO_BREAK_AFTER:
+                    has_thai = any('\u0e00' <= c <= '\u0e7f' for c in tok) or any('\u0e00' <= c <= '\u0e7f' for c in next_tok)
+                    if has_thai:
+                        res.append('\u200b')
+    return ''.join(res)
 
 def set_run_font(run, name='TH Sarabun New', size_pt=16, bold=False, italic=False, color_rgb=(30, 41, 59)):
     run.font.name = name
@@ -52,13 +71,21 @@ def set_run_font(run, name='TH Sarabun New', size_pt=16, bold=False, italic=Fals
     rFonts.set(qn('w:eastAsia'), name)
     rFonts.set(qn('w:cs'), name)
     rPr.append(rFonts)
+    if bold:
+        bCs = OxmlElement('w:bCs')
+        rPr.append(bCs)
+    szCs = OxmlElement('w:szCs')
+    szCs.set(qn('w:val'), str(int(size_pt * 2)))
+    rPr.append(szCs)
+    lang = parse_xml(f'<w:lang {nsdecls("w")} w:val="th-TH" w:eastAsia="th-TH" w:bidi="th-TH"/>')
+    rPr.append(lang)
 
 def set_cell_shading(cell, color_hex):
     tcPr = cell._element.get_or_add_tcPr()
     shd = parse_xml(f'<w:shd {nsdecls("w")} w:val="clear" w:color="auto" w:fill="{color_hex}"/>')
     tcPr.append(shd)
 
-def set_cell_margins(cell, top=100, bottom=100, left=150, right=150):
+def set_cell_margins(cell, top=80, bottom=80, left=120, right=120):
     tcPr = cell._element.get_or_add_tcPr()
     tcMar = OxmlElement('w:tcMar')
     for m, val in [('top', top), ('bottom', bottom), ('left', left), ('right', right)]:
@@ -83,137 +110,208 @@ def set_table_borders(table, color="CBD5E1", sz="4", val="single"):
         )
         tblPr[0].append(borders)
 
-def add_header_footer(doc):
-    for section in doc.sections:
-        section.top_margin = Inches(0.9)
-        section.bottom_margin = Inches(0.9)
-        section.left_margin = Inches(1.0)
-        section.right_margin = Inches(1.0)
-        
-        # Header
-        header = section.header
-        hp = header.paragraphs[0]
-        hp.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-        hrun = hp.add_run("หนังสือส่งมอบงานจ้างตามข้อกำหนดสัญญา TOR (ใบสั่งจ้างเลขที่ J69/290) | NARIT Smart Vending Machine")
-        set_run_font(hrun, size_pt=10, color_rgb=(148, 163, 184), italic=True)
-        
-        # Footer
-        footer = section.footer
-        fp = footer.paragraphs[0]
-        fp.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        frun = fp.add_run("สถาบันวิจัยดาราศาสตร์แห่งชาติ (องค์การมหาชน) — ศูนย์ปฏิบัติการหอดูดาวและวิศวกรรม")
-        set_run_font(frun, size_pt=10, color_rgb=(148, 163, 184))
+def apply_header_footer(section):
+    # Header
+    header = section.header
+    header.is_linked_to_previous = False
+    hp = header.paragraphs[0]
+    hp.text = ""
+    hp.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    hp.paragraph_format.first_line_indent = Pt(0)
+    hrun = hp.add_run("หนังสือส่งมอบงานจ้างตามข้อกำหนดสัญญา TOR (ใบสั่งจ้างเลขที่ J69/290) | NARIT Smart Vending Machine")
+    set_run_font(hrun, size_pt=10, color_rgb=(148, 163, 184), italic=True)
+    
+    # Footer
+    footer = section.footer
+    footer.is_linked_to_previous = False
+    fp = footer.paragraphs[0]
+    fp.text = ""
+    fp.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    fp.paragraph_format.first_line_indent = Pt(0)
+    frun = fp.add_run("สถาบันวิจัยดาราศาสตร์แห่งชาติ (องค์การมหาชน) — ศูนย์ปฏิบัติการหอดูดาวและวิศวกรรม")
+    set_run_font(frun, size_pt=10, color_rgb=(148, 163, 184))
 
-def add_h1(doc, text):
+def add_h1(doc, text, space_before=14, space_after=4):
     p = doc.add_paragraph()
-    p.paragraph_format.space_before = Pt(18)
-    p.paragraph_format.space_after = Pt(6)
+    p.paragraph_format.space_before = Pt(space_before)
+    p.paragraph_format.space_after = Pt(space_after)
     p.paragraph_format.keep_with_next = True
+    p.paragraph_format.first_line_indent = Pt(0)
+    p.alignment = WD_ALIGN_PARAGRAPH.LEFT
     run = p.add_run(text)
     set_run_font(run, size_pt=18, bold=True, color_rgb=(30, 58, 138)) # Navy Blue
     return p
 
-def add_h2(doc, text):
+def add_h2(doc, text, space_before=11, space_after=3):
     p = doc.add_paragraph()
-    p.paragraph_format.space_before = Pt(14)
-    p.paragraph_format.space_after = Pt(4)
+    p.paragraph_format.space_before = Pt(space_before)
+    p.paragraph_format.space_after = Pt(space_after)
     p.paragraph_format.keep_with_next = True
+    p.paragraph_format.first_line_indent = Pt(0)
+    p.alignment = WD_ALIGN_PARAGRAPH.LEFT
     run = p.add_run(text)
     set_run_font(run, size_pt=16, bold=True, color_rgb=(15, 23, 42)) # Slate Navy
     return p
 
-def add_h3(doc, text):
+def add_h3(doc, text, space_before=8, space_after=2):
     p = doc.add_paragraph()
-    p.paragraph_format.space_before = Pt(10)
-    p.paragraph_format.space_after = Pt(3)
+    p.paragraph_format.space_before = Pt(space_before)
+    p.paragraph_format.space_after = Pt(space_after)
     p.paragraph_format.keep_with_next = True
+    p.paragraph_format.first_line_indent = Pt(0)
+    p.alignment = WD_ALIGN_PARAGRAPH.LEFT
     run = p.add_run(text)
     set_run_font(run, size_pt=15, bold=True, color_rgb=(51, 65, 85)) # Slate
     return p
 
-def add_body(doc, text, bold_prefix=None, indent=0.0):
-    p = doc.add_paragraph()
-    p.paragraph_format.space_before = Pt(2)
-    p.paragraph_format.space_after = Pt(4)
-    p.paragraph_format.line_spacing = 1.15
-    if indent > 0:
-        p.paragraph_format.left_indent = Inches(indent)
+def add_body(doc, text, bold_prefix=None, indent=0.0, first_line_indent=0.5, align_justify=True, space_before=2, space_after=3, line_spacing=1.16):
+    ret_p = None
     
-    if bold_prefix:
-        r_pre = p.add_run(bold_prefix)
+    # If bold_prefix ends with newline, output it as an independent subheading line
+    # to prevent Word from stretching it across the whole width of the page
+    if bold_prefix and bold_prefix.endswith('\n'):
+        p_pre = doc.add_paragraph()
+        p_pre.paragraph_format.space_before = Pt(space_before + 3)
+        p_pre.paragraph_format.space_after = Pt(2)
+        p_pre.paragraph_format.first_line_indent = Pt(0)
+        p_pre.paragraph_format.keep_with_next = True
+        p_pre.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        r_pre = p_pre.add_run(insert_thai_breaks(bold_prefix.strip()))
         set_run_font(r_pre, size_pt=16, bold=True, color_rgb=(15, 23, 42))
-    
-    r_txt = p.add_run(text)
-    set_run_font(r_txt, size_pt=16, bold=False, color_rgb=(30, 41, 59))
-    return p
+        bold_prefix = None
 
-def add_bullet(doc, text, bold_prefix=None, level=0):
+    # Split text into lines/paragraphs so intermediate newlines never cause stretched text
+    raw_lines = [l.strip() for l in text.split('\n') if l.strip()]
+    for idx, line in enumerate(raw_lines):
+        p = doc.add_paragraph()
+        p.paragraph_format.space_before = Pt(space_before if idx == 0 else 1)
+        p.paragraph_format.space_after = Pt(space_after if idx == len(raw_lines) - 1 else 2)
+        p.paragraph_format.line_spacing = line_spacing
+        
+        # Check if this line is a numbered sub-item like "1. ", "2. "
+        is_sub_item = (len(line) > 2 and line[0].isdigit() and line[1] in ['.', ')']) or line.startswith('• ')
+        
+        if is_sub_item:
+            p.paragraph_format.left_indent = Inches(0.4)
+            p.paragraph_format.first_line_indent = Pt(0)
+            if align_justify:
+                p.alignment = WD_ALIGN_PARAGRAPH.THAI_JUSTIFY
+            else:
+                p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        else:
+            if indent > 0:
+                p.paragraph_format.left_indent = Inches(indent)
+                p.paragraph_format.first_line_indent = Pt(0)
+            elif first_line_indent > 0:
+                p.paragraph_format.first_line_indent = Inches(first_line_indent)
+            else:
+                p.paragraph_format.first_line_indent = Pt(0)
+            
+            if align_justify:
+                p.alignment = WD_ALIGN_PARAGRAPH.THAI_JUSTIFY
+            else:
+                p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+            
+        if idx == 0 and bold_prefix:
+            r_pre = p.add_run(insert_thai_breaks(bold_prefix))
+            set_run_font(r_pre, size_pt=16, bold=True, color_rgb=(15, 23, 42))
+        
+        r_txt = p.add_run(insert_thai_breaks(line))
+        set_run_font(r_txt, size_pt=16, bold=False, color_rgb=(30, 41, 59))
+        if ret_p is None:
+            ret_p = p
+    return ret_p
+
+def add_bullet(doc, text, bold_prefix=None, level=0, space_before=1, space_after=2, line_spacing=1.16):
     p = doc.add_paragraph(style='List Bullet' if level==0 else 'List Bullet 2')
-    p.paragraph_format.space_before = Pt(1)
-    p.paragraph_format.space_after = Pt(3)
-    p.paragraph_format.line_spacing = 1.15
+    p.paragraph_format.space_before = Pt(space_before)
+    p.paragraph_format.space_after = Pt(space_after)
+    p.paragraph_format.line_spacing = line_spacing
+    p.alignment = WD_ALIGN_PARAGRAPH.THAI_JUSTIFY
     
+    # Hanging Indents for neat bullet alignment
+    if level == 0:
+        p.paragraph_format.left_indent = Inches(0.4)
+        p.paragraph_format.first_line_indent = -Inches(0.25)
+    else:
+        p.paragraph_format.left_indent = Inches(0.7)
+        p.paragraph_format.first_line_indent = -Inches(0.25)
+        
     if bold_prefix:
-        r_pre = p.add_run(bold_prefix)
+        r_pre = p.add_run(insert_thai_breaks(bold_prefix))
         set_run_font(r_pre, size_pt=16, bold=True, color_rgb=(15, 23, 42))
         
-    r_txt = p.add_run(text)
+    r_txt = p.add_run(insert_thai_breaks(text))
     set_run_font(r_txt, size_pt=16, bold=False, color_rgb=(30, 41, 59))
     return p
 
-def add_image_caption(doc, img_path, caption_text, width=Inches(5.8)):
+def add_image_caption(doc, img_path, caption_text, width=Inches(5.5), space_before=6, space_after=6):
     if not os.path.exists(img_path):
         print(f"ERROR: Image not found: {img_path}")
         return None
     p_img = doc.add_paragraph()
-    p_img.paragraph_format.space_before = Pt(8)
+    p_img.paragraph_format.space_before = Pt(space_before)
     p_img.paragraph_format.space_after = Pt(2)
+    p_img.paragraph_format.first_line_indent = Pt(0)
+    p_img.paragraph_format.keep_with_next = True
     p_img.alignment = WD_ALIGN_PARAGRAPH.CENTER
     run_img = p_img.add_run()
     run_img.add_picture(img_path, width=width)
     
     p_cap = doc.add_paragraph()
     p_cap.paragraph_format.space_before = Pt(2)
-    p_cap.paragraph_format.space_after = Pt(10)
+    p_cap.paragraph_format.space_after = Pt(space_after)
+    p_cap.paragraph_format.first_line_indent = Pt(0)
     p_cap.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run_cap = p_cap.add_run(caption_text)
+    run_cap = p_cap.add_run(insert_thai_breaks(caption_text))
     set_run_font(run_cap, size_pt=13, bold=True, italic=True, color_rgb=(71, 85, 105))
     return p_img
 
-def add_styled_table(doc, headers, rows_data, col_widths=None):
+def add_styled_table(doc, headers, rows_data, col_widths=None, font_size_data=13, cell_top=60, cell_bot=60):
     table = doc.add_table(rows=len(rows_data) + 1, cols=len(headers))
     table.alignment = WD_TABLE_ALIGNMENT.CENTER
     table.autofit = False
     
+    # Repeat header row on every page
+    header_tr = table.rows[0]._element.get_or_add_trPr()
+    header_tr.append(parse_xml(f'<w:tblHeader {nsdecls("w")}/>'))
+    
+    # Prevent rows from breaking across pages
+    for row in table.rows:
+        trPr = row._element.get_or_add_trPr()
+        trPr.append(parse_xml(f'<w:cantSplit {nsdecls("w")}/>'))
+    
     # Header row
     hdr_cells = table.rows[0].cells
     for i, h_text in enumerate(headers):
-        hdr_cells[i].text = h_text
+        hdr_cells[i].text = insert_thai_breaks(h_text)
         set_cell_shading(hdr_cells[i], "1E3A8A") # Navy Blue
-        set_cell_margins(hdr_cells[i], top=120, bottom=120, left=150, right=150)
+        set_cell_margins(hdr_cells[i], top=90, bottom=90, left=110, right=110)
         p = hdr_cells[i].paragraphs[0]
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
         p.paragraph_format.space_before = Pt(0)
         p.paragraph_format.space_after = Pt(0)
-        set_run_font(p.runs[0], size_pt=14, bold=True, color_rgb=(255, 255, 255))
+        p.paragraph_format.first_line_indent = Pt(0)
+        set_run_font(p.runs[0], size_pt=13.5, bold=True, color_rgb=(255, 255, 255))
         
     # Data rows
     for r_idx, row_values in enumerate(rows_data):
         row_cells = table.rows[r_idx + 1].cells
         bg_color = "F8FAFC" if r_idx % 2 == 1 else "FFFFFF"
         for c_idx, val in enumerate(row_values):
-            row_cells[c_idx].text = str(val)
+            row_cells[c_idx].text = insert_thai_breaks(str(val))
             set_cell_shading(row_cells[c_idx], bg_color)
-            set_cell_margins(row_cells[c_idx], top=80, bottom=80, left=120, right=120)
+            set_cell_margins(row_cells[c_idx], top=cell_top, bottom=cell_bot, left=100, right=100)
             p = row_cells[c_idx].paragraphs[0]
             p.paragraph_format.space_before = Pt(0)
             p.paragraph_format.space_after = Pt(0)
             p.paragraph_format.line_spacing = 1.1
+            p.paragraph_format.first_line_indent = Pt(0)
             if len(str(val)) <= 6 or c_idx == 0:
                 p.alignment = WD_ALIGN_PARAGRAPH.CENTER
             else:
                 p.alignment = WD_ALIGN_PARAGRAPH.LEFT
-            set_run_font(p.runs[0], size_pt=13, color_rgb=(30, 41, 59))
+            set_run_font(p.runs[0], size_pt=font_size_data, color_rgb=(30, 41, 59))
             
     # Apply column widths
     if col_widths:
@@ -222,7 +320,6 @@ def add_styled_table(doc, headers, rows_data, col_widths=None):
                 row.cells[c_idx].width = w
                 
     set_table_borders(table, color="CBD5E1", sz="4", val="single")
-    doc.add_paragraph().paragraph_format.space_after = Pt(4)
     return table
 
 def add_callout(doc, text, bold_title=None):
@@ -230,9 +327,9 @@ def add_callout(doc, text, bold_title=None):
     tbl.alignment = WD_TABLE_ALIGNMENT.CENTER
     tbl.autofit = False
     cell = tbl.cell(0, 0)
-    cell.width = Inches(6.5)
+    cell.width = Inches(6.0) # Matches exactly with content width
     set_cell_shading(cell, "F1F5F9")
-    set_cell_margins(cell, top=120, bottom=120, left=200, right=180)
+    set_cell_margins(cell, top=90, bottom=90, left=150, right=150)
     
     tcPr = cell._element.get_or_add_tcPr()
     borders = parse_xml(
@@ -245,16 +342,26 @@ def add_callout(doc, text, bold_title=None):
     )
     tcPr.append(borders)
     
-    p = cell.paragraphs[0]
-    p.paragraph_format.space_before = Pt(2)
-    p.paragraph_format.space_after = Pt(2)
-    p.paragraph_format.line_spacing = 1.15
     if bold_title:
-        r_t = p.add_run(bold_title + "\n")
+        p_t = cell.paragraphs[0]
+        p_t.paragraph_format.space_before = Pt(2)
+        p_t.paragraph_format.space_after = Pt(2)
+        p_t.paragraph_format.line_spacing = 1.15
+        p_t.paragraph_format.first_line_indent = Pt(0)
+        p_t.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        r_t = p_t.add_run(insert_thai_breaks(bold_title))
         set_run_font(r_t, size_pt=15, bold=True, color_rgb=(30, 58, 138))
-    r_b = p.add_run(text)
+        p_b = cell.add_paragraph()
+    else:
+        p_b = cell.paragraphs[0]
+        
+    p_b.paragraph_format.space_before = Pt(2)
+    p_b.paragraph_format.space_after = Pt(2)
+    p_b.paragraph_format.line_spacing = 1.16
+    p_b.paragraph_format.first_line_indent = Pt(0)
+    p_b.alignment = WD_ALIGN_PARAGRAPH.THAI_JUSTIFY
+    r_b = p_b.add_run(insert_thai_breaks(text))
     set_run_font(r_b, size_pt=15, color_rgb=(51, 65, 85))
-    doc.add_paragraph().paragraph_format.space_after = Pt(4)
 
 # ---------------------------------------------------------------------------
 # MAIN BUILDER
@@ -263,7 +370,6 @@ def add_callout(doc, text, bold_title=None):
 def generate_handover_document(output_docx_path):
     print("Generating comprehensive Handover Document with EXACT image verification...")
     doc = docx.Document()
-    add_header_footer(doc)
     
     media_dir = r"C:\Users\Naruebest\.gemini\antigravity\brain\0418e452-5702-4e54-9804-766d0362af50\scratch\exact_media"
     draw_dir = r"C:\Users\Naruebest\.gemini\antigravity\brain\0418e452-5702-4e54-9804-766d0362af50\scratch\drawing_pages"
@@ -273,158 +379,207 @@ def generate_handover_document(output_docx_path):
         bom_data = json.load(f)
 
     # =========================================================================
-    # PART 1: หนังสือนำส่งมอบงาน (OFFICIAL COVER LETTER)
+    # SECTION 1: หนังสือนำส่งมอบงาน (OFFICIAL COVER LETTER - EXACT 1 PAGE)
     # =========================================================================
+    sec1 = doc.sections[0]
+    sec1.page_width = Inches(8.27)
+    sec1.page_height = Inches(11.69)
+    sec1.top_margin = Inches(0.8)
+    sec1.bottom_margin = Inches(0.8)
+    sec1.left_margin = Inches(1.25)
+    sec1.right_margin = Inches(1.0)
+    sec1.header.is_linked_to_previous = False
+    sec1.footer.is_linked_to_previous = False
+
     p_top_title = doc.add_paragraph()
     p_top_title.alignment = WD_ALIGN_PARAGRAPH.CENTER
     p_top_title.paragraph_format.space_before = Pt(0)
-    p_top_title.paragraph_format.space_after = Pt(12)
+    p_top_title.paragraph_format.space_after = Pt(4)
+    p_top_title.paragraph_format.first_line_indent = Pt(0)
     r_tt = p_top_title.add_run("ใบส่งมอบงาน")
-    set_run_font(r_tt, size_pt=26, bold=True, color_rgb=(15, 23, 42))
+    set_run_font(r_tt, size_pt=24, bold=True, color_rgb=(15, 23, 42))
 
     tbl_letter_meta = doc.add_table(rows=2, cols=2)
     tbl_letter_meta.alignment = WD_TABLE_ALIGNMENT.CENTER
     tbl_letter_meta.autofit = False
-    tbl_letter_meta.rows[0].cells[0].width = Inches(3.2)
-    tbl_letter_meta.rows[0].cells[1].width = Inches(3.3)
-    tbl_letter_meta.rows[1].cells[0].width = Inches(3.2)
-    tbl_letter_meta.rows[1].cells[1].width = Inches(3.3)
+    tbl_letter_meta.rows[0].cells[0].width = Inches(2.8)
+    tbl_letter_meta.rows[0].cells[1].width = Inches(3.2)
+    tbl_letter_meta.rows[1].cells[0].width = Inches(2.8)
+    tbl_letter_meta.rows[1].cells[1].width = Inches(3.2)
 
     c01 = tbl_letter_meta.cell(0, 1).paragraphs[0]
     c11 = tbl_letter_meta.cell(1, 1).paragraphs[0]
     c01.alignment = WD_ALIGN_PARAGRAPH.RIGHT
     c11.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    c01.paragraph_format.space_before = Pt(0)
+    c01.paragraph_format.space_after = Pt(0)
+    c11.paragraph_format.space_before = Pt(0)
+    c11.paragraph_format.space_after = Pt(0)
+    c01.paragraph_format.first_line_indent = Pt(0)
+    c11.paragraph_format.first_line_indent = Pt(0)
 
     r = c01.add_run("เขียนที่  สถาบันวิจัยดาราศาสตร์แห่งชาติ (องค์การมหาชน)")
-    set_run_font(r, size_pt=16, color_rgb=(15, 23, 42))
+    set_run_font(r, size_pt=15.5, color_rgb=(15, 23, 42))
     r = c11.add_run("วันที่  17  กันยายน  พ.ศ.  2569")
-    set_run_font(r, size_pt=16, color_rgb=(15, 23, 42))
-
-    doc.add_paragraph().paragraph_format.space_after = Pt(8)
+    set_run_font(r, size_pt=15.5, color_rgb=(15, 23, 42))
 
     p_subj = doc.add_paragraph()
-    p_subj.paragraph_format.space_before = Pt(4)
-    p_subj.paragraph_format.space_after = Pt(4)
+    p_subj.paragraph_format.space_before = Pt(2)
+    p_subj.paragraph_format.space_after = Pt(2)
+    p_subj.paragraph_format.first_line_indent = Pt(0)
     r1 = p_subj.add_run("เรื่อง   ")
-    set_run_font(r1, size_pt=16, bold=True, color_rgb=(15, 23, 42))
+    set_run_font(r1, size_pt=15.5, bold=True, color_rgb=(15, 23, 42))
     r2 = p_subj.add_run("ส่งมอบงานจ้างและขออนุมัติเบิกจ่ายเงินค่าจ้าง")
-    set_run_font(r2, size_pt=16, bold=True, color_rgb=(30, 58, 138))
+    set_run_font(r2, size_pt=15.5, bold=True, color_rgb=(30, 58, 138))
 
     p_to = doc.add_paragraph()
     p_to.paragraph_format.space_before = Pt(2)
-    p_to.paragraph_format.space_after = Pt(6)
+    p_to.paragraph_format.space_after = Pt(2)
+    p_to.paragraph_format.first_line_indent = Pt(0)
     r1 = p_to.add_run("เรียน   ")
-    set_run_font(r1, size_pt=16, bold=True, color_rgb=(15, 23, 42))
+    set_run_font(r1, size_pt=15.5, bold=True, color_rgb=(15, 23, 42))
     r2 = p_to.add_run("ประธานคณะกรรมการตรวจรับพัสดุ สถาบันวิจัยดาราศาสตร์แห่งชาติ (องค์การมหาชน)")
-    set_run_font(r2, size_pt=16, bold=False, color_rgb=(15, 23, 42))
+    set_run_font(r2, size_pt=15.5, bold=False, color_rgb=(15, 23, 42))
 
     p_ref = doc.add_paragraph()
     p_ref.paragraph_format.space_before = Pt(2)
-    p_ref.paragraph_format.space_after = Pt(12)
+    p_ref.paragraph_format.space_after = Pt(4)
+    p_ref.paragraph_format.first_line_indent = Pt(0)
     r1 = p_ref.add_run("อ้างถึง  ")
-    set_run_font(r1, size_pt=16, bold=True, color_rgb=(15, 23, 42))
+    set_run_font(r1, size_pt=15.5, bold=True, color_rgb=(15, 23, 42))
     r2 = p_ref.add_run("ใบสั่งจ้างเลขที่ J69/290 ลงวันที่ 1 กรกฎาคม 2569")
-    set_run_font(r2, size_pt=16, bold=False, color_rgb=(51, 65, 85))
+    set_run_font(r2, size_pt=15.5, bold=False, color_rgb=(51, 65, 85))
 
     p_body1 = doc.add_paragraph()
-    p_body1.paragraph_format.left_indent = Inches(0.8)
-    p_body1.paragraph_format.space_before = Pt(4)
-    p_body1.paragraph_format.space_after = Pt(6)
-    p_body1.paragraph_format.line_spacing = 1.15
+    p_body1.paragraph_format.left_indent = Pt(0)
+    p_body1.paragraph_format.first_line_indent = Inches(1.0) # 2.5 cm standard Thai royal/government letter indent
+    p_body1.alignment = WD_ALIGN_PARAGRAPH.THAI_JUSTIFY
+    p_body1.paragraph_format.space_before = Pt(2)
+    p_body1.paragraph_format.space_after = Pt(3)
+    p_body1.paragraph_format.line_spacing = 1.12
     r_b1 = p_body1.add_run(
-        "ตามที่ สถาบันวิจัยดาราศาสตร์แห่งชาติ (องค์การมหาชน) ได้ตกลงให้ข้าพเจ้า นายปพน แซ่จ๊ะ "
-        "ที่อยู่ 197 หมู่ 6 ตำบลป่ากลาง อำเภอปัว จังหวัดน่าน 55120 ดำเนินการจ้างออกแบบชั้นเก็บและจ่ายอุปกรณ์อิเล็กทรอนิกส์อัตโนมัติ "
-        "(Auto Electronic Parts Box) / เครื่องจำหน่ายสินค้าอัตโนมัติ (NARIT Smart Vending Machine) สำหรับบรรจุภัณฑ์รูปทรงสี่เหลี่ยม จำนวน 1 งาน "
-        "ตามใบสั่งจ้างเลขที่ J69/290 ลงวันที่ 1 กรกฎาคม 2569 ในวงเงินงบประมาณค่าจ้างทั้งสิ้น 90,000.00 บาท (เก้าหมื่นบาทถ้วน) นั้น"
+        insert_thai_breaks(
+            "ตามที่ สถาบันวิจัยดาราศาสตร์แห่งชาติ (องค์การมหาชน) ได้ตกลงให้ข้าพเจ้า นายปพน แซ่จ๊ะ "
+            "ที่อยู่ 197 หมู่ 6 ตำบลป่ากลาง อำเภอปัว จังหวัดน่าน 55120 ดำเนินการจ้างออกแบบชั้นเก็บและจ่ายอุปกรณ์อิเล็กทรอนิกส์อัตโนมัติ "
+            "(Auto Electronic Parts Box) / เครื่องจำหน่ายสินค้าอัตโนมัติ (NARIT Smart Vending Machine) สำหรับบรรจุภัณฑ์รูปทรงสี่เหลี่ยม จำนวน 1 งาน "
+            "ตามใบสั่งจ้างเลขที่ J69/290 ลงวันที่ 1 กรกฎาคม 2569 ในวงเงินงบประมาณค่าจ้างทั้งสิ้น 90,000.00 บาท (เก้าหมื่นบาทถ้วน) นั้น"
+        )
     )
-    set_run_font(r_b1, size_pt=16, color_rgb=(30, 41, 59))
+    set_run_font(r_b1, size_pt=15.5, color_rgb=(30, 41, 59))
 
     p_body2 = doc.add_paragraph()
-    p_body2.paragraph_format.left_indent = Inches(0.8)
-    p_body2.paragraph_format.space_before = Pt(4)
-    p_body2.paragraph_format.space_after = Pt(12)
-    p_body2.paragraph_format.line_spacing = 1.15
+    p_body2.paragraph_format.left_indent = Pt(0)
+    p_body2.paragraph_format.first_line_indent = Inches(1.0)
+    p_body2.alignment = WD_ALIGN_PARAGRAPH.THAI_JUSTIFY
+    p_body2.paragraph_format.space_before = Pt(2)
+    p_body2.paragraph_format.space_after = Pt(3)
+    p_body2.paragraph_format.line_spacing = 1.12
     r_b2 = p_body2.add_run(
-        "บัดนี้ ข้าพเจ้าได้ดำเนินการปฏิบัติงานจ้างออกแบบดังกล่าวเสร็จสิ้นเรียบร้อยสมบูรณ์ ถูกต้องครบถ้วนตามขอบเขตและเงื่อนไขแห่งข้อกำหนดของสถาบันฯ (TOR) "
-        "ทุกประการ โดยได้รวบรวมรายละเอียดผลงานการออกแบบทั้งหมด ทั้งแบบร่าง 3 รูปแบบ (Versions), ภาพจำลอง 3 มิติ (3D Rendering), "
-        "แบบจำลอง 3D CAD Model ฉบับสมบูรณ์, แบบวาดทางวิศวกรรมฉบับสมบูรณ์ (Production Drawing), รายการวัสดุและชิ้นส่วน (Bill of Materials : BOM), "
-        "เอกสารอธิบายหลักการทำงานของระบบย่อยแต่ละระบบ (System Description Document), แบบวงจรไฟฟ้าและแผนผังการเดินสาย (Electrical Schematic & Wiring Diagram) "
-        "ตลอดจนเอกสารข้อกำหนดการเชื่อมต่อระบบ (Interface Specification Document) บรรจุไว้ในเอกสารหนังสือส่งมอบงานฉบับสมบูรณ์นี้อย่างครบถ้วนในเล่มเดียว โดยไม่มีส่วนแยกแนบภายนอก\n\n"
-        "จึงเรียนมาเพื่อโปรดดำเนินการตรวจรับงานจ้าง และอนุมัติการเบิกจ่ายเงินค่าจ้าง จำนวน 90,000.00 บาท (เก้าหมื่นบาทถ้วน) ให้แก่ข้าพเจ้าต่อไป"
+        insert_thai_breaks(
+            "บัดนี้ ข้าพเจ้าได้ดำเนินการปฏิบัติงานจ้างออกแบบดังกล่าวเสร็จสิ้นเรียบร้อยสมบูรณ์ ถูกต้องครบถ้วนตามขอบเขตและเงื่อนไขแห่งข้อกำหนดของสถาบันฯ (TOR) "
+            "ทุกประการ โดยได้รวบรวมรายละเอียดผลงานการออกแบบทั้งหมด ทั้งแบบร่าง 3 รูปแบบ (Versions), ภาพจำลอง 3 มิติ (3D Rendering), "
+            "แบบจำลอง 3D CAD Model ฉบับสมบูรณ์, แบบวาดทางวิศวกรรมฉบับสมบูรณ์ (Production Drawing), รายการวัสดุและชิ้นส่วน (Bill of Materials : BOM), "
+            "เอกสารอธิบายหลักการทำงานของระบบย่อยแต่ละระบบ (System Description Document), แบบวงจรไฟฟ้าและแผนผังการเดินสาย (Electrical Schematic & Wiring Diagram) "
+            "ตลอดจนเอกสารข้อกำหนดการเชื่อมต่อระบบ (Interface Specification Document) บรรจุไว้ในเอกสารหนังสือส่งมอบงานฉบับสมบูรณ์นี้อย่างครบถ้วนในเล่มเดียว โดยไม่มีส่วนแยกแนบภายนอก"
+        )
     )
-    set_run_font(r_b2, size_pt=16, color_rgb=(30, 41, 59))
+    set_run_font(r_b2, size_pt=15.5, color_rgb=(30, 41, 59))
+
+    p_body3 = doc.add_paragraph()
+    p_body3.paragraph_format.left_indent = Pt(0)
+    p_body3.paragraph_format.first_line_indent = Inches(1.0)
+    p_body3.alignment = WD_ALIGN_PARAGRAPH.THAI_JUSTIFY
+    p_body3.paragraph_format.space_before = Pt(2)
+    p_body3.paragraph_format.space_after = Pt(6)
+    p_body3.paragraph_format.line_spacing = 1.12
+    r_b3 = p_body3.add_run(
+        insert_thai_breaks(
+            "จึงเรียนมาเพื่อโปรดดำเนินการตรวจรับงานจ้าง และอนุมัติการเบิกจ่ายเงินค่าจ้าง จำนวน 90,000.00 บาท (เก้าหมื่นบาทถ้วน) ให้แก่ข้าพเจ้าต่อไป"
+        )
+    )
+    set_run_font(r_b3, size_pt=15.5, color_rgb=(30, 41, 59))
 
     p_close = doc.add_paragraph()
-    p_close.paragraph_format.left_indent = Inches(3.5)
-    p_close.paragraph_format.space_before = Pt(20)
-    p_close.paragraph_format.space_after = Pt(28)
+    p_close.paragraph_format.left_indent = Inches(3.0)
+    p_close.paragraph_format.first_line_indent = Pt(0)
+    p_close.paragraph_format.space_before = Pt(6)
+    p_close.paragraph_format.space_after = Pt(10)
     r_cl = p_close.add_run("ขอแสดงความนับถือ")
-    set_run_font(r_cl, size_pt=16, color_rgb=(15, 23, 42))
+    set_run_font(r_cl, size_pt=15.5, color_rgb=(15, 23, 42))
 
     p_sig = doc.add_paragraph()
     p_sig.paragraph_format.left_indent = Inches(3.0)
+    p_sig.paragraph_format.first_line_indent = Pt(0)
     p_sig.paragraph_format.space_before = Pt(0)
-    p_sig.paragraph_format.space_after = Pt(2)
+    p_sig.paragraph_format.space_after = Pt(0)
     r_s1 = p_sig.add_run("ลงชื่อ............................................................ผู้รับจ้าง\n")
-    set_run_font(r_s1, size_pt=16, color_rgb=(15, 23, 42))
+    set_run_font(r_s1, size_pt=15, color_rgb=(15, 23, 42))
     r_s2 = p_sig.add_run("       ( นายปพน  แซ่จ๊ะ )\n")
-    set_run_font(r_s2, size_pt=16, bold=True, color_rgb=(15, 23, 42))
+    set_run_font(r_s2, size_pt=15, bold=True, color_rgb=(15, 23, 42))
     r_s3 = p_sig.add_run("          ผู้รับจ้าง / ผู้ปฏิบัติงาน")
-    set_run_font(r_s3, size_pt=15, color_rgb=(71, 85, 105))
-
-    doc.add_page_break()
+    set_run_font(r_s3, size_pt=14.5, color_rgb=(71, 85, 105))
 
     # =========================================================================
-    # PART 2: หน้าปกและข้อมูลควบคุมเอกสารรายงาน (REPORT TITLE BLOCK)
+    # SECTION 2: หน้าปกและข้อมูลควบคุมเอกสารรายงาน (REPORT TITLE BLOCK - EXACT 1 PAGE)
     # =========================================================================
+    sec2 = doc.add_section()
+    sec2.page_width = Inches(8.27)
+    sec2.page_height = Inches(11.69)
+    sec2.top_margin = Inches(0.8)
+    sec2.bottom_margin = Inches(0.8)
+    sec2.left_margin = Inches(1.25)
+    sec2.right_margin = Inches(1.0)
+    sec2.header.is_linked_to_previous = False
+    sec2.footer.is_linked_to_previous = False
+
     p_inst = doc.add_paragraph()
     p_inst.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    p_inst.paragraph_format.space_before = Pt(20)
+    p_inst.paragraph_format.space_before = Pt(0)
     p_inst.paragraph_format.space_after = Pt(2)
+    p_inst.paragraph_format.first_line_indent = Pt(0)
     r_ins = p_inst.add_run("สถาบันวิจัยดาราศาสตร์แห่งชาติ (องค์การมหาชน)")
-    set_run_font(r_ins, size_pt=20, bold=True, color_rgb=(30, 58, 138))
+    set_run_font(r_ins, size_pt=19, bold=True, color_rgb=(30, 58, 138))
 
     p_dept = doc.add_paragraph()
     p_dept.alignment = WD_ALIGN_PARAGRAPH.CENTER
     p_dept.paragraph_format.space_before = Pt(0)
-    p_dept.paragraph_format.space_after = Pt(14)
+    p_dept.paragraph_format.space_after = Pt(6)
+    p_dept.paragraph_format.first_line_indent = Pt(0)
     r_dep = p_dept.add_run("ศูนย์ปฏิบัติการหอดูดาวและวิศวกรรม | ห้องปฏิบัติการเทคโนโลยีเมคาทรอนิกส์")
-    set_run_font(r_dep, size_pt=15, italic=True, color_rgb=(71, 85, 105))
-
-    p_div = doc.add_paragraph()
-    p_div.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    p_div.paragraph_format.space_before = Pt(0)
-    p_div.paragraph_format.space_after = Pt(14)
-    r_div = p_div.add_run("━" * 58)
-    set_run_font(r_div, size_pt=11, color_rgb=(203, 213, 225))
+    set_run_font(r_dep, size_pt=14, italic=True, color_rgb=(71, 85, 105))
 
     p_rtitle = doc.add_paragraph()
     p_rtitle.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    p_rtitle.paragraph_format.space_before = Pt(8)
-    p_rtitle.paragraph_format.space_after = Pt(4)
+    p_rtitle.paragraph_format.space_before = Pt(2)
+    p_rtitle.paragraph_format.space_after = Pt(2)
+    p_rtitle.paragraph_format.first_line_indent = Pt(0)
     r_rt = p_rtitle.add_run("รายงานผลงานส่งมอบงานจ้างออกแบบฉบับสมบูรณ์ (รวมเล่มเดียว)\n(Comprehensive Final Deliverables Report)")
-    set_run_font(r_rt, size_pt=22, bold=True, color_rgb=(15, 23, 42))
+    set_run_font(r_rt, size_pt=19, bold=True, color_rgb=(15, 23, 42))
 
     p_rproj = doc.add_paragraph()
     p_rproj.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    p_rproj.paragraph_format.space_before = Pt(4)
-    p_rproj.paragraph_format.space_after = Pt(16)
+    p_rproj.paragraph_format.space_before = Pt(2)
+    p_rproj.paragraph_format.space_after = Pt(6)
+    p_rproj.paragraph_format.first_line_indent = Pt(0)
     r_rp = p_rproj.add_run("งานจัดจ้างออกแบบเครื่องจำหน่ายสินค้าอัตโนมัติ (NARIT Smart Vending Machine)\nสำหรับบรรจุภัณฑ์รูปทรงสี่เหลี่ยม จำนวน 1 งาน ตามข้อกำหนด TOR (ใบสั่งจ้างเลขที่ J69/290)")
-    set_run_font(r_rp, size_pt=17, bold=True, color_rgb=(30, 58, 138))
+    set_run_font(r_rp, size_pt=15, bold=True, color_rgb=(30, 58, 138))
 
     # COVER IMAGE: image4.png (3D CAD Model Overview)
     add_image_caption(
         doc,
         os.path.join(media_dir, "image4.png"),
         "ภาพจำลอง 3 มิติ (3D CAD Model) ฉบับสมบูรณ์ โครงสร้างตู้จำหน่ายสินค้าอัตโนมัติ NARIT Smart Vending Machine",
-        width=Inches(4.8)
+        width=Inches(3.2),
+        space_before=2,
+        space_after=4
     )
 
     p_tbl_lbl = doc.add_paragraph()
-    p_tbl_lbl.paragraph_format.space_before = Pt(12)
-    p_tbl_lbl.paragraph_format.space_after = Pt(4)
+    p_tbl_lbl.paragraph_format.space_before = Pt(4)
+    p_tbl_lbl.paragraph_format.space_after = Pt(2)
+    p_tbl_lbl.paragraph_format.first_line_indent = Pt(0)
     r_tl = p_tbl_lbl.add_run("ตารางข้อมูลการควบคุมเอกสาร (Document Control)")
-    set_run_font(r_tl, size_pt=15, bold=True, color_rgb=(30, 58, 138))
+    set_run_font(r_tl, size_pt=13.5, bold=True, color_rgb=(30, 58, 138))
 
     doc_ctrl_headers = ["รายการข้อมูล", "รายละเอียด"]
     doc_ctrl_rows = [
@@ -436,57 +591,67 @@ def generate_handover_document(output_docx_path):
         ["วงเงินงบประมาณค่าจ้าง", "90,000.00 บาท (เก้าหมื่นบาทถ้วน)"],
         ["สถานะเอกสาร", "ฉบับสมบูรณ์สำหรับตรวจรับพัสดุ (Final Approved Deliverable - Single Volume)"]
     ]
-    add_styled_table(doc, doc_ctrl_headers, doc_ctrl_rows, [Inches(2.3), Inches(4.2)])
-
-    doc.add_page_break()
+    add_styled_table(doc, doc_ctrl_headers, doc_ctrl_rows, [Inches(1.9), Inches(4.1)], font_size_data=11.5, cell_top=45, cell_bot=45)
 
     # =========================================================================
-    # PART 3: เนื้อหารายงานจัดเรียงตามเลขข้อของ TOR (00-TOR-Vending-J69-290)
+    # SECTION 3: เนื้อหารายงานจัดเรียงตามเลขข้อของ TOR (BODY CONTENT)
     # =========================================================================
+    sec3 = doc.add_section()
+    sec3.page_width = Inches(8.27)
+    sec3.page_height = Inches(11.69)
+    sec3.top_margin = Inches(1.0)
+    sec3.bottom_margin = Inches(1.0)
+    sec3.left_margin = Inches(1.25)
+    sec3.right_margin = Inches(1.0)
+    apply_header_footer(sec3)
 
     # -------------------------------------------------------------------------
     # ข้อ 1. ความเป็นมา (Background)
     # -------------------------------------------------------------------------
-    add_h1(doc, "1. ความเป็นมา (Background)")
+    add_h1(doc, "1. ความเป็นมา (Background)", space_before=12, space_after=4)
     add_body(doc,
         "สถาบันวิจัยดาราศาสตร์แห่งชาติ (องค์การมหาชน) หรือ NARIT มีพันธกิจหลักในการวิจัยและพัฒนาเทคโนโลยีด้านดาราศาสตร์ "
         "โดยมีองค์ความรู้และความเชี่ยวชาญในด้านวิศวกรรมหลากหลายสาขา ไม่ว่าจะเป็นงานวิศวกรรมเครื่องกล ระบบอัตโนมัติ "
         "เมคาทรอนิกส์ขั้นสูง หรืองานออกแบบเชิงวิศวกรรมความแม่นยำสูง โครงการนี้มีวัตถุประสงค์เพื่อจัดจ้างออกแบบรายละเอียด "
         "เครื่องจำหน่ายสินค้าอัตโนมัติ (NARIT Smart Vending Machine) สำหรับจำหน่ายสินค้าของที่ระลึกและสินค้าตราสัญลักษณ์ NARIT "
         "ในรูปแบบบรรจุภัณฑ์รูปทรงสี่เหลี่ยม เพื่อเตรียมความพร้อมสำหรับการผลิตและติดตั้งใช้งานจริงในพื้นที่นิทรรศการของอุทยานดาราศาสตร์สิรินธร "
-        "(ASTROPARK) อำเภอแม่ริม จังหวัดเชียงใหม่ ในอนาคต"
+        "(ASTROPARK) อำเภอแม่ริม จังหวัดเชียงใหม่ ในอนาคต",
+        space_before=1, space_after=3, line_spacing=1.15
     )
     add_body(doc,
         "เครื่องจำหน่ายสินค้าอัตโนมัตินี้ถูกออกแบบขึ้นเพื่อทำหน้าที่เป็นจุดสร้างแรงบันดาลใจทางด้านงานวิศวกรรมของ NARIT และนำเสนอให้ผู้เยี่ยมชม "
         "นักเรียน นักศึกษา และสาธารณชนได้ประจักษ์ถึงศักยภาพและองค์ความรู้ในการพัฒนานวัตกรรมและเทคโนโลยีวิศวกรรมของสถาบันฯ "
         "นอกเหนือจากงานด้านดาราศาสตร์โดยเฉพาะ โดยกำหนดให้เครื่องจำหน่ายสินค้าอัตโนมัติสามารถรองรับและทำงานร่วมกับกล่องบรรจุภัณฑ์มาตรฐาน 3 ขนาด "
         "ได้แก่ กล่องขนาด 2A, 2B และ D ทั้งนี้ ผู้รับจ้างได้ดำเนินการออกแบบเครื่องจำหน่ายสินค้าอัตโนมัติ 1 รูปแบบสุดท้าย (Final Version) "
-        "ที่มีความสมบูรณ์สูงสุดตามขอบเขตงานที่กำหนดไว้ในสัญญาจ้างทุกประการ"
+        "ที่มีความสมบูรณ์สูงสุดตามขอบเขตงานที่กำหนดไว้ในสัญญาจ้างทุกประการ",
+        space_before=1, space_after=4, line_spacing=1.15
     )
 
     # -------------------------------------------------------------------------
     # ข้อ 2. วัตถุประสงค์ (Objectives)
     # -------------------------------------------------------------------------
-    add_h1(doc, "2. วัตถุประสงค์ (Objectives)")
-    add_body(doc, "การดำเนินการจัดจ้างออกแบบในโครงการนี้ มีวัตถุประสงค์หลักตามข้อกำหนดสัญญา ดังต่อไปนี้:")
-    add_bullet(doc, "เพื่อจัดจ้างออกแบบรายละเอียด (Detail Design) เครื่องจำหน่ายสินค้าอัตโนมัติ (NARIT Smart Vending Machine) สำหรับบรรจุภัณฑ์ทรงสี่เหลี่ยมที่สามารถใช้งานร่วมกับกล่องบรรจุภัณฑ์ขนาดมาตรฐาน 2A, 2B และ D ได้อย่างสมบูรณ์และแม่นยำ", bold_prefix="2.1 ")
-    add_bullet(doc, "เพื่อจัดทำแบบวาดทางวิศวกรรมฉบับสมบูรณ์ (Production Drawing) ครอบคลุมรายละเอียดขนาด พิกัดความเผื่อ (Tolerances) ชนิดวัสดุ และการปรับสภาพผิว สำหรับเตรียมความพร้อมในการเข้าสู่กระบวนการผลิตเชิงอุตสาหกรรมในอนาคต", bold_prefix="2.2 ")
-    add_bullet(doc, "เพื่อนำเสนอองค์ความรู้และความสามารถทางวิศวกรรมชั้นสูงของ NARIT ให้แก่ผู้เยี่ยมชมและสาธารณชนทั่วไป ผ่านเครื่องจำหน่ายสินค้าอัตโนมัติที่จะติดตั้งในพื้นที่นิทรรศการของอุทยานดาราศาสตร์แห่งชาติ", bold_prefix="2.3 ")
-    add_bullet(doc, "เพื่อใช้เป็นช่องทางจำหน่ายสินค้าของที่ระลึก อุปกรณ์อิเล็กทรอนิกส์ และสินค้าตรา NARIT ให้แก่ผู้เยี่ยมชมได้อย่างสะดวกรวดเร็ว ทันสมัย ปลอดภัย และมีประสิทธิภาพสูงสุด", bold_prefix="2.4 ")
+    add_h1(doc, "2. วัตถุประสงค์ (Objectives)", space_before=10, space_after=3)
+    add_body(doc, "การดำเนินการจัดจ้างออกแบบในโครงการนี้ มีวัตถุประสงค์หลักตามข้อกำหนดสัญญา ดังต่อไปนี้:", space_before=1, space_after=2, line_spacing=1.15)
+    add_bullet(doc, "เพื่อจัดจ้างออกแบบรายละเอียด (Detail Design) เครื่องจำหน่ายสินค้าอัตโนมัติ (NARIT Smart Vending Machine) สำหรับบรรจุภัณฑ์ทรงสี่เหลี่ยมที่สามารถใช้งานร่วมกับกล่องบรรจุภัณฑ์ขนาดมาตรฐาน 2A, 2B และ D ได้อย่างสมบูรณ์และแม่นยำ", bold_prefix="2.1 ", space_before=1, space_after=2, line_spacing=1.15)
+    add_bullet(doc, "เพื่อจัดทำแบบวาดทางวิศวกรรมฉบับสมบูรณ์ (Production Drawing) ครอบคลุมรายละเอียดขนาด พิกัดความเผื่อ (Tolerances) ชนิดวัสดุ และการปรับสภาพผิว สำหรับเตรียมความพร้อมในการเข้าสู่กระบวนการผลิตเชิงอุตสาหกรรมในอนาคต", bold_prefix="2.2 ", space_before=1, space_after=2, line_spacing=1.15)
+    add_bullet(doc, "เพื่อนำเสนอองค์ความรู้และความสามารถทางวิศวกรรมชั้นสูงของ NARIT ให้แก่ผู้เยี่ยมชมและสาธารณชนทั่วไป ผ่านเครื่องจำหน่ายสินค้าอัตโนมัติที่จะติดตั้งในพื้นที่นิทรรศการของอุทยานดาราศาสตร์แห่งชาติ", bold_prefix="2.3 ", space_before=1, space_after=2, line_spacing=1.15)
+    add_bullet(doc, "เพื่อใช้เป็นช่องทางจำหน่ายสินค้าของที่ระลึก อุปกรณ์อิเล็กทรอนิกส์ และสินค้าตรา NARIT ให้แก่ผู้เยี่ยมชมได้อย่างสะดวกรวดเร็ว ทันสมัย ปลอดภัย และมีประสิทธิภาพสูงสุด", bold_prefix="2.4 ", space_before=1, space_after=3, line_spacing=1.15)
 
     # -------------------------------------------------------------------------
     # ข้อ 3. คุณสมบัติของผู้ยื่นข้อเสนอ / ผู้รับจ้าง (Qualifications)
     # -------------------------------------------------------------------------
-    add_h1(doc, "3. คุณสมบัติของผู้ยื่นข้อเสนอและผู้รับจ้าง (Qualifications)")
-    add_body(doc, "ผู้รับจ้าง (นายปพน แซ่จ๊ะ) ขอรับรองว่ามีคุณสมบัติถูกต้องครบถ้วนตามที่กำหนดไว้ในข้อ 3.1 ถึง 3.8 แห่งข้อกำหนด TOR ดังนี้:")
-    add_bullet(doc, "เป็นบุคคลธรรมดาผู้มีความสามารถตามกฎหมาย ไม่เป็นบุคคลวิกลจริตหรือคนไร้ความสามารถ", bold_prefix="3.1 ")
-    add_bullet(doc, "ไม่เป็นบุคคลล้มละลาย และไม่เคยถูกศาลสั่งพิทักษ์ทรัพย์เด็ดขาด", bold_prefix="3.2 ")
-    add_bullet(doc, "ไม่อยู่ระหว่างเลิกกิจการหรือถูกสั่งพักใช้ใบอนุญาตประกอบวิชาชีพ", bold_prefix="3.3 ")
-    add_bullet(doc, "ไม่เป็นบุคคลซึ่งอยู่ระหว่างถูกระงับการยื่นข้อเสนอหรือทำสัญญากับหน่วยงานของรัฐไว้ชั่วคราว ตามระเบียบกระทรวงการคลัง", bold_prefix="3.4 ")
-    add_bullet(doc, "ไม่เป็นบุคคลซึ่งถูกระบุชื่อไว้ในบัญชีรายชื่อผู้ทิ้งงานของทางราชการในระบบเครือข่ายสารสนเทศของกรมบัญชีกลาง", bold_prefix="3.5 ")
-    add_bullet(doc, "มีคุณสมบัติและไม่มีลักษณะต้องห้ามตามที่คณะกรรมการนโยบายการจัดซื้อจัดจ้างและการบริหารพัสดุภาครัฐกำหนดในราชกิจจานุเบกษา", bold_prefix="3.6 ")
-    add_bullet(doc, "เป็นบุคคลธรรมดาผู้มีอาชีพรับจ้างและมีความเชี่ยวชาญในงานออกแบบวิศวกรรมเมคาทรอนิกส์และระบบอัตโนมัติดังกล่าวโดยตรง", bold_prefix="3.7 ")
-    add_bullet(doc, "ไม่เป็นผู้ได้รับเอกสิทธิ์หรือความคุ้มกัน ซึ่งอาจปฏิเสธไม่ยอมขึ้นศาลไทย เว้นแต่รัฐบาลได้มีคำสั่งให้สละเอกสิทธิ์และความคุ้มกัน", bold_prefix="3.8 ")
+    add_h1(doc, "3. คุณสมบัติของผู้ยื่นข้อเสนอและผู้รับจ้าง (Qualifications)", space_before=10, space_after=3)
+    add_body(doc, "ผู้รับจ้าง (นายปพน แซ่จ๊ะ) ขอรับรองว่ามีคุณสมบัติถูกต้องครบถ้วนตามที่กำหนดไว้ในข้อ 3.1 ถึง 3.8 แห่งข้อกำหนด TOR ดังนี้:", space_before=1, space_after=2, line_spacing=1.15)
+    add_bullet(doc, "เป็นบุคคลธรรมดาผู้มีความสามารถตามกฎหมาย ไม่เป็นบุคคลวิกลจริตหรือคนไร้ความสามารถ", bold_prefix="3.1 ", space_before=1, space_after=1, line_spacing=1.14)
+    add_bullet(doc, "ไม่เป็นบุคคลล้มละลาย และไม่เคยถูกศาลสั่งพิทักษ์ทรัพย์เด็ดขาด", bold_prefix="3.2 ", space_before=1, space_after=1, line_spacing=1.14)
+    add_bullet(doc, "ไม่อยู่ระหว่างเลิกกิจการหรือถูกสั่งพักใช้ใบอนุญาตประกอบวิชาชีพ", bold_prefix="3.3 ", space_before=1, space_after=1, line_spacing=1.14)
+    add_bullet(doc, "ไม่เป็นบุคคลซึ่งอยู่ระหว่างถูกระงับการยื่นข้อเสนอหรือทำสัญญากับหน่วยงานของรัฐไว้ชั่วคราว ตามระเบียบกระทรวงการคลัง", bold_prefix="3.4 ", space_before=1, space_after=1, line_spacing=1.14)
+    add_bullet(doc, "ไม่เป็นบุคคลซึ่งถูกระบุชื่อไว้ในบัญชีรายชื่อผู้ทิ้งงานของทางราชการในระบบเครือข่ายสารสนเทศของกรมบัญชีกลาง", bold_prefix="3.5 ", space_before=1, space_after=1, line_spacing=1.14)
+    add_bullet(doc, "มีคุณสมบัติและไม่มีลักษณะต้องห้ามตามที่คณะกรรมการนโยบายการจัดซื้อจัดจ้างและการบริหารพัสดุภาครัฐกำหนดในราชกิจจานุเบกษา", bold_prefix="3.6 ", space_before=1, space_after=1, line_spacing=1.14)
+    add_bullet(doc, "เป็นบุคคลธรรมดาผู้มีอาชีพรับจ้างและมีความเชี่ยวชาญในงานออกแบบวิศวกรรมเมคาทรอนิกส์และระบบอัตโนมัติดังกล่าวโดยตรง", bold_prefix="3.7 ", space_before=1, space_after=1, line_spacing=1.14)
+    add_bullet(doc, "ไม่เป็นผู้ได้รับเอกสิทธิ์หรือความคุ้มกัน ซึ่งอาจปฏิเสธไม่ยอมขึ้นศาลไทย เว้นแต่รัฐบาลได้มีคำสั่งให้สละเอกสิทธิ์และความคุ้มกัน", bold_prefix="3.8 ", space_before=1, space_after=2, line_spacing=1.14)
+
+    doc.add_page_break()
 
     # -------------------------------------------------------------------------
     # ข้อ 4. ขอบเขตของงานที่จะดำเนินการจัดจ้าง (Scope of Work)
@@ -510,7 +675,7 @@ def generate_handover_document(output_docx_path):
         doc,
         os.path.join(media_dir, "image6.png"),
         "ภาพขนาดมิติของกล่องบรรจุภัณฑ์มาตรฐานทั้ง 3 ขนาด (2A, 2B, D) และการจัดวางบนชั้นวางสินค้า",
-        width=Inches(5.2)
+        width=Inches(5.0)
     )
 
     add_h3(doc, "4.1.2 การออกแบบโครงสร้างชั้นวางและกลไกให้ใช้งานร่วมกับกล่องบรรจุภัณฑ์")
@@ -527,13 +692,16 @@ def generate_handover_document(output_docx_path):
         doc,
         os.path.join(media_dir, "image5.png"),
         "ภาพโครงสร้างชั้นวางสินค้าแบบลาดเอียง 25 องศา (Gravity-Fed Sloped Shelves) พร้อมแผ่นกั้นขอบหน้าและช่องสอดแผ่นช้อน",
-        width=Inches(5.0)
+        width=Inches(2.7),
+        space_before=2,
+        space_after=2
     )
 
-    add_body(doc, "การจัดสรรความจุและการแบ่งชั้นวางสินค้าภายในตู้ (Shelf Capacity Calculation):", bold_prefix="การคำนวณความจุสินค้า: ")
     add_body(doc,
         "โครงสร้างตู้มีขนาดความกว้างภายในสำหรับติดตั้งชั้นวาง 1,480 มม. ลึก 700 มม. และสูง 2,200 มม. โดยแบ่งระดับชั้นวางสินค้าออกเป็น 7-8 ชั้น "
-        "ซึ่งสามารถรองรับการจัดวางกล่องบรรจุภัณฑ์ได้ทั้งสิ้น 127 กล่อง โดยมีรายละเอียดการจัดสรรพื้นที่ชั้นวาง ดังนี้:"
+        "ซึ่งสามารถรองรับการจัดวางกล่องบรรจุภัณฑ์ได้ทั้งสิ้น 127 กล่อง โดยมีรายละเอียดการจัดสรรพื้นที่ชั้นวาง ดังนี้:",
+        bold_prefix="การคำนวณความจุสินค้า: ",
+        space_before=1, space_after=2, line_spacing=1.14
     )
     
     cap_headers = ["ประเภทกล่อง", "ขนาดมิติ (กว้าง x ยาว x สูง)", "จำนวนชั้นวาง", "แถวต่อชั้น x กล่องต่อแถว", "ความจุรวม"]
@@ -543,7 +711,7 @@ def generate_handover_document(output_docx_path):
         ["กล่องเบอร์ D (ใหญ่)", "220 x 350 x 140 mm", "3 ชั้น", "ชั้นละ 3 แถว แถวละ 3 กล่อง", "27 กล่อง"],
         ["รวมทั้งสิ้น", "รองรับกล่องมาตรฐาน 3 ขนาด", "7-8 ระดับชั้น", "จัดสรรแบบโมดูลาร์ยืดหยุ่น", "127 กล่อง"]
     ]
-    add_styled_table(doc, cap_headers, cap_rows, [Inches(1.5), Inches(1.8), Inches(1.0), Inches(1.5), Inches(0.7)])
+    add_styled_table(doc, cap_headers, cap_rows, [Inches(1.2), Inches(1.5), Inches(0.85), Inches(1.45), Inches(1.0)])
 
     add_h3(doc, "4.1.3 ระบบชำระเงิน (Payment System)")
     add_body(doc,
@@ -574,7 +742,7 @@ def generate_handover_document(output_docx_path):
         doc,
         os.path.join(media_dir, "image14.png"),
         "ภาพจำลองส่วนต่อประสานผู้ใช้บนโทรศัพท์มือถือ (Mobile Web Application Mockup) หน้าเลือกสินค้าและหน้ารายละเอียดการสั่งซื้อ",
-        width=Inches(4.5)
+        width=Inches(4.2)
     )
 
     add_h3(doc, "4.1.5 ขนาดโดยรวมของตัวเครื่องและพื้นที่ใช้งาน (Overall Dimensions and Accessibility Areas)")
@@ -598,7 +766,7 @@ def generate_handover_document(output_docx_path):
         doc,
         os.path.join(media_dir, "image7.png"),
         "ภาพแบบแปลนมิติตัวเครื่อง (กว้าง 1,465 มม. ลึก 1,006.92 มม. สูง 2,000 มม.) และการจัดสรรเขตพื้นที่ทำงานภายใน 3 โซน",
-        width=Inches(5.0)
+        width=Inches(4.8)
     )
 
     add_body(doc,
@@ -638,7 +806,7 @@ def generate_handover_document(output_docx_path):
         doc,
         os.path.join(media_dir, "image1.png"),
         "ภาพจำลอง 3 มิติ แนวคิดการออกแบบ แบบที่ 1 : ระบบมาตรฐาน (จุดจ่ายคงที่ / จ่ายทีละ 1 ชิ้น) [แบบที่ได้รับคัดเลือก]",
-        width=Inches(4.6)
+        width=Inches(4.5)
     )
 
     # Concept 2
@@ -653,7 +821,7 @@ def generate_handover_document(output_docx_path):
         doc,
         os.path.join(media_dir, "image2.png"),
         "ภาพจำลอง 3 มิติ แนวคิดการออกแบบ แบบที่ 2 : ระบบเพิ่มชั้นพักจ่ายแบบเคลื่อนที่ (Mobile Delivery Shelf)",
-        width=Inches(4.6)
+        width=Inches(4.5)
     )
 
     # Concept 3
@@ -668,7 +836,7 @@ def generate_handover_document(output_docx_path):
         doc,
         os.path.join(media_dir, "image3.png"),
         "ภาพจำลอง 3 มิติ แนวคิดการออกแบบ แบบที่ 3 : ระบบโครงสร้างโปร่งใสและจ่ายหลายระดับ (Multi-level System)",
-        width=Inches(4.6)
+        width=Inches(4.5)
     )
 
     add_body(doc, "ตารางการวิเคราะห์เปรียบเทียบแนวคิดการออกแบบทั้ง 3 รูปแบบ (Concept Evaluation Matrix):", bold_prefix="การประเมินผลแนวคิด: ")
@@ -681,7 +849,7 @@ def generate_handover_document(output_docx_path):
         ["ความคุ้มค่าและต้นทุนการผลิต (Cost-Effectiveness)", "คุ้มค่าสูงสุด (งบประมาณเหมาะสม)", "ต้นทุนปานกลาง-สูง", "ต้นทุนสูงมาก"],
         ["ผลการคัดเลือกเพื่อผลิตจริง", "ผ่านการคัดเลือก (Final Selection)", "แบบทางเลือกสำรอง", "แบบทางเลือกสำรอง"]
     ]
-    add_styled_table(doc, eval_headers, eval_rows, [Inches(1.8), Inches(1.5), Inches(1.5), Inches(1.7)])
+    add_styled_table(doc, eval_headers, eval_rows, [Inches(1.8), Inches(1.4), Inches(1.4), Inches(1.4)])
 
     add_callout(doc,
         "คณะทำงานวิศวกรรมและผู้รับจ้างได้มีมติคัดเลือก 'แนวคิดการออกแบบ แบบที่ 1 : ระบบมาตรฐาน (จุดจ่ายคงที่ / จ่ายทีละ 1 ชิ้น)' "
@@ -718,13 +886,13 @@ def generate_handover_document(output_docx_path):
         doc,
         os.path.join(media_dir, "image4.png"),
         "ภาพแบบจำลอง 3 มิติฉบับสมบูรณ์ (Complete 3D CAD Model) โครงสร้างตู้จำหน่ายสินค้าและชั้นวางภายใน",
-        width=Inches(4.8)
+        width=Inches(4.5)
     )
 
-    add_body(doc, "คุณลักษณะทางเทคนิคของระบบขับเคลื่อน 3 แกนพิกัดฉาก (Cartesian Gantry Kinematics):", bold_prefix="ระบบขับเคลื่อนเชิงกล 3 แกน: ")
     add_body(doc,
         "NARIT Smart Vending Machine ขับเคลื่อนด้วยระบบหุ่นยนต์พิกัดฉาก (Cartesian Robot) 3 แกนอิสระ (X, Y, Z) "
-        "ที่ออกแบบขนาดมอเตอร์และอัตราทดให้เหมาะสมกับโหลดและพฤติกรรมการเคลื่อนที่จริง:"
+        "ที่ออกแบบขนาดมอเตอร์และอัตราทดให้เหมาะสมกับโหลดและพฤติกรรมการเคลื่อนที่จริง:",
+        bold_prefix="ระบบขับเคลื่อนเชิงกล 3 แกน: "
     )
     add_bullet(doc, "ทำหน้าที่ขับเคลื่อนเสาแนวตั้งไปตามแนวซ้าย-ขวาของตู้ ใช้มอเตอร์ Hybrid Closed-Loop Stepper Motor ขนาด NEMA 34 รุ่น 86HBS85 แรงบิดสูงถึง 8.5 N·m กระแส 5.6 A ควบคุมด้วยไดรเวอร์ดิจิทัล HBS860H ส่งกำลังผ่านสายพานไทม์มิ่งความแม่นยำสูง (Timing Belt Drive) ระยะพิตช์สมมูล 8 มม. ต่อรอบ ระยะชักใช้งานจริง 1,200 มม. (ระยะรวมโครงสร้าง 1,465 มม.) มีเอนโค้เดอร์ป้อนกลับตำแหน่ง ป้องกันการตกก้าว 100%", bold_prefix="1) แกน X (แนวนอน — Horizontal Axis): ")
     add_bullet(doc, "ทำหน้าที่ยกระดับชุด Carriage ขึ้น-ลงในแนวดิ่งเพื่อเข้าถึงชั้นวางสินค้าทั้ง 8 ระดับ ใช้มอเตอร์ Closed-Loop Stepper NEMA 34 รุ่น 86HBS85 (8.5 N·m) ร่วมกับไดรเวอร์ HBS860H ส่งกำลังผ่านชุดบอลสกรูความแม่นยำสูง (Ballscrew Drive) ขนาดเพลา 25 มม. พิตช์ 8 มม./รอบ ระยะชักใช้งานจริง 1,440 มม. รองรับน้ำหนักบรรทุกรวมชุดยกและสินค้าได้อย่างนิ่งสนิท", bold_prefix="2) แกน Y (แนวดิ่ง — Vertical Lift Axis): ")
@@ -735,17 +903,17 @@ def generate_handover_document(output_docx_path):
         doc,
         os.path.join(media_dir, "image8.jpg"),
         "ภาพโครงสร้างกลไกขับเคลื่อน 3 แกนพิกัดฉาก (Cartesian Gantry X, Y, Z) และการเชื่อมต่อมอเตอร์ส่งกำลัง",
-        width=Inches(5.0)
+        width=Inches(4.8)
     )
 
     add_body(doc, "ตารางสรุปพารามิเตอร์ระบบขับเคลื่อน 3 แกน (3-Axis Motion Parameters):", bold_prefix="ตารางพารามิเตอร์การเคลื่อนที่: ")
-    motion_headers = ["แกนขับเคลื่อน", "รุ่นมอเตอร์ขับ", "แรงบิด", "ระบบส่งกำลัง", "ระยะพิตช์", "ระยะชักใช้งาน", "ความเร็วสูงสุด", "ความเร่งใช้งาน"]
+    motion_headers = ["แกนขับ", "รุ่นมอเตอร์", "แรงบิด", "ระบบส่งกำลัง", "พิตช์", "ระยะชัก", "ความเร็ว", "ความเร่ง"]
     motion_rows = [
-        ["แกน X (แนวนอน)", "86HBS85 (NEMA 34)", "8.5 N·m", "Timing Belt Drive", "8 mm/rev", "1,200 mm", "300 mm/s", "1,500 mm/s²"],
-        ["แกน Y (แนวดิ่ง)", "86HBS85 (NEMA 34)", "8.5 N·m", "Ballscrew C7 25mm", "8 mm/rev", "1,440 mm", "250 mm/s", "1,200 mm/s²"],
-        ["แกน Z (ยื่นช้อน)", "17HS4401S (NEMA 17)", "0.42 N·m", "Lead Screw Mini", "1 mm/rev", "180 mm", "100 mm/s", "800 mm/s²"]
+        ["แกน X (แนวนอน)", "86HBS85 (NEMA34)", "8.5 N·m", "Timing Belt Drive", "8 mm/rev", "1,200 mm", "300 mm/s", "1,500 mm/s²"],
+        ["แกน Y (แนวดิ่ง)", "86HBS85 (NEMA34)", "8.5 N·m", "Ballscrew C7 25mm", "8 mm/rev", "1,440 mm", "250 mm/s", "1,200 mm/s²"],
+        ["แกน Z (ยื่นช้อน)", "17HS4401S (NEMA17)", "0.42 N·m", "Lead Screw Mini", "1 mm/rev", "180 mm", "100 mm/s", "800 mm/s²"]
     ]
-    add_styled_table(doc, motion_headers, motion_rows, [Inches(1.1), Inches(1.3), Inches(0.7), Inches(1.1), Inches(0.7), Inches(0.8), Inches(0.8), Inches(0.8)])
+    add_styled_table(doc, motion_headers, motion_rows, [Inches(1.0), Inches(1.1), Inches(0.6), Inches(1.0), Inches(0.6), Inches(0.6), Inches(0.6), Inches(0.5)])
 
     add_body(doc,
         "กลไกป้องกันการจ่ายสินค้าซ้อน (Anti-Double Feed Mechanical Logic):\n"
@@ -754,6 +922,8 @@ def generate_handover_document(output_docx_path):
         "ขอบด้านล่างของโครง Carriage จะทำหน้าที่เสมือนสลักกลไกกั้น (Mechanical Interlock Baffle) ขวางไม่ให้กล่องสินค้าชิ้นถัดไปที่อยู่ข้างหลังสไลด์ตามลงมา "
         "เมื่อกล่องสินค้าเป้าหมายถูกดึงพ้นแนวชั้นวางแล้ว กล่องถัดไปจะค่อย ๆ ไหลมาชนกับแผ่น L-Plate ด้านหน้าอย่างนุ่มนวลและพร้อมสำหรับการจ่ายในรอบต่อไป"
     )
+
+    doc.add_page_break()
 
     # 4.3.3 แบบวาดทางวิศวกรรมฉบับสมบูรณ์ (Production Drawing)
     add_h3(doc, "4.3.3 แบบวาดทางวิศวกรรมฉบับสมบูรณ์ (Production Drawing)")
@@ -764,12 +934,12 @@ def generate_handover_document(output_docx_path):
 
     dwg_headers = ["ลำดับ", "เลขที่แบบ (DWG No.)", "ชื่อแบบวาดทางวิศวกรรม (Drawing Title)", "วัสดุ (Material)", "การเก็บผิวงาน (Finish)", "สเกล"]
     dwg_rows = [
-        ["1", "NAR2093-0100A", "Machine Assembly Isometric & Dimensions (มิติรวมตัวเครื่อง)", "Aluminium / SS400", "Powder Coating / Anodize", "1:40"],
+        ["1", "NAR2093-0100A", "Machine Assembly Isometric & Dimensions", "Aluminium / SS400", "Powder Coating / Anodize", "1:40"],
         ["2", "NAR2093-0200A", "Shelf Assembly Overall (ชุดชั้นวางสินค้าภาพรวม)", "SUS304 / Steel", "Brush / Coating", "1:20"],
         ["3", "NAR2093-0200A", "Shelf Plate Sub-Assembly (ชุดประกอบถาดรองรับสินค้า)", "SUS304 Stainless", "No-burr / Clean", "1:15"],
         ["4", "NAR2093", "8-Level Shelf Assembly (ชุดแร็คชั้นวาง 8 ระดับ)", "Aluminium Profile", "Natural Anodize", "1:20"],
-        ["5", "NAR2093-0211A", "Stainless Plate Slot Detail (แผ่นสแตนเลสรองสินค้าเจาะสล็อต)", "SUS304 2B (1.2mm)", "Laser Cut / Deburr", "1:12"],
-        ["6", "NAR2093-0211A", "Stainless Plate Flatten Pattern (แผ่นสแตนเลสคลี่ระนาบ)", "SUS304 2B (1.2mm)", "Flat Sheet Pattern", "1:10"],
+        ["5", "NAR2093-0211A", "Stainless Plate Slot Detail (แผ่นสแตนเลสรองสินค้า)", "SUS304 2B (1.2mm)", "Laser Cut / Deburr", "1:12"],
+        ["6", "NAR2093-0211A", "Stainless Plate Flatten Pattern (แผ่นสแตนเลสคลี่)", "SUS304 2B (1.2mm)", "Flat Sheet Pattern", "1:10"],
         ["7", "NAR2093-0212A", "Spline Rail Guide (สไปลน์ประกบรางนำร่องกล่อง)", "Steel SS400 (1.2mm)", "Zinc Plated", "1:10"],
         ["8", "NAR2093-0212A", "Spline Flatten Pattern (สไปลน์คลี่ระนาบ)", "Steel SS400 (1.2mm)", "Flat Sheet Pattern", "1:7"],
         ["9", "NAR2093-0213A", "Right L-Plate (แผ่นฉากกั้นขอบขวา)", "Aluminium / SUS304", "Bending Finish", "1:5"],
@@ -777,58 +947,62 @@ def generate_handover_document(output_docx_path):
         ["11", "NAR2093-0214A", "Left L-Plate (แผ่นฉากกั้นขอบซ้าย)", "Aluminium / SUS304", "Bending Finish", "1:5"],
         ["12", "NAR2093-0214A", "Left L-Plate Flatten (แผ่นฉากกั้นซ้ายคลี่ระนาบ)", "Aluminium / SUS304", "Flat Sheet Pattern", "1:5"]
     ]
-    add_styled_table(doc, dwg_headers, dwg_rows, [Inches(0.5), Inches(1.3), Inches(2.2), Inches(1.2), Inches(1.4), Inches(0.6)])
+    add_styled_table(doc, dwg_headers, dwg_rows, [Inches(0.65), Inches(1.30), Inches(1.75), Inches(0.95), Inches(0.90), Inches(0.45)], font_size_data=12.5, cell_top=45, cell_bot=45)
 
-    add_body(doc, "รูปภาพแบบวาดทางวิศวกรรมฉบับสมบูรณ์ (Production Drawing Sheets):", bold_prefix="ภาพแบบวาดการผลิต: ")
+    doc.add_page_break()
+
+    add_body(doc, "รูปภาพแบบวาดทางวิศวกรรมฉบับสมบูรณ์ (Production Drawing Sheets):", bold_prefix="ภาพแบบวาดการผลิต: ", first_line_indent=0.0)
 
     add_image_caption(
         doc,
         os.path.join(draw_dir, "drawing_page_01.png"),
         "แบบวาดที่ 1 (NAR2093-0100A): มิติและโครงสร้างภาพรวมของเครื่องจำหน่ายสินค้าอัตโนมัติ (Machine Assembly)",
-        width=Inches(5.8)
+        width=Inches(5.6)
     )
     add_image_caption(
         doc,
         os.path.join(draw_dir, "drawing_page_02.png"),
         "แบบวาดที่ 2 (NAR2093-0200A): มิติและโครงสร้างชุดชั้นวางสินค้าหลัก (Shelf Assembly)",
-        width=Inches(5.8)
+        width=Inches(5.6)
     )
     add_image_caption(
         doc,
         os.path.join(draw_dir, "drawing_page_03.png"),
         "แบบวาดที่ 3 (NAR2093-0200A): รายละเอียดชุดประกอบถาดรองรับสินค้าและแผ่นสแตนเลส (Shelf Plate Sub-Assembly)",
-        width=Inches(5.8)
+        width=Inches(5.6)
     )
     add_image_caption(
         doc,
         os.path.join(draw_dir, "drawing_page_04.png"),
         "แบบวาดที่ 4 (NAR2093): โครงสร้างชุดแร็คชั้นวาง 8 ระดับ (8-Level Shelf Assembly)",
-        width=Inches(5.8)
+        width=Inches(5.6)
     )
     add_image_caption(
         doc,
         os.path.join(draw_dir, "drawing_page_05.png"),
         "แบบวาดที่ 5 (NAR2093-0211A): แผ่นสแตนเลสรองสินค้าเจาะสล็อตระบายและลดแรงเสียดทาน (Stainless Plate)",
-        width=Inches(5.8)
+        width=Inches(5.6)
     )
     add_image_caption(
         doc,
         os.path.join(draw_dir, "drawing_page_07.png"),
         "แบบวาดที่ 7 (NAR2093-0212A): สไปลน์รางนำทางกล่องบรรจุภัณฑ์ (Spline Rail Guide)",
-        width=Inches(5.8)
+        width=Inches(5.6)
     )
     add_image_caption(
         doc,
         os.path.join(draw_dir, "drawing_page_09.png"),
         "แบบวาดที่ 9 (NAR2093-0213A): แผ่นฉากกั้นปรับระดับขอบขวา (Right L-Plate)",
-        width=Inches(5.8)
+        width=Inches(5.6)
     )
     add_image_caption(
         doc,
         os.path.join(draw_dir, "drawing_page_11.png"),
         "แบบวาดที่ 11 (NAR2093-0214A): แผ่นฉากกั้นปรับระดับขอบซ้าย (Left L-Plate)",
-        width=Inches(5.8)
+        width=Inches(5.6)
     )
+
+    doc.add_page_break()
 
     # 4.3.4 รายการวัสดุและชิ้นส่วน (Bill of Materials : BOM)
     add_h3(doc, "4.3.4 รายการวัสดุและชิ้นส่วน (Bill of Materials : BOM)")
@@ -844,7 +1018,7 @@ def generate_handover_document(output_docx_path):
     for item in bom_data.get('CoreMechatronics', []):
         spec_short = item['spec'].split('\n')[0][:55] if item['spec'] else '-'
         bom1_rows.append([item['no'], item['name'][:42], spec_short, item['qty'], item['unit']])
-    add_styled_table(doc, bom1_headers, bom1_rows, [Inches(0.6), Inches(2.3), Inches(2.4), Inches(0.6), Inches(0.6)])
+    add_styled_table(doc, bom1_headers, bom1_rows, [Inches(0.65), Inches(2.10), Inches(2.15), Inches(0.55), Inches(0.55)], font_size_data=12, cell_top=45, cell_bot=45)
 
     # BOM Table 2: Electrical & Control Enclosure
     add_body(doc, "หมวดที่ 2 : อุปกรณ์ไฟฟ้ากำลังและการจ่ายไฟตู้ควบคุม (Electrical & Power Distribution)", bold_prefix="BOM ตารางที่ 2: ")
@@ -853,7 +1027,7 @@ def generate_handover_document(output_docx_path):
     for item in bom_data.get('อิเล็กเฟส1', [])[:12]:
         spec_short = item['spec'].split('\n')[0][:55] if item['spec'] else '-'
         bom2_rows.append([item['no'], item['name'][:42], spec_short, item['qty'], item['unit']])
-    add_styled_table(doc, bom2_headers, bom2_rows, [Inches(0.6), Inches(2.3), Inches(2.4), Inches(0.6), Inches(0.6)])
+    add_styled_table(doc, bom2_headers, bom2_rows, [Inches(0.65), Inches(2.10), Inches(2.15), Inches(0.55), Inches(0.55)], font_size_data=12, cell_top=45, cell_bot=45)
 
     # BOM Table 3: Mechanical & Transmission
     add_body(doc, "หมวดที่ 3 : อุปกรณ์ระบบเครื่องกลและชิ้นส่วนส่งกำลัง (Mechanical & Power Transmission)", bold_prefix="BOM ตารางที่ 3: ")
@@ -862,7 +1036,7 @@ def generate_handover_document(output_docx_path):
     for item in bom_data.get('Mechanic phase1', [])[:14]:
         spec_short = item['spec'].split('\n')[0][:55] if item['spec'] else '-'
         bom3_rows.append([item['no'], item['name'][:42], spec_short, item['qty'], item['unit']])
-    add_styled_table(doc, bom3_headers, bom3_rows, [Inches(0.6), Inches(2.3), Inches(2.4), Inches(0.6), Inches(0.6)])
+    add_styled_table(doc, bom3_headers, bom3_rows, [Inches(0.65), Inches(2.10), Inches(2.15), Inches(0.55), Inches(0.55)], font_size_data=12, cell_top=45, cell_bot=45)
 
     # BOM Table 4: Fabrication
     add_body(doc, "หมวดที่ 4 : ชิ้นส่วนโลหะสั่งผลิตและตัดพับ (Fabrication & Sheet Metal Parts)", bold_prefix="BOM ตารางที่ 4: ")
@@ -871,7 +1045,9 @@ def generate_handover_document(output_docx_path):
     for item in bom_data.get('สั่งผลิต phase1', []):
         spec_short = item['spec'].replace('\n', ' ')[:55] if item['spec'] else '-'
         bom4_rows.append([item['no'], item['name'][:42], spec_short, item['qty'], item['unit']])
-    add_styled_table(doc, bom4_headers, bom4_rows, [Inches(0.6), Inches(2.3), Inches(2.4), Inches(0.6), Inches(0.6)])
+    add_styled_table(doc, bom4_headers, bom4_rows, [Inches(0.65), Inches(2.10), Inches(2.15), Inches(0.55), Inches(0.55)], font_size_data=12, cell_top=45, cell_bot=45)
+
+    doc.add_page_break()
 
     # 4.3.5 เอกสารอธิบายหลักการทำงานของระบบย่อย (System Description Document)
     add_h3(doc, "4.3.5 เอกสารอธิบายหลักการทำงานของระบบย่อยแต่ละระบบ (System Description Document : SDD)")
@@ -885,25 +1061,27 @@ def generate_handover_document(output_docx_path):
         doc,
         os.path.join(media_dir, "image10.jpeg"),
         "บล็อกไดอะแกรมสถาปัตยกรรมระบบโดยรวม (Automated Machine System Architecture Block Diagram) ครอบคลุม 8 ระบบย่อย",
-        width=Inches(5.6)
+        width=Inches(5.4)
     )
 
     add_body(doc, "รายละเอียดหลักการทำงานของ 8 ระบบย่อย:", bold_prefix="รายละเอียดเชิงวิศวกรรมของแต่ละระบบย่อย:\n")
-    add_bullet(doc, "โครงสร้างหลักสร้างขึ้นจากอลูมิเนียมโปรไฟล์อุตสาหกรรมขนาด 40x40 มม. เสริมมุมด้วยแผ่นเหล็กฉากหนา 10 มม. เพื่อรองรับน้ำหนักโครงสร้าง ชั้นวาง และสินค้าได้มากกว่า 350 กิโลกรัม ทนต่อแรงสั่นสะเทือนจากการเร่งความเร็วของแกน X และ Y ภายในตู้ติดตั้งตู้สวิตช์บอร์ดเหล็กมาตรฐาน IP55 สำหรับติดตั้งระบบไฟฟ้า และมีกระดูกงูร้อยสาย (Drag Chain) ป้องกันสายไฟขาดล้า", bold_prefix="1. ระบบโครงสร้างตู้ (Machine Structure & Cabinet Enclosure): ")
-    add_bullet(doc, "ใช้ระบบชั้นวางเอียง 25 องศาตามแรงโน้มถ่วง (Gravity-Fed Shelves) เมื่อกล่องสินค้าตัวหน้าสุดถูกยกจ่าย กล่องถัดไปจะเลื่อนลงมารอที่ปากรางอัตโนมัติ โดยมีแผ่นสแตนเลสเจาะร่องลดแรงเสียดทานและสไปลน์ประคองข้างเพื่อป้องกันกล่องเอียงติดขัด", bold_prefix="2. ระบบชั้นวางสินค้า (Product Shelf & Gravity-Feed System): ")
-    add_bullet(doc, "ใช้หุ่นยนต์ Cartesian Gantry 3 แกนอิสระ ขับเคลื่อนด้วย Closed-Loop Stepper มอเตอร์แรงบิดสูง 8.5 N·m ในแกน X และ Y ป้องกันการหลุดก้าว ควบคุมความเร็วด้วยโพรไฟล์ S-Curve ป้องกันแรงกระชาก และมี Anti-Double Feed Logic โดยแกน Y ยกขึ้นสวนเพื่อกันกล่องถัดไป", bold_prefix="3. ระบบขับเคลื่อน 3 แกน (3-Axis Cartesian Motion Subsystem): ")
-    add_bullet(doc, "รับไฟ 220VAC ผ่านเบรกเกอร์ MCB, ตัวกรองสัญญาณรบกวน EMI Filter, อุปกรณ์ป้องกันไฟกระชาก SPD และตัวตัดไฟตก-ไฟเกินดิจิทัล แปลงไฟเป็นบัส 60VDC จ่ายมอเตอร์แรงบิดสูง, 24VDC จ่ายระบบคอนโทรล/เซนเซอร์ และ 5VDC จ่ายสมองกล CM4 แบบแยกกราวด์อิสระ (Galvanic Isolation)", bold_prefix="4. ระบบไฟฟ้ากำลังและการจ่ายพลังงาน (Power Distribution & Protection): ")
-    add_bullet(doc, "รวมสัญญาณจากลิมิตสวิตช์ความปลอดภัย 6 จุด (NC Contact), โฮมสวิตช์ 3 จุด และเซนเซอร์ลำแสง Photoelectric Sensor (E3Z-D81) ตรวจจับการตกของกล่องสินค้าลงสู่ช่องรับ เพื่อยืนยันว่าการจ่ายสินค้าสำเร็จจริงก่อนปิดคำสั่งซื้อ", bold_prefix="5. ระบบควบคุม I/O และเซนเซอร์ (I/O & Sensors Network): ")
-    add_bullet(doc, "สถาปัตยกรรมซอฟต์แวร์แบบแยกโพรเซสอิสระ (Decoupled Architecture) บนระบบปฏิบัติการ Linux โดยมี Controller Process เป็นผู้ถือกรรมสิทธิ์ควบคุมฮาร์ดแวร์และการเคลื่อนที่เพียงผู้เดียว บริหารผ่าน Finite State Machine (IDLE, MOVING, DISPENSING, ALARM, E_STOP) และ Web Process รัน REST API ผ่าน FastAPI และสื่อสารข้ามโพรเซสผ่าน Unix Domain Socket", bold_prefix="6. ระบบซอฟต์แวร์และการประมวลผล (Software Architecture & State Engine): ")
-    add_bullet(doc, "รองรับทั้งหน้าจอสัมผัสในตู้ (Local HMI) สำหรับช่างเทคนิคในการทดสอบระบบ (Jog, Home, Slot Calibration) และรองรับ Mobile Web Application สำหรับลูกค้าสั่งซื้อสินค้า พร้อมไฟสัญญาณ LED แสดงสถานะการทำงาน 4 สี (น้ำเงิน=พร้อม, เหลือง=กำลังขยับ, เขียว=สำเร็จ, แดง=ขัดข้อง)", bold_prefix="7. ระบบติดต่อผู้ใช้งาน (HMI Touchscreen & Web Interface): ")
-    add_bullet(doc, "ความปลอดภัยแบบสามชั้น (Three-Tier Safety System): วงจรตัดตอนไฟฟ้าฮาร์ดแวร์ฉุกเฉิน (Hardware E-Stop Contactor Cutoff ตัดบัส 60V ทันทีที่กดปุ่ม), ลิมิตสวิตช์แบบต่ออนุกรมตัดวงจรฉุกเฉินหากหลุดระยะ (Fail-Safe Limit Switches) และ ซอฟต์แวร์วอทช์ด็อก (Software Safety Watchdog) ตรวจสอบความผิดปกติระดับมิลลิวินาที", bold_prefix="8. ระบบความปลอดภัยและอินเตอร์ล็อก (Safety & Interlock System): ")
+    add_bullet(doc, "โครงสร้างหลักสร้างขึ้นจากอลูมิเนียมโปรไฟล์อุตสาหกรรมขนาด 40x40 มม. เสริมมุมด้วยแผ่นเหล็กฉากหนา 10 มม. เพื่อรองรับน้ำหนักโครงสร้าง ชั้นวาง และสินค้าได้มากกว่า 350 กิโลกรัม ทนต่อแรงสั่นสะเทือนจากการเร่งความเร็วของแกน X และ Y ภายในตู้ติดตั้งตู้สวิตช์บอร์ดเหล็กมาตรฐาน IP55 สำหรับติดตั้งระบบไฟฟ้า และมีกระดูกงูร้อยสาย (Drag Chain) ป้องกันสายไฟขาดล้า", bold_prefix="1. ระบบโครงสร้างตู้ (Machine Structure & Cabinet Enclosure): ", space_before=1, space_after=1, line_spacing=1.13)
+    add_bullet(doc, "ใช้ระบบชั้นวางเอียง 25 องศาตามแรงโน้มถ่วง (Gravity-Fed Shelves) เมื่อกล่องสินค้าตัวหน้าสุดถูกยกจ่าย กล่องถัดไปจะเลื่อนลงมารอที่ปากรางอัตโนมัติ โดยมีแผ่นสแตนเลสเจาะร่องลดแรงเสียดทานและสไปลน์ประคองข้างเพื่อป้องกันกล่องเอียงติดขัด", bold_prefix="2. ระบบชั้นวางสินค้า (Product Shelf & Gravity-Feed System): ", space_before=1, space_after=1, line_spacing=1.13)
+    add_bullet(doc, "ใช้หุ่นยนต์ Cartesian Gantry 3 แกนอิสระ ขับเคลื่อนด้วย Closed-Loop Stepper มอเตอร์แรงบิดสูง 8.5 N·m ในแกน X และ Y ป้องกันการหลุดก้าว ควบคุมความเร็วด้วยโพรไฟล์ S-Curve ป้องกันแรงกระชาก และมี Anti-Double Feed Logic โดยแกน Y ยกขึ้นสวนเพื่อกันกล่องถัดไป", bold_prefix="3. ระบบขับเคลื่อน 3 แกน (3-Axis Cartesian Motion Subsystem): ", space_before=1, space_after=1, line_spacing=1.13)
+    add_bullet(doc, "รับไฟ 220VAC ผ่านเบรกเกอร์ MCB, ตัวกรองสัญญาณรบกวน EMI Filter, อุปกรณ์ป้องกันไฟกระชาก SPD และตัวตัดไฟตก-ไฟเกินดิจิทัล แปลงไฟเป็นบัส 60VDC จ่ายมอเตอร์แรงบิดสูง, 24VDC จ่ายระบบคอนโทรล/เซนเซอร์ และ 5VDC จ่ายสมองกล CM4 แบบแยกกราวด์อิสระ (Galvanic Isolation)", bold_prefix="4. ระบบไฟฟ้ากำลังและการจ่ายพลังงาน (Power Distribution & Protection): ", space_before=1, space_after=1, line_spacing=1.13)
+    add_bullet(doc, "รวมสัญญาณจากลิมิตสวิตช์ความปลอดภัย 6 จุด (NC Contact), โฮมสวิตช์ 3 จุด และเซนเซอร์ลำแสง Photoelectric Sensor (E3Z-D81) ตรวจจับการตกของกล่องสินค้าลงสู่ช่องรับ เพื่อยืนยันว่าการจ่ายสินค้าสำเร็จจริงก่อนปิดคำสั่งซื้อ", bold_prefix="5. ระบบควบคุม I/O และเซนเซอร์ (I/O & Sensors Network): ", space_before=1, space_after=1, line_spacing=1.13)
+    add_bullet(doc, "สถาปัตยกรรมซอฟต์แวร์แบบแยกโพรเซสอิสระ (Decoupled Architecture) บนระบบปฏิบัติการ Linux โดยมี Controller Process เป็นผู้ถือกรรมสิทธิ์ควบคุมฮาร์ดแวร์และการเคลื่อนที่เพียงผู้เดียว บริหารผ่าน Finite State Machine (IDLE, MOVING, DISPENSING, ALARM, E_STOP) และ Web Process รัน REST API ผ่าน FastAPI และสื่อสารข้ามโพรเซสผ่าน Unix Domain Socket", bold_prefix="6. ระบบซอฟต์แวร์และการประมวลผล (Software Architecture & State Engine): ", space_before=1, space_after=1, line_spacing=1.13)
+    add_bullet(doc, "รองรับทั้งหน้าจอสัมผัสในตู้ (Local HMI) สำหรับช่างเทคนิคในการทดสอบระบบ (Jog, Home, Slot Calibration) และรองรับ Mobile Web Application สำหรับลูกค้าสั่งซื้อสินค้า พร้อมไฟสัญญาณ LED แสดงสถานะการทำงาน 4 สี (น้ำเงิน=พร้อม, เหลือง=กำลังขยับ, เขียว=สำเร็จ, แดง=ขัดข้อง)", bold_prefix="7. ระบบติดต่อผู้ใช้งาน (HMI Touchscreen & Web Interface): ", space_before=1, space_after=1, line_spacing=1.13)
+    add_bullet(doc, "ความปลอดภัยแบบสามชั้น (Three-Tier Safety System): วงจรตัดตอนไฟฟ้าฮาร์ดแวร์ฉุกเฉิน (Hardware E-Stop Contactor Cutoff ตัดบัส 60V ทันทีที่กดปุ่ม), ลิมิตสวิตช์แบบต่ออนุกรมตัดวงจรฉุกเฉินหากหลุดระยะ (Fail-Safe Limit Switches) และ ซอฟต์แวร์วอทช์ด็อก (Software Safety Watchdog) ตรวจสอบความผิดปกติระดับมิลลิวินาที", bold_prefix="8. ระบบความปลอดภัยและอินเตอร์ล็อก (Safety & Interlock System): ", space_before=1, space_after=1, line_spacing=1.13)
+
+    doc.add_page_break()
 
     # IMAGE: image9.png (Operation Sequence Flowchart)
     add_image_caption(
         doc,
         os.path.join(media_dir, "image9.png"),
         "แผนผังลำดับกระบวนการทำงานหลักของระบบ (End-to-End Operation Workflow Flowchart)",
-        width=Inches(5.2)
+        width=Inches(4.8)
     )
 
     # 4.3.6 แบบวงจรไฟฟ้าและแผนผังการเดินสาย (Electrical Schematic & Wiring Diagram)
@@ -918,7 +1096,7 @@ def generate_handover_document(output_docx_path):
         doc,
         os.path.join(media_dir, "image11.png"),
         "แผนผังการกระจายพลังงานไฟฟ้าและระบบสัญญาณควบคุม (System Power & Signal Wiring Diagram)",
-        width=Inches(5.5)
+        width=Inches(5.2)
     )
 
     add_body(doc, "หลักการจัดสรรระบบไฟฟ้าและการเดินสายสัญญาณ:", bold_prefix="รายละเอียดระบบไฟฟ้าและสัญญาณ:\n")
@@ -932,7 +1110,7 @@ def generate_handover_document(output_docx_path):
         doc,
         os.path.join(media_dir, "image12.jpg"),
         "ภาพบอร์ดประมวลผลหลักคอมพิวเตอร์อุตสาหกรรม IRIV PiControl CM4, บอร์ดขยาย I/O และอุปกรณ์ตู้ควบคุม Mini Control Box",
-        width=Inches(5.0)
+        width=Inches(4.6)
     )
 
     # 4.3.7 เอกสารข้อกำหนดการเชื่อมต่อระบบ (Interface Specification Document)
@@ -948,16 +1126,16 @@ def generate_handover_document(output_docx_path):
         doc,
         os.path.join(media_dir, "image13.png"),
         "โครงสร้างการสื่อสารและสถาปัตยกรรมการเชื่อมต่อระหว่าง Web Application และตัวเครื่องผ่าน Private MQTT Broker",
-        width=Inches(5.2)
+        width=Inches(4.8)
     )
 
-    add_body(doc, "ข้อกำหนดโปรโตคอล MQTT Topic Contract:", bold_prefix="1) การสื่อสารด้วย MQTT (Message Queuing Telemetry Transport):\n")
     add_body(doc,
         "ระบบใช้ MQTT Broker พร้อมการเข้ารหัส TLS และกำหนด Topic แยกตามรหัสประจำเครื่อง ({id}) โดยใช้ระดับคุณภาพบริการ QoS 1 "
-        "ประกอบด้วย Topic หลักตามตารางต่อไปนี้:"
+        "ประกอบด้วย Topic หลักตามตารางต่อไปนี้:",
+        bold_prefix="1) การสื่อสารด้วย MQTT (Message Queuing Telemetry Transport):\n"
     )
 
-    mqtt_headers = ["MQTT Topic", "ทิศทางการสื่อสาร", "ระดับ QoS", "หน้าที่และข้อมูลหลักที่รับ-ส่ง (Payload Data)"]
+    mqtt_headers = ["MQTT Topic", "ทิศทาง", "ระดับ QoS", "หน้าที่และข้อมูลหลักที่รับ-ส่ง (Payload Data)"]
     mqtt_rows = [
         ["cabinet/{id}/scan", "เครื่อง → Server", "QoS 1", "ส่งข้อมูลรหัส Token ที่ลูกค้าสแกนหน้าตู้ พร้อม Device ID และ Timestamp"],
         ["cabinet/{id}/command", "Server → เครื่อง", "QoS 1", "ส่งคำสั่งจ่ายสินค้า (Dispense), พิกัดสล็อตเป้าหมาย, Request ID และ Timeout"],
@@ -965,20 +1143,20 @@ def generate_handover_document(output_docx_path):
         ["cabinet/{id}/presence", "เครื่อง → Server", "QoS 1 (Retained)", "รายงานสถานะออนไลน์/ออฟไลน์ (LWT: Last Will and Testament) ของตู้"],
         ["cabinet/{id}/telemetry", "เครื่อง → Server", "QoS 0", "ส่งข้อมูลพิกัดปัจจุบัน (DRO X,Y,Z), อุณหภูมิ และสถานะเซนเซอร์แบบเรียลไทม์"]
     ]
-    add_styled_table(doc, mqtt_headers, mqtt_rows, [Inches(1.8), Inches(1.3), Inches(0.9), Inches(2.5)])
+    add_styled_table(doc, mqtt_headers, mqtt_rows, [Inches(1.6), Inches(1.1), Inches(0.9), Inches(2.4)])
 
     # IMAGE: image15.png (MQTT Topic Contract)
     add_image_caption(
         doc,
         os.path.join(media_dir, "image15.png"),
         "แผนภาพข้อกำหนด MQTT Topic Contract และทิศทางการรับ-ส่งข้อมูลระหว่างตัวเครื่องกับเซิร์ฟเวอร์",
-        width=Inches(4.5)
+        width=Inches(4.2)
     )
 
-    add_body(doc, "สถาปัตยกรรม REST API ภายในเครื่อง (Decoupled REST API Endpoints):", bold_prefix="2) การเชื่อมต่อด้วย REST API:\n")
     add_body(doc,
         "ตัวเครื่องให้บริการ REST API ผ่าน FastAPI ภายในเครื่อง เพื่อให้ Web Process, Local HMI และระบบภายนอกสามารถเรียกสั่งงาน "
-        "โดยมีเอนด์พอยต์สำคัญตามตารางต่อไปนี้:"
+        "โดยมีเอนด์พอยต์สำคัญตามตารางต่อไปนี้:",
+        bold_prefix="2) การเชื่อมต่อด้วย REST API:\n"
     )
 
     api_headers = ["Method", "Endpoint Path", "คำอธิบายหน้าที่การทำงาน", "ระดับความปลอดภัย"]
@@ -990,17 +1168,16 @@ def generate_handover_document(output_docx_path):
         ["POST", "/api/slot/run_sequence", "สั่งทำงานตามลำดับจ่ายสินค้าเต็มรูปแบบ (Move X/Y -> Extend Z -> Retract Z -> Home)", "Safety Interlocked"],
         ["POST", "/api/stop", "คำสั่งหยุดฉุกเฉินซอฟต์แวร์ สั่งตัดสัญญาณพัลส์และหยุดมอเตอร์ทันที", "High Priority Emergency"]
     ]
-    add_styled_table(doc, api_headers, api_rows, [Inches(0.8), Inches(2.0), Inches(2.6), Inches(1.1)])
+    add_styled_table(doc, api_headers, api_rows, [Inches(0.7), Inches(1.8), Inches(2.4), Inches(1.1)])
 
     # IMAGE: image16.png (REST API Endpoints)
     add_image_caption(
         doc,
         os.path.join(media_dir, "image16.png"),
         "แผนภาพสถาปัตยกรรม REST API Endpoints และการเชื่อมต่อข้ามโพรเซสผ่าน Unix Domain Socket",
-        width=Inches(5.2)
+        width=Inches(4.8)
     )
 
-    add_body(doc, "กระบวนการความปลอดภัย Two-Phase Motion Safety Sequence:", bold_prefix="3) ลำดับขั้นตอนความปลอดภัยก่อนการเคลื่อนที่:\n")
     add_body(doc,
         "เพื่อป้องกันอุบัติเหตุและคำสั่งสั่งงานที่ผิดพลาด การสั่งเคลื่อนที่กลไกจะไม่กระทำโดยตรงในคำสั่งเดียว "
         "แต่ต้องผ่านกระบวนการตรวจสอบสิทธิ์และสถานะ 6 ขั้นตอนอย่างเข้มงวด ดังนี้:\n"
@@ -1009,7 +1186,8 @@ def generate_handover_document(output_docx_path):
         "3. ขอสิทธิ์ขับเคลื่อน (Arm System): เรียก POST /api/motion/arm เพื่อเปิดระบบขับเคลื่อน และรับ Arm Token แบบสุ่มมีอายุ 5 วินาที\n"
         "4. สั่งเริ่มเคลื่อนที่จริง (Execute Motion): เรียก POST /api/motion/execute พร้อมแนบ Arm Token ที่ถูกต้องเพื่อสั่งเคลื่อนที่มอเตอร์\n"
         "5. ติดตามผลการทำงาน (Monitor Telemetry): ติดตามสถานะผ่าน GET /api/status จนกว่ากลไกจะหยุดนิ่งและเซนเซอร์ยืนยันตำแหน่ง\n"
-        "6. จุดหยุดฉุกเฉิน (Emergency Stop): สามารถเรียก POST /api/stop ได้ทุกเสี้ยววินาทีเพื่อสั่งเบรกการเคลื่อนที่ทันที"
+        "6. จุดหยุดฉุกเฉิน (Emergency Stop): สามารถเรียก POST /api/stop ได้ทุกเสี้ยววินาทีเพื่อสั่งเบรกการเคลื่อนที่ทันที",
+        bold_prefix="3) ลำดับขั้นตอนความปลอดภัยก่อนการเคลื่อนที่:\n"
     )
 
     # IMAGE: image17.png (Two-Phase Motion Safety)
@@ -1017,11 +1195,11 @@ def generate_handover_document(output_docx_path):
         doc,
         os.path.join(media_dir, "image17.png"),
         "แผนผังขั้นตอนความปลอดภัย Two-Phase Motion Safety (Status Check -> Validate -> Arm -> Execute -> Monitor -> E-Stop)",
-        width=Inches(5.2)
+        width=Inches(4.8)
     )
 
     # 4.4 หมายเหตุแห่งสัญญาจ้าง
-    add_h2(doc, "4.4 หมายเหตุแห่งสัญญาจ้าง")
+    add_h2(doc, "4.4 หมายเหตุแห่งสัญญาจ้าง", space_before=10, space_after=3)
     add_body(doc,
         "ขอบเขตของงานตามสัญญาจ้างเลขที่ J69/290 ครั้งนี้ เป็นงานจ้างออกแบบเครื่องจำหน่ายสินค้าอัตโนมัติ (Design Only) "
         "ซึ่งครอบคลุมการศึกษาแนวคิด, การออกแบบ 3D CAD Model, การจัดทำแบบวาดเพื่อการผลิต (Production Drawing), รายการวัสดุ (BOM), "
@@ -1029,110 +1207,122 @@ def generate_handover_document(output_docx_path):
         "ทั้งนี้ ไม่รวมถึงขั้นตอนการจัดซื้อวัสดุมาเพื่อประกอบ กระบวนการผลิตชิ้นงานจริง การประกอบ และการติดตั้งตัวเครื่องในสถานที่จริง"
     )
 
+    doc.add_page_break()
+
+    # -------------------------------------------------------------------------
+    # ข้อ 5 ถึง ข้อ 13: ข้อกำหนดการบริหารสัญญา (ADMINISTRATIVE SECTIONS)
     # -------------------------------------------------------------------------
     # ข้อ 5. กำหนดเวลาส่งมอบพัสดุ
-    # -------------------------------------------------------------------------
-    add_h1(doc, "5. กำหนดเวลาส่งมอบพัสดุ")
+    add_h1(doc, "5. กำหนดเวลาส่งมอบพัสดุ", space_before=8, space_after=2)
     add_body(doc,
         "ตามสัญญาจ้างกำหนดให้ผู้รับจ้างต้องดำเนินการออกแบบให้แล้วเสร็จภายในระยะเวลา 3 เดือน (90 วัน) นับถัดจากวันลงนามในสัญญาจ้าง "
         "(ลงวันที่ 1 กรกฎาคม 2569 ครบกำหนดวันที่ 29 กันยายน 2569) ทั้งนี้ ผู้รับจ้างได้ดำเนินการปฏิบัติงานจ้างออกแบบเสร็จสิ้นสมบูรณ์ "
-        "และส่งมอบงานในวันที่ 17 กันยายน 2569 ซึ่งเป็นการส่งมอบงานก่อนครบกำหนดเวลาตามสัญญา จึงไม่มีภาระผูกพันหรือค่าปรับใด ๆ ทั้งสิ้น"
+        "และส่งมอบงานในวันที่ 17 กันยายน 2569 ซึ่งเป็นการส่งมอบงานก่อนครบกำหนดเวลาตามสัญญา จึงไม่มีภาระผูกพันหรือค่าปรับใด ๆ ทั้งสิ้น",
+        space_before=1, space_after=3, line_spacing=1.14
     )
 
-    # -------------------------------------------------------------------------
     # ข้อ 6. หลักเกณฑ์ในการพิจารณาคัดเลือกข้อเสนอ
-    # -------------------------------------------------------------------------
-    add_h1(doc, "6. หลักเกณฑ์ในการพิจารณาคัดเลือกข้อเสนอ")
+    add_h1(doc, "6. หลักเกณฑ์ในการพิจารณาคัดเลือกข้อเสนอ", space_before=7, space_after=2)
     add_body(doc,
         "ในการพิจารณาผลการยื่นข้อเสนอและการจัดจ้างครั้งนี้ สถาบันวิจัยดาราศาสตร์แห่งชาติ (องค์การมหาชน) "
-        "ได้ดำเนินการพิจารณาตัดสินโดยใช้ 'เกณฑ์ราคา' (Price Criteria) ภายใต้คุณสมบัติและข้อกำหนดทางวิศวกรรมที่ถูกต้องครบถ้วนตาม TOR"
+        "ได้ดำเนินการพิจารณาตัดสินโดยใช้ 'เกณฑ์ราคา' (Price Criteria) ภายใต้คุณสมบัติและข้อกำหนดทางวิศวกรรมที่ถูกต้องครบถ้วนตาม TOR",
+        space_before=1, space_after=3, line_spacing=1.14
     )
 
-    # -------------------------------------------------------------------------
     # ข้อ 7. วงเงินงบประมาณในการจัดจ้าง
-    # -------------------------------------------------------------------------
-    add_h1(doc, "7. วงเงินงบประมาณในการจัดจ้าง")
+    add_h1(doc, "7. วงเงินงบประมาณในการจัดจ้าง", space_before=7, space_after=2)
     add_body(doc,
         "การจัดจ้างครั้งนี้ดำเนินการภายในวงเงินงบประมาณค่าจ้างที่ได้รับอนุมัติ จำนวนทั้งสิ้น 90,000.00 บาท (เก้าหมื่นบาทถ้วน) "
-        "ซึ่งรวมภาษีมูลค่าเพิ่ม ตลอดจนค่าใช้จ่ายอื่น ๆ ที่เกี่ยวข้องทั้งปวงไว้เรียบร้อยแล้ว"
+        "ซึ่งรวมภาษีมูลค่าเพิ่ม ตลอดจนค่าใช้จ่ายอื่น ๆ ที่เกี่ยวข้องทั้งปวงไว้เรียบร้อยแล้ว",
+        space_before=1, space_after=3, line_spacing=1.14
     )
 
-    # -------------------------------------------------------------------------
     # ข้อ 8. งวดงานและการจ่ายเงิน
-    # -------------------------------------------------------------------------
-    add_h1(doc, "8. งวดงานและการจ่ายเงิน")
+    add_h1(doc, "8. งวดงานและการจ่ายเงิน", space_before=7, space_after=2)
     add_body(doc,
         "ตามสัญญาจ้างกำหนดการจ่ายเงินค่าจ้างเป็นงวดเดียว (งวดสุดท้าย) โดยผู้ว่าจ้างจะดำเนินการจ่ายเงินค่าจ้าง จำนวน 90,000.00 บาท (เก้าหมื่นบาทถ้วน) "
         "ให้แก่ผู้รับจ้าง เมื่อผู้รับจ้างได้ปฏิบัติงานออกแบบทั้งหมดให้แล้วเสร็จเรียบร้อยถูกต้องตามสัญญา และคณะกรรมการตรวจรับพัสดุของผู้ว่าจ้าง "
-        "ได้ทำการตรวจรับมอบงานจ้างไว้โดยครบถ้วนถูกต้องเรียบร้อยแล้ว"
+        "ได้ทำการตรวจรับมอบงานจ้างไว้โดยครบถ้วนถูกต้องเรียบร้อยแล้ว",
+        space_before=1, space_after=3, line_spacing=1.14
     )
 
-    # -------------------------------------------------------------------------
     # ข้อ 9. อัตราค่าปรับ
-    # -------------------------------------------------------------------------
-    add_h1(doc, "9. อัตราค่าปรับ")
+    add_h1(doc, "9. อัตราค่าปรับ", space_before=7, space_after=2)
     add_body(doc,
         "สัญญาจ้างกำหนดว่า หากผู้รับจ้างไม่สามารถทำงานให้แล้วเสร็จภายในเวลาที่กำหนด ผู้รับจ้างจะต้องชำระค่าปรับให้แก่ผู้ว่าจ้างเป็นรายวัน "
         "ในอัตราร้อยละ 0.1 ของราคาค่าจ้าง แต่ไม่ต่ำกว่าวันละ 100.00 บาท (หนึ่งร้อยบาทถ้วน) นับถัดจากวันที่ครบกำหนดเวลาแล้วเสร็จตามสัญญาจนถึงวันที่ทำงานแล้วเสร็จจริง "
-        "ทั้งนี้ ในการปฏิบัติงานจริง ผู้รับจ้างได้ส่งมอบงานเสร็จสมบูรณ์ภายในระยะเวลาที่กำหนด จึงไม่มีการคิดค่าปรับแต่อย่างใด"
+        "ทั้งนี้ ในการปฏิบัติงานจริง ผู้รับจ้างได้ส่งมอบงานเสร็จสมบูรณ์ภายในระยะเวลาที่กำหนด จึงไม่มีการคิดค่าปรับแต่อย่างใด",
+        space_before=1, space_after=3, line_spacing=1.14
     )
 
-    # -------------------------------------------------------------------------
     # ข้อ 10. การรับประกันความชำรุดบกพร่อง
-    # -------------------------------------------------------------------------
-    add_h1(doc, "10. การรับประกันความชำรุดบกพร่อง")
+    add_h1(doc, "10. การรับประกันความชำรุดบกพร่อง", space_before=7, space_after=2)
     add_body(doc,
         "ผู้รับจ้างขอรับประกันความสมบูรณ์ ถูกต้อง และความสมเหตุสมผลของผลงานการออกแบบทั้งหมดให้เป็นไปตามมาตรฐานวิศวกรรมสากล "
         "เป็นระยะเวลา 1 ปี นับถัดจากวันที่คณะกรรมการได้ตรวจรับมอบงานจ้าง หากสถาบันฯ หรือผู้ผลิตพบข้อบกพร่อง ความขัดข้อง "
         "หรือความคลาดเคลื่อนของแบบวาดที่ทำให้ไม่สามารถนำไปสร้างหรือประกอบใช้งานได้จริงภายในระยะเวลารับประกันดังกล่าว "
         "ผู้รับจ้างยินดีและพร้อมที่จะดำเนินการแก้ไข ปรับปรุงแบบ หรือให้คำปรึกษาทางวิศวกรรมแก่สถาบันฯ ให้ใช้งานได้ดีดังเดิม "
-        "โดยไม่คิดค่าใช้จ่ายเพิ่มเติมใด ๆ ทั้งสิ้น ภายในระยะเวลา 7 วัน นับถัดจากวันที่ได้รับแจ้งเป็นลายลักษณ์อักษร"
+        "โดยไม่คิดค่าใช้จ่ายเพิ่มเติมใด ๆ ทั้งสิ้น ภายในระยะเวลา 7 วัน นับถัดจากวันที่ได้รับแจ้งเป็นลายลักษณ์อักษร",
+        space_before=1, space_after=3, line_spacing=1.14
     )
 
-    # -------------------------------------------------------------------------
     # ข้อ 11. สถานที่ส่งมอบงาน
-    # -------------------------------------------------------------------------
-    add_h1(doc, "11. สถานที่ส่งมอบงาน")
+    add_h1(doc, "11. สถานที่ส่งมอบงาน", space_before=7, space_after=2)
     add_body(doc,
-        "ผู้รับจ้างดำเนินการส่งมอบผลงานออกแบบ ณ:\n"
-        "สถาบันวิจัยดาราศาสตร์แห่งชาติ (องค์การมหาชน)\n"
-        "เลขที่ 260 หมู่ 4 ตำบลดอนแก้ว อำเภอแม่ริม จังหวัดเชียงใหม่ 50180"
+        "ผู้รับจ้างดำเนินการส่งมอบผลงานออกแบบ ณ: สถาบันวิจัยดาราศาสตร์แห่งชาติ (องค์การมหาชน) เลขที่ 260 หมู่ 4 ตำบลดอนแก้ว อำเภอแม่ริม จังหวัดเชียงใหม่ 50180",
+        first_line_indent=0.0, space_before=1, space_after=3, line_spacing=1.14
     )
 
-    # -------------------------------------------------------------------------
     # ข้อ 12. หน่วยงานผู้รับผิดชอบ
-    # -------------------------------------------------------------------------
-    add_h1(doc, "12. หน่วยงานผู้รับผิดชอบ")
+    add_h1(doc, "12. หน่วยงานผู้รับผิดชอบ", space_before=7, space_after=2)
     add_body(doc,
-        "ศูนย์ปฏิบัติการหอดูดาวและวิศวกรรม\n"
-        "สถาบันวิจัยดาราศาสตร์แห่งชาติ (องค์การมหาชน)"
+        "ศูนย์ปฏิบัติการหอดูดาวและวิศวกรรม สถาบันวิจัยดาราศาสตร์แห่งชาติ (องค์การมหาชน)",
+        first_line_indent=0.0, space_before=1, space_after=3, line_spacing=1.14
     )
 
-    # -------------------------------------------------------------------------
     # ข้อ 13. สถานที่ติดต่อเพื่อขอทราบข้อมูลเพิ่มเติม
-    # -------------------------------------------------------------------------
-    add_h1(doc, "13. สถานที่ติดต่อเพื่อขอทราบข้อมูลเพิ่มเติม")
+    add_h1(doc, "13. สถานที่ติดต่อเพื่อขอทราบข้อมูลเพิ่มเติม", space_before=7, space_after=2)
     add_body(doc,
         "หน่วยงาน: ศูนย์ปฏิบัติการหอดูดาวและวิศวกรรม สถาบันวิจัยดาราศาสตร์แห่งชาติ (องค์การมหาชน)\n"
-        "ผู้ประสานงานโครงการ: นายภควัต ประสิทธิ์\n"
-        "โทรศัพท์: 053-121268-9 ต่อ 731\n"
-        "อีเมล (Email): Pakawat@narit.or.th"
+        "ผู้ประสานงานโครงการ: นายภควัต ประสิทธิ์ | โทรศัพท์: 053-121268-9 ต่อ 731 | อีเมล: Pakawat@narit.or.th",
+        first_line_indent=0.0, space_before=1, space_after=4, line_spacing=1.14
     )
 
-    doc.add_page_break()
+    # =========================================================================
+    # SECTION 4: แบบฟอร์มการตรวจรับพัสดุและลายมือชื่อ (EXACT 1 PAGE COMPLETE)
+    # =========================================================================
+    sec4 = doc.add_section()
+    sec4.page_width = Inches(8.27)
+    sec4.page_height = Inches(11.69)
+    sec4.top_margin = Inches(0.7)
+    sec4.bottom_margin = Inches(0.5)
+    sec4.left_margin = Inches(1.25)
+    sec4.right_margin = Inches(1.0)
+    apply_header_footer(sec4)
 
-    # =========================================================================
-    # PART 4: แบบฟอร์มการตรวจรับพัสดุและลายมือชื่อ (ACCEPTANCE & SIGNATURES)
-    # =========================================================================
-    add_h1(doc, "ใบตรวจรับพัสดุสำหรับคณะกรรมการตรวจรับพัสดุ")
-    add_body(doc,
-        "ตามที่ สถาบันวิจัยดาราศาสตร์แห่งชาติ (องค์การมหาชน) ได้ตกลงจ้าง นายปพน แซ่จ๊ะ ดำเนินการจ้างออกแบบชั้นเก็บและจ่ายอุปกรณ์อิเล็กทรอนิกส์อัตโนมัติ "
-        "(Auto Electronic Parts Box) / เครื่องจำหน่ายสินค้าอัตโนมัติ (NARIT Smart Vending Machine) สำหรับบรรจุภัณฑ์รูปทรงสี่เหลี่ยม จำนวน 1 งาน "
-        "ตามใบสั่งจ้างเลขที่ J69/290 ลงวันที่ 1 กรกฎาคม 2569 ในวงเงินค่าจ้าง 90,000.00 บาท (เก้าหมื่นบาทถ้วน) นั้น"
+    p_cert_title = doc.add_paragraph()
+    p_cert_title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p_cert_title.paragraph_format.space_before = Pt(0)
+    p_cert_title.paragraph_format.space_after = Pt(2)
+    p_cert_title.paragraph_format.first_line_indent = Pt(0)
+    r_ct = p_cert_title.add_run("ใบตรวจรับพัสดุสำหรับคณะกรรมการตรวจรับพัสดุ")
+    set_run_font(r_ct, size_pt=18, bold=True, color_rgb=(30, 58, 138))
+
+    p_cb1 = doc.add_paragraph()
+    p_cb1.paragraph_format.first_line_indent = Inches(0.5)
+    p_cb1.alignment = WD_ALIGN_PARAGRAPH.THAI_JUSTIFY
+    p_cb1.paragraph_format.space_before = Pt(0)
+    p_cb1.paragraph_format.space_after = Pt(2)
+    p_cb1.paragraph_format.line_spacing = 1.1
+    r_cb1 = p_cb1.add_run(
+        insert_thai_breaks(
+            "ตามที่ สถาบันวิจัยดาราศาสตร์แห่งชาติ (องค์การมหาชน) ได้ตกลงจ้าง นายปพน แซ่จ๊ะ ดำเนินการจ้างออกแบบชั้นเก็บและจ่ายอุปกรณ์อิเล็กทรอนิกส์อัตโนมัติ "
+            "(Auto Electronic Parts Box) / เครื่องจำหน่ายสินค้าอัตโนมัติ (NARIT Smart Vending Machine) สำหรับบรรจุภัณฑ์รูปทรงสี่เหลี่ยม จำนวน 1 งาน "
+            "ตามใบสั่งจ้างเลขที่ J69/290 ลงวันที่ 1 กรกฎาคม 2569 ในวงเงินค่าจ้าง 90,000.00 บาท (เก้าหมื่นบาทถ้วน) นั้น "
+            "คณะกรรมการตรวจรับพัสดุได้ร่วมกันทำการตรวจสอบผลงานการส่งมอบงานจ้างออกแบบดังกล่าวแล้ว ปรากฏผลการตรวจรับดังนี้:"
+        )
     )
-    add_body(doc,
-        "คณะกรรมการตรวจรับพัสดุได้ร่วมกันทำการตรวจสอบผลงานการส่งมอบงานจ้างออกแบบดังกล่าวแล้ว ปรากฏผลการตรวจรับดังนี้:"
-    )
+    set_run_font(r_cb1, size_pt=14, color_rgb=(30, 41, 59))
 
     chk_headers = ["ลำดับ", "รายการผลงานส่งมอบตามข้อกำหนด TOR", "ข้อกำหนดสัญญา", "ผลการตรวจสอบ", "หมายเหตุ"]
     chk_rows = [
@@ -1144,50 +1334,54 @@ def generate_handover_document(output_docx_path):
         ["6", "แบบวงจรไฟฟ้าและแผนผังการเดินสาย (Wiring Schematic)", "TOR ข้อ 4.3.6", "[ / ] ครบถ้วนถูกต้อง", "ครอบคลุมระบบความปลอดภัย E-Stop"],
         ["7", "เอกสารข้อกำหนดการเชื่อมต่อระบบ (Interface Specification)", "TOR ข้อ 4.3.7", "[ / ] ครบถ้วนถูกต้อง", "ครอบคลุม MQTT และ REST API"]
     ]
-    add_styled_table(doc, chk_headers, chk_rows, [Inches(0.5), Inches(2.3), Inches(1.1), Inches(1.3), Inches(1.3)])
+    add_styled_table(doc, chk_headers, chk_rows, [Inches(0.65), Inches(2.25), Inches(1.05), Inches(1.05), Inches(1.00)], font_size_data=11, cell_top=30, cell_bot=30)
 
-    add_body(doc,
-        "คณะกรรมการตรวจรับพัสดุขอรับรองว่า ผู้รับจ้างได้ส่งมอบงานถูกต้องครบถ้วนตามสัญญาจ้างและข้อกำหนดแห่ง TOR ทุกประการ "
-        "ตั้งแต่วันที่ 17 กันยายน 2569 ซึ่งอยู่ภายในระยะเวลาที่กำหนด จึงเห็นควรอนุมัติให้เบิกจ่ายเงินค่าจ้าง จำนวน 90,000.00 บาท (เก้าหมื่นบาทถ้วน) "
-        "ให้แก่ผู้รับจ้างต่อไป"
+    p_cb2 = doc.add_paragraph()
+    p_cb2.paragraph_format.first_line_indent = Inches(0.5)
+    p_cb2.alignment = WD_ALIGN_PARAGRAPH.THAI_JUSTIFY
+    p_cb2.paragraph_format.space_before = Pt(2)
+    p_cb2.paragraph_format.space_after = Pt(3)
+    p_cb2.paragraph_format.line_spacing = 1.1
+    r_cb2 = p_cb2.add_run(
+        insert_thai_breaks(
+            "คณะกรรมการตรวจรับพัสดุขอรับรองว่า ผู้รับจ้างได้ส่งมอบงานถูกต้องครบถ้วนตามสัญญาจ้างและข้อกำหนดแห่ง TOR ทุกประการ "
+            "ตั้งแต่วันที่ 17 กันยายน 2569 ซึ่งอยู่ภายในระยะเวลาที่กำหนด จึงเห็นควรอนุมัติให้เบิกจ่ายเงินค่าจ้าง จำนวน 90,000.00 บาท (เก้าหมื่นบาทถ้วน) "
+            "ให้แก่ผู้รับจ้างต่อไป"
+        )
     )
+    set_run_font(r_cb2, size_pt=14, color_rgb=(30, 41, 59))
 
-    doc.add_paragraph().paragraph_format.space_after = Pt(12)
-
-    # Signature Block Table
+    # Signature Block Table (Fits on same page!)
     tbl_sigs = doc.add_table(rows=2, cols=2)
     tbl_sigs.alignment = WD_TABLE_ALIGNMENT.CENTER
     tbl_sigs.autofit = False
-    tbl_sigs.rows[0].cells[0].width = Inches(3.2)
-    tbl_sigs.rows[0].cells[1].width = Inches(3.3)
-    tbl_sigs.rows[1].cells[0].width = Inches(3.2)
-    tbl_sigs.rows[1].cells[1].width = Inches(3.3)
+    tbl_sigs.rows[0].cells[0].width = Inches(3.0)
+    tbl_sigs.rows[0].cells[1].width = Inches(3.0)
+    tbl_sigs.rows[1].cells[0].width = Inches(3.0)
+    tbl_sigs.rows[1].cells[1].width = Inches(3.0)
 
-    s00 = tbl_sigs.cell(0, 0).paragraphs[0]
-    s01 = tbl_sigs.cell(0, 1).paragraphs[0]
-    s10 = tbl_sigs.cell(1, 0).paragraphs[0]
-    s11 = tbl_sigs.cell(1, 1).paragraphs[0]
-
-    s00.paragraph_format.space_after = Pt(16)
-    s01.paragraph_format.space_after = Pt(16)
-    s10.paragraph_format.space_after = Pt(16)
-    s11.paragraph_format.space_after = Pt(16)
+    for r in tbl_sigs.rows:
+        for c in r.cells:
+            c.paragraphs[0].paragraph_format.space_before = Pt(0)
+            c.paragraphs[0].paragraph_format.space_after = Pt(4)
+            c.paragraphs[0].paragraph_format.line_spacing = 1.05
+            c.paragraphs[0].paragraph_format.first_line_indent = Pt(0)
 
     # Contractor Signature
-    r = s00.add_run("ลงชื่อ...................................................ผู้รับจ้าง\n( นายปพน  แซ่จ๊ะ )\nวันที่ 17 กันยายน 2569")
-    set_run_font(r, size_pt=14, color_rgb=(15, 23, 42))
+    r = tbl_sigs.rows[0].cells[0].paragraphs[0].add_run("ลงชื่อ...................................................ผู้รับจ้าง\n( นายปพน  แซ่จ๊ะ )\nวันที่ 17 กันยายน 2569")
+    set_run_font(r, size_pt=12, color_rgb=(15, 23, 42))
 
     # Committee Chairman Signature
-    r = s01.add_run("ลงชื่อ...................................................ประธานกรรมการ\n( .................................................... )\nวันที่ ......./......./.......")
-    set_run_font(r, size_pt=14, color_rgb=(15, 23, 42))
+    r = tbl_sigs.rows[0].cells[1].paragraphs[0].add_run("ลงชื่อ...................................................ประธานกรรมการ\n( .................................................... )\nวันที่ ......./......./.......")
+    set_run_font(r, size_pt=12, color_rgb=(15, 23, 42))
 
     # Committee Member 1
-    r = s10.add_run("ลงชื่อ...................................................กรรมการตรวจรับ\n( .................................................... )\nวันที่ ......./......./.......")
-    set_run_font(r, size_pt=14, color_rgb=(15, 23, 42))
+    r = tbl_sigs.rows[1].cells[0].paragraphs[0].add_run("ลงชื่อ...................................................กรรมการตรวจรับ\n( .................................................... )\nวันที่ ......./......./.......")
+    set_run_font(r, size_pt=12, color_rgb=(15, 23, 42))
 
     # Committee Member 2
-    r = s11.add_run("ลงชื่อ...................................................กรรมการตรวจรับ\n( .................................................... )\nวันที่ ......./......./.......")
-    set_run_font(r, size_pt=14, color_rgb=(15, 23, 42))
+    r = tbl_sigs.rows[1].cells[1].paragraphs[0].add_run("ลงชื่อ...................................................กรรมการตรวจรับ\n( .................................................... )\nวันที่ ......./......./.......")
+    set_run_font(r, size_pt=12, color_rgb=(15, 23, 42))
 
     # Save Word document
     print(f"Saving Word document to: {output_docx_path}")
