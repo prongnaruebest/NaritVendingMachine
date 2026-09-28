@@ -3,8 +3,6 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
 wb = openpyxl.Workbook()
-
-# Remove default sheet
 default_sheet = wb.active
 
 # ----------------- Styles & Colors -----------------
@@ -12,10 +10,19 @@ NAVY = "1B365D"
 STEEL_BLUE = "2E5B88"
 LIGHT_BLUE = "E8F1F5"
 HEADER_BG = "2C3E50"
-OUTER_HEADER_BG = "78281F"   # Red/Brick tone for Outer
+
+# Outer Theme (Brick/Red)
+OUTER_HEADER_BG = "78281F"
 OUTER_LIGHT = "FADBD8"
-INNER_HEADER_BG = "1B4F72"   # Deep Blue tone for Inner
+
+# Inner Theme (Deep Blue)
+INNER_HEADER_BG = "1B4F72"
 INNER_LIGHT = "D4E6F1"
+
+# Acrylic Theme (Teal / Cyan)
+ACRYLIC_HEADER_BG = "0E6655"
+ACRYLIC_LIGHT = "D1F2EB"
+
 INPUT_YELLOW = "FEF9E7"
 ACCENT_GREEN = "1E8449"
 LIGHT_GREEN = "E8F8F5"
@@ -62,7 +69,7 @@ col_widths = {
     "J": 14
 }
 
-def create_parts_sheet(ws, title, subtitle, header_color, light_color, parts, extra_count=3):
+def create_parts_sheet(ws, title, subtitle, header_color, light_color, parts, material_name="คอมโพสิต", default_sheet_w=1220, default_sheet_l=2440, extra_count=3):
     ws.views.sheetView[0].showGridLines = True
     fill_hdr = PatternFill(start_color=header_color, end_color=header_color, fill_type="solid")
     fill_sub_hdr = PatternFill(start_color=light_color, end_color=light_color, fill_type="solid")
@@ -82,15 +89,15 @@ def create_parts_sheet(ws, title, subtitle, header_color, light_color, parts, ex
 
     # Left Config Box (Rows 4-8)
     ws.merge_cells("B4:D4")
-    ws["B4"] = "⚙️ ข้อมูลแผ่นมาตรฐาน (Standard Sheet Config)"
+    ws["B4"] = f"⚙️ ข้อมูลแผ่นมาตรฐาน - {material_name} (Standard Sheet Config)"
     ws["B4"].font = font_section
     ws["B4"].alignment = align_left
 
     sheet_configs = [
-        (5, "ความกว้างแผ่นมาตรฐาน (Sheet Width)", 1220, " มม. (mm)", True),
-        (6, "ความยาวแผ่นมาตรฐาน (Sheet Length)", 2440, " มม. (mm)", True),
-        (7, "พื้นที่ต่อ 1 แผ่นมาตรฐาน (Area/Sheet)", "=(C5*C6)/1000000", " ตร.ม. (m²)", False),
-        (8, "เผื่อเศษตัด/พับ/โครงสร้าง (Waste Factor)", 0.15, " (15%)", True),
+        (5, f"ความกว้างแผ่นมาตรฐาน (Sheet Width)", default_sheet_w, " มม. (mm)", True),
+        (6, f"ความยาวแผ่นมาตรฐาน (Sheet Length)", default_sheet_l, " มม. (mm)", True),
+        (7, f"พื้นที่ต่อ 1 แผ่นมาตรฐาน (Area/Sheet)", "=(C5*C6)/1000000", " ตร.ม. (m²)", False),
+        (8, f"เผื่อเศษตัด/พับ/โครงสร้าง (Waste Factor)", 0.15, " (15%)", True),
     ]
 
     for r_idx, label, val, unit, is_input in sheet_configs:
@@ -157,7 +164,7 @@ def create_parts_sheet(ws, title, subtitle, header_color, light_color, parts, ex
 
     # Grand Result Card
     ws.merge_cells("I4:J5")
-    ws["I4"] = "จำนวนแผ่นที่แนะนำสั่งซื้อ\n(Recommended to Order)"
+    ws["I4"] = f"จำนวนแผ่น {material_name} ที่ต้องใช้\n(Recommended to Order)"
     ws["I4"].font = Font(name="Segoe UI", size=9, bold=True, color="1B365D")
     ws["I4"].alignment = align_wrap
     ws["I4"].fill = fill_sub_hdr
@@ -183,7 +190,7 @@ def create_parts_sheet(ws, title, subtitle, header_color, light_color, parts, ex
         ("F11", "ยาวคลี่ (L)\nLength (mm)", 15),
         ("G11", "พื้นที่รวม\nTotal Area (m²)", 16),
         ("H11", "สัดส่วนต่อแผ่น\n% of Sheet", 14),
-        ("I11", "หมายเหตุการตัด / พับ\nRemarks & Bending Note", 28),
+        ("I11", "หมายเหตุการตัด / พับ / ติดตั้ง\nRemarks & Notes", 28),
     ]
 
     ws.row_dimensions[11].height = 30
@@ -237,12 +244,14 @@ def create_parts_sheet(ws, title, subtitle, header_color, light_color, parts, ex
         ws[f"F{row}"].border = cell_border
         ws[f"F{row}"].number_format = "#,##0"
         
+        # Area Formula
         ws[f"G{row}"] = f'=IF(AND(ISNUMBER(E{row}),ISNUMBER(F{row}),E{row}>0,F{row}>0), D{row}*(E{row}*F{row})/1000000, 0)'
         ws[f"G{row}"].alignment = align_right
         ws[f"G{row}"].font = font_bold
         ws[f"G{row}"].border = cell_border
         ws[f"G{row}"].number_format = "#,##0.0000"
         
+        # Proportion of 1 Sheet
         ws[f"H{row}"] = f'=IF($C$7>0, G{row}/$C$7, 0)'
         ws[f"H{row}"].alignment = align_right
         ws[f"H{row}"].font = font_regular
@@ -355,23 +364,23 @@ def create_parts_sheet(ws, title, subtitle, header_color, light_color, parts, ex
 
 
 # -------------------------------------------------------------
-# 1. Sheet: สรุปรวมภาพรวมทั้งตู้ (Grand Summary)
+# 1. Sheet: สรุปภาพรวมทั้งตู้ (Grand Summary)
 # -------------------------------------------------------------
 ws_summary = wb.create_sheet(title="สรุปภาพรวมทั้งตู้ (Summary)")
 ws_summary.views.sheetView[0].showGridLines = True
 
 ws_summary.merge_cells("A1:G1")
-ws_summary["A1"] = "📊 สรุปภาพรวมจำนวนแผ่นคอมโพสิตทั้งตู้ (Inner & Outer Combined)"
+ws_summary["A1"] = "📊 สรุปภาพรวมการสั่งซื้อแผ่นคอมโพสิตและอะคริลิก (Bill of Materials)"
 ws_summary["A1"].font = font_title
 ws_summary.row_dimensions[1].height = 28
 
 ws_summary.merge_cells("A2:G2")
-ws_summary["A2"] = "โครงการ: Narit Vending Machine | เปรียบเทียบและรวมการสั่งซื้อแผ่นคอมโพสิตฝั่งใน (Inner) และฝั่งนอก (Outer)"
+ws_summary["A2"] = "โครงการ: Narit Vending Machine | สรุปแยกตามชนิดวัสดุ: แผ่นคอมโพสิต (ฝั่งใน + ฝั่งนอก) และ แผ่นอะคริลิกใส (Acrylic)"
 ws_summary["A2"].font = font_subtitle
 ws_summary.row_dimensions[2].height = 20
 
 # Summary Table Header
-sum_headers = ["หมวดหมู่ / โซน (Section)", "จำนวนชิ้นงาน (Qty)", "พื้นที่สุทธิ (Net Area m²)", "พื้นที่เผื่อเศษ (Gross Area m²)", "แผ่นตามทฤษฎี", "สั่งซื้อแยกฝั่ง (แผ่น)", "หมายเหตุ"]
+sum_headers = ["หมวดหมู่วัสดุ / ส่วนงาน (Material & Section)", "จำนวนชิ้นงาน (Qty)", "พื้นที่สุทธิ (Net Area m²)", "พื้นที่เผื่อเศษ (Gross Area m²)", "แผ่นตามทฤษฎี", "สั่งซื้อ (แผ่น)", "หมายเหตุ"]
 ws_summary.row_dimensions[4].height = 26
 fill_navy = PatternFill(start_color=NAVY, end_color=NAVY, fill_type="solid")
 for c_idx, sh in enumerate(sum_headers, 1):
@@ -382,10 +391,14 @@ for c_idx, sh in enumerate(sum_headers, 1):
     c.alignment = align_wrap
     c.border = header_border
 
-# Rows for Inner & Outer
+# Composite Rows (Inner & Outer)
+# Row 5: Inner (9 parts + 3 extras -> Tot row 24)
+# Row 6: Outer (9 parts + 3 extras -> Tot row 24)
+# Row 7: Total Composite
+# Row 8: Acrylic (3 parts + 3 extras -> Tot row 18)
 sections_summary = [
-    (5, "1. ชิ้นส่วนฝั่งใน (Inner Parts)", "='ฝั่งใน (Inner)'!D24", "='ฝั่งใน (Inner)'!G6", "='ฝั่งใน (Inner)'!G7", "='ฝั่งใน (Inner)'!G8", "='ฝั่งใน (Inner)'!I6", "แผ่นกั้น, ซับในประตู, ฝาครอบหลังใน"),
-    (6, "2. ชิ้นส่วนฝั่งนอก (Outer Parts)", "='ฝั่งนอก (Outer)'!D27", "='ฝั่งนอก (Outer)'!G6", "='ฝั่งนอก (Outer)'!G7", "='ฝั่งนอก (Outer)'!G8", "='ฝั่งนอก (Outer)'!I6", "ฝาบน, ฝาหลัง, ฝาข้างซ้าย-ขวา, ประตูหน้า"),
+    (5, "1. แผ่นคอมโพสิต - ฝั่งใน (Inner Composite)", "='ฝั่งใน (Inner)'!D24", "='ฝั่งใน (Inner)'!G6", "='ฝั่งใน (Inner)'!G7", "='ฝั่งใน (Inner)'!G8", "='ฝั่งใน (Inner)'!I6", "แผ่นกั้น Partition, กล่องใน, ฝาหลังใน, ซับในประตู"),
+    (6, "2. แผ่นคอมโพสิต - ฝั่งนอก (Outer Composite)", "='ฝั่งนอก (Outer)'!D24", "='ฝั่งนอก (Outer)'!G6", "='ฝั่งนอก (Outer)'!G7", "='ฝั่งนอก (Outer)'!G8", "='ฝั่งนอก (Outer)'!I6", "ฝาบน, ฝาหลัง, ฝาข้างซ้าย-ขวา, บานประตูหน้านอก"),
 ]
 
 for r_idx, name, f_qty, f_net, f_gross, f_theo, f_rec, remark in sections_summary:
@@ -428,93 +441,135 @@ for r_idx, name, f_qty, f_net, f_gross, f_theo, f_rec, remark in sections_summar
     ws_summary[f"G{r_idx}"].font = font_subtitle
     ws_summary[f"G{r_idx}"].border = cell_border
 
-# Row 7: Grand Total if cut separately
+# Row 7: Grand Subtotal for Aluminum Composite (Inner + Outer)
 r_idx = 7
 ws_summary.row_dimensions[r_idx].height = 24
-ws_summary[f"A{r_idx}"] = "รวมแบบสั่งซื้อแยกฝั่ง (Separate Purchasing)"
+ws_summary[f"A{r_idx}"] = "⭐ รวมแผ่นคอมโพสิตทั้งตู้ (Total Composite)"
 ws_summary[f"A{r_idx}"].font = font_bold
+ws_summary[f"A{r_idx}"].fill = PatternFill(start_color=LIGHT_BLUE, end_color=LIGHT_BLUE, fill_type="solid")
 ws_summary[f"A{r_idx}"].border = total_border
 
 ws_summary[f"B{r_idx}"] = "=B5+B6"
 ws_summary[f"B{r_idx}"].font = font_bold
 ws_summary[f"B{r_idx}"].alignment = align_center
+ws_summary[f"B{r_idx}"].fill = PatternFill(start_color=LIGHT_BLUE, end_color=LIGHT_BLUE, fill_type="solid")
 ws_summary[f"B{r_idx}"].border = total_border
 ws_summary[f"B{r_idx}"].number_format = '#,##0 " ชิ้น"'
 
 ws_summary[f"C{r_idx}"] = "=C5+C6"
 ws_summary[f"C{r_idx}"].font = font_bold
 ws_summary[f"C{r_idx}"].alignment = align_right
+ws_summary[f"C{r_idx}"].fill = PatternFill(start_color=LIGHT_BLUE, end_color=LIGHT_BLUE, fill_type="solid")
 ws_summary[f"C{r_idx}"].border = total_border
 ws_summary[f"C{r_idx}"].number_format = '#,##0.0000 " m²"'
 
 ws_summary[f"D{r_idx}"] = "=D5+D6"
 ws_summary[f"D{r_idx}"].font = font_bold
 ws_summary[f"D{r_idx}"].alignment = align_right
+ws_summary[f"D{r_idx}"].fill = PatternFill(start_color=LIGHT_BLUE, end_color=LIGHT_BLUE, fill_type="solid")
 ws_summary[f"D{r_idx}"].border = total_border
 ws_summary[f"D{r_idx}"].number_format = '#,##0.0000 " m²"'
 
 ws_summary[f"E{r_idx}"] = "=E5+E6"
 ws_summary[f"E{r_idx}"].font = font_bold
 ws_summary[f"E{r_idx}"].alignment = align_right
+ws_summary[f"E{r_idx}"].fill = PatternFill(start_color=LIGHT_BLUE, end_color=LIGHT_BLUE, fill_type="solid")
 ws_summary[f"E{r_idx}"].border = total_border
 ws_summary[f"E{r_idx}"].number_format = '0.00'
 
-ws_summary[f"F{r_idx}"] = "=F5+F6"
-ws_summary[f"F{r_idx}"].font = font_bold
+ws_summary[f"F{r_idx}"] = "=ROUNDUP(D7/'ฝั่งใน (Inner)'!C7, 0)"
+ws_summary[f"F{r_idx}"].font = Font(name="Segoe UI", size=11, bold=True, color="1E8449")
 ws_summary[f"F{r_idx}"].alignment = align_center
+ws_summary[f"F{r_idx}"].fill = PatternFill(start_color=LIGHT_GREEN, end_color=LIGHT_GREEN, fill_type="solid")
 ws_summary[f"F{r_idx}"].border = total_border
 ws_summary[f"F{r_idx}"].number_format = '0 " แผ่น"'
 
-ws_summary[f"G{r_idx}"] = "ผลรวมแผ่นเมื่อปัดเศษแยกแต่ละฝั่ง"
+ws_summary[f"G{r_idx}"] = "คำนวณรวม Nesting ตัดคอมโพสิตทั้งตู้"
 ws_summary[f"G{r_idx}"].font = font_subtitle
+ws_summary[f"G{r_idx}"].fill = PatternFill(start_color=LIGHT_BLUE, end_color=LIGHT_BLUE, fill_type="solid")
 ws_summary[f"G{r_idx}"].border = total_border
 
-# Big Recommendation Card for Combined Nesting (แถว 9 - 14)
-ws_summary.merge_cells("A10:C13")
-ws_summary["A10"] = "💡 แนะนำการสั่งซื้อรวมทั้งตู้\n(Combined Nesting Optimization)\n\nหากตัดร่วมกันทั้งฝั่งในและฝั่งนอก จะลดเศษเหลือตามมุมได้มากที่สุด"
-ws_summary["A10"].font = Font(name="Segoe UI", size=10, bold=True, color="1B365D")
-ws_summary["A10"].alignment = align_wrap
-ws_summary["A10"].fill = PatternFill(start_color=LIGHT_BLUE, end_color=LIGHT_BLUE, fill_type="solid")
+# Row 8: Acrylic Row
+r_idx = 8
+ws_summary.row_dimensions[r_idx].height = 24
+ws_summary[f"A{r_idx}"] = "3. แผ่นอะคริลิกใส (Acrylic Sheet)"
+ws_summary[f"A{r_idx}"].font = font_bold
+ws_summary[f"A{r_idx}"].border = cell_border
 
-for r in range(10, 14):
+ws_summary[f"B{r_idx}"] = "='อะคริลิก (Acrylic)'!D18"
+ws_summary[f"B{r_idx}"].font = font_bold
+ws_summary[f"B{r_idx}"].alignment = align_center
+ws_summary[f"B{r_idx}"].border = cell_border
+ws_summary[f"B{r_idx}"].number_format = '#,##0 " ชิ้น"'
+
+ws_summary[f"C{r_idx}"] = "='อะคริลิก (Acrylic)'!G6"
+ws_summary[f"C{r_idx}"].font = font_regular
+ws_summary[f"C{r_idx}"].alignment = align_right
+ws_summary[f"C{r_idx}"].border = cell_border
+ws_summary[f"C{r_idx}"].number_format = '#,##0.0000 " m²"'
+
+ws_summary[f"D{r_idx}"] = "='อะคริลิก (Acrylic)'!G7"
+ws_summary[f"D{r_idx}"].font = font_regular
+ws_summary[f"D{r_idx}"].alignment = align_right
+ws_summary[f"D{r_idx}"].border = cell_border
+ws_summary[f"D{r_idx}"].number_format = '#,##0.0000 " m²"'
+
+ws_summary[f"E{r_idx}"] = "='อะคริลิก (Acrylic)'!G8"
+ws_summary[f"E{r_idx}"].font = font_regular
+ws_summary[f"E{r_idx}"].alignment = align_right
+ws_summary[f"E{r_idx}"].border = cell_border
+ws_summary[f"E{r_idx}"].number_format = '0.00'
+
+ws_summary[f"F{r_idx}"] = "='อะคริลิก (Acrylic)'!I6"
+ws_summary[f"F{r_idx}"].font = Font(name="Segoe UI", size=11, bold=True, color="0E6655")
+ws_summary[f"F{r_idx}"].alignment = align_center
+ws_summary[f"F{r_idx}"].fill = PatternFill(start_color=ACRYLIC_LIGHT, end_color=ACRYLIC_LIGHT, fill_type="solid")
+ws_summary[f"F{r_idx}"].border = cell_border
+ws_summary[f"F{r_idx}"].number_format = '0 " แผ่น"'
+
+ws_summary[f"G{r_idx}"] = "ฝาครอบอะคริลิกด้านหน้าและด้านข้าง (แผ่นใส/ตกแต่ง)"
+ws_summary[f"G{r_idx}"].font = font_subtitle
+ws_summary[f"G{r_idx}"].border = cell_border
+
+
+# Two Recommendation Cards (Row 11 - 15)
+# Card 1: Composite Total
+ws_summary.merge_cells("A11:C12")
+ws_summary["A11"] = "📦 แผ่นอลูมิเนียมคอมโพสิต (Total Composite)\nสั่งซื้อรวมทั้งตู้ (Inner + Outer)"
+ws_summary["A11"].font = font_section
+ws_summary["A11"].alignment = align_center
+ws_summary["A11"].fill = PatternFill(start_color=LIGHT_BLUE, end_color=LIGHT_BLUE, fill_type="solid")
+
+ws_summary.merge_cells("A13:C15")
+ws_summary["A13"] = "=F7"
+ws_summary["A13"].font = font_highlight_big
+ws_summary["A13"].alignment = align_center
+ws_summary["A13"].fill = fill_result_box
+ws_summary["A13"].number_format = '0 " แผ่น"'
+
+for r in range(11, 16):
     for c in ["A", "B", "C"]:
         ws_summary[f"{c}{r}"].border = result_card_border
 
-ws_summary.merge_cells("D10:E11")
-ws_summary["D10"] = "พื้นที่รวมทั้งตู้ (Gross)"
-ws_summary["D10"].font = font_bold
-ws_summary["D10"].alignment = align_center
-ws_summary["D10"].fill = PatternFill(start_color=SUMMARY_BG, end_color=SUMMARY_BG, fill_type="solid")
+# Card 2: Acrylic Total
+ws_summary.merge_cells("E11:G12")
+ws_summary["E11"] = "💎 แผ่นอะคริลิกใส (Acrylic Sheet)\nสำหรับฝาหน้าและฝาข้างขวา"
+ws_summary["E11"].font = Font(name="Segoe UI", size=11, bold=True, color="0E6655")
+ws_summary["E11"].alignment = align_center
+ws_summary["E11"].fill = PatternFill(start_color=ACRYLIC_LIGHT, end_color=ACRYLIC_LIGHT, fill_type="solid")
 
-ws_summary.merge_cells("D12:E13")
-ws_summary["D12"] = "=D7"
-ws_summary["D12"].font = Font(name="Segoe UI", size=14, bold=True, color="1B365D")
-ws_summary["D12"].alignment = align_center
-ws_summary["D12"].fill = PatternFill(start_color=SUMMARY_BG, end_color=SUMMARY_BG, fill_type="solid")
-ws_summary["D12"].number_format = '#,##0.00 " m²"'
+ws_summary.merge_cells("E13:G15")
+ws_summary["E13"] = "=F8"
+ws_summary["E13"].font = Font(name="Segoe UI", size=18, bold=True, color="0E6655")
+ws_summary["E13"].alignment = align_center
+ws_summary["E13"].fill = PatternFill(start_color=ACRYLIC_LIGHT, end_color=ACRYLIC_LIGHT, fill_type="solid")
+ws_summary["E13"].number_format = '0 " แผ่น"'
 
-for r in range(10, 14):
-    for c in ["D", "E"]:
+for r in range(11, 16):
+    for c in ["E", "F", "G"]:
         ws_summary[f"{c}{r}"].border = result_card_border
 
-ws_summary.merge_cells("F10:G11")
-ws_summary["F10"] = "จำนวนแผ่นรวมที่ต้องใช้จริง\n(ROUNDUP รวมทั้งตู้)"
-ws_summary["F10"].font = font_bold
-ws_summary["F10"].alignment = align_wrap
-ws_summary["F10"].fill = PatternFill(start_color=LIGHT_GREEN, end_color=LIGHT_GREEN, fill_type="solid")
-
-ws_summary.merge_cells("F12:G13")
-ws_summary["F12"] = "=ROUNDUP(D7/'ฝั่งใน (Inner)'!C7, 0)"
-ws_summary["F12"].font = font_highlight_big
-ws_summary["F12"].alignment = align_center
-ws_summary["F12"].fill = fill_result_box
-ws_summary["F12"].number_format = '0 " แผ่น"'
-
-for r in range(10, 14):
-    for c in ["F", "G"]:
-        ws_summary[f"{c}{r}"].border = result_card_border
-
-ws_summary.column_dimensions["A"].width = 34
+ws_summary.column_dimensions["A"].width = 38
 ws_summary.column_dimensions["B"].width = 18
 ws_summary.column_dimensions["C"].width = 20
 ws_summary.column_dimensions["D"].width = 20
@@ -524,7 +579,7 @@ ws_summary.column_dimensions["G"].width = 38
 
 
 # -------------------------------------------------------------
-# 2. Sheet: ฝั่งนอก (Outer Parts)
+# 2. Sheet: ฝั่งนอก (Outer) - เฉพาะแผ่นคอมโพสิต
 # -------------------------------------------------------------
 ws_outer = wb.create_sheet(title="ฝั่งนอก (Outer)")
 
@@ -535,10 +590,7 @@ outer_parts = [
     ("Cover Left Side-Bending-st", "ฝาครอบข้างซ้าย (พับขึ้นรูป)", 1, "", "", "ชิ้นงานพับขอบ Bending"),
     ("Cover Left Side 2-Bending-st", "ฝาครอบข้างซ้าย 2 (พับขึ้นรูป)", 1, "", "", "ชิ้นงานพับขอบ Bending"),
     ("Cover Front 1-Bending-st", "ฝาครอบหน้า 1 (พับขึ้นรูป)", 1, "", "", "ชิ้นงานพับขอบ Bending"),
-    ("Arcylic Cover Front 2-st", "ฝาครอบหน้า 2 (อะคริลิก/คอมโพสิต)", 1, "", "", "เช็คสเปกว่าใช้ อะคริลิก หรือ คอมโพสิต"),
-    ("Arcylic Cover Front-st", "ฝาครอบหน้า (อะคริลิก/คอมโพสิต)", 1, "", "", "เช็คสเปกว่าใช้ อะคริลิก หรือ คอมโพสิต"),
     ("Cover Front 2-Bending-st", "ฝาครอบหน้า 2 (พับขึ้นรูป)", 1, "", "", "ชิ้นงานพับขอบ Bending"),
-    ("Arcylic Cover Right -side-st", "ฝาครอบข้างขวา (อะคริลิก/คอมโพสิต)", 1, "", "", "เช็คสเปกว่าใช้ อะคริลิก หรือ คอมโพสิต"),
     ("Cover Right Side 1-Bending-st", "ฝาครอบข้างขวา 1 (พับขึ้นรูป)", 1, "", "", "ชิ้นงานพับขอบ Bending"),
     ("Cover Right Side 2-Bending-st", "ฝาครอบข้างขวา 2 (พับขึ้นรูป)", 1, "", "", "ชิ้นงานพับขอบ Bending"),
 ]
@@ -546,16 +598,17 @@ outer_parts = [
 create_parts_sheet(
     ws_outer,
     "ตารางคำนวณแผ่นคอมโพสิต - ชิ้นส่วนฝั่งนอก (Outer Parts)",
-    "รายการชิ้นส่วนจาก SOLIDWORKS: ฝาบน, ฝาหลัง, ฝาข้าง, ประตู และฝาหน้า",
+    "รายการชิ้นส่วนจาก SOLIDWORKS: ฝาบน, ฝาหลัง, ฝาข้าง, ประตู และฝาหน้า (เฉพาะแผ่นคอมโพสิต)",
     OUTER_HEADER_BG,
     OUTER_LIGHT,
     outer_parts,
+    material_name="คอมโพสิต",
     extra_count=3
 )
 
 
 # -------------------------------------------------------------
-# 3. Sheet: ฝั่งใน (Inner Parts)
+# 3. Sheet: ฝั่งใน (Inner) - เฉพาะแผ่นคอมโพสิต
 # -------------------------------------------------------------
 ws_inner = wb.create_sheet(title="ฝั่งใน (Inner)")
 
@@ -578,39 +631,70 @@ create_parts_sheet(
     INNER_HEADER_BG,
     INNER_LIGHT,
     inner_parts,
+    material_name="คอมโพสิต",
     extra_count=3
 )
 
 
 # -------------------------------------------------------------
-# 4. Sheet: ขนาดแผ่นมาตรฐานและแนวทาง (Guide)
+# 4. Sheet: อะคริลิก (Acrylic)
+# -------------------------------------------------------------
+ws_acrylic = wb.create_sheet(title="อะคริลิก (Acrylic)")
+
+acrylic_parts = [
+    ("Arcylic Cover Front 2-st", "ฝาครอบหน้า 2 (แผ่นอะคริลิกใส/ป้ายไฟ)", 1, "", "", "ตัดเลเซอร์ Laser Cut / ขัดขอบ"),
+    ("Arcylic Cover Front-st", "ฝาครอบหน้า (แผ่นอะคริลิกใส/ช่องมอง)", 1, "", "", "ตัดเลเซอร์ Laser Cut / ขัดขอบ"),
+    ("Arcylic Cover Right -side-st", "ฝาครอบข้างขวา (แผ่นอะคริลิกใส/แสดงผล)", 1, "", "", "ตัดเลเซอร์ Laser Cut / ขัดขอบ"),
+]
+
+create_parts_sheet(
+    ws_acrylic,
+    "ตารางคำนวณแผ่นอะคริลิก (Acrylic Sheet Requirement)",
+    "รายการชิ้นส่วนอะคริลิกจาก SOLIDWORKS: ฝาครอบด้านหน้าและฝาครอบด้านข้าง",
+    ACRYLIC_HEADER_BG,
+    ACRYLIC_LIGHT,
+    acrylic_parts,
+    material_name="อะคริลิก",
+    default_sheet_w=1220,
+    default_sheet_l=2440,
+    extra_count=3
+)
+
+
+# -------------------------------------------------------------
+# 5. Sheet: ขนาดแผ่นมาตรฐานและแนวทาง (Guide)
 # -------------------------------------------------------------
 ws_guide = wb.create_sheet(title="ขนาดแผ่นมาตรฐานและแนวทาง")
 ws_guide.views.sheetView[0].showGridLines = True
 
 ws_guide.merge_cells("A1:F1")
-ws_guide["A1"] = "ข้อมูลอ้างอิงขนาดแผ่นอลูมิเนียมคอมโพสิต (Aluminum Composite Sheet Standards)"
+ws_guide["A1"] = "ข้อมูลอ้างอิงขนาดแผ่นอลูมิเนียมคอมโพสิตและแผ่นอะคริลิก"
 ws_guide["A1"].font = font_title
 ws_guide.row_dimensions[1].height = 28
 
+# Composite Standards
+ws_guide.merge_cells("A3:F3")
+ws_guide["A3"] = "1. ขนาดแผ่นอลูมิเนียมคอมโพสิตมาตรฐาน (Aluminum Composite Standard Sizes)"
+ws_guide["A3"].font = font_section
+
 guide_headers = ["ขนาดมาตรฐาน (Standard Size)", "กว้าง (W) มม.", "ยาว (L) มม.", "พื้นที่ (ตร.ม./แผ่น)", "ความหนารวมทั่วไป", "การใช้งานที่นิยม"]
 for c_idx, gh in enumerate(guide_headers, 1):
-    cell = ws_guide.cell(row=3, column=c_idx)
+    cell = ws_guide.cell(row=4, column=c_idx)
     cell.value = gh
     cell.font = font_header
     cell.fill = fill_navy
     cell.alignment = align_wrap
     cell.border = header_border
-ws_guide.row_dimensions[3].height = 25
+ws_guide.row_dimensions[4].height = 25
 
 sizes_data = [
-    ("4 x 8 ฟุต (มาตรฐานสากล - นิยมที่สุด)", 1220, 2440, "=B4*C4/1000000", "3 มม. / 4 มม.", "โครงสร้างตู้, พาร์ทิชัน, ป้าย"),
-    ("1.25 x 2.50 เมตร (ไซส์ยุโรป)", 1250, 2500, "=B5*C5/1000000", "4 มม.", "งานอาคาร, ผนังตู้ขนาดใหญ่"),
-    ("4 x 10 ฟุต (แผ่นยาว)", 1220, 3050, "=B6*C6/1000000", "4 มม.", "ฝาหลังตู้สูง, ชิ้นส่วนยาวต่อเนื่อง"),
-    ("5 x 10 ฟุต (แผ่นหน้ากว้าง)", 1500, 3000, "=B7*C7/1000000", "4 มม.", "ชิ้นงานขนาดใหญ่ลดรอยต่อ"),
+    ("4 x 8 ฟุต (มาตรฐานสากล - นิยมที่สุด)", 1220, 2440, "=B5*C5/1000000", "3 มม. / 4 มม.", "โครงสร้างตู้, พาร์ทิชัน, ฝาครอบ"),
+    ("1.25 x 2.50 เมตร (ไซส์ยุโรป)", 1250, 2500, "=B6*C6/1000000", "4 มม.", "งานอาคาร, ผนังตู้ขนาดใหญ่"),
+    ("4 x 10 ฟุต (แผ่นยาว)", 1220, 3050, "=B7*C7/1000000", "4 มม.", "ฝาหลังตู้สูง, ชิ้นส่วนยาวต่อเนื่อง"),
+    ("5 x 10 ฟุต (แผ่นหน้ากว้าง)", 1500, 3000, "=B8*C8/1000000", "4 มม.", "ชิ้นงานขนาดใหญ่ลดรอยต่อ"),
 ]
 
-for r_idx, row_vals in enumerate(sizes_data, 4):
+for r_idx, row_vals in enumerate(sizes_data, 5):
     for c_idx, val in enumerate(row_vals, 1):
         cell = ws_guide.cell(row=r_idx, column=c_idx)
         cell.value = val
@@ -629,20 +713,60 @@ for r_idx, row_vals in enumerate(sizes_data, 4):
         else:
             cell.alignment = align_left
 
+# Acrylic Standards
 ws_guide.merge_cells("A10:F10")
-ws_guide["A10"] = "📐 เทคนิคการคำนวณขนาดคลี่สำหรับงานพับแผ่นคอมโพสิต (V-Groove Bending Allowance)"
+ws_guide["A10"] = "2. ขนาดแผ่นอะคริลิกมาตรฐาน (Acrylic Sheet Standard Sizes)"
 ws_guide["A10"].font = font_section
 
-bending_tips = [
-    "1. การพับแผ่นอลูมิเนียมคอมโพสิต นิยมใช้ใบเซาะร่อง V-Groove 90° หรือ 135° ด้านหลัง โดยเหลือชั้นแกนพลาสติกและอลูมิเนียมผิวหน้าไว้ประมาณ 0.5 - 0.8 มม.",
-    "2. ระยะปีกพับ (Bending Flange): ควรมีความกว้างอย่างน้อย 20 - 30 มม. เพื่อให้จับยึดรีเวทหรือสกรูได้แข็งแรง",
-    "3. การหาขนาด Blank Size (กว้าง x ยาว ก่อนพับ):",
-    "   - หากพับขึ้นขอบ 2 ข้าง ซ้าย-ขวา ข้างละ F มม. และแผ่นตรงกลางกว้าง W มม. -> กว้างคลี่ = W + (2 x F) - K-factor (ปกติเผื่อลดลงประมาณ 1-2 มม. ต่อมุมพับ)",
-    "   - เพื่อความปลอดภัยในการสั่งแผ่น สามารถใช้ขนาด กว้างรวมปีก (W + 2F) ได้เลยโดยถือเป็นระยะเผื่อตัดแต่งขอบ",
-    "4. ชิ้นงานที่มีชื่อ Arcylic (อะคริลิก): เช่น Arcylic Cover Front, Arcylic Cover Right ให้ตรวจสอบว่าใช้แผ่นอะคริลิกใส หรือแผ่นคอมโพสิตทึบในการตัด"
+acrylic_headers = ["ขนาดแผ่นอะคริลิก", "กว้าง (W) มม.", "ยาว (L) มม.", "พื้นที่ (ตร.ม./แผ่น)", "ความหนาทั่วไป", "คุณสมบัติ/การใช้งาน"]
+for c_idx, gh in enumerate(acrylic_headers, 1):
+    cell = ws_guide.cell(row=11, column=c_idx)
+    cell.value = gh
+    cell.font = font_header
+    cell.fill = PatternFill(start_color=ACRYLIC_HEADER_BG, end_color=ACRYLIC_HEADER_BG, fill_type="solid")
+    cell.alignment = align_wrap
+    cell.border = header_border
+ws_guide.row_dimensions[11].height = 25
+
+acrylic_sizes = [
+    ("4 x 8 ฟุต (ขนาดเต็มแผ่นมาตรฐาน)", 1220, 2440, "=B12*C12/1000000", "2, 3, 5, 8 มม.", "งานตู้โชว์, บานหน้าต่าง, ฝาครอบใส"),
+    ("4 x 6 ฟุต (ขนาดตัดแบ่ง)", 1220, 1830, "=B13*C13/1000000", "2, 3, 5 มม.", "ป้ายหน้าร้าน, ฝาครอบเครื่อง"),
+    ("3 x 6 ฟุต (ขนาดยอดนิยม)", 915, 1830, "=B14*C14/1000000", "2, 3, 5 มม.", "ชิ้นงานขนาดกลาง ประหยัดเศษ"),
+    ("2 x 4 ฟุต (แผ่นเล็ก)", 610, 1220, "=B15*C15/1000000", "2, 3, 5 มม.", "ชิ้นงานขนาดเล็ก, ป้ายไฟ"),
 ]
 
-for idx, tip in enumerate(bending_tips, 11):
+for r_idx, row_vals in enumerate(acrylic_sizes, 12):
+    for c_idx, val in enumerate(row_vals, 1):
+        cell = ws_guide.cell(row=r_idx, column=c_idx)
+        cell.value = val
+        cell.font = font_regular
+        cell.border = cell_border
+        if c_idx in [2, 3]:
+            cell.alignment = align_right
+            cell.number_format = "#,##0"
+        elif c_idx == 4:
+            cell.alignment = align_right
+            cell.number_format = "0.0000"
+            cell.font = font_bold
+        elif c_idx == 1:
+            cell.alignment = align_left
+            cell.font = font_bold
+        else:
+            cell.alignment = align_left
+
+# Tips
+ws_guide.merge_cells("A17:F17")
+ws_guide["A17"] = "📐 เทคนิคและข้อแนะนำการตัดและการพับ (Fabrication Notes)"
+ws_guide["A17"].font = font_section
+
+bending_tips = [
+    "1. แผ่นคอมโพสิต: ใช้ใบมีดเซาะร่อง V-Groove 90° หรือ 135° ด้านหลัง โดยเหลือชั้นพลาสติกและผิวหน้าไว้ประมาณ 0.5 - 0.8 มม. ก่อนพับขึ้นรูป",
+    "2. แผ่นอะคริลิก (Arcylic): แนะนำให้ตัดด้วยเครื่อง Laser Cutting เพื่อให้ขอบเรียบเงาใส ไม่ต้องขัดแต่งเพิ่มเติม",
+    "3. ระยะเผื่อคลี่ชิ้นงานพับ (Blank Size): สามารถใช้สูตร กว้างรวมปีกพับ (W + 2F) ในการคำนวณเบื้องต้น เพื่อความปลอดภัยของเศษตัด",
+    "4. ค่าเผื่อเศษตัด (Waste Factor): สำหรับอะคริลิกแผ่นใส แนะนำตั้งเผื่อไว้ 15% - 20% เนื่องจากต้องเผื่อระยะแนวทางเดินลำแสงเลเซอร์และการเว้นขอบฟิล์มกันรอย"
+]
+
+for idx, tip in enumerate(bending_tips, 18):
     ws_guide.merge_cells(f"A{idx}:F{idx}")
     ws_guide[f"A{idx}"] = tip
     ws_guide[f"A{idx}"].font = font_regular
